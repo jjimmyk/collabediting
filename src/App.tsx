@@ -5,6 +5,7 @@ import Point from '@arcgis/core/geometry/Point'
 import GraphicsLayer from '@arcgis/core/layers/GraphicsLayer'
 import MapView from '@arcgis/core/views/MapView'
 import {
+  AlertTriangle,
   Box,
   CalendarDays,
   Check,
@@ -12,8 +13,10 @@ import {
   ChevronLeft,
   ChevronRight,
   Bell,
+  Clock,
   FileText,
   History,
+  Image as ImageIcon,
   Map as MapIcon,
   Menu,
   MoreHorizontal,
@@ -60,6 +63,15 @@ import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { cn } from '@/lib/utils'
 import pratusLogo from '@/assets/pratus-logo.png'
 
@@ -195,6 +207,7 @@ type LeftTab =
   | 'calendar'
   | 'reports'
   | 'briefing'
+  | 'sitreps'
   | `form-${string}`
 type PratusPlanStatus = 'pending' | 'accepted' | 'cancelled'
 type PratusAssignmentRecommendation = {
@@ -319,6 +332,43 @@ type Ics201FormState = {
   }
   resources: Ics201ResourceSummaryRow[]
   safetyAnalysis: Ics201SafetyRow[]
+}
+type SitrepActivityRow = {
+  id: number
+  time: string
+  description: string
+  status: 'Planned' | 'In Progress' | 'Completed'
+}
+type SitrepResourceRow = {
+  id: number
+  resource: string
+  quantity: string
+  status: string
+  location: string
+}
+type SitrepFormState = {
+  reportNumber: string
+  preparedDateTime: string
+  reportingPeriodStart: string
+  reportingPeriodEnd: string
+  incidentName: string
+  incidentLocation: string
+  preparedBy: string
+  agency: string
+  sectorLno: string
+  executiveSummary: string
+  readinessAssessment: string
+  riskToMission: string
+  outstandingRfiRfr: string
+  previousCriticalIncidentComms: string
+  generalComments: string
+  imageryNotes: string
+  currentSituationSummary: string
+  currentActivities: SitrepActivityRow[]
+  resourcesDeployed: SitrepResourceRow[]
+  keyIssues: string[]
+  nextSteps: string[]
+  distribution: string
 }
 type Ics204FormState = {
   id: number
@@ -506,7 +556,7 @@ function App() {
       { name: 'K. Simmons', role: 'Safety Officer' },
       { name: 'Maya Chen', role: 'Situation Unit Leader' },
     ]
-    const signedIndices = new Set([1, 3, 5, 7, 9])
+    const signedIndices = new Set([0, 2, 4, 6, 8])
     let signedCursor = 0
     return Array.from({ length: 10 }, (_, index) => {
       const minutesAgo = (10 - index) * 2
@@ -539,7 +589,444 @@ function App() {
   const [isIcs201SignNameDialogOpen, setIsIcs201SignNameDialogOpen] = useState(false)
   const [ics201SignNameInput, setIcs201SignNameInput] = useState('You')
   const [viewingIcs201Version, setViewingIcs201Version] = useState<Ics201Version | null>(null)
+  const [currentSituationEdit, setCurrentSituationEdit] = useState<string | null>(null)
+  const [currentSituationConflict, setCurrentSituationConflict] = useState<{
+    yourDraft: string
+    currentContent: string
+    remoteAuthor: string
+    remoteAuthorRole: string
+    remoteColor: string
+    remoteAt: number
+  } | null>(null)
+  const SIMULATED_REMOTE_SITUATION_EDIT =
+    'Severe weather impacts continue across multiple districts. Levee monitoring teams report rising water at North Levee Sector with possible breach within 2 hours. Road closures are expanding; new evacuation orders issued for Districts 4 and 7. Shelter demand spiking at Central and East Aid Stations.'
+  const SIMULATED_REMOTE_AUTHOR = {
+    name: 'Maya Chen',
+    role: 'Planning Section Chief',
+    color: '#ef4444',
+  } as const
   const liveIcs201FormRef = useRef<Ics201FormState | null>(null)
+  const INITIAL_SITREP_FORM: SitrepFormState = {
+    reportNumber: 'SITREP-2026-014',
+    preparedDateTime: '2026-04-25 18:00 UTC',
+    reportingPeriodStart: '2026-04-25 06:00 UTC',
+    reportingPeriodEnd: '2026-04-25 18:00 UTC',
+    incidentName: 'Incident Alpha',
+    incidentLocation: 'North Levee Sector / Districts 4 & 7',
+    preparedBy: 'Planning Section Chief',
+    agency: 'State Emergency Operations Center',
+    sectorLno: 'Sector North-1 • LNO: M. Wells (State EOC) • Backup LNO: R. Patel (County EOC)',
+    executiveSummary:
+      'Operations remain in life-safety phase. Two evacuation orders active; shelter occupancy at 64%. No new injuries reported in this period; one rescue completed successfully.',
+    readinessAssessment:
+      'Personnel: 92% on-shift. Equipment: 85% mission-capable; 2 pumps deadlined awaiting parts. Logistics: 36-hour fuel and water supply on hand. Communications: primary and alternate nets stable. Overall readiness: AMBER (degraded equipment, sustainable for next op period).',
+    riskToMission:
+      'Highest: potential levee breach at North Sector within 2 hours could force shelter relocation. Medium: deteriorating road network restricting medical transport routes. Low: weather-driven shelter surge expected to plateau by 22:00.',
+    outstandingRfiRfr:
+      'RFI-014 (open): updated rainfall forecast for next 12 hours from NWS. RFI-016 (open): power restoration ETA for Districts 4 & 7. RFR-009 (open): two additional water tenders. RFR-011 (pending approval): mutual aid medical strike team.',
+    previousCriticalIncidentComms:
+      '15:12 — Notified IC of swift water rescue at River Bend Corridor (resolved). 16:40 — Coordinated evacuation messaging with PIO for Districts 4 & 7. 17:05 — Briefed County EOC on shelter capacity trend. 17:42 — Casualty transport coordinated with Hospital Liaison.',
+    generalComments:
+      'Inter-agency cooperation strong this period. Recommend standing up mutual aid coordination cell next op period. Consider pre-positioning sandbag teams at North Levee Sector ahead of forecast rainfall.',
+    imageryNotes:
+      'Aerial drone footage of North Levee Sector captured at 17:30 (3 frames). Ground photos of River Bend Corridor staging at 16:15 (2 frames). All imagery archived to Incident Archive folder /alpha-2026-001/sitrep-014/.',
+    currentSituationSummary:
+      'Severe weather impacts continue across multiple districts. Road closures and utility disruptions are driving shelter demand and dynamic resource allocation.',
+    currentActivities: [
+      {
+        id: 1,
+        time: '14:30',
+        description: 'Swift water rescue completed at River Bend Corridor.',
+        status: 'Completed',
+      },
+      {
+        id: 2,
+        time: '15:45',
+        description: 'Levee monitoring teams deployed to North Sector.',
+        status: 'In Progress',
+      },
+      {
+        id: 3,
+        time: '17:00',
+        description: 'Shelter staffing surge for Central Aid Station.',
+        status: 'Planned',
+      },
+    ],
+    resourcesDeployed: [
+      {
+        id: 1,
+        resource: 'USAR Team Alpha',
+        quantity: '2',
+        status: 'Assigned',
+        location: 'North Levee Sector',
+      },
+      {
+        id: 2,
+        resource: 'Medical Strike Team',
+        quantity: '1',
+        status: 'Available',
+        location: 'South Aid Station',
+      },
+    ],
+    keyIssues: [
+      'Rising water at North Levee Sector with breach risk in next 2 hours.',
+      'Shelter capacity nearing threshold at Central Aid Station.',
+    ],
+    nextSteps: [
+      'Coordinate utility assessment sweep across affected sectors.',
+      'Pre-position barricade teams at South Connector choke points.',
+      'Issue updated public messaging at next operational period.',
+    ],
+    distribution:
+      'Incident Commander; Section Chiefs; State EOC; County EOC; Public Information Officer.',
+  }
+  const [sitrepForm, setSitrepForm] = useState<SitrepFormState>(INITIAL_SITREP_FORM)
+  type SitrepVersion = {
+    id: string
+    createdAt: number
+    creatorCreatedAt: number
+    creatorName: string
+    creatorColor: string
+    creatorRole: string
+    authorName: string
+    authorColor: string
+    authorRole: string
+    snapshot: SitrepFormState
+    signatures: Ics201VersionSignature[]
+    submittedForReviewTo?: Array<{ name: string; role: string }>
+    submittedForReviewAt?: number
+  }
+  const [sitrepVersions, setSitrepVersions] = useState<SitrepVersion[]>(() => {
+    const now = Date.now()
+    const authors: Array<{ name: string; color: string; role: string }> = [
+      { name: 'You', color: '#16a34a', role: 'Technical Specialist' },
+      { name: 'Maya Chen', color: '#ef4444', role: 'Operations Section Chief' },
+      { name: 'Diego Alvarez', color: '#3b82f6', role: 'Logistics Section Chief' },
+      { name: 'A. Rivera', color: '#16a34a', role: 'Liaison Officer' },
+    ]
+    const signers: Array<{ name: string; role: string }> = [
+      { name: 'R. Morgan', role: 'Incident Commander' },
+      { name: 'A. Rivera', role: 'Planning Section Chief' },
+      { name: 'T. Hale', role: 'Operations Section Chief' },
+    ]
+    const signedIndices = new Set([0, 2, 4, 6])
+    let signedCursor = 0
+    const totalSeedVersions = 8
+    let latestUnsignedIndex = -1
+    for (let i = totalSeedVersions - 1; i >= 0; i -= 1) {
+      if (!signedIndices.has(i)) {
+        latestUnsignedIndex = i
+        break
+      }
+    }
+    return Array.from({ length: totalSeedVersions }, (_, index) => {
+      const minutesAgo = (totalSeedVersions - index) * 3
+      const createdAt = now - minutesAgo * 60_000
+      const author = authors[index % authors.length]
+      const isSigned = signedIndices.has(index)
+      const signatures: Ics201VersionSignature[] = []
+      if (isSigned) {
+        const signer = signers[signedCursor % signers.length]
+        signedCursor += 1
+        signatures.push({
+          name: signer.name,
+          role: signer.role,
+          signedAt: createdAt + 30_000,
+        })
+      }
+      const creator = authors[(index + 2) % authors.length]
+      const isSubmittedSeed = !isSigned && index === latestUnsignedIndex
+      const submittedForReviewTo = isSubmittedSeed
+        ? [{ name: 'R. Morgan', role: 'Incident Commander' }]
+        : undefined
+      const submittedForReviewAt = isSubmittedSeed ? createdAt + 60_000 : undefined
+      return {
+        id: `seed-sitrep-v${index + 1}`,
+        createdAt,
+        creatorCreatedAt: createdAt - 8 * 60 * 1000,
+        creatorName: creator.name,
+        creatorColor: creator.color,
+        creatorRole: creator.role,
+        authorName: author.name,
+        authorColor: author.color,
+        authorRole: author.role,
+        snapshot: INITIAL_SITREP_FORM,
+        signatures,
+        submittedForReviewTo,
+        submittedForReviewAt,
+      }
+    })
+  })
+  const [isSitrepVersionDialogOpen, setIsSitrepVersionDialogOpen] = useState(false)
+  const [isSitrepSignedVersionsDialogOpen, setIsSitrepSignedVersionsDialogOpen] = useState(false)
+  const [isCreatingSignedSitrepVersion, setIsCreatingSignedSitrepVersion] = useState(false)
+  const [isSitrepSignNameDialogOpen, setIsSitrepSignNameDialogOpen] = useState(false)
+  const [sitrepSignNameInput, setSitrepSignNameInput] = useState('You')
+  const [viewingSitrepVersion, setViewingSitrepVersion] = useState<SitrepVersion | null>(null)
+  const [activeSitrepDraftId, setActiveSitrepDraftId] = useState<string | null>(null)
+  const [requestedApprovalSitrepDraftIds, setRequestedApprovalSitrepDraftIds] = useState<
+    Set<string>
+  >(() => new Set())
+  const [expandedSitrepReviewStatusDraftId, setExpandedSitrepReviewStatusDraftId] = useState<
+    string | null
+  >(null)
+  const [sitrepApprovalRequestConfirmation, setSitrepApprovalRequestConfirmation] = useState<{
+    versionLabel: string
+    authorName: string
+    recipients: Array<{ name: string; role: string }>
+  } | null>(null)
+  type SitrepApprovalAssignee = { name: string; email: string }
+  const SITREP_SITUATION_UNIT_LEADERS: SitrepApprovalAssignee[] = [
+    { name: 'D. Alvarez', email: 'd.alvarez@incident.gov' },
+    { name: 'M. Tanaka', email: 'm.tanaka@incident.gov' },
+  ]
+  const SITREP_PLANNING_SECTION_CHIEFS: SitrepApprovalAssignee[] = [
+    { name: 'A. Rivera', email: 'a.rivera@incident.gov' },
+    { name: 'Maya Chen', email: 'maya.chen@incident.gov' },
+  ]
+  const SITREP_INCIDENT_COMMANDERS: SitrepApprovalAssignee[] = [
+    { name: 'R. Morgan', email: 'r.morgan@incident.gov' },
+    { name: 'P. Whitfield', email: 'p.whitfield@incident.gov' },
+  ]
+  const [sitrepApprovalRecipientPicker, setSitrepApprovalRecipientPicker] = useState<{
+    draftId: string
+    versionLabel: string
+    authorName: string
+  } | null>(null)
+  const openSitrepApprovalRecipientPicker = (params: {
+    draftId: string
+    versionLabel: string
+    authorName: string
+  }) => {
+    setSitrepApprovalRecipientPicker(params)
+  }
+  const submitSitrepApprovalRecipients = () => {
+    const picker = sitrepApprovalRecipientPicker
+    if (!picker) return
+    const selectedRecipients: Array<{ name: string; role: string }> = [
+      ...SITREP_SITUATION_UNIT_LEADERS.map((assignee) => ({
+        name: assignee.name,
+        role: 'Situation Unit Leader',
+      })),
+      ...SITREP_PLANNING_SECTION_CHIEFS.map((assignee) => ({
+        name: assignee.name,
+        role: 'Planning Section Chief',
+      })),
+      ...SITREP_INCIDENT_COMMANDERS.map((assignee) => ({
+        name: assignee.name,
+        role: 'Incident Commander',
+      })),
+    ]
+    const submittedAt = Date.now()
+    setSitrepVersions((previous) =>
+      previous.map((entry) =>
+        entry.id === picker.draftId
+          ? {
+              ...entry,
+              submittedForReviewTo: selectedRecipients,
+              submittedForReviewAt: submittedAt,
+            }
+          : entry
+      )
+    )
+    setRequestedApprovalSitrepDraftIds((previous) => {
+      const next = new Set(previous)
+      next.add(picker.draftId)
+      return next
+    })
+    setSitrepApprovalRequestConfirmation({
+      versionLabel: picker.versionLabel,
+      authorName: picker.authorName,
+      recipients: selectedRecipients,
+    })
+    setSitrepApprovalRecipientPicker(null)
+  }
+  type SitrepViewMode = 'current' | 'historical' | 'drafts' | 'review-queue'
+  const [sitrepViewMode, setSitrepViewMode] = useState<SitrepViewMode>('current')
+  type SitrepScopeKind = 'aor' | 'incident'
+  const SITREP_SCOPE_OPTIONS: Array<{ id: string; kind: SitrepScopeKind; label: string }> = [
+    { id: 'aor-d1', kind: 'aor', label: 'USCG District 1 (Boston)' },
+    { id: 'aor-d5', kind: 'aor', label: 'USCG District 5 (Portsmouth)' },
+    { id: 'aor-d7', kind: 'aor', label: 'USCG District 7 (Miami)' },
+    { id: 'aor-d8', kind: 'aor', label: 'USCG District 8 (New Orleans)' },
+    { id: 'aor-d11', kind: 'aor', label: 'USCG District 11 (Alameda)' },
+    { id: 'aor-d13', kind: 'aor', label: 'USCG District 13 (Seattle)' },
+    { id: 'aor-d14', kind: 'aor', label: 'USCG District 14 (Honolulu)' },
+    { id: 'aor-d17', kind: 'aor', label: 'USCG District 17 (Juneau)' },
+    { id: 'aor-sector-ny', kind: 'aor', label: 'USCG Sector New York' },
+    { id: 'aor-sector-la', kind: 'aor', label: 'USCG Sector Los Angeles' },
+    { id: 'aor-sector-houston', kind: 'aor', label: 'USCG Sector Houston-Galveston' },
+    { id: 'aor-sector-miami', kind: 'aor', label: 'USCG Sector Miami' },
+    { id: 'incident-mateo', kind: 'incident', label: 'Hurricane Mateo Response' },
+    { id: 'incident-caspian-star', kind: 'incident', label: 'M/V Caspian Star Distress' },
+    { id: 'incident-port-houston-spill', kind: 'incident', label: 'Port Houston Oil Spill' },
+    {
+      id: 'incident-fl-straits-interdiction',
+      kind: 'incident',
+      label: 'Florida Straits Migrant Interdiction',
+    },
+  ]
+  const [selectedSitrepScopeId, setSelectedSitrepScopeId] = useState<string>('aor-d7')
+  const createNewSitrepDraft = () => {
+    const now = Date.now()
+    const newId = `${now}-sitrep-draft-${Math.random().toString(36).slice(2, 8)}`
+    const seedSnapshot: SitrepFormState = {
+      ...INITIAL_SITREP_FORM,
+      sectorLno: '',
+      executiveSummary: '',
+      readinessAssessment: '',
+      riskToMission: '',
+      outstandingRfiRfr: '',
+      previousCriticalIncidentComms: '',
+      generalComments: '',
+      imageryNotes: '',
+    }
+    const newDraft: SitrepVersion = {
+      id: newId,
+      createdAt: now,
+      creatorCreatedAt: now,
+      creatorName: 'You',
+      creatorColor: '#16a34a',
+      creatorRole: 'Technical Specialist',
+      authorName: 'You',
+      authorColor: '#16a34a',
+      authorRole: 'Technical Specialist',
+      snapshot: seedSnapshot,
+      signatures: [],
+    }
+    if (liveSitrepFormRef.current === null) {
+      liveSitrepFormRef.current = sitrepForm
+    }
+    setSitrepVersions((previous) => [...previous, newDraft].slice(-100))
+    setSitrepForm(seedSnapshot)
+    setSitrepSectionEdits({
+      'reporting-unit': null,
+      'executive-summary': null,
+      'readiness-assessment': null,
+      'risk-to-mission': null,
+      'outstanding-rfi-rfr': null,
+      'previous-critical-incident-comms': null,
+      'general-comments': null,
+      'imagery': null,
+    })
+    setViewingSitrepVersion(null)
+    setSitrepViewMode('current')
+    setActiveSitrepDraftId(newId)
+  }
+  type SitrepSection =
+    | 'reporting-unit'
+    | 'executive-summary'
+    | 'readiness-assessment'
+    | 'risk-to-mission'
+    | 'outstanding-rfi-rfr'
+    | 'previous-critical-incident-comms'
+    | 'general-comments'
+    | 'imagery'
+  const SITREP_SECTIONS: { id: SitrepSection; label: string }[] = [
+    { id: 'reporting-unit', label: 'Reporting Unit (Sector/LNO)' },
+    { id: 'executive-summary', label: 'Executive Summary' },
+    { id: 'readiness-assessment', label: 'Readiness Assessment' },
+    { id: 'risk-to-mission', label: 'Risk to Mission' },
+    { id: 'outstanding-rfi-rfr', label: 'Outstanding RFI/RFR' },
+    { id: 'previous-critical-incident-comms', label: 'Previous Critical Incident Communications' },
+    { id: 'general-comments', label: 'General Comments' },
+    { id: 'imagery', label: 'Imagery' },
+  ]
+  const [sitrepActiveSection, setSitrepActiveSection] = useState<SitrepSection>('reporting-unit')
+  const SITREP_SECTION_PRIMARY: Record<
+    SitrepSection,
+    { field: keyof SitrepFormState; label: string }
+  > = {
+    'reporting-unit': { field: 'sectorLno', label: 'Reporting Unit (Sector/LNO)' },
+    'executive-summary': { field: 'executiveSummary', label: 'Executive Summary' },
+    'readiness-assessment': { field: 'readinessAssessment', label: 'Readiness Assessment' },
+    'risk-to-mission': { field: 'riskToMission', label: 'Risk to Mission' },
+    'outstanding-rfi-rfr': { field: 'outstandingRfiRfr', label: 'Outstanding RFI/RFR' },
+    'previous-critical-incident-comms': {
+      field: 'previousCriticalIncidentComms',
+      label: 'Previous Critical Incident Communications',
+    },
+    'general-comments': { field: 'generalComments', label: 'General Comments' },
+    'imagery': { field: 'imageryNotes', label: 'Imagery' },
+  }
+  const SIMULATED_REMOTE_SITREP_SECTION_EDITS: Record<SitrepSection, string> = {
+    'reporting-unit':
+      'Sector North-1 • LNO: M. Wells (State EOC) • Backup LNO: R. Patel (County EOC) • Updated boundary coordination with Sector North-2 lead at 17:55.',
+    'executive-summary':
+      'Operations remain in life-safety phase. Updated counts: 3 evacuation orders active; shelter occupancy at 71% and rising. One additional rescue completed at 17:42; no new injuries reported. Mutual aid request submitted for two strike teams.',
+    'readiness-assessment':
+      'Personnel: 88% on-shift after late shift change. Equipment: 82% mission-capable; 3 pumps deadlined awaiting parts (1 added since last update). Logistics: 30-hour fuel reserve, 24-hour potable water reserve. Communications: alternate net experiencing intermittent dropouts in Sector 7. Overall readiness: AMBER trending RED if equipment status not restored.',
+    'risk-to-mission':
+      'Highest: levee breach probability raised to 60% within 90 minutes; pre-stage shelter relocation buses now. Medium: degraded medical transport routes between Sector 4 and Hospital A. Medium: communication dropouts in Sector 7. Low: weather-driven shelter surge plateauing.',
+    'outstanding-rfi-rfr':
+      'RFI-014 (open): updated 12-hour rainfall forecast from NWS — response expected within 30 min. RFI-016 (open): power restoration ETA for Districts 4 & 7. RFR-009 (approved): two additional water tenders en route, ETA 19:00. RFR-011 (approved): mutual aid medical strike team activated, ETA 19:30. RFR-013 (new): request for swift water rescue team augmentation.',
+    'previous-critical-incident-comms':
+      '15:12 — Notified IC of swift water rescue at River Bend Corridor (resolved). 16:40 — Coordinated evacuation messaging with PIO for Districts 4 & 7. 17:05 — Briefed County EOC on shelter capacity trend. 17:42 — Casualty transport coordinated with Hospital Liaison. 18:10 — Activated mutual aid medical strike team via State EOC.',
+    'general-comments':
+      'Inter-agency cooperation strong this period. Recommend standing up mutual aid coordination cell next op period. Consider pre-positioning sandbag teams at North Levee Sector ahead of forecast rainfall. Recommend public messaging update at top of next hour given evacuation expansion.',
+    'imagery':
+      'Aerial drone footage of North Levee Sector captured at 17:30 (3 frames) and supplemental sweep at 18:05 (2 frames). Ground photos of River Bend Corridor staging at 16:15 (2 frames). Shelter occupancy photos at 17:50 (1 frame). All imagery archived to Incident Archive folder /alpha-2026-001/sitrep-014/.',
+  }
+  const [sitrepSectionEdits, setSitrepSectionEdits] = useState<
+    Record<SitrepSection, string | null>
+  >({
+    'reporting-unit': null,
+    'executive-summary': null,
+    'readiness-assessment': null,
+    'risk-to-mission': null,
+    'outstanding-rfi-rfr': null,
+    'previous-critical-incident-comms': null,
+    'general-comments': null,
+    'imagery': null,
+  })
+  const [sitrepSectionConflict, setSitrepSectionConflict] = useState<{
+    section: SitrepSection
+    sectionLabel: string
+    yourDraft: string
+    currentContent: string
+    remoteAuthor: string
+    remoteAuthorRole: string
+    remoteColor: string
+    remoteAt: number
+  } | null>(null)
+  const beginSitrepSectionEdit = (section: SitrepSection) => {
+    if (sitrepSectionEdits[section] !== null) return
+    const primaryField = SITREP_SECTION_PRIMARY[section].field
+    setSitrepSectionEdits((previous) => ({
+      ...previous,
+      [section]: (sitrepForm[primaryField] as string) ?? '',
+    }))
+  }
+  const setSitrepSectionEditValue = (section: SitrepSection, value: string) => {
+    setSitrepSectionEdits((previous) => ({ ...previous, [section]: value }))
+  }
+  const cancelSitrepSectionEdit = (section: SitrepSection) => {
+    setSitrepSectionEdits((previous) => ({ ...previous, [section]: null }))
+  }
+  const saveSitrepSectionEdit = (section: SitrepSection) => {
+    const yourDraft = sitrepSectionEdits[section]
+    if (yourDraft === null) return
+    const { field: primaryField, label: sectionLabel } = SITREP_SECTION_PRIMARY[section]
+    const remoteContent = SIMULATED_REMOTE_SITREP_SECTION_EDITS[section]
+    updateSitrepField(primaryField, remoteContent)
+    setSitrepSectionConflict({
+      section,
+      sectionLabel,
+      yourDraft,
+      currentContent: remoteContent,
+      remoteAuthor: SIMULATED_REMOTE_AUTHOR.name,
+      remoteAuthorRole: SIMULATED_REMOTE_AUTHOR.role,
+      remoteColor: SIMULATED_REMOTE_AUTHOR.color,
+      remoteAt: Date.now(),
+    })
+  }
+  const liveSitrepFormRef = useRef<SitrepFormState | null>(null)
+  const updateSitrepField = <K extends keyof SitrepFormState>(
+    field: K,
+    value: SitrepFormState[K]
+  ) => {
+    setSitrepForm((previous) => ({ ...previous, [field]: value }))
+  }
   const [ics204Forms, setIcs204Forms] = useState<Ics204FormState[]>([
     {
       id: 1,
@@ -1517,6 +2004,7 @@ function App() {
     if (tab === 'calendar') return 'Calendar'
     if (tab === 'reports') return 'Reports'
     if (tab === 'briefing') return 'Incident Briefing ICS-201'
+    if (tab === 'sitreps') return 'SITREPs'
     if (tab === 'form-ICS-204') return 'ICS-204 Assignment List'
     if (tab.startsWith('form-')) return tab.replace('form-', '')
     return 'Panel Content'
@@ -2552,12 +3040,14 @@ function App() {
     }
     pratusAiLoadingTimerRef.current = window.setTimeout(() => {
       let shouldApplyPlan = false
+      let planAction: PratusMessagePlan['action'] | null = null
       setPratusAiMessages((previous) =>
         previous.map((message) => {
           if (message.id !== messageId || !message.plan || message.plan.status !== 'pending') {
             return message
           }
           shouldApplyPlan = decision === 'accepted'
+          planAction = message.plan.action
           return {
             ...message,
             plan: {
@@ -2568,7 +3058,7 @@ function App() {
         })
       )
 
-      if (shouldApplyPlan) {
+      if (shouldApplyPlan && planAction === 'add-3-objectives') {
         let firstNewObjectiveId = 0
         setAors((previous) => {
           const nextIdStart = previous.reduce((max, item) => Math.max(max, item.id), 0) + 1
@@ -2625,6 +3115,225 @@ function App() {
         if (firstNewObjectiveId > 0) {
           setActiveTab('aors')
           setExpandedItemId(`aor-${firstNewObjectiveId}`)
+        }
+      }
+
+      if (shouldApplyPlan && planAction === 'draft-ics-204-recommendation') {
+        let createdForms: Ics204FormState[] = []
+        setIcs204Forms((previous) => {
+          const baseId =
+            previous.length === 0 ? 0 : Math.max(...previous.map((form) => form.id))
+          createdForms = [
+            {
+              id: baseId + 1,
+              assignedUnit: 'Division A/B Search & Rescue Task Force',
+              branch: 'Operations Branch',
+              division: 'Divisions A/B',
+              group: 'Search & Rescue Group',
+              stagingArea: 'North Staging Area',
+              sectionChief: 'T. Hale',
+              branchDirector: 'R. Patel',
+              divisionGroupSupervisor: 'K. Simmons',
+              resourcesAssigned: [
+                {
+                  id: 1,
+                  resourceIdentifier: 'Urban Search Team Alpha',
+                  leader: 'Capt. J. Nguyen',
+                  contact: '555-0142',
+                  location: 'North Levee Sector',
+                },
+                {
+                  id: 2,
+                  resourceIdentifier: 'Engine Co. 7',
+                  leader: 'Lt. M. Ortega',
+                  contact: '555-0118',
+                  location: 'River Bend Corridor',
+                },
+              ],
+              workAssignments: [
+                {
+                  id: 1,
+                  assignment:
+                    'Conduct perimeter control and life-safety sweeps across Divisions A and B.',
+                  priority: 'High',
+                  resourceRequirements: [
+                    { id: 1, resource: 'USAR Team', required: '2', have: '2', need: '0' },
+                    { id: 2, resource: 'Engine Co.', required: '2', have: '1', need: '1' },
+                  ],
+                  overheadPositions: 'Task Force Leader, Safety Officer, Rescue Specialist',
+                  specialEquipmentSupplies:
+                    'Confined-space kit, swift-water PPE, lighting trailer',
+                  reportingLocation: 'North Staging Area',
+                  requestedArrivalTime: '13:00',
+                },
+                {
+                  id: 2,
+                  assignment:
+                    'Maintain accountability checks and report life-safety status every 60 minutes.',
+                  priority: 'High',
+                  resourceRequirements: [
+                    { id: 1, resource: 'Accountability Officer', required: '1', have: '1', need: '0' },
+                  ],
+                  overheadPositions: 'Accountability Officer',
+                  specialEquipmentSupplies: 'Personnel accountability board, radios',
+                  reportingLocation: 'North Staging Area',
+                  requestedArrivalTime: '13:30',
+                },
+              ],
+              specialInstructions:
+                'Maintain responder accountability checks every 60 minutes. Coordinate sweeps with Branch Director before re-entry to flagged structures.',
+              communications:
+                'Primary: Tac Channel 3 (155.160). Alternate: Command Net 1. Medical emergency code: MED-ALPHA.',
+            },
+            {
+              id: baseId + 2,
+              assignedUnit: 'Branch Staffing Coordination Unit',
+              branch: 'Operations Branch',
+              division: 'All Divisions',
+              group: 'Command & Coordination Group',
+              stagingArea: 'Central Command Post',
+              sectionChief: 'T. Hale',
+              branchDirector: 'R. Patel',
+              divisionGroupSupervisor: 'M. Wells',
+              resourcesAssigned: [
+                {
+                  id: 1,
+                  resourceIdentifier: 'Mobile Command Unit MCU-1',
+                  leader: 'Cmdr. L. Park',
+                  contact: '555-0173',
+                  location: 'Central Command Post',
+                },
+                {
+                  id: 2,
+                  resourceIdentifier: 'Logistics Liaison Team',
+                  leader: 'A. Banks',
+                  contact: '555-0155',
+                  location: 'Central Command Post',
+                },
+              ],
+              workAssignments: [
+                {
+                  id: 1,
+                  assignment:
+                    'Synchronize branch staffing levels and confirm relief handoff schedule across Divisions.',
+                  priority: 'High',
+                  resourceRequirements: [
+                    { id: 1, resource: 'Branch Director', required: '2', have: '2', need: '0' },
+                    { id: 2, resource: 'Staging Manager', required: '1', have: '1', need: '0' },
+                  ],
+                  overheadPositions: 'Branch Director, Staging Manager, Liaison Officer',
+                  specialEquipmentSupplies:
+                    'Staffing boards, ICS-218 forms, hardline phones',
+                  reportingLocation: 'Central Command Post',
+                  requestedArrivalTime: '12:30',
+                },
+                {
+                  id: 2,
+                  assignment:
+                    'Publish updated relief schedule and brief incoming supervisors at handoff.',
+                  priority: 'Medium',
+                  resourceRequirements: [
+                    { id: 1, resource: 'Documentation Unit', required: '1', have: '1', need: '0' },
+                  ],
+                  overheadPositions: 'Documentation Unit Leader',
+                  specialEquipmentSupplies: 'Printer, schedule template, briefing packets',
+                  reportingLocation: 'Central Command Post',
+                  requestedArrivalTime: '14:00',
+                },
+              ],
+              specialInstructions:
+                'Confirm relief shift coverage 30 minutes before handoff. Escalate uncovered positions to Operations Section Chief immediately.',
+              communications:
+                'Primary: Command Net 1 (154.265). Alternate: Logistics Net 2. Notification path: MCU-1 → Branch Director → Section Chief.',
+            },
+            {
+              id: baseId + 3,
+              assignedUnit: 'Medical Strike Team Bravo',
+              branch: 'Operations Branch',
+              division: 'Medical',
+              group: 'Medical Operations Group',
+              stagingArea: 'South Aid Station',
+              sectionChief: 'T. Hale',
+              branchDirector: 'R. Patel',
+              divisionGroupSupervisor: 'D. Ortiz',
+              resourcesAssigned: [
+                {
+                  id: 1,
+                  resourceIdentifier: 'Medical Strike Team Bravo',
+                  leader: 'Dr. S. Kapoor',
+                  contact: '555-0167',
+                  location: 'South Aid Station',
+                },
+                {
+                  id: 2,
+                  resourceIdentifier: 'Mobile Triage Unit',
+                  leader: 'EMT P. Lopez',
+                  contact: '555-0192',
+                  location: 'South Aid Station',
+                },
+              ],
+              workAssignments: [
+                {
+                  id: 1,
+                  assignment:
+                    'Prepare medical operations briefing materials for next operational period and distribute assignments.',
+                  priority: 'Medium',
+                  resourceRequirements: [
+                    { id: 1, resource: 'Medical Officer', required: '2', have: '2', need: '0' },
+                    { id: 2, resource: 'EMT', required: '4', have: '3', need: '1' },
+                  ],
+                  overheadPositions: 'Medical Unit Leader, Triage Officer',
+                  specialEquipmentSupplies:
+                    'Triage tags, ALS kit, restock pallets, IV supply bin',
+                  reportingLocation: 'South Aid Station',
+                  requestedArrivalTime: '15:00',
+                },
+                {
+                  id: 2,
+                  assignment:
+                    'Coordinate transport routes with Logistics for casualties from Divisions A/B.',
+                  priority: 'High',
+                  resourceRequirements: [
+                    { id: 1, resource: 'Ambulance', required: '3', have: '2', need: '1' },
+                  ],
+                  overheadPositions: 'Transport Coordinator',
+                  specialEquipmentSupplies: 'Stretchers, oxygen cylinders, route maps',
+                  reportingLocation: 'South Aid Station',
+                  requestedArrivalTime: '15:30',
+                },
+              ],
+              specialInstructions:
+                'Coordinate with Hospital Liaison before patient transport. Update Med-Comm every 30 minutes with patient counts and acuity.',
+              communications:
+                'Primary: Med-Comm Channel 7 (155.340). Alternate: Tac Channel 5. Emergency code: MED-ALPHA. HEAR radio for hospital handoff.',
+            },
+          ]
+          return [...previous, ...createdForms]
+        })
+
+        if (createdForms.length > 0) {
+          const createdAt = Date.now()
+          setIcs204VersionsById((previous) => {
+            const next = { ...previous }
+            createdForms.forEach((form) => {
+              next[form.id] = [
+                {
+                  id: `pratus-204-${form.id}-v1`,
+                  createdAt,
+                  authorName: 'PRATUS AI',
+                  authorColor: '#a855f7',
+                  snapshot: form,
+                  signatures: [],
+                },
+              ]
+            })
+            return next
+          })
+          setSelectedIcsForms((previous) =>
+            previous.includes('ICS-204') ? previous : [...previous, 'ICS-204']
+          )
+          setExpandedIcs204FormId(createdForms[0].id)
+          setActiveTab('form-ICS-204')
         }
       }
 
@@ -3668,6 +4377,38 @@ function App() {
                         </TooltipContent>
                       </Tooltip>
                     )}
+                    {!isCompactPanelTabs && (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            type="button"
+                            size="icon"
+                            variant={isGlassMode ? 'outline' : activeTab === 'sitreps' ? 'default' : 'outline'}
+                            className={selectedGlassTabClasses(activeTab === 'sitreps')}
+                            onClick={() => setActiveTab('sitreps')}
+                            aria-label="Open SITREPs tab"
+                            data-has-form-badge="true"
+                            data-pratus-context-id="tab:sitreps"
+                            data-pratus-context-label="SITREPs"
+                          >
+                            <span className="relative inline-flex h-4 w-4 items-center justify-center">
+                              <FileText className="h-4 w-4" />
+                              <span
+                                className={cn(
+                                  'absolute -right-2 -bottom-2 rounded bg-foreground px-0.5 py-px text-[7px] leading-none text-background',
+                                  isGlassMode && 'z-20'
+                                )}
+                              >
+                                SR
+                              </span>
+                            </span>
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom" sideOffset={6}>
+                          SITREPs
+                        </TooltipContent>
+                      </Tooltip>
+                    )}
                     {selectedIcsForms.map((form) => {
                       const formTabId = `form-${form}` as LeftTab
                       const formNumber = form.replace('ICS-', '')
@@ -3914,6 +4655,7 @@ function App() {
                   {activeTab === 'calendar' && 'Calendar'}
                   {activeTab === 'reports' && 'Reports'}
                   {activeTab === 'briefing' && 'Incident Briefing ICS-201'}
+                  {activeTab === 'sitreps' && null}
                   {activeTab === 'form-ICS-204' && 'ICS-204 Assignment List'}
                   {activeTab !== 'form-ICS-204' && activeFormTabLabel}
                 </CardTitle>
@@ -6243,27 +6985,66 @@ function App() {
                         <ItemContent className="space-y-2">
                           <ItemTitle>Current Situation</ItemTitle>
                           <Textarea
-                            value={ics201Form.currentSituationSummary}
-                            onChange={(event) =>
-                              updateIcs201Field('currentSituationSummary', event.target.value)
+                            value={
+                              currentSituationEdit !== null
+                                ? currentSituationEdit
+                                : ics201Form.currentSituationSummary
                             }
-                            className="min-h-24 text-xs"
+                            onChange={(event) => {
+                              if (currentSituationEdit !== null) {
+                                setCurrentSituationEdit(event.target.value)
+                              }
+                            }}
+                            onFocus={() => {
+                              if (currentSituationEdit === null) {
+                                setCurrentSituationEdit(ics201Form.currentSituationSummary)
+                              }
+                            }}
+                            onClick={() => {
+                              if (currentSituationEdit === null) {
+                                setCurrentSituationEdit(ics201Form.currentSituationSummary)
+                              }
+                            }}
+                            readOnly={currentSituationEdit === null}
+                            className="min-h-24 cursor-text text-xs"
                             placeholder="Current situation summary"
                           />
-                          <Textarea
-                            value={ics201Form.weatherForecast}
-                            onChange={(event) => updateIcs201Field('weatherForecast', event.target.value)}
-                            className="min-h-20 text-xs"
-                            placeholder="Weather forecast and impacts"
-                          />
-                          <Textarea
-                            value={ics201Form.projectedIncidentCourse}
-                            onChange={(event) =>
-                              updateIcs201Field('projectedIncidentCourse', event.target.value)
-                            }
-                            className="min-h-20 text-xs"
-                            placeholder="Projected incident course"
-                          />
+                          {currentSituationEdit !== null && (
+                            <div className="flex items-center justify-start gap-2">
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                className="h-7 gap-1 text-xs"
+                                onClick={() => {
+                                  const yourDraft = currentSituationEdit
+                                  updateIcs201Field(
+                                    'currentSituationSummary',
+                                    SIMULATED_REMOTE_SITUATION_EDIT
+                                  )
+                                  setCurrentSituationConflict({
+                                    yourDraft,
+                                    currentContent: SIMULATED_REMOTE_SITUATION_EDIT,
+                                    remoteAuthor: SIMULATED_REMOTE_AUTHOR.name,
+                                    remoteAuthorRole: SIMULATED_REMOTE_AUTHOR.role,
+                                    remoteColor: SIMULATED_REMOTE_AUTHOR.color,
+                                    remoteAt: Date.now(),
+                                  })
+                                }}
+                              >
+                                Save
+                              </Button>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="ghost"
+                                className="h-7 gap-1 text-xs"
+                                onClick={() => setCurrentSituationEdit(null)}
+                              >
+                                Cancel
+                              </Button>
+                            </div>
+                          )}
                         </ItemContent>
                       </div>
                     </Item>
@@ -6599,6 +7380,1222 @@ function App() {
                           <Check className="h-3.5 w-3.5" />
                           Sign this version
                         </Button>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {activeTab === 'sitreps' && (
+                  <div className="space-y-3">
+                    <div className="sticky top-0 z-10 -mx-2 space-y-3 bg-card px-2 pb-2 pt-1">
+                      {viewingSitrepVersion && (
+                        <div className="flex items-center justify-between rounded-md border border-amber-400 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-500 dark:bg-amber-500/10 dark:text-amber-200">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <History className="h-3.5 w-3.5" />
+                            <span>
+                              You are viewing a past version from{' '}
+                              <span className="font-semibold">
+                                {new Date(viewingSitrepVersion.createdAt).toLocaleTimeString([], {
+                                  hour: '2-digit',
+                                  minute: '2-digit',
+                                  second: '2-digit',
+                                })}
+                              </span>{' '}
+                              last edited by{' '}
+                              <span className="font-semibold">
+                                {viewingSitrepVersion.authorRole}{' '}
+                                {viewingSitrepVersion.authorName}
+                              </span>
+                              .
+                            </span>
+                            {(() => {
+                              const liveVersion = sitrepVersions.find(
+                                (entry) => entry.id === viewingSitrepVersion.id
+                              )
+                              const submittedRecipients =
+                                liveVersion?.submittedForReviewTo ??
+                                viewingSitrepVersion.submittedForReviewTo
+                              const submittedAt =
+                                liveVersion?.submittedForReviewAt ??
+                                viewingSitrepVersion.submittedForReviewAt
+                              if (
+                                !submittedRecipients ||
+                                submittedRecipients.length === 0 ||
+                                !submittedAt
+                              ) {
+                                return null
+                              }
+                              return (
+                                <span className="basis-full text-[11px] text-amber-900 dark:text-amber-200">
+                                  Submitted for Review to{' '}
+                                  <span className="font-semibold">
+                                    {submittedRecipients
+                                      .map(
+                                        (recipient) => `${recipient.role} ${recipient.name}`
+                                      )
+                                      .join(', ')}
+                                  </span>{' '}
+                                  at{' '}
+                                  <span className="font-semibold">
+                                    {new Date(submittedAt).toLocaleTimeString([], {
+                                      hour: '2-digit',
+                                      minute: '2-digit',
+                                      second: '2-digit',
+                                    })}
+                                  </span>
+                                  .
+                                </span>
+                              )
+                            })()}
+                            {(() => {
+                              const liveSignatures =
+                                sitrepVersions.find((entry) => entry.id === viewingSitrepVersion.id)
+                                  ?.signatures ?? viewingSitrepVersion.signatures
+                              if (liveSignatures.length === 0) {
+                                return null
+                              }
+                              return (
+                                <span
+                                  className="flex items-center gap-1 rounded-full border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-800 dark:border-emerald-500/50 dark:bg-emerald-500/10 dark:text-emerald-300"
+                                  title={liveSignatures
+                                    .map(
+                                      (signature) =>
+                                        `${signature.name} (${signature.role}) at ${new Date(
+                                          signature.signedAt
+                                        ).toLocaleTimeString([], {
+                                          hour: '2-digit',
+                                          minute: '2-digit',
+                                        })}`
+                                    )
+                                    .join(', ')}
+                                >
+                                  <Check className="h-3 w-3" />
+                                  Signed by{' '}
+                                  {liveSignatures
+                                    .map((signature) => `${signature.name} (${signature.role})`)
+                                    .join(', ')}
+                                </span>
+                              )
+                            })()}
+                          </div>
+                          {(() => {
+                            const backLabelByMode: Record<SitrepViewMode, string> = {
+                              current: 'View latest',
+                              historical: 'Back to Historical',
+                              drafts: 'Back to Drafts',
+                              'review-queue': 'Back to Review Queue',
+                            }
+                            return (
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                className="h-7 gap-1 text-xs"
+                                onClick={() => {
+                                  if (liveSitrepFormRef.current) {
+                                    setSitrepForm(liveSitrepFormRef.current)
+                                    liveSitrepFormRef.current = null
+                                  }
+                                  setViewingSitrepVersion(null)
+                                }}
+                              >
+                                <X className="h-3.5 w-3.5" />
+                                {backLabelByMode[sitrepViewMode]}
+                              </Button>
+                            )
+                          })()}
+                        </div>
+                      )}
+                      {activeSitrepDraftId !== null &&
+                        !viewingSitrepVersion &&
+                        (() => {
+                          const activeDraft = sitrepVersions.find(
+                            (v) => v.id === activeSitrepDraftId
+                          )
+                          if (!activeDraft) {
+                            return null
+                          }
+                          const indexInAll = sitrepVersions.findIndex(
+                            (v) => v.id === activeSitrepDraftId
+                          )
+                          const versionLabel =
+                            indexInAll === sitrepVersions.length - 1
+                              ? 'latest'
+                              : `v${indexInAll + 1}`
+                          const hasRequestedApproval = requestedApprovalSitrepDraftIds.has(
+                            activeDraft.id
+                          )
+                          return (
+                            <>
+                              <div className="flex items-center justify-end">
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant={hasRequestedApproval ? 'outline' : 'default'}
+                                  disabled={hasRequestedApproval}
+                                  className={cn(
+                                    'h-7 gap-1 text-xs',
+                                    !hasRequestedApproval &&
+                                      'bg-emerald-600 text-white hover:bg-emerald-700'
+                                  )}
+                                  onClick={() => {
+                                    openSitrepApprovalRecipientPicker({
+                                      draftId: activeDraft.id,
+                                      versionLabel,
+                                      authorName: activeDraft.authorName,
+                                    })
+                                  }}
+                                >
+                                  {hasRequestedApproval ? (
+                                    <>
+                                      <Check className="h-3.5 w-3.5" />
+                                      Approval Requested
+                                    </>
+                                  ) : (
+                                    'Request Approval'
+                                  )}
+                                </Button>
+                              </div>
+                              <div className="flex items-center justify-between rounded-md border border-sky-400 bg-sky-50 px-3 py-2 text-xs text-sky-900 dark:border-sky-500 dark:bg-sky-500/10 dark:text-sky-200">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <div className="flex flex-col gap-0.5">
+                                  <span>
+                                    Created by{' '}
+                                    <span className="font-semibold">
+                                      {activeDraft.creatorRole} {activeDraft.creatorName}
+                                    </span>{' '}
+                                    at{' '}
+                                    <span className="font-semibold">
+                                      {new Date(activeDraft.creatorCreatedAt).toLocaleTimeString(
+                                        [],
+                                        {
+                                          hour: '2-digit',
+                                          minute: '2-digit',
+                                          second: '2-digit',
+                                        }
+                                      )}
+                                    </span>
+                                    .
+                                  </span>
+                                  <span>
+                                    Last edited by{' '}
+                                    <span className="font-semibold">
+                                      {activeDraft.authorRole} {activeDraft.authorName}
+                                    </span>{' '}
+                                    at{' '}
+                                    <span className="font-semibold">
+                                      {new Date(activeDraft.createdAt).toLocaleTimeString([], {
+                                        hour: '2-digit',
+                                        minute: '2-digit',
+                                        second: '2-digit',
+                                      })}
+                                    </span>
+                                    .
+                                  </span>
+                                </div>
+                              </div>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                className="h-7 gap-1 text-xs"
+                                onClick={() => {
+                                  if (liveSitrepFormRef.current) {
+                                    setSitrepForm(liveSitrepFormRef.current)
+                                    liveSitrepFormRef.current = null
+                                  }
+                                  setActiveSitrepDraftId(null)
+                                  setSitrepViewMode('drafts')
+                                  setSitrepSectionEdits({
+                                    'reporting-unit': null,
+                                    'executive-summary': null,
+                                    'readiness-assessment': null,
+                                    'risk-to-mission': null,
+                                    'outstanding-rfi-rfr': null,
+                                    'previous-critical-incident-comms': null,
+                                    'general-comments': null,
+                                    'imagery': null,
+                                  })
+                                }}
+                              >
+                                <X className="h-3.5 w-3.5" />
+                                Back to Drafts
+                              </Button>
+                            </div>
+                            </>
+                          )
+                        })()}
+                      {!viewingSitrepVersion &&
+                        !isCreatingSignedSitrepVersion &&
+                        activeSitrepDraftId === null && (
+                          <div className="flex items-center justify-start gap-2">
+                            <span className="text-base font-semibold text-foreground">
+                              SITREP for
+                            </span>
+                            <Select
+                              value={selectedSitrepScopeId}
+                              onValueChange={(value) => setSelectedSitrepScopeId(value)}
+                            >
+                              <SelectTrigger
+                                size="sm"
+                                aria-label="SITREP AOR or Incident"
+                                className="h-8 w-[280px] text-xs"
+                              >
+                                <SelectValue placeholder="Select AOR or Incident" />
+                              </SelectTrigger>
+                              <SelectContent className="text-xs">
+                                <SelectGroup>
+                                  <SelectLabel className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                                    USCG AORs
+                                  </SelectLabel>
+                                  {SITREP_SCOPE_OPTIONS.filter(
+                                    (option) => option.kind === 'aor'
+                                  ).map((option) => (
+                                    <SelectItem
+                                      key={option.id}
+                                      value={option.id}
+                                      className="text-xs"
+                                    >
+                                      {option.label}
+                                    </SelectItem>
+                                  ))}
+                                </SelectGroup>
+                                <SelectGroup>
+                                  <SelectLabel className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                                    Incidents
+                                  </SelectLabel>
+                                  {SITREP_SCOPE_OPTIONS.filter(
+                                    (option) => option.kind === 'incident'
+                                  ).map((option) => (
+                                    <SelectItem
+                                      key={option.id}
+                                      value={option.id}
+                                      className="text-xs"
+                                    >
+                                      {option.label}
+                                    </SelectItem>
+                                  ))}
+                                </SelectGroup>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        )}
+                      {!viewingSitrepVersion &&
+                        !isCreatingSignedSitrepVersion &&
+                        activeSitrepDraftId === null && (
+                          <div className="flex items-center justify-between gap-2">
+                            <ToggleGroup
+                              type="single"
+                              value={sitrepViewMode}
+                              onValueChange={(value) => {
+                                if (
+                                  value === 'current' ||
+                                  value === 'historical' ||
+                                  value === 'drafts' ||
+                                  value === 'review-queue'
+                                ) {
+                                  setSitrepViewMode(value)
+                                }
+                              }}
+                              variant="outline"
+                              size="sm"
+                              spacing={0}
+                              aria-label="SITREP view mode"
+                              className={glassToggleGroupClasses}
+                            >
+                              <ToggleGroupItem value="current" aria-label="Current">
+                                Current
+                              </ToggleGroupItem>
+                              <ToggleGroupItem value="historical" aria-label="Historical">
+                                Historical
+                              </ToggleGroupItem>
+                              <ToggleGroupItem value="drafts" aria-label="Drafts">
+                                Drafts
+                              </ToggleGroupItem>
+                              <ToggleGroupItem value="review-queue" aria-label="Review Queue">
+                                Review Queue
+                              </ToggleGroupItem>
+                            </ToggleGroup>
+                            {(sitrepViewMode === 'current' ||
+                              sitrepViewMode === 'drafts') && (
+                              <Button
+                                type="button"
+                                size="sm"
+                                className="h-8 gap-1 bg-emerald-600 text-xs text-white hover:bg-emerald-700"
+                                onClick={createNewSitrepDraft}
+                              >
+                                <Plus className="h-3.5 w-3.5" />
+                                Create Draft SITREP
+                              </Button>
+                            )}
+                          </div>
+                        )}
+                    </div>
+                    {!viewingSitrepVersion && sitrepViewMode !== 'current' && (() => {
+                      const reversed = [...sitrepVersions].reverse()
+                      const filtered =
+                        sitrepViewMode === 'historical'
+                          ? reversed
+                          : sitrepViewMode === 'drafts'
+                            ? reversed.filter((version) => version.signatures.length === 0)
+                            : reversed.filter((version) => version.signatures.length > 0)
+                      const titleByMode: Record<Exclude<SitrepViewMode, 'current'>, string> = {
+                        historical: 'Historical versions',
+                        drafts: 'Drafts',
+                        'review-queue': 'Review queue',
+                      }
+                      const subtitleByMode: Record<Exclude<SitrepViewMode, 'current'>, string> = {
+                        historical: 'All revisions captured as the team collaborates',
+                        drafts: ' ',
+                        'review-queue': 'Signed versions ready for review',
+                      }
+                      const emptyByMode: Record<Exclude<SitrepViewMode, 'current'>, string> = {
+                        historical: 'No versions yet.',
+                        drafts: 'No draft versions yet.',
+                        'review-queue': 'No signed versions awaiting review.',
+                      }
+                      const mode = sitrepViewMode
+                      return (
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-2 px-1 text-xs font-semibold">
+                            {mode === 'review-queue' ? (
+                              <Check className="h-3.5 w-3.5 text-emerald-600" />
+                            ) : mode === 'drafts' ? (
+                              <FileText className="h-3.5 w-3.5" />
+                            ) : (
+                              <History className="h-3.5 w-3.5" />
+                            )}
+                            {titleByMode[mode]}
+                            <span className="ml-auto text-[11px] font-normal text-muted-foreground">
+                              {subtitleByMode[mode]}
+                            </span>
+                          </div>
+                          <div className="overflow-hidden rounded-md border">
+                            {filtered.length === 0 ? (
+                              <div className="px-4 py-8 text-center text-xs text-muted-foreground">
+                                {emptyByMode[mode]}
+                              </div>
+                            ) : (
+                              <ul className="divide-y">
+                                {filtered.map((version) => {
+                                  const created = new Date(version.createdAt)
+                                  const indexInAll = sitrepVersions.findIndex(
+                                    (entry) => entry.id === version.id
+                                  )
+                                  const versionLabel =
+                                    indexInAll === sitrepVersions.length - 1
+                                      ? 'Current'
+                                      : `v${indexInAll + 1}`
+                                  const preview =
+                                    version.snapshot.executiveSummary.slice(0, 80) +
+                                    (version.snapshot.executiveSummary.length > 80 ? '…' : '')
+                                  const createdAtLabel = created.toLocaleTimeString([], {
+                                    hour: '2-digit',
+                                    minute: '2-digit',
+                                    second: '2-digit',
+                                  })
+                                  const statusBadge =
+                                    mode === 'historical'
+                                      ? null
+                                      : version.signatures.length > 0 ? (
+                                          <span
+                                            className="flex max-w-full items-center gap-1 rounded-full border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-800 dark:border-emerald-500/50 dark:bg-emerald-500/10 dark:text-emerald-300"
+                                            title={version.signatures
+                                              .map(
+                                                (signature) =>
+                                                  `${signature.name} (${signature.role}) at ${new Date(
+                                                    signature.signedAt
+                                                  ).toLocaleTimeString([], {
+                                                    hour: '2-digit',
+                                                    minute: '2-digit',
+                                                  })}`
+                                              )
+                                              .join(', ')}
+                                          >
+                                            <Check className="h-3 w-3 shrink-0" />
+                                            <span className="truncate">
+                                              Signed by{' '}
+                                              {version.signatures
+                                                .map(
+                                                  (signature) =>
+                                                    `${signature.name} (${signature.role})`
+                                                )
+                                                .join(', ')}
+                                            </span>
+                                          </span>
+                                        ) : version.submittedForReviewTo &&
+                                          version.submittedForReviewTo.length > 0 ? (
+                                          <button
+                                            type="button"
+                                            onClick={() =>
+                                              setExpandedSitrepReviewStatusDraftId((previous) =>
+                                                previous === version.id ? null : version.id
+                                              )
+                                            }
+                                            aria-expanded={
+                                              expandedSitrepReviewStatusDraftId === version.id
+                                            }
+                                            className="flex max-w-full cursor-pointer items-start gap-1 rounded-md border border-emerald-300 bg-emerald-50 px-2 py-1 text-left text-[10px] font-medium text-emerald-800 hover:bg-emerald-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 dark:border-emerald-500/50 dark:bg-emerald-500/10 dark:text-emerald-300 dark:hover:bg-emerald-500/20"
+                                          >
+                                            <Check className="mt-[2px] h-3 w-3 shrink-0" />
+                                            <span className="whitespace-normal break-words">
+                                              Submitted for Review to{' '}
+                                              {version.submittedForReviewTo
+                                                .map(
+                                                  (recipient) =>
+                                                    `${recipient.role} ${recipient.name}`
+                                                )
+                                                .join(', ')}
+                                            </span>
+                                          </button>
+                                        ) : (
+                                          <span className="flex items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-800 dark:border-amber-500/50 dark:bg-amber-500/10 dark:text-amber-300">
+                                            Not Submitted for Review
+                                          </span>
+                                        )
+                                  const viewButton = (
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      variant="outline"
+                                      className="h-7 text-xs"
+                                      onClick={() => {
+                                        const isEditableDraft =
+                                          version.signatures.length === 0 &&
+                                          (!version.submittedForReviewTo ||
+                                            version.submittedForReviewTo.length === 0)
+                                        if (
+                                          !viewingSitrepVersion &&
+                                          activeSitrepDraftId === null
+                                        ) {
+                                          liveSitrepFormRef.current = sitrepForm
+                                        }
+                                        setSitrepForm(version.snapshot)
+                                        setSitrepSectionEdits({
+                                          'reporting-unit': null,
+                                          'executive-summary': null,
+                                          'readiness-assessment': null,
+                                          'risk-to-mission': null,
+                                          'outstanding-rfi-rfr': null,
+                                          'previous-critical-incident-comms': null,
+                                          'general-comments': null,
+                                          'imagery': null,
+                                        })
+                                        if (isEditableDraft) {
+                                          setActiveSitrepDraftId(version.id)
+                                          setViewingSitrepVersion(null)
+                                        } else {
+                                          setActiveSitrepDraftId(null)
+                                          setViewingSitrepVersion(version)
+                                        }
+                                        setSitrepViewMode('current')
+                                      }}
+                                    >
+                                      View
+                                    </Button>
+                                  )
+                                  if (mode === 'drafts') {
+                                    return (
+                                      <li
+                                        key={version.id}
+                                        className="flex flex-col gap-1.5 px-3 py-2 text-xs hover:bg-muted/40"
+                                      >
+                                        <div className="flex items-center gap-3">
+                                          <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                                            <div className="text-muted-foreground">
+                                              Created by{' '}
+                                              <span className="font-medium text-foreground">
+                                                {version.creatorRole} {version.creatorName}
+                                              </span>
+                                            </div>
+                                            <div className="text-muted-foreground">
+                                              Last updated by{' '}
+                                              <span className="font-medium text-foreground">
+                                                {version.authorRole} {version.authorName}
+                                              </span>{' '}
+                                              at {createdAtLabel}
+                                            </div>
+                                            {expandedSitrepReviewStatusDraftId === version.id &&
+                                              version.submittedForReviewTo &&
+                                              version.submittedForReviewTo.length > 0 &&
+                                              version.signatures.length === 0 &&
+                                              (() => {
+                                                const sulRecipient =
+                                                  version.submittedForReviewTo.find(
+                                                    (recipient) =>
+                                                      recipient.role === 'Situation Unit Leader'
+                                                  )
+                                                const pscRecipient =
+                                                  version.submittedForReviewTo.find(
+                                                    (recipient) =>
+                                                      recipient.role === 'Planning Section Chief'
+                                                  )
+                                                const sulApprovedAt = version.submittedForReviewAt
+                                                  ? version.submittedForReviewAt + 5 * 60 * 1000
+                                                  : null
+                                                return (
+                                                  <>
+                                                    {sulRecipient && (
+                                                      <div className="flex items-center gap-1 text-emerald-700 dark:text-emerald-300">
+                                                        <Check className="h-3 w-3 shrink-0" />
+                                                        <span>
+                                                          Approved by{' '}
+                                                          <span className="font-medium">
+                                                            {sulRecipient.role}{' '}
+                                                            {sulRecipient.name}
+                                                          </span>
+                                                          {sulApprovedAt && (
+                                                            <>
+                                                              {' '}
+                                                              at{' '}
+                                                              <span className="font-medium">
+                                                                {new Date(
+                                                                  sulApprovedAt
+                                                                ).toLocaleTimeString([], {
+                                                                  hour: '2-digit',
+                                                                  minute: '2-digit',
+                                                                  second: '2-digit',
+                                                                })}
+                                                              </span>
+                                                            </>
+                                                          )}
+                                                        </span>
+                                                      </div>
+                                                    )}
+                                                    {pscRecipient && (
+                                                      <div className="flex items-center gap-1 text-amber-700 dark:text-amber-300">
+                                                        <Clock className="h-3 w-3 shrink-0" />
+                                                        <span>
+                                                          Pending Review by{' '}
+                                                          <span className="font-medium">
+                                                            {pscRecipient.role}
+                                                          </span>
+                                                        </span>
+                                                      </div>
+                                                    )}
+                                                  </>
+                                                )
+                                              })()}
+                                          </div>
+                                          {viewButton}
+                                        </div>
+                                        {statusBadge && (
+                                          <div className="flex justify-end">{statusBadge}</div>
+                                        )}
+                                      </li>
+                                    )
+                                  }
+                                  return (
+                                    <li
+                                      key={version.id}
+                                      className="flex items-center gap-3 px-3 py-2 text-xs hover:bg-muted/40"
+                                    >
+                                      <div className="flex w-24 shrink-0 flex-col">
+                                        <span className="font-medium">{versionLabel}</span>
+                                        <span className="text-muted-foreground">
+                                          {createdAtLabel}
+                                        </span>
+                                      </div>
+                                      <span
+                                        className="flex h-5 items-center gap-1 rounded-full px-2 text-[10px] font-semibold text-white"
+                                        style={{ backgroundColor: version.authorColor }}
+                                      >
+                                        {version.authorName}
+                                      </span>
+                                      <span className="flex-1 truncate text-muted-foreground">
+                                        {preview || '(no summary changes)'}
+                                      </span>
+                                      {statusBadge}
+                                      {viewButton}
+                                    </li>
+                                  )
+                                })}
+                              </ul>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    })()}
+                    {(sitrepViewMode === 'current' || viewingSitrepVersion !== null) && (
+                      <div className="space-y-3">
+                        <div className="-mx-1 overflow-x-auto px-1">
+                          <div className="flex min-w-max items-center gap-1 border-b">
+                            {SITREP_SECTIONS.map((section) => {
+                              const isActive = sitrepActiveSection === section.id
+                              return (
+                                <button
+                                  key={section.id}
+                                  type="button"
+                                  onClick={() => setSitrepActiveSection(section.id)}
+                                  className={cn(
+                                    'shrink-0 whitespace-nowrap rounded-t-md border-b-2 px-3 py-1.5 text-xs font-medium transition-colors',
+                                    isActive
+                                      ? 'border-foreground text-foreground'
+                                      : 'border-transparent text-muted-foreground hover:text-foreground'
+                                  )}
+                                >
+                                  {section.label}
+                                </button>
+                              )
+                            })}
+                          </div>
+                        </div>
+                        {(() => {
+                          const activeSitrepDraft =
+                            activeSitrepDraftId !== null
+                              ? sitrepVersions.find((entry) => entry.id === activeSitrepDraftId)
+                              : null
+                          const activeDraftSubmitted =
+                            !!activeSitrepDraft &&
+                            ((activeSitrepDraft.submittedForReviewTo?.length ?? 0) > 0 ||
+                              requestedApprovalSitrepDraftIds.has(activeSitrepDraft.id))
+                          const formLocked =
+                            !!viewingSitrepVersion ||
+                            (activeSitrepDraftId === null && !isCreatingSignedSitrepVersion) ||
+                            activeDraftSubmitted
+                          return (
+                        <div
+                          className={cn(
+                            'space-y-3',
+                            formLocked && 'pointer-events-none opacity-70 select-none'
+                          )}
+                        >
+                          {sitrepActiveSection === 'reporting-unit' && (
+                            <Item
+                              variant="outline"
+                              className={cn(
+                                'flex-col items-stretch p-0',
+                                glassItemBorderClasses
+                              )}
+                            >
+                              <div className="px-3 py-2.5">
+                                <ItemContent className="space-y-3">
+                                  <ItemTitle>Reporting Unit (Sector/LNO)</ItemTitle>
+                                  <Textarea
+                                    value={
+                                      sitrepSectionEdits['reporting-unit'] !== null
+                                        ? sitrepSectionEdits['reporting-unit']!
+                                        : sitrepForm.sectorLno
+                                    }
+                                    onChange={(event) => {
+                                      if (sitrepSectionEdits['reporting-unit'] !== null) {
+                                        setSitrepSectionEditValue(
+                                          'reporting-unit',
+                                          event.target.value
+                                        )
+                                      }
+                                    }}
+                                    onFocus={() => beginSitrepSectionEdit('reporting-unit')}
+                                    onClick={() => beginSitrepSectionEdit('reporting-unit')}
+                                    readOnly={sitrepSectionEdits['reporting-unit'] === null}
+                                    className="min-h-16 cursor-text text-xs"
+                                    placeholder="Sector / LNO assignment"
+                                  />
+                                  {sitrepSectionEdits['reporting-unit'] !== null && (
+                                    <div className="flex items-center justify-start gap-2">
+                                      <Button
+                                        type="button"
+                                        size="sm"
+                                        variant="outline"
+                                        className="h-7 gap-1 text-xs"
+                                        onClick={() => saveSitrepSectionEdit('reporting-unit')}
+                                      >
+                                        Save
+                                      </Button>
+                                      <Button
+                                        type="button"
+                                        size="sm"
+                                        variant="ghost"
+                                        className="h-7 gap-1 text-xs"
+                                        onClick={() => cancelSitrepSectionEdit('reporting-unit')}
+                                      >
+                                        Cancel
+                                      </Button>
+                                    </div>
+                                  )}
+                                </ItemContent>
+                              </div>
+                            </Item>
+                          )}
+                          {sitrepActiveSection === 'executive-summary' && (
+                            <Item
+                              variant="outline"
+                              className={cn(
+                                'flex-col items-stretch p-0',
+                                glassItemBorderClasses
+                              )}
+                            >
+                              <div className="px-3 py-2.5">
+                                <ItemContent className="space-y-2">
+                                  <ItemTitle>Executive Summary</ItemTitle>
+                                  <Textarea
+                                    value={
+                                      sitrepSectionEdits['executive-summary'] !== null
+                                        ? sitrepSectionEdits['executive-summary']!
+                                        : sitrepForm.executiveSummary
+                                    }
+                                    onChange={(event) => {
+                                      if (sitrepSectionEdits['executive-summary'] !== null) {
+                                        setSitrepSectionEditValue(
+                                          'executive-summary',
+                                          event.target.value
+                                        )
+                                      }
+                                    }}
+                                    onFocus={() => beginSitrepSectionEdit('executive-summary')}
+                                    onClick={() => beginSitrepSectionEdit('executive-summary')}
+                                    readOnly={sitrepSectionEdits['executive-summary'] === null}
+                                    className="min-h-24 cursor-text text-xs"
+                                    placeholder="Executive summary of operational period"
+                                  />
+                                  {sitrepSectionEdits['executive-summary'] !== null && (
+                                    <div className="flex items-center justify-start gap-2">
+                                      <Button
+                                        type="button"
+                                        size="sm"
+                                        variant="outline"
+                                        className="h-7 gap-1 text-xs"
+                                        onClick={() => saveSitrepSectionEdit('executive-summary')}
+                                      >
+                                        Save
+                                      </Button>
+                                      <Button
+                                        type="button"
+                                        size="sm"
+                                        variant="ghost"
+                                        className="h-7 gap-1 text-xs"
+                                        onClick={() =>
+                                          cancelSitrepSectionEdit('executive-summary')
+                                        }
+                                      >
+                                        Cancel
+                                      </Button>
+                                    </div>
+                                  )}
+                                </ItemContent>
+                              </div>
+                            </Item>
+                          )}
+                          {sitrepActiveSection === 'readiness-assessment' && (
+                            <Item
+                              variant="outline"
+                              className={cn(
+                                'flex-col items-stretch p-0',
+                                glassItemBorderClasses
+                              )}
+                            >
+                              <div className="px-3 py-2.5">
+                                <ItemContent className="space-y-2">
+                                  <ItemTitle>Readiness Assessment</ItemTitle>
+                                  <Textarea
+                                    value={
+                                      sitrepSectionEdits['readiness-assessment'] !== null
+                                        ? sitrepSectionEdits['readiness-assessment']!
+                                        : sitrepForm.readinessAssessment
+                                    }
+                                    onChange={(event) => {
+                                      if (sitrepSectionEdits['readiness-assessment'] !== null) {
+                                        setSitrepSectionEditValue(
+                                          'readiness-assessment',
+                                          event.target.value
+                                        )
+                                      }
+                                    }}
+                                    onFocus={() =>
+                                      beginSitrepSectionEdit('readiness-assessment')
+                                    }
+                                    onClick={() =>
+                                      beginSitrepSectionEdit('readiness-assessment')
+                                    }
+                                    readOnly={sitrepSectionEdits['readiness-assessment'] === null}
+                                    className="min-h-32 cursor-text text-xs"
+                                    placeholder="Readiness across personnel, equipment, logistics, and comms"
+                                  />
+                                  {sitrepSectionEdits['readiness-assessment'] !== null && (
+                                    <div className="flex items-center justify-start gap-2">
+                                      <Button
+                                        type="button"
+                                        size="sm"
+                                        variant="outline"
+                                        className="h-7 gap-1 text-xs"
+                                        onClick={() =>
+                                          saveSitrepSectionEdit('readiness-assessment')
+                                        }
+                                      >
+                                        Save
+                                      </Button>
+                                      <Button
+                                        type="button"
+                                        size="sm"
+                                        variant="ghost"
+                                        className="h-7 gap-1 text-xs"
+                                        onClick={() =>
+                                          cancelSitrepSectionEdit('readiness-assessment')
+                                        }
+                                      >
+                                        Cancel
+                                      </Button>
+                                    </div>
+                                  )}
+                                </ItemContent>
+                              </div>
+                            </Item>
+                          )}
+                          {sitrepActiveSection === 'risk-to-mission' && (
+                            <Item
+                              variant="outline"
+                              className={cn(
+                                'flex-col items-stretch p-0',
+                                glassItemBorderClasses
+                              )}
+                            >
+                              <div className="px-3 py-2.5">
+                                <ItemContent className="space-y-2">
+                                  <ItemTitle>Risk to Mission</ItemTitle>
+                                  <Textarea
+                                    value={
+                                      sitrepSectionEdits['risk-to-mission'] !== null
+                                        ? sitrepSectionEdits['risk-to-mission']!
+                                        : sitrepForm.riskToMission
+                                    }
+                                    onChange={(event) => {
+                                      if (sitrepSectionEdits['risk-to-mission'] !== null) {
+                                        setSitrepSectionEditValue(
+                                          'risk-to-mission',
+                                          event.target.value
+                                        )
+                                      }
+                                    }}
+                                    onFocus={() => beginSitrepSectionEdit('risk-to-mission')}
+                                    onClick={() => beginSitrepSectionEdit('risk-to-mission')}
+                                    readOnly={sitrepSectionEdits['risk-to-mission'] === null}
+                                    className="min-h-32 cursor-text text-xs"
+                                    placeholder="Risks to mission success and mitigations"
+                                  />
+                                  {sitrepSectionEdits['risk-to-mission'] !== null && (
+                                    <div className="flex items-center justify-start gap-2">
+                                      <Button
+                                        type="button"
+                                        size="sm"
+                                        variant="outline"
+                                        className="h-7 gap-1 text-xs"
+                                        onClick={() => saveSitrepSectionEdit('risk-to-mission')}
+                                      >
+                                        Save
+                                      </Button>
+                                      <Button
+                                        type="button"
+                                        size="sm"
+                                        variant="ghost"
+                                        className="h-7 gap-1 text-xs"
+                                        onClick={() => cancelSitrepSectionEdit('risk-to-mission')}
+                                      >
+                                        Cancel
+                                      </Button>
+                                    </div>
+                                  )}
+                                </ItemContent>
+                              </div>
+                            </Item>
+                          )}
+                          {sitrepActiveSection === 'outstanding-rfi-rfr' && (
+                            <Item
+                              variant="outline"
+                              className={cn(
+                                'flex-col items-stretch p-0',
+                                glassItemBorderClasses
+                              )}
+                            >
+                              <div className="px-3 py-2.5">
+                                <ItemContent className="space-y-2">
+                                  <ItemTitle>Outstanding RFI / RFR</ItemTitle>
+                                  <Textarea
+                                    value={
+                                      sitrepSectionEdits['outstanding-rfi-rfr'] !== null
+                                        ? sitrepSectionEdits['outstanding-rfi-rfr']!
+                                        : sitrepForm.outstandingRfiRfr
+                                    }
+                                    onChange={(event) => {
+                                      if (sitrepSectionEdits['outstanding-rfi-rfr'] !== null) {
+                                        setSitrepSectionEditValue(
+                                          'outstanding-rfi-rfr',
+                                          event.target.value
+                                        )
+                                      }
+                                    }}
+                                    onFocus={() => beginSitrepSectionEdit('outstanding-rfi-rfr')}
+                                    onClick={() => beginSitrepSectionEdit('outstanding-rfi-rfr')}
+                                    readOnly={sitrepSectionEdits['outstanding-rfi-rfr'] === null}
+                                    className="min-h-32 cursor-text text-xs"
+                                    placeholder="Open RFIs and RFRs"
+                                  />
+                                  {sitrepSectionEdits['outstanding-rfi-rfr'] !== null && (
+                                    <div className="flex items-center justify-start gap-2">
+                                      <Button
+                                        type="button"
+                                        size="sm"
+                                        variant="outline"
+                                        className="h-7 gap-1 text-xs"
+                                        onClick={() =>
+                                          saveSitrepSectionEdit('outstanding-rfi-rfr')
+                                        }
+                                      >
+                                        Save
+                                      </Button>
+                                      <Button
+                                        type="button"
+                                        size="sm"
+                                        variant="ghost"
+                                        className="h-7 gap-1 text-xs"
+                                        onClick={() =>
+                                          cancelSitrepSectionEdit('outstanding-rfi-rfr')
+                                        }
+                                      >
+                                        Cancel
+                                      </Button>
+                                    </div>
+                                  )}
+                                </ItemContent>
+                              </div>
+                            </Item>
+                          )}
+                          {sitrepActiveSection === 'previous-critical-incident-comms' && (
+                            <Item
+                              variant="outline"
+                              className={cn(
+                                'flex-col items-stretch p-0',
+                                glassItemBorderClasses
+                              )}
+                            >
+                              <div className="px-3 py-2.5">
+                                <ItemContent className="space-y-2">
+                                  <ItemTitle>Previous Critical Incident Communications</ItemTitle>
+                                  <Textarea
+                                    value={
+                                      sitrepSectionEdits['previous-critical-incident-comms'] !==
+                                      null
+                                        ? sitrepSectionEdits['previous-critical-incident-comms']!
+                                        : sitrepForm.previousCriticalIncidentComms
+                                    }
+                                    onChange={(event) => {
+                                      if (
+                                        sitrepSectionEdits['previous-critical-incident-comms'] !==
+                                        null
+                                      ) {
+                                        setSitrepSectionEditValue(
+                                          'previous-critical-incident-comms',
+                                          event.target.value
+                                        )
+                                      }
+                                    }}
+                                    onFocus={() =>
+                                      beginSitrepSectionEdit('previous-critical-incident-comms')
+                                    }
+                                    onClick={() =>
+                                      beginSitrepSectionEdit('previous-critical-incident-comms')
+                                    }
+                                    readOnly={
+                                      sitrepSectionEdits['previous-critical-incident-comms'] ===
+                                      null
+                                    }
+                                    className="min-h-32 cursor-text text-xs"
+                                    placeholder="Critical communications log (time — message)"
+                                  />
+                                  {sitrepSectionEdits['previous-critical-incident-comms'] !==
+                                    null && (
+                                    <div className="flex items-center justify-start gap-2">
+                                      <Button
+                                        type="button"
+                                        size="sm"
+                                        variant="outline"
+                                        className="h-7 gap-1 text-xs"
+                                        onClick={() =>
+                                          saveSitrepSectionEdit(
+                                            'previous-critical-incident-comms'
+                                          )
+                                        }
+                                      >
+                                        Save
+                                      </Button>
+                                      <Button
+                                        type="button"
+                                        size="sm"
+                                        variant="ghost"
+                                        className="h-7 gap-1 text-xs"
+                                        onClick={() =>
+                                          cancelSitrepSectionEdit(
+                                            'previous-critical-incident-comms'
+                                          )
+                                        }
+                                      >
+                                        Cancel
+                                      </Button>
+                                    </div>
+                                  )}
+                                </ItemContent>
+                              </div>
+                            </Item>
+                          )}
+                          {sitrepActiveSection === 'general-comments' && (
+                            <Item
+                              variant="outline"
+                              className={cn(
+                                'flex-col items-stretch p-0',
+                                glassItemBorderClasses
+                              )}
+                            >
+                              <div className="px-3 py-2.5">
+                                <ItemContent className="space-y-2">
+                                  <ItemTitle>General Comments</ItemTitle>
+                                  <Textarea
+                                    value={
+                                      sitrepSectionEdits['general-comments'] !== null
+                                        ? sitrepSectionEdits['general-comments']!
+                                        : sitrepForm.generalComments
+                                    }
+                                    onChange={(event) => {
+                                      if (sitrepSectionEdits['general-comments'] !== null) {
+                                        setSitrepSectionEditValue(
+                                          'general-comments',
+                                          event.target.value
+                                        )
+                                      }
+                                    }}
+                                    onFocus={() => beginSitrepSectionEdit('general-comments')}
+                                    onClick={() => beginSitrepSectionEdit('general-comments')}
+                                    readOnly={sitrepSectionEdits['general-comments'] === null}
+                                    className="min-h-32 cursor-text text-xs"
+                                    placeholder="General comments, observations, recommendations"
+                                  />
+                                  {sitrepSectionEdits['general-comments'] !== null && (
+                                    <div className="flex items-center justify-start gap-2">
+                                      <Button
+                                        type="button"
+                                        size="sm"
+                                        variant="outline"
+                                        className="h-7 gap-1 text-xs"
+                                        onClick={() => saveSitrepSectionEdit('general-comments')}
+                                      >
+                                        Save
+                                      </Button>
+                                      <Button
+                                        type="button"
+                                        size="sm"
+                                        variant="ghost"
+                                        className="h-7 gap-1 text-xs"
+                                        onClick={() =>
+                                          cancelSitrepSectionEdit('general-comments')
+                                        }
+                                      >
+                                        Cancel
+                                      </Button>
+                                    </div>
+                                  )}
+                                </ItemContent>
+                              </div>
+                            </Item>
+                          )}
+                          {sitrepActiveSection === 'imagery' && (
+                            <Item
+                              variant="outline"
+                              className={cn(
+                                'flex-col items-stretch p-0',
+                                glassItemBorderClasses
+                              )}
+                            >
+                              <div className="px-3 py-2.5">
+                                <ItemContent className="space-y-3">
+                                  <ItemTitle>Imagery</ItemTitle>
+                                  <div className="grid grid-cols-3 gap-2">
+                                    {[
+                                      {
+                                        caption: 'Aerial — North Levee Sector',
+                                        meta: '17:30 • drone',
+                                        gradient:
+                                          'from-sky-500/40 via-indigo-500/30 to-emerald-500/40',
+                                      },
+                                      {
+                                        caption: 'Ground — River Bend Corridor',
+                                        meta: '16:15 • field unit',
+                                        gradient:
+                                          'from-amber-500/40 via-orange-500/30 to-rose-500/40',
+                                      },
+                                      {
+                                        caption: 'Shelter — Districts 4 & 7',
+                                        meta: '17:05 • PIO',
+                                        gradient:
+                                          'from-violet-500/40 via-fuchsia-500/30 to-cyan-500/40',
+                                      },
+                                    ].map((image) => (
+                                      <div
+                                        key={image.caption}
+                                        className="overflow-hidden rounded-md border"
+                                      >
+                                        <div
+                                          className={cn(
+                                            'relative flex aspect-video items-center justify-center bg-gradient-to-br',
+                                            image.gradient
+                                          )}
+                                        >
+                                          <ImageIcon className="size-6 text-white/80" />
+                                        </div>
+                                        <div className="space-y-0.5 px-2 py-1.5">
+                                          <p className="text-[11px] font-medium leading-tight">
+                                            {image.caption}
+                                          </p>
+                                          <p className="text-[10px] text-muted-foreground">
+                                            {image.meta}
+                                          </p>
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                  <Textarea
+                                    value={
+                                      sitrepSectionEdits['imagery'] !== null
+                                        ? sitrepSectionEdits['imagery']!
+                                        : sitrepForm.imageryNotes
+                                    }
+                                    onChange={(event) => {
+                                      if (sitrepSectionEdits['imagery'] !== null) {
+                                        setSitrepSectionEditValue('imagery', event.target.value)
+                                      }
+                                    }}
+                                    onFocus={() => beginSitrepSectionEdit('imagery')}
+                                    onClick={() => beginSitrepSectionEdit('imagery')}
+                                    readOnly={sitrepSectionEdits['imagery'] === null}
+                                    className="min-h-20 cursor-text text-xs"
+                                    placeholder="Imagery notes, attribution, archive location"
+                                  />
+                                  {sitrepSectionEdits['imagery'] !== null && (
+                                    <div className="flex items-center justify-start gap-2">
+                                      <Button
+                                        type="button"
+                                        size="sm"
+                                        variant="outline"
+                                        className="h-7 gap-1 text-xs"
+                                        onClick={() => saveSitrepSectionEdit('imagery')}
+                                      >
+                                        Save
+                                      </Button>
+                                      <Button
+                                        type="button"
+                                        size="sm"
+                                        variant="ghost"
+                                        className="h-7 gap-1 text-xs"
+                                        onClick={() => cancelSitrepSectionEdit('imagery')}
+                                      >
+                                        Cancel
+                                      </Button>
+                                    </div>
+                                  )}
+                                </ItemContent>
+                              </div>
+                            </Item>
+                          )}
+                        </div>
+                          )
+                        })()}
                       </div>
                     )}
                   </div>
@@ -9018,6 +11015,107 @@ function App() {
           </div>
         </DialogContent>
       </Dialog>
+      <Dialog
+        open={currentSituationConflict !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setCurrentSituationConflict(null)
+            setCurrentSituationEdit(null)
+          }
+        }}
+      >
+        <DialogContent className="!w-[60vw] !max-w-[60vw] sm:!max-w-[60vw]">
+          {currentSituationConflict && (
+            <div className="space-y-4">
+              <div className="flex items-start gap-2">
+                <AlertTriangle className="mt-0.5 h-5 w-5 text-amber-500" />
+                <div className="space-y-1">
+                  <div className="text-sm font-semibold">
+                    This section was edited by another user
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    <span
+                      className="mr-1 inline-block rounded px-1.5 py-0.5 text-[10px] font-semibold text-white"
+                      style={{ backgroundColor: currentSituationConflict.remoteColor }}
+                    >
+                      {currentSituationConflict.remoteAuthorRole}{' '}
+                      {currentSituationConflict.remoteAuthor}
+                    </span>
+                    saved changes to Current Situation since you started editing. Review both
+                    versions below and choose whether to override with your edits or keep their
+                    content.
+                  </div>
+                </div>
+              </div>
+              <div className="grid gap-3 md:grid-cols-2">
+                <div className="space-y-2">
+                  <div className="flex items-center gap-1 text-xs font-semibold">
+                    <span
+                      className="inline-block h-2 w-2 rounded-full"
+                      style={{ backgroundColor: currentSituationConflict.remoteColor }}
+                    />
+                    <span>
+                      Current content (from {currentSituationConflict.remoteAuthorRole}{' '}
+                      {currentSituationConflict.remoteAuthor}) at{' '}
+                      {new Date(currentSituationConflict.remoteAt).toLocaleTimeString([], {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        second: '2-digit',
+                      })}
+                    </span>
+                  </div>
+                  <div className="max-h-64 overflow-y-auto whitespace-pre-wrap rounded-md border bg-muted/30 px-3 py-2 text-xs">
+                    {currentSituationConflict.currentContent || '(empty)'}
+                  </div>
+                  <div className="flex items-center justify-start">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="h-8 text-xs"
+                      onClick={() => {
+                        setCurrentSituationConflict(null)
+                        setCurrentSituationEdit(null)
+                      }}
+                    >
+                      Keep current content
+                    </Button>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-xs font-semibold">
+                    <span className="flex items-center gap-1">
+                      <span className="inline-block h-2 w-2 rounded-full bg-emerald-500" />
+                      Your edits
+                    </span>
+                  </div>
+                  <div className="max-h-64 overflow-y-auto whitespace-pre-wrap rounded-md border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs dark:border-emerald-500/50 dark:bg-emerald-500/10">
+                    {currentSituationConflict.yourDraft || '(empty)'}
+                  </div>
+                  <div className="flex items-center justify-start">
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="h-8 text-xs"
+                      onClick={() => {
+                        if (!currentSituationConflict) return
+                        updateIcs201Field(
+                          'currentSituationSummary',
+                          currentSituationConflict.yourDraft
+                        )
+                        setCurrentSituationConflict(null)
+                        setCurrentSituationEdit(null)
+                      }}
+                    >
+                      Override with my edits
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
       <Dialog open={isIcs201VersionDialogOpen} onOpenChange={setIsIcs201VersionDialogOpen}>
         <DialogContent className="!w-[60vw] !max-w-[60vw] sm:!max-w-[60vw]">
           <div className="flex items-center gap-2 px-1 pb-2 text-sm font-semibold">
@@ -9284,7 +11382,7 @@ function App() {
                   signatures: [
                     {
                       name,
-                      role: 'Planning Section Chief',
+                      role: 'Technical Specialist',
                       signedAt: Date.now(),
                     },
                   ],
@@ -9293,6 +11391,596 @@ function App() {
                 setIsIcs201SignNameDialogOpen(false)
                 setIsCreatingSignedIcs201Version(false)
                 setIcs201SignNameInput('You')
+              }}
+            >
+              <Check className="h-3.5 w-3.5" />
+              Sign
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={sitrepApprovalRecipientPicker !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setSitrepApprovalRecipientPicker(null)
+          }
+        }}
+      >
+        <DialogContent className="!w-[720px] !max-w-[95vw]">
+          {sitrepApprovalRecipientPicker && (
+            <div className="space-y-4">
+              <div className="space-y-1">
+                <div className="text-sm font-semibold">Send draft for review</div>
+              </div>
+              <div className="space-y-2 rounded-md border border-sky-300 bg-sky-50/70 p-3 text-xs text-sky-900 dark:border-sky-500/60 dark:bg-sky-500/10 dark:text-sky-200">
+                <div className="text-[11px] font-semibold uppercase tracking-wide">
+                  Approval workflow for Incident SITREPs
+                </div>
+                <ol className="ml-4 list-decimal space-y-1">
+                  <li>
+                    Sent first to the{' '}
+                    <span className="font-semibold">Situation Unit Leader</span> for review.
+                  </li>
+                  <li>
+                    Then routed to the{' '}
+                    <span className="font-semibold">Planning Section Chief</span> for review and
+                    signature.
+                  </li>
+                </ol>
+                <p className="text-[11px] leading-snug">
+                  The <span className="font-semibold">Incident Commander</span> can review and
+                  approve this draft at any point, regardless of where it is in the workflow above
+                  or the actions of the other reviewers.
+                </p>
+              </div>
+              <div className="space-y-2">
+                <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  Notified reviewers
+                </label>
+                <div className="overflow-hidden rounded-md border">
+                  <div className="flex items-center justify-between gap-2 border-b bg-muted/50 px-3 py-2">
+                    <span className="text-xs">
+                      <span className="font-semibold">Step 1 — Situation Unit Leader</span>
+                      <span className="ml-2 text-[10px] uppercase tracking-wide text-muted-foreground">
+                        First approval
+                      </span>
+                    </span>
+                    <span className="text-[10px] text-muted-foreground">
+                      {SITREP_SITUATION_UNIT_LEADERS.length} assigned
+                    </span>
+                  </div>
+                  <ul className="divide-y">
+                    {SITREP_SITUATION_UNIT_LEADERS.map((assignee) => (
+                      <li
+                        key={`sul-${assignee.email}`}
+                        className="flex items-center justify-between gap-2 px-3 py-2 text-xs"
+                      >
+                        <span className="min-w-0 truncate">
+                          <span className="font-medium">Situation Unit Leader</span>{' '}
+                          <span className="text-foreground">{assignee.name}</span>{' '}
+                          <span className="text-muted-foreground">({assignee.email})</span>
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+                <div className="overflow-hidden rounded-md border">
+                  <div className="flex items-center justify-between gap-2 border-b bg-muted/50 px-3 py-2">
+                    <span className="text-xs">
+                      <span className="font-semibold">Step 2 — Planning Section Chief</span>
+                      <span className="ml-2 text-[10px] uppercase tracking-wide text-muted-foreground">
+                        Final approval
+                      </span>
+                    </span>
+                    <span className="text-[10px] text-muted-foreground">
+                      {SITREP_PLANNING_SECTION_CHIEFS.length} assigned
+                    </span>
+                  </div>
+                  <ul className="divide-y">
+                    {SITREP_PLANNING_SECTION_CHIEFS.map((assignee) => (
+                      <li
+                        key={`psc-${assignee.email}`}
+                        className="flex items-center justify-between gap-2 px-3 py-2 text-xs"
+                      >
+                        <span className="min-w-0 truncate">
+                          <span className="font-medium">Planning Section Chief</span>{' '}
+                          <span className="text-foreground">{assignee.name}</span>{' '}
+                          <span className="text-muted-foreground">({assignee.email})</span>
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+                <div className="overflow-hidden rounded-md border border-amber-300 dark:border-amber-500/60">
+                  <div className="flex items-center justify-between gap-2 border-b border-amber-300 bg-amber-50 px-3 py-2 dark:border-amber-500/60 dark:bg-amber-500/10">
+                    <span className="text-xs">
+                      <span className="font-semibold text-amber-900 dark:text-amber-200">
+                        Incident Commander — override authority
+                      </span>
+                      <span className="ml-2 text-[10px] uppercase tracking-wide text-amber-800/80 dark:text-amber-200/80">
+                        May approve at any time
+                      </span>
+                    </span>
+                    <span className="text-[10px] text-amber-800/80 dark:text-amber-200/80">
+                      {SITREP_INCIDENT_COMMANDERS.length} assigned
+                    </span>
+                  </div>
+                  <ul className="divide-y">
+                    {SITREP_INCIDENT_COMMANDERS.map((assignee) => (
+                      <li
+                        key={`ic-${assignee.email}`}
+                        className="flex items-center justify-between gap-2 px-3 py-2 text-xs"
+                      >
+                        <span className="min-w-0 truncate">
+                          <span className="font-medium">Incident Commander</span>{' '}
+                          <span className="text-foreground">{assignee.name}</span>{' '}
+                          <span className="text-muted-foreground">({assignee.email})</span>
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+                <p className="text-[10px] leading-snug text-muted-foreground">
+                  All users currently assigned to these positions will be notified to review the
+                  draft. The Situation Unit Leader and Planning Section Chief complete the
+                  workflow steps in order, while any Incident Commander may review and approve
+                  the draft at any time regardless of the actions of the other reviewers.
+                </p>
+              </div>
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-8 text-xs"
+                  onClick={() => {
+                    setSitrepApprovalRecipientPicker(null)
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  className="h-8 gap-1 bg-emerald-600 text-xs text-white hover:bg-emerald-700"
+                  onClick={submitSitrepApprovalRecipients}
+                >
+                  <Check className="h-3.5 w-3.5" />
+                  Send for Review
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={sitrepApprovalRequestConfirmation !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setSitrepApprovalRequestConfirmation(null)
+          }
+        }}
+      >
+        <DialogContent className="!w-[420px] !max-w-[90vw]">
+          {sitrepApprovalRequestConfirmation && (
+            <div className="space-y-4">
+              <div className="flex items-start gap-2">
+                <Check className="mt-0.5 h-5 w-5 text-emerald-600" />
+                <div className="space-y-1">
+                  <div className="text-sm font-semibold">Approval requested</div>
+                  <div className="text-xs text-muted-foreground">
+                    Draft{' '}
+                    <span className="font-semibold">
+                      {sitrepApprovalRequestConfirmation.versionLabel}
+                    </span>{' '}
+                    by{' '}
+                    <span className="font-semibold">
+                      {sitrepApprovalRequestConfirmation.authorName}
+                    </span>{' '}
+                    has been sent for review and signature to{' '}
+                    <span className="font-semibold text-foreground">
+                      {sitrepApprovalRequestConfirmation.recipients
+                        .map((recipient) => `${recipient.role} ${recipient.name}`)
+                        .join(', ')}
+                    </span>
+                    .
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center justify-end">
+                <Button
+                  type="button"
+                  size="sm"
+                  className="h-8 text-xs"
+                  onClick={() => setSitrepApprovalRequestConfirmation(null)}
+                >
+                  OK
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={sitrepSectionConflict !== null}
+        onOpenChange={(open) => {
+          if (!open && sitrepSectionConflict) {
+            cancelSitrepSectionEdit(sitrepSectionConflict.section)
+            setSitrepSectionConflict(null)
+          }
+        }}
+      >
+        <DialogContent className="!w-[60vw] !max-w-[60vw] sm:!max-w-[60vw]">
+          {sitrepSectionConflict && (
+            <div className="space-y-4">
+              <div className="flex items-start gap-2">
+                <AlertTriangle className="mt-0.5 h-5 w-5 text-amber-500" />
+                <div className="space-y-1">
+                  <div className="text-sm font-semibold">
+                    This section was edited by another user
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    <span
+                      className="mr-1 inline-block rounded px-1.5 py-0.5 text-[10px] font-semibold text-white"
+                      style={{ backgroundColor: sitrepSectionConflict.remoteColor }}
+                    >
+                      {sitrepSectionConflict.remoteAuthorRole}{' '}
+                      {sitrepSectionConflict.remoteAuthor}
+                    </span>
+                    saved changes to {sitrepSectionConflict.sectionLabel} since you started
+                    editing. Review both versions below and choose whether to override with your
+                    edits or keep their content.
+                  </div>
+                </div>
+              </div>
+              <div className="grid gap-3 md:grid-cols-2">
+                <div className="space-y-2">
+                  <div className="flex items-center gap-1 text-xs font-semibold">
+                    <span
+                      className="inline-block h-2 w-2 rounded-full"
+                      style={{ backgroundColor: sitrepSectionConflict.remoteColor }}
+                    />
+                    <span>
+                      Current content (from {sitrepSectionConflict.remoteAuthorRole}{' '}
+                      {sitrepSectionConflict.remoteAuthor}) at{' '}
+                      {new Date(sitrepSectionConflict.remoteAt).toLocaleTimeString([], {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        second: '2-digit',
+                      })}
+                    </span>
+                  </div>
+                  <div className="max-h-64 overflow-y-auto whitespace-pre-wrap rounded-md border bg-muted/30 px-3 py-2 text-xs">
+                    {sitrepSectionConflict.currentContent || '(empty)'}
+                  </div>
+                  <div className="flex items-center justify-start">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="h-8 text-xs"
+                      onClick={() => {
+                        cancelSitrepSectionEdit(sitrepSectionConflict.section)
+                        setSitrepSectionConflict(null)
+                      }}
+                    >
+                      Keep current content
+                    </Button>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-xs font-semibold">
+                    <span className="flex items-center gap-1">
+                      <span className="inline-block h-2 w-2 rounded-full bg-emerald-500" />
+                      Your edits
+                    </span>
+                  </div>
+                  <div className="max-h-64 overflow-y-auto whitespace-pre-wrap rounded-md border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs dark:border-emerald-500/50 dark:bg-emerald-500/10">
+                    {sitrepSectionConflict.yourDraft || '(empty)'}
+                  </div>
+                  <div className="flex items-center justify-start">
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="h-8 text-xs"
+                      onClick={() => {
+                        const conflict = sitrepSectionConflict
+                        if (!conflict) return
+                        const primaryField = SITREP_SECTION_PRIMARY[conflict.section].field
+                        updateSitrepField(primaryField, conflict.yourDraft)
+                        cancelSitrepSectionEdit(conflict.section)
+                        setSitrepSectionConflict(null)
+                      }}
+                    >
+                      Override with my edits
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+      <Dialog open={isSitrepVersionDialogOpen} onOpenChange={setIsSitrepVersionDialogOpen}>
+        <DialogContent className="!w-[60vw] !max-w-[60vw] sm:!max-w-[60vw]">
+          <div className="flex items-center gap-2 px-1 pb-2 text-sm font-semibold">
+            <History className="h-4 w-4" />
+            SITREP version history
+            <span className="ml-auto text-xs font-normal text-muted-foreground">
+              Revisions captured as the team collaborates
+            </span>
+          </div>
+          <div className="max-h-[60vh] overflow-y-auto rounded-md border">
+            {sitrepVersions.length === 0 ? (
+              <div className="px-4 py-8 text-center text-xs text-muted-foreground">
+                No versions yet.
+              </div>
+            ) : (
+              <ul className="divide-y">
+                {[...sitrepVersions].reverse().map((version, index) => {
+                  const created = new Date(version.createdAt)
+                  const preview =
+                    version.snapshot.executiveSummary.slice(0, 80) +
+                    (version.snapshot.executiveSummary.length > 80 ? '…' : '')
+                  return (
+                    <li
+                      key={version.id}
+                      className="flex items-center gap-3 px-3 py-2 text-xs hover:bg-muted/40"
+                    >
+                      <div className="flex w-32 shrink-0 flex-col">
+                        <span className="font-medium">
+                          {index === 0 ? 'Current' : `v${sitrepVersions.length - index}`}
+                        </span>
+                        <span className="text-muted-foreground">
+                          {created.toLocaleTimeString([], {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                            second: '2-digit',
+                          })}
+                        </span>
+                      </div>
+                      <span
+                        className="flex h-5 items-center gap-1 rounded-full px-2 text-[10px] font-semibold text-white"
+                        style={{ backgroundColor: version.authorColor }}
+                      >
+                        {version.authorName}
+                      </span>
+                      <span className="flex-1 truncate text-muted-foreground">
+                        {preview || '(no summary changes)'}
+                      </span>
+                      {version.signatures.length > 0 ? (
+                        <span
+                          className="flex max-w-[18rem] items-center gap-1 truncate rounded-full border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-800 dark:border-emerald-500/50 dark:bg-emerald-500/10 dark:text-emerald-300"
+                          title={version.signatures
+                            .map(
+                              (signature) =>
+                                `${signature.name} (${signature.role}) at ${new Date(
+                                  signature.signedAt
+                                ).toLocaleTimeString([], {
+                                  hour: '2-digit',
+                                  minute: '2-digit',
+                                })}`
+                            )
+                            .join(', ')}
+                        >
+                          <Check className="h-3 w-3" />
+                          <span className="truncate">
+                            Signed by{' '}
+                            {version.signatures
+                              .map((signature) => `${signature.name} (${signature.role})`)
+                              .join(', ')}
+                          </span>
+                        </span>
+                      ) : (
+                        <span className="flex items-center gap-1 rounded-full border border-muted-foreground/30 px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                          Unsigned
+                        </span>
+                      )}
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="h-7 text-xs"
+                        disabled={index === 0 && !viewingSitrepVersion}
+                        onClick={() => {
+                          if (!viewingSitrepVersion) {
+                            liveSitrepFormRef.current = sitrepForm
+                          }
+                          setSitrepForm(version.snapshot)
+                          setViewingSitrepVersion(version)
+                          setIsSitrepVersionDialogOpen(false)
+                        }}
+                      >
+                        View
+                      </Button>
+                    </li>
+                  )
+                })}
+              </ul>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={isSitrepSignedVersionsDialogOpen}
+        onOpenChange={setIsSitrepSignedVersionsDialogOpen}
+      >
+        <DialogContent className="!w-[60vw] !max-w-[60vw] sm:!max-w-[60vw]">
+          <div className="flex items-center gap-2 px-1 pb-2 text-sm font-semibold">
+            <Check className="h-4 w-4 text-emerald-600" />
+            SITREP signed versions
+            <span className="ml-auto text-xs font-normal text-muted-foreground">
+              Versions with at least one signature
+            </span>
+          </div>
+          <div className="max-h-[60vh] overflow-y-auto rounded-md border">
+            {(() => {
+              const signedVersions = sitrepVersions.filter(
+                (version) => version.signatures.length > 0
+              )
+              if (signedVersions.length === 0) {
+                return (
+                  <div className="px-4 py-8 text-center text-xs text-muted-foreground">
+                    No signed versions yet.
+                  </div>
+                )
+              }
+              return (
+                <ul className="divide-y">
+                  {[...signedVersions].reverse().map((version) => {
+                    const created = new Date(version.createdAt)
+                    const indexInAll = sitrepVersions.findIndex(
+                      (entry) => entry.id === version.id
+                    )
+                    const versionLabel =
+                      indexInAll === sitrepVersions.length - 1 ? 'Current' : `v${indexInAll + 1}`
+                    const preview =
+                      version.snapshot.executiveSummary.slice(0, 80) +
+                      (version.snapshot.executiveSummary.length > 80 ? '…' : '')
+                    return (
+                      <li
+                        key={version.id}
+                        className="flex items-center gap-3 px-3 py-2 text-xs hover:bg-muted/40"
+                      >
+                        <div className="flex w-32 shrink-0 flex-col">
+                          <span className="font-medium">{versionLabel}</span>
+                          <span className="text-muted-foreground">
+                            {created.toLocaleTimeString([], {
+                              hour: '2-digit',
+                              minute: '2-digit',
+                              second: '2-digit',
+                            })}
+                          </span>
+                        </div>
+                        <span
+                          className="flex h-5 items-center gap-1 rounded-full px-2 text-[10px] font-semibold text-white"
+                          style={{ backgroundColor: version.authorColor }}
+                        >
+                          {version.authorName}
+                        </span>
+                        <span className="flex-1 truncate text-muted-foreground">
+                          {preview || '(no summary changes)'}
+                        </span>
+                        <span
+                          className="flex max-w-[20rem] items-center gap-1 truncate rounded-full border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-800 dark:border-emerald-500/50 dark:bg-emerald-500/10 dark:text-emerald-300"
+                          title={version.signatures
+                            .map(
+                              (signature) =>
+                                `${signature.name} (${signature.role}) at ${new Date(
+                                  signature.signedAt
+                                ).toLocaleTimeString([], {
+                                  hour: '2-digit',
+                                  minute: '2-digit',
+                                })}`
+                            )
+                            .join(', ')}
+                        >
+                          <Check className="h-3 w-3" />
+                          <span className="truncate">
+                            Signed by{' '}
+                            {version.signatures
+                              .map((signature) => `${signature.name} (${signature.role})`)
+                              .join(', ')}
+                          </span>
+                        </span>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-xs"
+                          onClick={() => {
+                            if (!viewingSitrepVersion) {
+                              liveSitrepFormRef.current = sitrepForm
+                            }
+                            setSitrepForm(version.snapshot)
+                            setViewingSitrepVersion(version)
+                            setIsSitrepSignedVersionsDialogOpen(false)
+                          }}
+                        >
+                          View
+                        </Button>
+                      </li>
+                    )
+                  })}
+                </ul>
+              )
+            })()}
+          </div>
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={isSitrepSignNameDialogOpen}
+        onOpenChange={(open) => {
+          setIsSitrepSignNameDialogOpen(open)
+          if (!open) {
+            setSitrepSignNameInput('You')
+          }
+        }}
+      >
+        <DialogContent className="!w-[24rem] !max-w-[24rem] sm:!max-w-[24rem]">
+          <div className="flex items-center gap-2 px-1 pb-1 text-sm font-semibold">
+            <Check className="h-4 w-4 text-emerald-600" />
+            Confirm your signature
+          </div>
+          <p className="px-1 text-xs text-muted-foreground">
+            Type your name to sign this version. Your signature will be attached to a new entry in
+            the SITREP version history.
+          </p>
+          <div className="space-y-1 px-1 pt-2">
+            <label className="text-[11px] font-medium text-muted-foreground">Your name</label>
+            <input
+              autoFocus
+              value={sitrepSignNameInput}
+              onChange={(event) => setSitrepSignNameInput(event.target.value)}
+              placeholder="Full name"
+              className="h-9 w-full rounded-md border bg-transparent px-2 text-sm outline-none focus:ring-2 focus:ring-emerald-500/40"
+            />
+          </div>
+          <div className="flex items-center justify-end gap-2 px-1 pt-3">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-8 text-xs"
+              onClick={() => setIsSitrepSignNameDialogOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              disabled={sitrepSignNameInput.trim().length === 0}
+              className="h-8 gap-1 bg-emerald-600 text-xs text-white hover:bg-emerald-700"
+              onClick={() => {
+                const name = sitrepSignNameInput.trim()
+                if (!name) {
+                  return
+                }
+                const signedAt = Date.now()
+                const newVersion: SitrepVersion = {
+                  id: `${signedAt}-sitrep-signed-${Math.random().toString(36).slice(2, 8)}`,
+                  createdAt: signedAt,
+                  creatorCreatedAt: signedAt,
+                  creatorName: name,
+                  creatorColor: '#16a34a',
+                  creatorRole: 'Technical Specialist',
+                  authorName: name,
+                  authorColor: '#16a34a',
+                  authorRole: 'Technical Specialist',
+                  snapshot: sitrepForm,
+                  signatures: [
+                    {
+                      name,
+                      role: 'Technical Specialist',
+                      signedAt,
+                    },
+                  ],
+                }
+                setSitrepVersions((previous) => [...previous, newVersion].slice(-100))
+                setIsSitrepSignNameDialogOpen(false)
+                setIsCreatingSignedSitrepVersion(false)
+                setSitrepSignNameInput('You')
               }}
             >
               <Check className="h-3.5 w-3.5" />
