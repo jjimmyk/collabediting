@@ -11,4 +11,17 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  server: {
+    proxy: {
+      // Avoids browser CORS when calling Seerist World of Data from the
+      // dev server. Mount under /seerist-proxy/* and rewrite to the real
+      // host. Production deployments need an equivalent reverse proxy.
+      '/seerist-proxy': {
+        target: 'https://app.seerist.com',
+        changeOrigin: true,
+        secure: true,
+        rewrite: (urlPath) => urlPath.replace(/^\/seerist-proxy/, '/hyperionapi'),
+      },
+    },
+  },
 })

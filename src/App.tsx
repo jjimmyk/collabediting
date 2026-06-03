@@ -1,37 +1,64 @@
-import { type ChangeEvent, useEffect, useRef, useState } from 'react'
+import {
+  type ChangeEvent,
+  type CSSProperties,
+  type Dispatch,
+  type ReactNode,
+  type SetStateAction,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import ArcGISMap from '@arcgis/core/Map'
 import Graphic from '@arcgis/core/Graphic'
 import Point from '@arcgis/core/geometry/Point'
+import FeatureLayer from '@arcgis/core/layers/FeatureLayer'
 import GraphicsLayer from '@arcgis/core/layers/GraphicsLayer'
 import MapView from '@arcgis/core/views/MapView'
+import SketchViewModel from '@arcgis/core/widgets/Sketch/SketchViewModel'
+import Zoom from '@arcgis/core/widgets/Zoom'
 import {
   AlertTriangle,
   Box,
-  CalendarDays,
   Check,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  ChevronUp,
+  BarChart3,
   Bell,
   Clock,
+  Download as DownloadIcon,
+  ExternalLink,
+  Eye,
   FileText,
+  Folder,
+  FolderOpen,
   History,
+  Home,
   Image as ImageIcon,
+  Info,
   Map as MapIcon,
+  MapPin,
   Menu,
   MoreHorizontal,
   MoreVertical,
+  MousePointer2,
   Lock,
   Moon,
   Plus,
   Pencil,
+  Radar,
+  Radio,
   Search,
+  Settings,
   Shield,
+  SlidersHorizontal,
+  Sparkles,
   Square,
   Sun,
   Target,
   Trash2,
-  Users,
   X,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
@@ -50,7 +77,16 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Dialog, DialogContent } from '@/components/ui/dialog'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import {
   Item,
   ItemActions,
@@ -60,6 +96,10 @@ import {
 } from '@/components/ui/item'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Switch } from '@/components/ui/switch'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Toaster } from '@/components/ui/sonner'
+import { toast } from 'sonner'
 import { Textarea } from '@/components/ui/textarea'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
@@ -72,21 +112,166 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import {
+  Sheet,
+  SheetContent,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet'
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
+import { Ics213rrDocumentPreview } from '@/components/Ics213rrDocumentPreview'
+import {
+  buildIcs213rrDocxBlocks,
+  DEFAULT_ICS213RR_RESOURCE_REQUESTS,
+  getIcs213rrPriorityLabel,
+  getResourceRequestDocFilename,
+  getResourceRequestItemFieldValue,
+  getResourceRequestSearchValues,
+  printResourceRequestPdf,
+  type ResourceRequestItem,
+} from '@/lib/ics-213rr-resource-request'
 import { cn } from '@/lib/utils'
+import { femaRegionGeometries } from '@/data/fema-regions'
+import {
+  DEFAULT_EVENT_CREATION_RULES,
+  type EventCreationRule,
+} from '@/data/event-threshold-rules'
+import {
+  DEFAULT_NOTIFICATION_CREATION_RULES,
+  type NotificationCreationRule,
+} from '@/data/notification-threshold-rules'
+import { EventsSettingsPage } from '@/components/EventsSettingsPage'
+import { NotificationSettingsPage } from '@/components/NotificationSettingsPage'
 import pratusLogo from '@/assets/pratus-logo.png'
+
+type OperationalStatus = 'Operational' | 'Partially Operational' | 'Not Operational'
 
 type NotificationItem = {
   id: number
   title: string
   severity: 'Critical' | 'High' | 'Medium' | 'Low'
   status: 'New' | 'Acknowledged' | 'Resolved'
-  category: 'Power' | 'Transport' | 'Shelter'
+  category: 'Power' | 'Transport' | 'Shelter' | 'Weather'
   timestamp: string
   owner: string
   summary: string
   impact: string
   location: [number, number]
+  relatedEventId?: number
+  regionalThreats?: {
+    region: string
+    description: string
+    threats: {
+      resource: string
+      risk: string
+      location: [number, number]
+      operationalStatus: OperationalStatus
+    }[]
+    responseChecklist: { label: string }[]
+  }
 }
+
+type NotificationTaskResource = {
+  id: string
+  name: string
+  availability: 'Available' | 'Assigned'
+  location: string
+}
+
+const NOTIFICATION_TASK_RESOURCE_CATALOG: Record<string, NotificationTaskResource[]> = {
+  'Activate USDA Emergency Support Function #11 (Agriculture) coordination cell and notify FSA state offices.':
+    [
+      {
+        id: 'usda-esf11-cell',
+        name: 'USDA ESF #11 Coordination Cell',
+        availability: 'Available',
+        location: 'Washington, DC',
+      },
+      {
+        id: 'usda-ohs-watch',
+        name: 'USDA Office of Homeland Security Watch Desk',
+        availability: 'Available',
+        location: 'Washington, DC',
+      },
+      {
+        id: 'fsa-state-fl',
+        name: 'FSA State Office — Florida',
+        availability: 'Assigned',
+        location: 'Gainesville, FL',
+      },
+      {
+        id: 'fsa-state-ga',
+        name: 'FSA State Office — Georgia',
+        availability: 'Available',
+        location: 'Athens, GA',
+      },
+      {
+        id: 'fsa-state-al',
+        name: 'FSA State Office — Alabama',
+        availability: 'Available',
+        location: 'Auburn, AL',
+      },
+      {
+        id: 'nrcs-ewp-liaison',
+        name: 'NRCS Emergency Watershed Protection Liaison',
+        availability: 'Available',
+        location: 'Jackson, MS',
+      },
+      {
+        id: 'ams-commodity-ops',
+        name: 'AMS Commodity Operations Emergency Cell',
+        availability: 'Assigned',
+        location: 'Washington, DC',
+      },
+    ],
+  'Pre-position FSA disaster assessment teams and livestock indemnity intake staff in inland staging areas.':
+    [
+      {
+        id: 'fsa-dat-gainesville',
+        name: 'FSA Disaster Assessment Team — Gainesville',
+        availability: 'Available',
+        location: 'Gainesville, FL',
+      },
+      {
+        id: 'fsa-li-orlando',
+        name: 'FSA Livestock Indemnity Intake Unit — Orlando',
+        availability: 'Available',
+        location: 'Orlando, FL',
+      },
+      {
+        id: 'fsa-emergency-loan',
+        name: 'FSA Emergency Loan Processing Team — Tallahassee',
+        availability: 'Assigned',
+        location: 'Tallahassee, FL',
+      },
+      {
+        id: 'nrcs-soil-strike',
+        name: 'NRCS Soil Conservation Strike Team — Lake City',
+        availability: 'Available',
+        location: 'Lake City, FL',
+      },
+      {
+        id: 'rma-crop-survey',
+        name: 'RMA Crop Damage Survey Unit — Tampa',
+        availability: 'Available',
+        location: 'Tampa, FL',
+      },
+      {
+        id: 'fsa-mobile-service',
+        name: 'Mobile FSA Service Center — Ocala',
+        availability: 'Available',
+        location: 'Ocala, FL',
+      },
+    ],
+}
+
+type ResourceCostUnitType = 'per day' | 'per hour' | 'to purchase'
+type ResourceDeploymentKind = 'available' | 'incident' | 'exercise'
 
 type ResourceItem = {
   id: number
@@ -117,7 +302,172 @@ type ResourceItem = {
   currentOpPeriodAssignment: string
   nextOpPeriodAssignment: string
   checkInStatus: string
+  costUnitType: ResourceCostUnitType
+  costPerUnit: number
+  deploymentKind: ResourceDeploymentKind
+  assignedIncidentName: string | null
+  assignedExerciseName: string | null
 }
+
+const getResourceIncidentAssignmentLabel = (resource: ResourceItem) =>
+  resource.deploymentKind === 'incident' ? resource.assignedIncidentName ?? '' : ''
+
+const formatResourceCostPerUnit = (costPerUnit: number) =>
+  costPerUnit.toLocaleString('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })
+
+const formatResourceCostUnitType = (costUnitType: ResourceCostUnitType) => {
+  if (costUnitType === 'per day') return 'Per day'
+  if (costUnitType === 'per hour') return 'Per hour'
+  return 'To purchase'
+}
+
+const RESOURCE_REQUEST_FILTER_FIELD_OPTIONS = [
+  { id: 'incidentName', label: 'Incident Name' },
+  { id: 'dateTimeInitiated', label: 'Date/Time Initiated' },
+  { id: 'requestNumber', label: 'Request Number' },
+  { id: 'orderQuantity', label: 'Order Quantity' },
+  { id: 'orderKind', label: 'Order Kind' },
+  { id: 'orderType', label: 'Order Type' },
+  { id: 'orderPriority', label: 'Order Priority' },
+  { id: 'orderDetailedDescription', label: 'Detailed Description' },
+  { id: 'orderRequestedReportingLocation', label: 'Reporting Location' },
+  { id: 'orderEtaLsc', label: 'ETA (LSC)' },
+  { id: 'requestedByName', label: 'Requested By' },
+  { id: 'status', label: 'Status' },
+  { id: 'notes', label: 'Notes' },
+] as const
+
+type ResourcesPanelView = 'resources' | 'resource-requests'
+type ResourcesDisplayMode = 'list' | 'table'
+type ResourcesFieldFilterRule = {
+  id: number
+  field: string
+  value: string
+}
+
+const RESOURCE_FILTER_FIELD_OPTIONS = [
+  { id: 'name', label: 'Name' },
+  { id: 'owner', label: 'Owner' },
+  { id: 'status', label: 'Status' },
+  { id: 'assignment', label: 'Incident Assignment' },
+  { id: 'type', label: 'Type' },
+  { id: 'teamLead', label: 'Team Lead' },
+  { id: 'eta', label: 'ETA' },
+  { id: 'location', label: 'Location' },
+  { id: 'notes', label: 'Notes' },
+  { id: 'currentLocation', label: 'Current Location' },
+  { id: 'datetimeOrdered', label: 'Datetime Ordered' },
+  { id: 'opcon', label: 'OPCON' },
+  { id: 'tacon', label: 'TACON' },
+  { id: 'pointOfContact', label: 'Point of Contact' },
+  { id: 'owningOrganization', label: 'Owning Organization' },
+  { id: 'quantity', label: 'Quantity' },
+  { id: 'unit', label: 'Unit' },
+  { id: 'hullTailNumber', label: 'Hull/Tail Number' },
+  { id: 'symbology', label: 'Symbology' },
+  { id: 'latitude', label: 'Lat' },
+  { id: 'longitude', label: 'Long' },
+  { id: 'capabilities', label: 'Capabilities' },
+  { id: 'currentOpPeriod', label: 'Current Op Period' },
+  { id: 'nextOpPeriod', label: 'Next Op Period' },
+  { id: 'currentOpPeriodAssignment', label: 'Current Op Period Assignment' },
+  { id: 'nextOpPeriodAssignment', label: 'Next Op Period Assignment' },
+  { id: 'checkInStatus', label: 'Check-in Status' },
+  { id: 'costUnitType', label: 'Cost Unit Type' },
+  { id: 'costPerUnit', label: 'Cost per Unit' },
+] as const
+
+const getResourceItemFieldValue = (item: ResourceItem, field: string) => {
+  switch (field) {
+    case 'name':
+      return item.name
+    case 'owner':
+      return item.owner
+    case 'status':
+      return item.status
+    case 'assignment':
+      return getResourceIncidentAssignmentLabel(item)
+    case 'type':
+      return item.type
+    case 'teamLead':
+      return item.teamLead
+    case 'eta':
+      return item.eta
+    case 'location':
+      return item.location
+    case 'notes':
+      return item.notes
+    case 'currentLocation':
+      return item.currentLocation
+    case 'datetimeOrdered':
+      return item.datetimeOrdered
+    case 'opcon':
+      return item.opcon
+    case 'tacon':
+      return item.tacon
+    case 'pointOfContact':
+      return item.pointOfContact
+    case 'owningOrganization':
+      return item.owningOrganization
+    case 'quantity':
+      return String(item.quantity)
+    case 'unit':
+      return item.unit
+    case 'hullTailNumber':
+      return item.hullTailNumber
+    case 'symbology':
+      return item.symbology
+    case 'latitude':
+      return item.latitude
+    case 'longitude':
+      return item.longitude
+    case 'capabilities':
+      return item.capabilities
+    case 'currentOpPeriod':
+      return item.currentOpPeriod
+    case 'nextOpPeriod':
+      return item.nextOpPeriod
+    case 'currentOpPeriodAssignment':
+      return item.currentOpPeriodAssignment
+    case 'nextOpPeriodAssignment':
+      return item.nextOpPeriodAssignment
+    case 'checkInStatus':
+      return item.checkInStatus
+    case 'costUnitType':
+      return formatResourceCostUnitType(item.costUnitType)
+    case 'costPerUnit':
+      return formatResourceCostPerUnit(item.costPerUnit)
+    default:
+      return ''
+  }
+}
+
+const matchesResourcesFieldFilterRules = (
+  rules: ResourcesFieldFilterRule[],
+  getFieldValue: (field: string) => string
+) => {
+  const activeRules = rules.filter((rule) => rule.field && rule.value.trim())
+  if (activeRules.length === 0) {
+    return true
+  }
+
+  return activeRules.every((rule) =>
+    getFieldValue(rule.field).toLowerCase().includes(rule.value.trim().toLowerCase())
+  )
+}
+
+const createResourcesFieldFilterRule = (
+  fieldOptions: readonly { id: string; label: string }[]
+): ResourcesFieldFilterRule => ({
+  id: Date.now() + Math.floor(Math.random() * 1000),
+  field: fieldOptions[0]?.id ?? '',
+  value: '',
+})
 
 type AorItem = {
   id: number
@@ -139,6 +489,22 @@ type AorItem = {
   lastUpdate: string
   evacuationStatus: 'None' | 'Recommended' | 'Active'
   notes: string
+  location: [number, number]
+}
+
+type FemaAorItem = {
+  id: number
+  name: string
+  lead: string
+  incidents: number
+  priority: 'High' | 'Medium' | 'Low'
+  population: string
+  lastUpdate: string
+  evacuationStatus: 'None' | 'Recommended' | 'Active'
+  notes: string
+  sitrep: string
+  sitrepUpdatedBy: string
+  sitrepSources: string[]
   location: [number, number]
 }
 
@@ -165,17 +531,6 @@ type SafetyAnalysisItem = {
   location: [number, number]
 }
 
-type ReportItem = {
-  id: number
-  title: string
-  reportType: 'SitRep' | 'Resource Status' | 'Damage Assessment'
-  status: 'Draft' | 'Submitted' | 'Approved'
-  author: string
-  dueBy: string
-  summary: string
-  location: [number, number]
-}
-
 type IncidentBriefingItem = {
   id: number
   title: string
@@ -198,16 +553,2557 @@ type CalendarItem = {
   location: [number, number]
 }
 
+type IncidentListItem = {
+  id: number
+  name: string
+  type: string
+  status: 'Active' | 'Monitoring' | 'Demobilizing'
+  severity: 'High' | 'Medium' | 'Low'
+  region: string
+  location: [number, number]
+  lead: string
+  startedAt: string
+  lastUpdate: string
+  summary: string
+  resourcesCommitted: string
+  relatedEventIds: number[]
+}
+
+const getIncidentRelatedEventNames = (incident: IncidentListItem, events: EventListItem[]) =>
+  incident.relatedEventIds
+    .map((eventId) => events.find((event) => event.id === eventId)?.name)
+    .filter((name): name is string => Boolean(name))
+
+const getIncidentRelatedEventsLabel = (incident: IncidentListItem, events: EventListItem[]) => {
+  const names = getIncidentRelatedEventNames(incident, events)
+  if (names.length === 0) {
+    return 'No related event'
+  }
+
+  if (names.length === 1) {
+    return `Related event · ${names[0]}`
+  }
+
+  return `Related events · ${names.join('; ')}`
+}
+
+const INCIDENT_SEVERITY_ORDER: Record<IncidentListItem['severity'], number> = {
+  High: 0,
+  Medium: 1,
+  Low: 2,
+}
+
+const sortIncidentsBySeverity = (incidents: IncidentListItem[]) =>
+  [...incidents].sort(
+    (a, b) => INCIDENT_SEVERITY_ORDER[a.severity] - INCIDENT_SEVERITY_ORDER[b.severity]
+  )
+
+const sortEventsBySeverity = (events: EventListItem[]) =>
+  [...events].sort(
+    (a, b) => INCIDENT_SEVERITY_ORDER[a.severity] - INCIDENT_SEVERITY_ORDER[b.severity]
+  )
+
+const matchesWorkspaceNavSearch = (item: IncidentListItem, query: string) => {
+  const normalized = query.trim().toLowerCase()
+  if (!normalized) return true
+
+  return [
+    item.name,
+    item.type,
+    item.status,
+    item.severity,
+    item.region,
+    item.lead,
+    item.summary,
+  ]
+    .join(' ')
+    .toLowerCase()
+    .includes(normalized)
+}
+
+const getIncidentSeverityBadgeClasses = (severity: IncidentListItem['severity']) => {
+  switch (severity) {
+    case 'High':
+      return 'border-red-300 bg-red-50 text-red-700 dark:border-red-500/60 dark:bg-red-500/10 dark:text-red-200'
+    case 'Medium':
+      return 'border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-500/60 dark:bg-amber-500/10 dark:text-amber-200'
+    case 'Low':
+      return 'border-green-300 bg-green-50 text-green-700 dark:border-green-500/60 dark:bg-green-500/10 dark:text-green-200'
+  }
+}
+
+type EventCreationKind = 'user' | 'threshold'
+
+type EventListItem = {
+  id: number
+  name: string
+  type: string
+  status: 'Active' | 'Monitoring' | 'Demobilizing'
+  severity: 'High' | 'Medium' | 'Low'
+  region: string
+  businessUnit: string
+  location: [number, number]
+  lead: string
+  startedAt: string
+  lastUpdate: string
+  summary: string
+  resourcesCommitted: string
+  creationKind: EventCreationKind
+  createdByUser: string | null
+  thresholdDescription: string | null
+  sendNotificationOnCreate: boolean
+  notificationRecipients: string
+  sourceReport?: InitialIncidentReportState
+}
+
+const getEventCreationLabel = (event: EventListItem) => {
+  if (event.creationKind === 'user') {
+    return `Created by Pratus user · ${event.createdByUser ?? 'Unknown user'}`
+  }
+
+  return `Auto-created by Pratus · ${event.thresholdDescription ?? 'Threshold reached'}`
+}
+
+const EVENT_SEVERITY_FILTER_OPTIONS: EventListItem['severity'][] = ['High', 'Medium', 'Low']
+
+type ExerciseListItem = IncidentListItem
+
+const DEFAULT_EXERCISE_LIST: ExerciseListItem[] = [
+  {
+    id: 1,
+    name: 'Gulf Coast Unified Command Tabletop — Edgar Scenario',
+    type: 'Tabletop / ICS Activation',
+    status: 'Active',
+    severity: 'Medium',
+    region: 'FEMA Region 4 — Southeast',
+    location: [-84.388, 33.749],
+    lead: 'FEMA Region 4 IMAT · Exercise Director',
+    startedAt: '2026-05-08 09:00 EST',
+    lastUpdate: '2026-05-09 08:00 EST',
+    summary:
+      'Full-scale tabletop exercising ESF-1 contraflow decision points and unified command handoffs ahead of Hurricane Edgar landfall. Evaluating ICP stand-up timelines and mutual-aid request workflows.',
+    resourcesCommitted:
+      'Region 4 IMAT, FDOT exercise cell, 6 county EOC liaisons, virtual USCG Sector Miami observer',
+    relatedEventIds: [],
+  },
+  {
+    id: 2,
+    name: 'PHMSA Hazmat Rail Response Functional Exercise',
+    type: 'Functional Exercise',
+    status: 'Monitoring',
+    severity: 'Low',
+    region: 'FEMA Region 6 — South Central',
+    location: [-96.797, 32.7765],
+    lead: 'PHMSA Southwest District · Exercise Controller',
+    startedAt: '2026-05-07 13:00 CST',
+    lastUpdate: '2026-05-08 16:45 CST',
+    summary:
+      'Functional exercise simulating anhydrous ammonia release near an intermodal yard. Testing shelter-in-place messaging, DOT detour coordination, and EPA OSC notification timelines.',
+    resourcesCommitted:
+      'PHMSA exercise team, TxDOT District Dallas, Dallas OEM evaluators, 2 EPA Region 6 observers',
+    relatedEventIds: [],
+  },
+  {
+    id: 3,
+    name: 'CAL FIRE Red Flag Coordination Drill',
+    type: 'Drill / Coordination',
+    status: 'Demobilizing',
+    severity: 'Low',
+    region: 'FEMA Region 9 — Pacific',
+    location: [-119.4179, 36.7783],
+    lead: 'CAL FIRE SLO Unit · Exercise Lead',
+    startedAt: '2026-05-06 08:00 PST',
+    lastUpdate: '2026-05-08 12:30 PST',
+    summary:
+      'Drill validating Red Flag pre-positioning triggers and Caltrans SR-1 detour cache deployment. Hotwash scheduled; AAR draft in progress.',
+    resourcesCommitted:
+      'CAL FIRE SLO, Caltrans D5 exercise staff, USFS Region 5 liaison, 3 evaluator teams',
+    relatedEventIds: [],
+  },
+]
+
+const DEFAULT_EVENT_LIST: EventListItem[] = (
+  [
+  {
+    id: 1,
+    name: 'Southeast Florida Coastal Flood Advisory',
+    type: 'Coastal Flood Watch',
+    status: 'Monitoring',
+    severity: 'Medium',
+    region: 'FEMA Region 4 — Southeast',
+    location: [-80.1918, 26.1224],
+    lead: 'NWS Miami · FEMA Region 4 Liaison',
+    startedAt: '2026-05-08 18:00 EST',
+    lastUpdate: '2026-05-09 07:30 EST',
+    summary:
+      'Minor coastal flooding expected along Atlantic barrier islands from Sebastian Inlet to Miami-Dade. No road closures; FDOT monitoring A1A low spots and pump stations. Related to but below Hurricane Edgar incident threshold.',
+    resourcesCommitted:
+      'FDOT District 4 flood monitors, Palm Beach County OEM watch desk, 2 ESF-1 liaison officers',
+    businessUnit: 'FEMA Region 4 — Southeast',
+    creationKind: 'threshold',
+    createdByUser: null,
+    thresholdDescription: 'Coastal flood watch threshold reached for FEMA Region 4',
+  },
+  {
+    id: 2,
+    name: 'I-95 Shoulder Debris Removal — Flagler County',
+    type: 'Roadway Maintenance / Debris',
+    status: 'Monitoring',
+    severity: 'Low',
+    region: 'FEMA Region 4 — Southeast',
+    location: [-81.0378, 29.5544],
+    lead: 'FDOT District 5 · Maintenance Supervisor',
+    startedAt: '2026-05-09 05:00 EST',
+    lastUpdate: '2026-05-09 08:15 EST',
+    summary:
+      'Wind-blown palm fronds and signage debris on I-95 northbound shoulder near Exit 284. Right shoulder closed 0.3 mi; mainline traffic unaffected. Routine maintenance response, not escalated to incident.',
+    resourcesCommitted: 'FDOT maintenance crew (3), FHP traffic assist unit',
+    businessUnit: 'FEMA Region 4 — Southeast',
+    creationKind: 'threshold',
+    createdByUser: null,
+    thresholdDescription: 'Roadway debris accumulation threshold reached on I-95 corridor',
+  },
+  {
+    id: 3,
+    name: 'GOM Platform Crew Change Delay — BP Mad Dog',
+    type: 'Offshore Operations',
+    status: 'Monitoring',
+    severity: 'Low',
+    region: 'Gulf of Mexico — Offshore',
+    location: [-90.78, 27.53],
+    lead: 'BP Mad Dog OIM · Logistics Coordinator',
+    startedAt: '2026-05-09 06:00 CST',
+    lastUpdate: '2026-05-09 07:45 CST',
+    summary:
+      'Helicopter crew change delayed 90 minutes due to low cloud ceiling at Green Canyon heliport. No personnel welfare issues; production operations nominal. CCMER notified per standing protocol.',
+    resourcesCommitted:
+      'BP aviation coordinator, USCG Sector NOLA helo ops liaison, offshore medic on standby',
+    businessUnit: 'Gulf of Mexico — Offshore',
+    creationKind: 'user',
+    createdByUser: 'BP Mad Dog OIM · Logistics Coordinator',
+    thresholdDescription: null,
+  },
+  {
+    id: 4,
+    name: 'Ventura County Red Flag Conditions',
+    type: 'Wildfire / Red Flag Warning',
+    status: 'Monitoring',
+    severity: 'Medium',
+    region: 'FEMA Region 9 — Pacific',
+    location: [-119.2932, 34.2783],
+    lead: 'CAL FIRE · Ventura Unit Forecaster',
+    startedAt: '2026-05-08 17:00 PST',
+    lastUpdate: '2026-05-09 07:50 PST',
+    summary:
+      'Elevated fire weather index with gusty sundowner winds in Ventura foothills. No active ignitions; Caltrans pre-positioning SR-33 detour signage. Watch-level posture supporting inland wildfire incident monitoring.',
+    resourcesCommitted:
+      'CAL FIRE Ventura Unit engine standby, Caltrans D7 sign crew, 1 air attack spotter',
+    businessUnit: 'FEMA Region 9 — Pacific',
+    creationKind: 'threshold',
+    createdByUser: null,
+    thresholdDescription: 'Red Flag fire weather index threshold exceeded for Ventura Unit',
+  },
+  {
+    id: 5,
+    name: 'Houston Ship Channel Approach Flood Watch',
+    type: 'Riverine / Coastal Flood',
+    status: 'Monitoring',
+    severity: 'Medium',
+    region: 'FEMA Region 6 — South Central',
+    location: [-95.2695, 29.7355],
+    lead: 'Harris County OEM · Hydrology Desk',
+    startedAt: '2026-05-08 22:00 CST',
+    lastUpdate: '2026-05-09 06:30 CST',
+    summary:
+      'Tidal flooding watch for SH-146 approach to Houston Ship Channel. TxDOT gates staged; no lane closures. Monitoring only — separate from LBJ Express hazmat incident operations.',
+    resourcesCommitted: 'Harris County OEM hydrology desk, TxDOT Houston District flood monitors',
+    businessUnit: 'FEMA Region 6 — South Central',
+    creationKind: 'threshold',
+    createdByUser: null,
+    thresholdDescription: 'Tidal flood watch threshold reached for Houston Ship Channel approach',
+  },
+  {
+    id: 6,
+    name: 'Cape Cod Minor Coastal Erosion — Chatham',
+    type: 'Coastal Erosion',
+    status: 'Monitoring',
+    severity: 'Low',
+    region: 'FEMA Region 1 — New England',
+    location: [-69.9595, 41.6821],
+    lead: 'Town of Chatham · DPW Director',
+    startedAt: '2026-05-08 08:00 EST',
+    lastUpdate: '2026-05-08 16:45 EST',
+    summary:
+      'Nor\'easter swell causing minor bluff erosion at Lighthouse Beach. Local road detour on Bridge Street; no shelter activations. Tracked as event under broader Cape Cod storm response.',
+    resourcesCommitted: 'Chatham DPW (2 crews), MassDOT District 5 liaison officer',
+    businessUnit: 'FEMA Region 1 — New England',
+    creationKind: 'threshold',
+    createdByUser: null,
+    thresholdDescription: 'Coastal erosion monitoring threshold reached for Cape Cod shoreline',
+  },
+  {
+    id: 7,
+    name: 'Orlando TMC Traffic Signal Outage Cluster',
+    type: 'Infrastructure / Power',
+    status: 'Active',
+    severity: 'Low',
+    region: 'FEMA Region 4 — Southeast',
+    location: [-81.3792, 28.5383],
+    lead: 'FDOT District 5 · TMC Operator',
+    startedAt: '2026-05-09 07:10 EST',
+    lastUpdate: '2026-05-09 08:40 EST',
+    summary:
+      'Brief power blip caused 4 interconnected signals to fail on Colonial Drive corridor. Flashing red ops in effect; Duke Energy ETA 45 minutes. Localized impact, not unified command.',
+    resourcesCommitted: 'FDOT signal tech team, Orlando Police traffic unit, Duke Energy line crew',
+    businessUnit: 'FEMA Region 4 — Southeast',
+    creationKind: 'threshold',
+    createdByUser: null,
+    thresholdDescription: 'Traffic signal outage cluster threshold reached on Colonial Drive corridor',
+  },
+  {
+    id: 8,
+    name: 'GOM CCMER QI Drill — Process Area Gas Release',
+    type: 'Drill / Exercise',
+    status: 'Active',
+    severity: 'Low',
+    region: 'Gulf of Mexico — Offshore',
+    location: [-88.5, 27.8],
+    lead: 'BP CCMER Advisor · Landry, Carlton P',
+    startedAt: '2026-05-09 08:00 CST',
+    lastUpdate: '2026-05-09 09:00 CST',
+    summary:
+      'Scheduled quarterly inspection drill simulating process area gas release notification. All check-ins on time; no real release or muster. Logged as event per CCMER duty notification protocol.',
+    resourcesCommitted:
+      'BP CCMER advisor on duty, facility control room operator, drill evaluator',
+    businessUnit: 'Gulf of Mexico — Offshore',
+    creationKind: 'user',
+    createdByUser: 'Landry, Carlton P',
+    thresholdDescription: null,
+  },
+  {
+    id: 9,
+    name: 'Maine Coast Winter Storm Watch',
+    type: 'Winter Weather',
+    status: 'Monitoring',
+    severity: 'Low',
+    region: 'FEMA Region 1 — New England',
+    location: [-70.2553, 43.6591],
+    lead: 'NWS Gray · Maine DOT Liaison',
+    startedAt: '2026-05-07 12:00 EST',
+    lastUpdate: '2026-05-08 18:00 EST',
+    summary:
+      'Late-season coastal storm watch for Downeast Maine. MaineDOT pre-treating US-1 bridges; no travel restrictions. Standard seasonal watch posture.',
+    resourcesCommitted: 'MaineDOT pre-treat crews (4), NWS Gray forecast desk',
+    businessUnit: 'FEMA Region 1 — New England',
+    creationKind: 'threshold',
+    createdByUser: null,
+    thresholdDescription: 'Winter storm watch threshold reached for Downeast Maine coast',
+  },
+  {
+    id: 10,
+    name: 'LBJ Express Perimeter Air Monitoring',
+    type: 'Hazmat Support / Perimeter',
+    status: 'Monitoring',
+    severity: 'Medium',
+    region: 'FEMA Region 6 — South Central',
+    location: [-96.8717, 32.9067],
+    lead: 'EPA Region 6 · Air Monitoring Lead',
+    startedAt: '2026-05-09 05:30 CST',
+    lastUpdate: '2026-05-09 08:20 CST',
+    summary:
+      'Downwind air monitoring at 1.5-mile perimeter for anhydrous ammonia release. Readings below action levels; shelter-in-place remains per unified command. Support event to active hazmat incident.',
+    resourcesCommitted:
+      'EPA Region 6 air monitoring team, Dallas Fire-Rescue hazmat techs, 2 fixed-site sensors',
+    businessUnit: 'FEMA Region 6 — South Central',
+    creationKind: 'threshold',
+    createdByUser: null,
+    thresholdDescription: 'Perimeter air monitoring watch threshold reached for hazmat support zone',
+  },
+  {
+    id: 11,
+    name: 'Hurricane EDGAR — Southeast Agricultural Threat Watch',
+    type: 'Tropical Cyclone / Agriculture',
+    status: 'Active',
+    severity: 'High',
+    region: 'FEMA Region 4 — Southeast',
+    location: [-81.5158, 27.6648],
+    lead: 'USDA Office of Homeland Security / NHC Liaison',
+    startedAt: '2026-05-09 09:45 EST',
+    lastUpdate: '2026-05-09 09:45 EST',
+    summary:
+      'Cat-4 hurricane EDGAR threatens USDA agricultural operations across the Southeast. FSA service centers, ARS research stations, Forest Service dispatch caches, and regional food distribution warehouses in FEMA Region 4 are at elevated risk.',
+    resourcesCommitted:
+      'USDA ESF #11 coordination cell, FSA state offices (FL, GA, AL), disaster assessment teams, livestock indemnity intake staff',
+    businessUnit: 'FEMA Region 4 — Southeast',
+    creationKind: 'threshold',
+    createdByUser: null,
+    thresholdDescription:
+      'Hurricane threat threshold crossed for Region 4 USDA agricultural asset exposure',
+  },
+  ] as Omit<EventListItem, 'sendNotificationOnCreate' | 'notificationRecipients'>[]
+).map((event) => ({
+  ...event,
+  sendNotificationOnCreate: event.severity !== 'Low',
+  notificationRecipients:
+    event.severity !== 'Low'
+      ? `${event.lead}; ${event.businessUnit} watch desk`
+      : '',
+}))
+
+const ANALYTICS_INCIDENT_CATEGORY_COUNTS = [
+  { category: 'Tropical Cyclone', count: 8 },
+  { category: 'Hazmat', count: 12 },
+  { category: 'Wildfire', count: 15 },
+  { category: 'Coastal Storm', count: 9 },
+  { category: 'Infrastructure', count: 18 },
+  { category: 'Offshore Ops', count: 6 },
+  { category: 'Riverine Flood', count: 5 },
+] as const
+
+const ANALYTICS_EVENT_CATEGORY_COUNTS = [
+  { category: 'Coastal Flood', count: 14 },
+  { category: 'Roadway Maint.', count: 22 },
+  { category: 'Offshore Ops', count: 11 },
+  { category: 'Winter Weather', count: 7 },
+  { category: 'Infrastructure', count: 9 },
+  { category: 'Hazmat Support', count: 6 },
+  { category: 'Drill/Exercise', count: 13 },
+  { category: 'CCMER Notify', count: 8 },
+] as const
+
+const ANALYTICS_INCIDENT_CATEGORIES = [
+  'Tropical Cyclone',
+  'Hazmat / Transport',
+  'Wildfire',
+  'Coastal Storm',
+  'Infrastructure',
+  'Offshore Ops',
+] as const
+
+const ANALYTICS_REGIONS = [
+  'Region 1 — New England',
+  'Region 4 — Southeast',
+  'Region 6 — South Central',
+  'Region 9 — Pacific',
+  'GOM Offshore',
+] as const
+
+const ANALYTICS_REGION_COORDS: Record<(typeof ANALYTICS_REGIONS)[number], [number, number]> = {
+  'Region 1 — New England': [-71.5, 43.8],
+  'Region 4 — Southeast': [-84.5, 32.5],
+  'Region 6 — South Central': [-97.5, 32.5],
+  'Region 9 — Pacific': [-118.5, 37.0],
+  'GOM Offshore': [-89.0, 27.8],
+}
+
+const getAnalyticsRecordLocation = (
+  region: (typeof ANALYTICS_REGIONS)[number],
+  seed: number
+): [number, number] => {
+  const [baseLon, baseLat] = ANALYTICS_REGION_COORDS[region]
+  const lonSpread = region === 'GOM Offshore' ? 2.8 : 3.5
+  const latSpread = region === 'GOM Offshore' ? 1.8 : 2.5
+  const angle = (seed * 137.508) % 360
+  const radius = 0.15 + (seed % 7) * 0.08
+  return [
+    baseLon + Math.cos((angle * Math.PI) / 180) * lonSpread * radius,
+    baseLat + Math.sin((angle * Math.PI) / 180) * latSpread * radius,
+  ]
+}
+
+const ANALYTICS_RESOLUTION_HOURS: Record<
+  (typeof ANALYTICS_REGIONS)[number],
+  Record<(typeof ANALYTICS_INCIDENT_CATEGORIES)[number], number>
+> = {
+  'Region 1 — New England': {
+    'Tropical Cyclone': 42,
+    'Hazmat / Transport': 16,
+    Wildfire: 28,
+    'Coastal Storm': 22,
+    Infrastructure: 14,
+    'Offshore Ops': 36,
+  },
+  'Region 4 — Southeast': {
+    'Tropical Cyclone': 68,
+    'Hazmat / Transport': 24,
+    Wildfire: 52,
+    'Coastal Storm': 38,
+    Infrastructure: 18,
+    'Offshore Ops': 44,
+  },
+  'Region 6 — South Central': {
+    'Tropical Cyclone': 54,
+    'Hazmat / Transport': 20,
+    Wildfire: 36,
+    'Coastal Storm': 30,
+    Infrastructure: 12,
+    'Offshore Ops': 48,
+  },
+  'Region 9 — Pacific': {
+    'Tropical Cyclone': 36,
+    'Hazmat / Transport': 18,
+    Wildfire: 72,
+    'Coastal Storm': 26,
+    Infrastructure: 16,
+    'Offshore Ops': 40,
+  },
+  'GOM Offshore': {
+    'Tropical Cyclone': 58,
+    'Hazmat / Transport': 32,
+    Wildfire: 48,
+    'Coastal Storm': 34,
+    Infrastructure: 22,
+    'Offshore Ops': 26,
+  },
+}
+
+const getAnalyticsLayerKey = (kind: AnalyticsSeedRecord['kind'], category: string) =>
+  `${kind}::${category}`
+
+const parseAnalyticsLayerKey = (key: string) => {
+  const separatorIndex = key.indexOf('::')
+  return {
+    kind: key.slice(0, separatorIndex) as AnalyticsSeedRecord['kind'],
+    category: key.slice(separatorIndex + 2),
+  }
+}
+
+const ANALYTICS_CATEGORY_LAYER_COLORS: Record<string, [number, number, number, number]> = {
+  [getAnalyticsLayerKey('incident', 'Tropical Cyclone')]: [124, 58, 237, 0.95],
+  [getAnalyticsLayerKey('incident', 'Hazmat')]: [220, 38, 38, 0.95],
+  [getAnalyticsLayerKey('incident', 'Wildfire')]: [234, 88, 12, 0.95],
+  [getAnalyticsLayerKey('incident', 'Coastal Storm')]: [37, 99, 235, 0.95],
+  [getAnalyticsLayerKey('incident', 'Infrastructure')]: [100, 116, 139, 0.95],
+  [getAnalyticsLayerKey('incident', 'Offshore Ops')]: [168, 85, 247, 0.95],
+  [getAnalyticsLayerKey('incident', 'Riverine Flood')]: [20, 184, 166, 0.95],
+  [getAnalyticsLayerKey('event', 'Coastal Flood')]: [6, 182, 212, 0.95],
+  [getAnalyticsLayerKey('event', 'Roadway Maint.')]: [245, 158, 11, 0.95],
+  [getAnalyticsLayerKey('event', 'Offshore Ops')]: [99, 102, 241, 0.95],
+  [getAnalyticsLayerKey('event', 'Winter Weather')]: [56, 189, 248, 0.95],
+  [getAnalyticsLayerKey('event', 'Infrastructure')]: [148, 163, 184, 0.95],
+  [getAnalyticsLayerKey('event', 'Hazmat Support')]: [244, 63, 94, 0.95],
+  [getAnalyticsLayerKey('event', 'Drill/Exercise')]: [34, 197, 94, 0.95],
+  [getAnalyticsLayerKey('event', 'CCMER Notify')]: [217, 70, 239, 0.95],
+}
+
+const getAnalyticsCategoryColor = (
+  kind: AnalyticsSeedRecord['kind'],
+  category: string
+): [number, number, number, number] => {
+  const color = ANALYTICS_CATEGORY_LAYER_COLORS[getAnalyticsLayerKey(kind, category)]
+  if (color) {
+    return color
+  }
+
+  return kind === 'incident' ? [124, 58, 237, 0.95] : [14, 165, 233, 0.95]
+}
+
+// Cluster when zoomed out; individual markers when zoomed in past ~zoom 10 (1:577,790).
+const ANALYTICS_MAP_CLUSTER_MAX_SCALE = 577790
+
+const ANALYTICS_POINT_FEATURE_FIELDS: __esri.FieldProperties[] = [
+  { name: 'ObjectID', type: 'oid' },
+  { name: 'mapKey', type: 'string' },
+  { name: 'title', type: 'string' },
+  { name: 'kind', type: 'string' },
+  { name: 'recordKind', type: 'string' },
+  { name: 'category', type: 'string' },
+  { name: 'resolutionCategory', type: 'string' },
+  { name: 'mapSymbol', type: 'string' },
+  { name: 'region', type: 'string' },
+  { name: 'status', type: 'string' },
+  { name: 'occurredAt', type: 'string' },
+  { name: 'resolutionHours', type: 'string' },
+]
+
+const createAnalyticsClusterFeatureReduction = (): __esri.FeatureReductionClusterProperties => ({
+  type: 'cluster',
+  clusterRadius: '80px',
+  clusterMinSize: '28px',
+  clusterMaxSize: '56px',
+  clusterMaxScale: ANALYTICS_MAP_CLUSTER_MAX_SCALE,
+  popupTemplate: {
+    title: '{cluster_count} records',
+    content: 'This cluster represents <b>{cluster_count}</b> records. Zoom in to view individuals.',
+    fieldInfos: [
+      {
+        fieldName: 'cluster_count',
+        format: {
+          digitSeparator: true,
+          places: 0,
+        },
+      },
+    ],
+  },
+  labelingInfo: [
+    {
+      deconflictionStrategy: 'none',
+      labelExpressionInfo: {
+        expression: "Text($feature.cluster_count, '#,###')",
+      },
+      symbol: {
+        type: 'text',
+        color: 'white',
+        font: {
+          size: 12,
+          weight: 'bold',
+        },
+        haloColor: [0, 0, 0, 0.45],
+        haloSize: 1,
+      },
+    },
+  ],
+})
+
+const replaceAnalyticsFeatureLayerSource = (layer: FeatureLayer, graphics: Graphic[]) => {
+  layer.source.removeAll()
+  if (graphics.length > 0) {
+    layer.source.addMany(graphics)
+  }
+}
+
+const createAnalyticsCategoryFeatureLayer = (
+  id: string,
+  title: string,
+  color: [number, number, number, number]
+) =>
+  new FeatureLayer({
+    id,
+    title,
+    visible: false,
+    listMode: 'hide',
+    source: [],
+    objectIdField: 'ObjectID',
+    geometryType: 'point',
+    spatialReference: { wkid: 4326 },
+    fields: ANALYTICS_POINT_FEATURE_FIELDS,
+    renderer: {
+      type: 'simple',
+      symbol: {
+        type: 'simple-marker',
+        color,
+        size: 11,
+        outline: {
+          color: [255, 255, 255, 1],
+          width: 1.5,
+        },
+      },
+    },
+    featureReduction: createAnalyticsClusterFeatureReduction(),
+    popupTemplate: {
+      title: '{title}',
+      content:
+        '<b>Type:</b> {kind}<br/><b>Region:</b> {region}<br/><b>Occurred:</b> {occurredAt}<br/><b>Status:</b> {status}<br/><b>Resolution:</b> {resolutionHours}',
+    },
+  })
+
+const createAnalyticsRecordGraphic = (record: AnalyticsSeedRecord) => {
+  const isIncident = record.kind === 'incident'
+
+  return new Graphic({
+    geometry: {
+      type: 'point',
+      longitude: record.location[0],
+      latitude: record.location[1],
+    },
+    attributes: {
+      ObjectID: record.id,
+      mapKey: `analytics-${record.id}`,
+      title: record.category,
+      kind: isIncident ? 'Analytics Incident' : 'Analytics Event',
+      recordKind: '',
+      category: record.category,
+      resolutionCategory: '',
+      mapSymbol: '',
+      region: record.region,
+      status: record.status,
+      occurredAt: formatAnalyticsOccurredAt(record.occurredAt),
+      resolutionHours:
+        record.resolutionHours !== undefined
+          ? formatAnalyticsResolutionHours(record.resolutionHours)
+          : '—',
+    },
+  })
+}
+
+const initializeAnalyticsCategoryLayers = (
+  layerMap: globalThis.Map<string, FeatureLayer>
+) => {
+  if (layerMap.size > 0) {
+    return [...layerMap.values()]
+  }
+
+  ANALYTICS_INCIDENT_CATEGORY_COUNTS.forEach(({ category }) => {
+    const key = getAnalyticsLayerKey('incident', category)
+    layerMap.set(
+      key,
+      createAnalyticsCategoryFeatureLayer(
+        `analytics-layer-${key.replace(/::/g, '-')}`,
+        `Incidents: ${category}`,
+        getAnalyticsCategoryColor('incident', category)
+      )
+    )
+  })
+
+  ANALYTICS_EVENT_CATEGORY_COUNTS.forEach(({ category }) => {
+    const key = getAnalyticsLayerKey('event', category)
+    layerMap.set(
+      key,
+      createAnalyticsCategoryFeatureLayer(
+        `analytics-layer-${key.replace(/::/g, '-')}`,
+        `Events: ${category}`,
+        getAnalyticsCategoryColor('event', category)
+      )
+    )
+  })
+
+  return [...layerMap.values()]
+}
+
+const formatAnalyticsResolutionHours = (hours: number) => {
+  if (hours < 24) {
+    return `${hours}h`
+  }
+
+  const days = hours / 24
+  return days % 1 === 0 ? `${days}d` : `${days.toFixed(1)}d`
+}
+
+const getAnalyticsResolutionCellClasses = (hours: number) => {
+  if (hours <= 24) {
+    return 'bg-green-50 text-green-800 dark:bg-green-500/10 dark:text-green-200'
+  }
+
+  if (hours <= 48) {
+    return 'bg-amber-50 text-amber-800 dark:bg-amber-500/10 dark:text-amber-200'
+  }
+
+  return 'bg-red-50 text-red-800 dark:bg-red-500/10 dark:text-red-200'
+}
+
+const ANALYTICS_CATEGORY_SPEND_BASE: Record<
+  (typeof ANALYTICS_INCIDENT_CATEGORIES)[number],
+  number
+> = {
+  'Tropical Cyclone': 920000,
+  'Hazmat / Transport': 640000,
+  Wildfire: 580000,
+  'Coastal Storm': 720000,
+  Infrastructure: 410000,
+  'Offshore Ops': 880000,
+}
+
+const getAnalyticsRecordSpendDollars = (
+  kind: AnalyticsSeedRecord['kind'],
+  resolutionCategory: AnalyticsResolutionCategory,
+  region: AnalyticsRegion,
+  seed: number
+) => {
+  const regionMultiplier =
+    region === 'GOM Offshore' ? 1.35 : region.startsWith('FEMA Region 4') ? 1.15 : 1
+  const base = ANALYTICS_CATEGORY_SPEND_BASE[resolutionCategory] ?? 320000
+  const kindMultiplier = kind === 'incident' ? 1 : 0.42
+
+  return Math.round(base * regionMultiplier * kindMultiplier * (0.82 + (seed % 11) * 0.035))
+}
+
+const formatAnalyticsSpendDollars = (amount: number) => {
+  if (amount >= 1_000_000) {
+    const millions = amount / 1_000_000
+    return `$${millions >= 10 ? Math.round(millions) : millions.toFixed(1)}M`
+  }
+
+  if (amount >= 1_000) {
+    return `$${Math.round(amount / 1_000)}K`
+  }
+
+  return `$${amount.toLocaleString()}`
+}
+
+const getAnalyticsSpendCellClasses = (amount: number) => {
+  if (amount <= 300_000) {
+    return 'bg-green-50 text-green-800 dark:bg-green-500/10 dark:text-green-200'
+  }
+
+  if (amount <= 600_000) {
+    return 'bg-amber-50 text-amber-800 dark:bg-amber-500/10 dark:text-amber-200'
+  }
+
+  return 'bg-red-50 text-red-800 dark:bg-red-500/10 dark:text-red-200'
+}
+
+const ANALYTICS_RESOLUTION_CATEGORY_LABELS: Record<
+  (typeof ANALYTICS_INCIDENT_CATEGORIES)[number],
+  string
+> = {
+  'Tropical Cyclone': 'Tropical',
+  'Hazmat / Transport': 'Hazmat',
+  Wildfire: 'Wildfire',
+  'Coastal Storm': 'Coastal',
+  Infrastructure: 'Infra',
+  'Offshore Ops': 'Offshore',
+}
+
+const ANALYTICS_CHART_TO_RESOLUTION_CATEGORY: Record<
+  string,
+  (typeof ANALYTICS_INCIDENT_CATEGORIES)[number]
+> = {
+  'Tropical Cyclone': 'Tropical Cyclone',
+  Hazmat: 'Hazmat / Transport',
+  Wildfire: 'Wildfire',
+  'Coastal Storm': 'Coastal Storm',
+  Infrastructure: 'Infrastructure',
+  'Offshore Ops': 'Offshore Ops',
+  'Riverine Flood': 'Coastal Storm',
+}
+
+const ANALYTICS_EVENT_CHART_TO_RESOLUTION_CATEGORY: Record<
+  string,
+  (typeof ANALYTICS_INCIDENT_CATEGORIES)[number]
+> = {
+  'Coastal Flood': 'Coastal Storm',
+  'Roadway Maint.': 'Infrastructure',
+  'Offshore Ops': 'Offshore Ops',
+  'Winter Weather': 'Coastal Storm',
+  Infrastructure: 'Infrastructure',
+  'Hazmat Support': 'Hazmat / Transport',
+  'Drill/Exercise': 'Infrastructure',
+  'CCMER Notify': 'Offshore Ops',
+}
+
+type AnalyticsResolutionKindFilter = 'incidents' | 'events' | 'both'
+
+const getResolutionCategoryForRecord = (
+  record: AnalyticsSeedRecord
+): AnalyticsResolutionCategory | null => {
+  if (record.kind === 'incident') {
+    return ANALYTICS_CHART_TO_RESOLUTION_CATEGORY[record.category] ?? null
+  }
+
+  return ANALYTICS_EVENT_CHART_TO_RESOLUTION_CATEGORY[record.category] ?? null
+}
+
+const matchesAnalyticsResolutionKindFilter = (
+  record: AnalyticsSeedRecord,
+  kindFilter: AnalyticsResolutionKindFilter
+) => {
+  if (record.resolutionHours === undefined) {
+    return false
+  }
+
+  if (kindFilter === 'both') {
+    return record.kind === 'incident' || record.kind === 'event'
+  }
+
+  if (kindFilter === 'incidents') {
+    return record.kind === 'incident'
+  }
+
+  return record.kind === 'event'
+}
+
+const matchesAnalyticsSpendKindFilter = (
+  record: AnalyticsSeedRecord,
+  kindFilter: AnalyticsResolutionKindFilter
+) => {
+  if (record.spendDollars === undefined) {
+    return false
+  }
+
+  if (kindFilter === 'both') {
+    return record.kind === 'incident' || record.kind === 'event'
+  }
+
+  if (kindFilter === 'incidents') {
+    return record.kind === 'incident'
+  }
+
+  return record.kind === 'event'
+}
+
+type AnalyticsSeedRecord = {
+  id: number
+  kind: 'incident' | 'event'
+  category: string
+  region: (typeof ANALYTICS_REGIONS)[number]
+  location: [number, number]
+  occurredAt: Date
+  resolutionHours?: number
+  spendDollars?: number
+  status: 'Active' | 'Monitoring'
+}
+
+const formatAnalyticsOccurredAt = (date: Date) =>
+  date.toLocaleString([], {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+
+const createAnalyticsSeedRecords = (): AnalyticsSeedRecord[] => {
+  const records: AnalyticsSeedRecord[] = []
+  let id = 1
+  const rangeStart = new Date('2026-01-01T00:00:00')
+
+  ANALYTICS_REGIONS.forEach((region, regionIndex) => {
+    ANALYTICS_INCIDENT_CATEGORY_COUNTS.forEach(({ category, count }, categoryIndex) => {
+      const perRegion = Math.max(1, Math.round(count / ANALYTICS_REGIONS.length) + (regionIndex % 2))
+      for (let index = 0; index < perRegion; index += 1) {
+        const dayOffset = (regionIndex * 19 + categoryIndex * 13 + index * 9 + id) % 148
+        const occurredAt = new Date(rangeStart)
+        occurredAt.setDate(rangeStart.getDate() + dayOffset)
+        occurredAt.setHours(6 + (id % 12), (id * 7) % 60, 0, 0)
+        const resolutionCategory = ANALYTICS_CHART_TO_RESOLUTION_CATEGORY[category]
+        const baseResolution = ANALYTICS_RESOLUTION_HOURS[region][resolutionCategory]
+        records.push({
+          id: id++,
+          kind: 'incident',
+          category,
+          region,
+          location: getAnalyticsRecordLocation(region, id * 17 + index),
+          occurredAt,
+          resolutionHours: Math.max(8, baseResolution + ((id + index) % 7) - 3),
+          spendDollars: getAnalyticsRecordSpendDollars(
+            'incident',
+            resolutionCategory,
+            region,
+            id + index
+          ),
+          status: dayOffset > 132 ? 'Active' : 'Monitoring',
+        })
+      }
+    })
+
+    ANALYTICS_EVENT_CATEGORY_COUNTS.forEach(({ category, count }, categoryIndex) => {
+      const perRegion = Math.max(1, Math.round(count / ANALYTICS_REGIONS.length) + (categoryIndex % 2))
+      for (let index = 0; index < perRegion; index += 1) {
+        const dayOffset = (regionIndex * 23 + categoryIndex * 11 + index * 5 + id) % 148
+        const occurredAt = new Date(rangeStart)
+        occurredAt.setDate(rangeStart.getDate() + dayOffset)
+        occurredAt.setHours(8 + (id % 10), (id * 5) % 60, 0, 0)
+        const eventResolutionCategory = ANALYTICS_EVENT_CHART_TO_RESOLUTION_CATEGORY[category]
+        const eventBaseResolution = eventResolutionCategory
+          ? ANALYTICS_RESOLUTION_HOURS[region][eventResolutionCategory]
+          : 16
+        records.push({
+          id: id++,
+          kind: 'event',
+          category,
+          region,
+          location: getAnalyticsRecordLocation(region, id * 23 + index),
+          occurredAt,
+          resolutionHours: eventResolutionCategory
+            ? Math.max(4, Math.round(eventBaseResolution * 0.62) + ((id + index) % 5) - 2)
+            : undefined,
+          spendDollars: eventResolutionCategory
+            ? getAnalyticsRecordSpendDollars(
+                'event',
+                eventResolutionCategory,
+                region,
+                id + index
+              )
+            : Math.round(85000 * (0.85 + (id % 9) * 0.04)),
+          status: dayOffset > 136 ? 'Active' : 'Monitoring',
+        })
+      }
+    })
+  })
+
+  return records
+}
+
+const ANALYTICS_SEED_RECORDS = createAnalyticsSeedRecords()
+
+type AnalyticsResolutionCategory = (typeof ANALYTICS_INCIDENT_CATEGORIES)[number]
+type AnalyticsRegion = (typeof ANALYTICS_REGIONS)[number]
+
+const getAnalyticsResolutionLayerKey = (
+  region: AnalyticsRegion,
+  category: AnalyticsResolutionCategory
+) => `resolution::${region}::${category}`
+
+const parseAnalyticsResolutionLayerKey = (key: string) => {
+  const parts = key.split('::')
+  return {
+    region: parts[1] as AnalyticsRegion,
+    category: parts.slice(2).join('::') as AnalyticsResolutionCategory,
+  }
+}
+
+const getAnalyticsResolutionRecords = (
+  records: AnalyticsSeedRecord[],
+  region: AnalyticsRegion,
+  category: AnalyticsResolutionCategory,
+  kindFilter: AnalyticsResolutionKindFilter = 'incidents'
+) =>
+  records.filter(
+    (record) =>
+      matchesAnalyticsResolutionKindFilter(record, kindFilter) &&
+      record.region === region &&
+      getResolutionCategoryForRecord(record) === category
+  )
+
+const getAnalyticsResolutionLayerEntriesForRegion = (
+  records: AnalyticsSeedRecord[],
+  region: AnalyticsRegion,
+  regions: readonly AnalyticsRegion[] = ANALYTICS_REGIONS,
+  kindFilter: AnalyticsResolutionKindFilter = 'incidents'
+) =>
+  ANALYTICS_INCIDENT_CATEGORIES.flatMap((category) => {
+    if (!regions.includes(region)) {
+      return []
+    }
+
+    const hasRecords =
+      getAnalyticsResolutionRecords(records, region, category, kindFilter).length > 0
+    if (!hasRecords) {
+      return []
+    }
+
+    return [
+      {
+        key: getAnalyticsResolutionLayerKey(region, category),
+        region,
+        category,
+      },
+    ]
+  })
+
+const getAnalyticsResolutionLayerEntriesForCategory = (
+  records: AnalyticsSeedRecord[],
+  category: AnalyticsResolutionCategory,
+  regions: readonly AnalyticsRegion[],
+  kindFilter: AnalyticsResolutionKindFilter = 'incidents'
+) =>
+  regions.flatMap((region) => {
+    const hasRecords =
+      getAnalyticsResolutionRecords(records, region, category, kindFilter).length > 0
+    if (!hasRecords) {
+      return []
+    }
+
+    return [
+      {
+        key: getAnalyticsResolutionLayerKey(region, category),
+        region,
+        category,
+      },
+    ]
+  })
+
+const getAnalyticsResolutionBulkState = (
+  entries: { key: string }[],
+  visibleKeys: Set<string>
+) => {
+  if (entries.length === 0) {
+    return 'none' as const
+  }
+
+  const visibleCount = entries.filter((entry) => visibleKeys.has(entry.key)).length
+  if (visibleCount === 0) {
+    return 'none' as const
+  }
+
+  if (visibleCount === entries.length) {
+    return 'all' as const
+  }
+
+  return 'some' as const
+}
+
+// NAPSG DHS Symbol Server — https://github.com/NAPSG/DHS-Symbol-Server
+const ANALYTICS_RESOLUTION_DHS_SYMBOLS: Record<
+  AnalyticsResolutionCategory,
+  {
+    url: string
+    symbolName: string
+    dhsPath: string
+  }
+> = {
+  Wildfire: {
+    url: '/dhs-symbols/wildfire-fire-forest.svg',
+    symbolName: 'Fire Forest Hazard',
+    dhsPath: 'Human Caused Hazards/Human Caused Hazards/icon-FAC.svg',
+  },
+  'Tropical Cyclone': {
+    url: '/dhs-symbols/tropical-cyclone-hurricane.svg',
+    symbolName: 'Hurricane',
+    dhsPath: 'Natural Hazards/Natural Hazards/icon-IAD.svg',
+  },
+  'Hazmat / Transport': {
+    url: '/dhs-symbols/hazmat-general.svg',
+    symbolName: 'Hazmat General',
+    dhsPath: 'Hazardous Materials/Hazardous Materials/icon-JABM.svg',
+  },
+  'Coastal Storm': {
+    url: '/dhs-symbols/coastal-storm-severe.svg',
+    symbolName: 'Severe or Extreme Storm',
+    dhsPath: 'Natural Hazards/Natural Hazards/icon-IAG.svg',
+  },
+  Infrastructure: {
+    url: '/dhs-symbols/infrastructure-bridge.svg',
+    symbolName: 'National Bridge Inventory (NBI) Bridges',
+    dhsPath: 'Infrastructure/Transportation, Ground/icon-LQF.svg',
+  },
+  'Offshore Ops': {
+    url: '/dhs-symbols/offshore-oil-platform.svg',
+    symbolName: 'Oil and Natural Gas Platforms',
+    dhsPath: 'Infrastructure/Energy/icon-LHAZ.svg',
+  },
+}
+
+const getAnalyticsResolutionCategorySymbol = (category: AnalyticsResolutionCategory) => {
+  const symbolAsset =
+    ANALYTICS_RESOLUTION_DHS_SYMBOLS[category] ??
+    ANALYTICS_RESOLUTION_DHS_SYMBOLS.Infrastructure
+
+  return {
+    type: 'picture-marker' as const,
+    url: symbolAsset.url,
+    width: 30,
+    height: 30,
+  }
+}
+
+const createAnalyticsResolutionFeatureLayer = (
+  id: string,
+  title: string,
+  category: AnalyticsResolutionCategory
+) =>
+  new FeatureLayer({
+    id,
+    title,
+    visible: false,
+    listMode: 'hide',
+    source: [],
+    objectIdField: 'ObjectID',
+    geometryType: 'point',
+    spatialReference: { wkid: 4326 },
+    fields: ANALYTICS_POINT_FEATURE_FIELDS,
+    renderer: {
+      type: 'simple',
+      symbol: getAnalyticsResolutionCategorySymbol(category),
+    },
+    featureReduction: createAnalyticsClusterFeatureReduction(),
+    popupTemplate: {
+      title: '{title}',
+      content:
+        '<b>Record Type:</b> {recordKind}<br/><b>Type:</b> {kind}<br/><b>Symbol:</b> {mapSymbol}<br/><b>Resolution Category:</b> {resolutionCategory}<br/><b>Region:</b> {region}<br/><b>Occurred:</b> {occurredAt}<br/><b>Status:</b> {status}<br/><b>Resolution:</b> {resolutionHours}',
+    },
+  })
+
+const createAnalyticsResolutionRecordGraphic = (record: AnalyticsSeedRecord) => {
+  const hours = record.resolutionHours ?? 0
+  const resolutionCategory = getResolutionCategoryForRecord(record) ?? record.category
+  const dhsSymbol =
+    ANALYTICS_RESOLUTION_DHS_SYMBOLS[resolutionCategory as AnalyticsResolutionCategory]
+  const recordKindLabel = record.kind === 'incident' ? 'Incident' : 'Event'
+
+  return new Graphic({
+    geometry: {
+      type: 'point',
+      longitude: record.location[0],
+      latitude: record.location[1],
+    },
+    attributes: {
+      ObjectID: record.id,
+      mapKey: `analytics-resolution-${record.id}`,
+      title: record.category,
+      kind: `Resolution ${recordKindLabel}`,
+      recordKind: recordKindLabel,
+      category: record.category,
+      resolutionCategory,
+      mapSymbol: dhsSymbol?.symbolName ?? resolutionCategory,
+      region: record.region,
+      status: record.status,
+      occurredAt: formatAnalyticsOccurredAt(record.occurredAt),
+      resolutionHours: formatAnalyticsResolutionHours(hours),
+    },
+  })
+}
+
+const initializeAnalyticsResolutionLayers = (
+  layerMap: globalThis.Map<string, FeatureLayer>
+) => {
+  if (layerMap.size > 0) {
+    return [...layerMap.values()]
+  }
+
+  ANALYTICS_REGIONS.forEach((region) => {
+    ANALYTICS_INCIDENT_CATEGORIES.forEach((category) => {
+      const key = getAnalyticsResolutionLayerKey(region, category)
+      layerMap.set(
+        key,
+        createAnalyticsResolutionFeatureLayer(
+          `analytics-resolution-${key.replace(/::/g, '-')}`,
+          `Resolution: ${ANALYTICS_RESOLUTION_CATEGORY_LABELS[category]} · ${region}`,
+          category
+        )
+      )
+    })
+  })
+
+  return [...layerMap.values()]
+}
+
+const parseAnalyticsFilterDate = (value: string) => {
+  if (!value.trim()) {
+    return null
+  }
+
+  const parsed = new Date(value)
+  return Number.isNaN(parsed.getTime()) ? null : parsed
+}
+
+const filterAnalyticsSeedRecords = (
+  records: AnalyticsSeedRecord[],
+  startTime: string,
+  endTime: string,
+  regions: string[]
+) => {
+  const start = parseAnalyticsFilterDate(startTime)
+  const end = parseAnalyticsFilterDate(endTime)
+
+  return records.filter((record) => {
+    if (!regions.includes(record.region)) {
+      return false
+    }
+
+    if (start && record.occurredAt < start) {
+      return false
+    }
+
+    if (end && record.occurredAt > end) {
+      return false
+    }
+
+    return true
+  })
+}
+
+const aggregateAnalyticsCategoryCounts = (
+  records: AnalyticsSeedRecord[],
+  kind: AnalyticsSeedRecord['kind']
+) => {
+  const counts = new Map<string, number>()
+  records
+    .filter((record) => record.kind === kind)
+    .forEach((record) => {
+      counts.set(record.category, (counts.get(record.category) ?? 0) + 1)
+    })
+
+  return [...counts.entries()]
+    .map(([category, count]) => ({ category, count }))
+    .sort((a, b) => b.count - a.count)
+}
+
+const aggregateAnalyticsResolutionByRegion = (
+  records: AnalyticsSeedRecord[],
+  kindFilter: AnalyticsResolutionKindFilter = 'incidents'
+) => {
+  const totals = new Map<string, { sum: number; count: number }>()
+
+  records
+    .filter((record) => matchesAnalyticsResolutionKindFilter(record, kindFilter))
+    .forEach((record) => {
+      const resolutionCategory = getResolutionCategoryForRecord(record)
+      if (!resolutionCategory) {
+        return
+      }
+
+      const key = `${record.region}::${resolutionCategory}`
+      const previous = totals.get(key) ?? { sum: 0, count: 0 }
+      totals.set(key, {
+        sum: previous.sum + (record.resolutionHours ?? 0),
+        count: previous.count + 1,
+      })
+    })
+
+  return totals
+}
+
+const aggregateAnalyticsSpendByRegion = (
+  records: AnalyticsSeedRecord[],
+  kindFilter: AnalyticsResolutionKindFilter = 'incidents'
+) => {
+  const totals = new Map<string, { sum: number; count: number }>()
+
+  records
+    .filter((record) => matchesAnalyticsSpendKindFilter(record, kindFilter))
+    .forEach((record) => {
+      const resolutionCategory = getResolutionCategoryForRecord(record)
+      if (!resolutionCategory) {
+        return
+      }
+
+      const key = `${record.region}::${resolutionCategory}`
+      const previous = totals.get(key) ?? { sum: 0, count: 0 }
+      totals.set(key, {
+        sum: previous.sum + (record.spendDollars ?? 0),
+        count: previous.count + 1,
+      })
+    })
+
+  return totals
+}
+
+const aggregateAnalyticsMeanResolutionByChartCategory = (
+  records: AnalyticsSeedRecord[],
+  kind: AnalyticsSeedRecord['kind']
+) => {
+  const totals = new Map<string, { sum: number; count: number }>()
+
+  records
+    .filter((record) => record.kind === kind && record.resolutionHours !== undefined)
+    .forEach((record) => {
+      const previous = totals.get(record.category) ?? { sum: 0, count: 0 }
+      totals.set(record.category, {
+        sum: previous.sum + (record.resolutionHours ?? 0),
+        count: previous.count + 1,
+      })
+    })
+
+  return totals
+}
+
+const getAnalyticsMeanResolutionFromTotals = (
+  totals: Map<string, { sum: number; count: number }>,
+  key: string
+) => {
+  const entry = totals.get(key)
+  if (!entry || entry.count === 0) {
+    return null
+  }
+
+  return Math.round(entry.sum / entry.count)
+}
+
+const computeAnalyticsMeanResolutionHours = (
+  records: AnalyticsSeedRecord[],
+  kindFilter: AnalyticsResolutionKindFilter = 'both'
+) => {
+  const recordsWithResolution = records.filter((record) =>
+    matchesAnalyticsResolutionKindFilter(record, kindFilter)
+  )
+  if (recordsWithResolution.length === 0) {
+    return 0
+  }
+
+  const totalHours = recordsWithResolution.reduce(
+    (sum, record) => sum + (record.resolutionHours ?? 0),
+    0
+  )
+  return Math.round(totalHours / recordsWithResolution.length)
+}
+
+const SITREP_ONGOING_INCIDENTS: IncidentListItem[] = [
+  {
+    id: 101,
+    name: 'Cape Cod Coastal Storm Response',
+    type: 'Coastal Storm / Nor\'easter',
+    status: 'Active',
+    severity: 'Medium',
+    region: 'FEMA Region 1 — New England',
+    location: [-70.2962, 41.6688],
+    lead: 'Massachusetts EMA · RA Boston, MA',
+    startedAt: '2026-05-08 06:15 EST',
+    lastUpdate: '2026-05-09 08:30 EST',
+    summary:
+      'Nor\'easter tracking offshore Cape Cod with sustained 45 kt winds and coastal flood advisories. Barnstable County shelter standby activated; Route 6A periodic lane closures for debris removal.',
+    resourcesCommitted:
+      'MassDOT District 5 crews, Barnstable County EOC, USCG Sector SE New England patrol assets',
+    relatedEventIds: [6],
+  },
+  {
+    id: 102,
+    name: 'Boston Metro Water Main Break — I-93 Corridor',
+    type: 'Infrastructure / Surface Transport',
+    status: 'Active',
+    severity: 'High',
+    region: 'FEMA Region 1 — New England',
+    location: [-71.0589, 42.3601],
+    lead: 'Boston OEM · MWRA On-Scene',
+    startedAt: '2026-05-09 02:40 EST',
+    lastUpdate: '2026-05-09 08:12 EST',
+    summary:
+      '48-inch water main rupture near South Station interchange. I-93 northbound reduced to two lanes; Mass511 detour via I-90 westbound active. MWRA repair crew on-scene with estimated 6-hour restoration window.',
+    resourcesCommitted:
+      'MWRA repair crew, Boston DPW, MassDOT Highway Division IRT, Boston Fire-Rescue support',
+    relatedEventIds: [],
+  },
+  {
+    id: 103,
+    name: 'Connecticut River Ice Jam Watch',
+    type: 'Riverine Flood / Ice Jam',
+    status: 'Monitoring',
+    severity: 'Low',
+    region: 'FEMA Region 1 — New England',
+    location: [-72.6734, 41.7658],
+    lead: 'Connecticut DEM · NWS WFO Hartford',
+    startedAt: '2026-05-07 18:00 EST',
+    lastUpdate: '2026-05-09 07:45 EST',
+    summary:
+      'Ice jam forming upstream of Hartford with minor flooding in low-lying areas along Route 17. CT DOT pre-positioned barricades; no evacuations ordered. NWS monitoring for breakup over next 24 hours.',
+    resourcesCommitted:
+      'CT DOT maintenance crews, CT DEM liaison, Hartford OEM monitoring cell',
+    relatedEventIds: [],
+  },
+]
+
+const getOngoingIncidentsForFemaAor = (aorName: string) =>
+  SITREP_ONGOING_INCIDENTS.filter((entry) => entry.region === aorName)
+
+const buildFemaAorGraphicAttributes = (aor: FemaAorItem) => {
+  const regionIncidents = getOngoingIncidentsForFemaAor(aor.name)
+  return {
+    mapKey: `fema-aor-${aor.id}`,
+    femaAorId: aor.id,
+    title: aor.name,
+    kind: 'AOR',
+    lead: aor.lead,
+    incidents: String(aor.incidents),
+    population: aor.population,
+    evacuationStatus: aor.evacuationStatus,
+    priority: aor.priority,
+    lastUpdate: aor.lastUpdate,
+    sitrep: aor.sitrep,
+    sitrepUpdatedBy: aor.sitrepUpdatedBy,
+    ongoingIncidentsSummary:
+      regionIncidents.length > 0
+        ? regionIncidents
+            .map((incident) => `${incident.name} (${incident.severity})`)
+            .join('; ')
+        : 'None recorded',
+    sitrepSourcesSummary: aor.sitrepSources.join('; '),
+  }
+}
+
+const FEMA_AOR_POPUP_TEMPLATE = {
+  title: '{title}',
+  content:
+    '<b>Lead:</b> {lead}<br/>' +
+    '<b>Active Incidents:</b> {incidents}<br/>' +
+    '<b>Population:</b> {population}<br/>' +
+    '<b>Evacuation:</b> {evacuationStatus}<br/>' +
+    '<b>Priority:</b> {priority}<br/>' +
+    '<b>Updated:</b> {lastUpdate}<br/>' +
+    '<b>Latest SITREP:</b> {sitrep} <i>(last updated by {sitrepUpdatedBy})</i><br/>' +
+    '<b>Ongoing Incidents:</b> {ongoingIncidentsSummary}<br/>' +
+    '<b>Data Sources:</b> {sitrepSourcesSummary}',
+}
+
+const applyFemaAorPopupState = (graphic: Graphic, aor: FemaAorItem) => {
+  graphic.attributes = buildFemaAorGraphicAttributes(aor)
+  graphic.popupTemplate = FEMA_AOR_POPUP_TEMPLATE
+}
+
+const isFemaAorGraphicAttributes = (attrs: Record<string, unknown> | undefined) =>
+  attrs !== undefined &&
+  typeof attrs.femaAorId === 'number' &&
+  attrs.kind === 'AOR'
+
+const isClusterGraphicAttributes = (attrs: Record<string, unknown> | undefined) =>
+  attrs !== undefined && typeof attrs.cluster_count === 'number'
+
+const getGraphicMapLocation = (graphic: Graphic): [number, number] | null => {
+  const geometry = graphic.geometry
+  if (!geometry) {
+    return null
+  }
+
+  if (geometry.type === 'point') {
+    return [geometry.longitude, geometry.latitude]
+  }
+
+  if (geometry.extent?.center) {
+    return [geometry.extent.center.longitude, geometry.extent.center.latitude]
+  }
+
+  return null
+}
+
+type MapClickTarget =
+  | { type: 'item'; graphic: Graphic; mapKey: string }
+  | { type: 'fema'; femaAorId: number }
+  | { type: 'cluster'; graphic: Graphic }
+
+const resolveMapClickTarget = (results: __esri.HitTestResult[]): MapClickTarget | null => {
+  let femaFallback: { type: 'fema'; femaAorId: number } | null = null
+  let polygonItemFallback: { type: 'item'; graphic: Graphic; mapKey: string } | null = null
+
+  for (const result of results) {
+    if (result.type !== 'graphic') {
+      continue
+    }
+
+    const graphic = (result as __esri.GraphicHit).graphic
+    const attrs = graphic.attributes as Record<string, unknown> | undefined
+
+    if (isClusterGraphicAttributes(attrs)) {
+      return { type: 'cluster', graphic }
+    }
+
+    const mapKey = attrs?.mapKey
+    if (typeof mapKey !== 'string') {
+      if (isFemaAorGraphicAttributes(attrs)) {
+        femaFallback = { type: 'fema', femaAorId: attrs.femaAorId as number }
+      }
+      continue
+    }
+
+    if (isFemaAorGraphicAttributes(attrs)) {
+      femaFallback = { type: 'fema', femaAorId: attrs.femaAorId as number }
+      continue
+    }
+
+    if (graphic.geometry?.type === 'point') {
+      return { type: 'item', graphic, mapKey }
+    }
+
+    if (!polygonItemFallback) {
+      polygonItemFallback = { type: 'item', graphic, mapKey }
+    }
+  }
+
+  if (polygonItemFallback) {
+    return polygonItemFallback
+  }
+
+  if (femaFallback) {
+    return femaFallback
+  }
+
+  return null
+}
+
+const positionMapZoomControls = (view: MapView) => {
+  void view.when().then(() => {
+    if (view.ui.find('zoom')) {
+      view.ui.move('zoom', 'bottom-right')
+      return
+    }
+
+    view.ui.add(new Zoom({ view }), 'bottom-right')
+  })
+}
+
+type Ics214ActivityLogEntry = {
+  dateTime: string
+  activities: string
+  personnelEquipment: string
+}
+
+const CAPE_COD_ICS214_ACTIVITY_LOG = {
+  incidentName: 'Cape Cod Coastal Storm Response',
+  unitName: 'MassDOT District 5 IRT · Barnstable County REPC Liaison',
+  operationalPeriod: 'OP 2 (2026-05-08 06:00 – 2026-05-09 06:00 EST)',
+  dateOfActivity: '2026-05-08',
+  preparedBy: 'MassDOT District 5 IRT Leader',
+  entries: [
+    {
+      dateTime: '2026-05-08 06:15',
+      activities:
+        'Incident workspace activated; Barnstable County REPC notified. Shelter standby posture initiated for Outer Cape communities.',
+      personnelEquipment: 'District 5 IRT (14 crews) · Barnstable County EOC liaison',
+    },
+    {
+      dateTime: '2026-05-08 06:45',
+      activities:
+        'Mass511 alert MA-88392 published for Route 6A corridor. Coastal flood advisories relayed to field crews.',
+      personnelEquipment: 'Mass511 ops · District 5 comms cell',
+    },
+    {
+      dateTime: '2026-05-08 07:15',
+      activities:
+        'USCG Sector SE New England patrol assets on-station offshore. Confirmed no vessel distress calls in advisory area.',
+      personnelEquipment: 'USCG Sector SE New England patrol boat',
+    },
+    {
+      dateTime: '2026-05-08 07:30',
+      activities:
+        'Route 6A periodic lane closure implemented between Eastham and Wellfleet for debris removal. Traffic control signage deployed.',
+      personnelEquipment: 'Highway maintenance units · barricade stock',
+    },
+    {
+      dateTime: '2026-05-08 08:30',
+      activities:
+        'Route 6A closure extended past MP 84 for debris accumulation. Coordination call with USCG on patrol coverage through next high tide.',
+      personnelEquipment: 'District 5 IRT · USCG liaison',
+    },
+    {
+      dateTime: '2026-05-09 07:45',
+      activities:
+        'Coastal drone overflight documented debris at Route 6A MP 78–84. NWS radar loop archived to incident workspace.',
+      personnelEquipment: 'District 5 drone team · NWS WFO Boston feed',
+    },
+  ] satisfies Ics214ActivityLogEntry[],
+  citedEntryIndex: 4,
+}
+
+type OngoingIncidentSitrepContent = {
+  executiveSummary: string
+  readinessAssessment: string
+  riskToMission: string
+  outstandingRfiRfr: string
+  previousCriticalIncidentComms: string
+  generalComments: string
+  imageryNotes: string
+  sources: string[]
+}
+
+const ONGOING_INCIDENT_SITREP_CONTENT: Record<number, OngoingIncidentSitrepContent> = {
+  101: {
+    executiveSummary:
+      'Nor\'easter conditions persist along Outer Cape Cod with sustained 45 kt winds and coastal flood advisories in effect through the next operational period. MassDOT District 5 has implemented periodic Route 6A lane closures between Eastham and Wellfleet for debris removal; Barnstable County shelter standby remains activated. USCG Sector SE New England patrol assets are on-station. No MassDOT personnel injuries reported.',
+    readinessAssessment:
+      'MassDOT District 5 IRT: 14/16 crews available (88%). Highway maintenance units staged at Route 6A MP 84 and Barnstable. Barnstable County EOC liaison active. Fuel and barricade stock sufficient for 36 hours. Communications: primary and alternate nets stable.',
+    riskToMission:
+      'Highest: continued coastal flooding may extend Route 6A closures into the next op period, affecting emergency access to Provincetown. Medium: debris accumulation on secondary roads may require additional District 5 sweeps. Mitigations: pre-staged plow crews in Orleans; Mass511 alerts refreshed every 15 minutes.',
+    outstandingRfiRfr:
+      'RFI-CC-014 (NWS): Updated offshore wind forecast for Outer Cape, due 12:00 EST.\nRFR-CC-022 (MassDOT): Additional high-visibility signage for Route 6A detour at MP 72, due before next op period.',
+    previousCriticalIncidentComms:
+      '06:15 — Incident workspace activated; Barnstable County REPC notified.\n07:30 — Mass511 alert MA-88392 published for Route 6A corridor.\n08:30 — Coordination call with USCG Sector SE New England on patrol coverage.',
+    generalComments:
+      'Shelter standby posture maintained; no evacuations ordered. Eversource staging crews on-island. Recommend extending District 5 IRT shift through evening high tide cycle.',
+    imageryNotes:
+      'Coastal drone overflight at 07:45 captured debris accumulation at Route 6A MP 78–84. NWS radar loop archived to incident workspace.',
+    sources: [
+      'NWS WFO Boston marine forecast',
+      'Mass511 Route 6A active alerts',
+      'Barnstable County REPC situation report',
+      'USCG Sector SE New England patrol log',
+    ],
+  },
+  102: {
+    executiveSummary:
+      '48-inch water main rupture near Boston South Station at 02:40 EST has reduced I-93 northbound to two lanes. Mass511 detour via I-90 westbound is active. MWRA repair crew on-scene with estimated six-hour restoration window; MassDOT Highway Division IRT supporting traffic control at the I-93/I-90 interchange. Boston DPW and Boston Fire-Rescue providing excavation support. No injuries reported.',
+    readinessAssessment:
+      'MWRA repair crew: fully staffed on-scene. MassDOT IRT: 8/8 personnel deployed at interchange. Boston DPW: 6 crews supporting excavation. Traffic control signage and portable signals operational. Estimated restoration: 14:00 EST.',
+    riskToMission:
+      'Highest: prolonged I-93 lane reduction during AM peak may cascade delays to Route 1A and Tobin Bridge approaches. Medium: water infiltration may affect South Station transit access routes. Mitigations: Mass511 detour messaging active; IRT monitoring queue length at 15-minute intervals.',
+    outstandingRfiRfr:
+      'RFI-BOS-018 (MWRA): Updated restoration timeline for 48-inch main, due 10:00 EST.\nRFI-BOS-019 (MassDOT): MBTA bus bridge capacity for South Station commuters, due 11:00 EST.',
+    previousCriticalIncidentComms:
+      '02:40 — Boston OEM notified; incident workspace opened.\n05:10 — Mass511 alert MA-88421 published for I-93 NB lane reduction.\n07:30 — MassDOT IRT deployed additional signage at I-93/I-90 interchange.\n08:12 — MWRA estimates 6-hour restoration; Boston DPW excavation underway.',
+    generalComments:
+      'Unified command established at South Station staging area. Recommend pre-positioning tow trucks at I-90 interchange for disabled vehicles. MWRA coordinating with Boston Water and Sewer Commission on downstream pressure monitoring.',
+    imageryNotes:
+      'Ground photos at 06:30 document excavation footprint and lane configuration. MassDOT traffic camera stills from I-93 NB archived to incident workspace.',
+    sources: [
+      'MWRA on-scene repair status report',
+      'Mass511 I-93 / I-90 active alerts',
+      'Boston OEM unified command log',
+      'MassDOT Highway Division IRT field notes',
+    ],
+  },
+  103: {
+    executiveSummary:
+      'Ice jam forming upstream of Hartford on the Connecticut River with minor flooding in low-lying areas along Route 17. Connecticut DEM and CT DOT maintain monitoring posture; barricades pre-positioned with no evacuations ordered. NWS WFO Hartford has issued an ice jam breakup watch over the next 24 hours. Hartford OEM monitoring cell active.',
+    readinessAssessment:
+      'CT DOT District 1: 10/12 maintenance crews available. Barricades and high-water signs staged at Route 17 low crossings. Connecticut DEM liaison on-scene. NWS monitoring hourly. No shelter activations required at this time.',
+    riskToMission:
+      'Highest: ice jam breakup could cause rapid water rise along Route 17 within 6–12 hours if warm trend continues. Medium: minor flooding may affect local access roads in East Hartford lowlands. Mitigations: CT DOT pre-positioned barricades; Hartford OEM monitoring cell issuing hourly situational updates.',
+    outstandingRfiRfr:
+      'RFI-CT-007 (NWS): Ice jam breakup timing forecast for Hartford reach, due 10:00 EST.\nRFI-CT-008 (CT DOT): Updated road closure threshold criteria for Route 17, due 12:00 EST.',
+    previousCriticalIncidentComms:
+      '18:00 (prior day) — Incident workspace set to Monitoring posture.\n05:00 — NWS WFO Hartford issues ice jam breakup watch.\n06:20 — Hartford OEM monitoring cell activated.\n07:45 — CT DOT staged barricades along Route 17.',
+    generalComments:
+      'Monitoring posture appropriate; no change to evacuation status recommended. CT DOT coordinating with local fire departments on water rescue standby. Recommend next formal update after NWS breakup forecast at 10:00 EST.',
+    imageryNotes:
+      'NWS river gauge chart for Hartford reach archived at 07:45. CT DOT field photos of barricade staging at Route 17 MP 4.2 uploaded to incident workspace.',
+    sources: [
+      'NWS WFO Hartford ice jam statement',
+      'Connecticut DEM situation report',
+      'CT DOT District 1 maintenance log',
+      'Hartford OEM monitoring cell notes',
+    ],
+  },
+}
+
+const getOngoingIncidentSitrepSectionValue = (
+  incidentId: number,
+  section:
+    | 'executive-summary'
+    | 'readiness-assessment'
+    | 'risk-to-mission'
+    | 'outstanding-rfi-rfr'
+    | 'previous-critical-incident-comms'
+    | 'general-comments'
+    | 'imagery'
+): string | null => {
+  const content = ONGOING_INCIDENT_SITREP_CONTENT[incidentId]
+  if (!content) {
+    return null
+  }
+  switch (section) {
+    case 'executive-summary':
+      return content.executiveSummary
+    case 'readiness-assessment':
+      return content.readinessAssessment
+    case 'risk-to-mission':
+      return content.riskToMission
+    case 'outstanding-rfi-rfr':
+      return content.outstandingRfiRfr
+    case 'previous-critical-incident-comms':
+      return content.previousCriticalIncidentComms
+    case 'general-comments':
+      return content.generalComments
+    case 'imagery':
+      return content.imageryNotes
+    default:
+      return null
+  }
+}
+
+const isNonHumanSitrepAuthor = (name: string) => name.trim().toLowerCase() === 'pratus ai'
+
+const getHumanSitrepAuthorName = (
+  version: { authorName: string; creatorName: string } | null | undefined
+) => {
+  if (version) {
+    if (!isNonHumanSitrepAuthor(version.authorName)) {
+      return version.authorName
+    }
+    if (!isNonHumanSitrepAuthor(version.creatorName)) {
+      return version.creatorName
+    }
+  }
+  return 'You'
+}
+
+const formatSitrepLastEditor = (
+  version: { authorName: string; authorRole: string } | null | undefined
+) => {
+  if (!version) {
+    return 'You'
+  }
+  if (version.authorName === 'You') {
+    return 'You'
+  }
+  return [version.authorRole, version.authorName].filter(Boolean).join(' ')
+}
+
+const getSitrepLastEditorLabel = (
+  version: { authorName: string } | null | undefined
+) => (version?.authorName === 'You' ? 'Last edited by' : 'Last updated by')
+
+type YesNoField = 'yes' | 'no' | ''
+
+type InitialIncidentReportState = {
+  shortDescription: string
+  reportDate: string
+  reportTime: string
+  facilityLocations: string[]
+  facilityLocationOther: string
+  ccmerAdvisors: string[]
+  callerName: string
+  callbackNumber: string
+  callType: 'drill' | 'incident' | ''
+  whatHappened: string
+  facilityMuster: YesNoField
+  abandonStations: YesNoField
+  assistanceNeeded: YesNoField
+  qiDrill: YesNoField
+  icNotified: YesNoField
+  icNotifiedName: string
+  scenarios: string[]
+}
+
+const GOM_CCMER_FACILITY_LOCATIONS = [
+  'BP Atlantis (Green Canyon 787)',
+  'BP Mad Dog (Green Canyon 782)',
+  'BP NaKika (Mississippi Canyon 474)',
+  'BP Thunder Horse PDQ (Mississippi Canyon 778)',
+  'BP Argos',
+] as const
+
+const GOM_CCMER_ADVISORS = [
+  'Baccigalopi, Michael',
+  'Eugene Barlow',
+  'Landry, Carlton P',
+  'Montou, Quin R',
+  'Chris Bellavia',
+] as const
+
+const GOM_CCMER_ERP_SCENARIOS = [
+  'Attendant Vessel Collision (Drive Off / Drift Off)',
+  'Abandon Facility',
+  'Damaged or Loss of Critical Equipment / Pipelines',
+  'Drilling Area – Gas Release',
+  'Fire – Accommodations and Hull',
+  'Fire and Explosion - Topsides',
+  'Fire – Jet Pressurized',
+  'Helicopter Crash',
+  'Loss of Facility Stability and Flooding',
+  'Loss of Well Control',
+  'Man Overboard',
+  'Medical Emergency / Fatality',
+  'Medivac',
+  'Mooring Failure',
+  'Passing Vessel Collision',
+  'Process Area - Gas Release',
+  'Process Area – Major Liquid Hydrocarbon Release',
+  'Riser Failure / Loss of Containment',
+  'Severe Weather',
+  'Subsea Release (Flow Line or Subsea System)',
+  'Unplanned Loss of Power',
+  'Hazardous Waste Spill / Release',
+  'ASDS Cyber Incident Response',
+  'Security Response',
+  'No ERP Scenario Tested',
+] as const
+
+const createDefaultInitialIncidentReport = (): InitialIncidentReportState => ({
+  shortDescription: '',
+  reportDate: '',
+  reportTime: '',
+  facilityLocations: [],
+  facilityLocationOther: '',
+  ccmerAdvisors: [],
+  callerName: '',
+  callbackNumber: '',
+  callType: '',
+  whatHappened: '',
+  facilityMuster: '',
+  abandonStations: '',
+  assistanceNeeded: '',
+  qiDrill: '',
+  icNotified: '',
+  icNotifiedName: '',
+  scenarios: [],
+})
+
+const toggleStringSelection = (previous: string[], value: string) =>
+  previous.includes(value)
+    ? previous.filter((item) => item !== value)
+    : [...previous, value]
+
+const GOM_CCMER_FACILITY_COORDS: Record<string, [number, number]> = {
+  'BP Atlantis (Green Canyon 787)': [-88.0, 27.2],
+  'BP Mad Dog (Green Canyon 782)': [-90.78, 27.53],
+  'BP NaKika (Mississippi Canyon 474)': [-88.5, 28.3],
+  'BP Thunder Horse PDQ (Mississippi Canyon 778)': [-88.6, 28.2],
+  'BP Argos': [-88.0, 27.5],
+}
+
+const buildEventFromCcmerReport = (report: InitialIncidentReportState): EventListItem => {
+  const nowLabel = new Date().toLocaleString([], {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+  const facilityLabel = [
+    ...report.facilityLocations.filter((location) => location !== 'Other'),
+    report.facilityLocations.includes('Other') && report.facilityLocationOther.trim()
+      ? report.facilityLocationOther.trim()
+      : null,
+  ]
+    .filter((entry): entry is string => Boolean(entry))
+    .join(', ')
+  const callTypeLabel =
+    report.callType === 'drill'
+      ? 'Drill'
+      : report.callType === 'incident'
+        ? 'Incident Notification'
+        : 'CCMER Duty Notification'
+  const scenarioLabel =
+    report.scenarios.length > 0 ? report.scenarios.slice(0, 2).join(' · ') : null
+  const displayName =
+    report.shortDescription.trim() ||
+    (facilityLabel ? `${callTypeLabel} — ${facilityLabel}` : 'New Event')
+  const primaryFacility =
+    report.facilityLocations.find((location) => location !== 'Other') ??
+    (report.facilityLocationOther.trim() ? 'Other' : undefined)
+  const location =
+    primaryFacility && GOM_CCMER_FACILITY_COORDS[primaryFacility]
+      ? GOM_CCMER_FACILITY_COORDS[primaryFacility]
+      : [-90.0, 28.0]
+  const region = facilityLabel ? 'Gulf of Mexico — Offshore' : 'Unassigned Region'
+  const startedAt =
+    [report.reportDate.trim(), report.reportTime.trim()].filter(Boolean).join(' ') || nowLabel
+  const summaryParts = [
+    report.shortDescription.trim(),
+    report.whatHappened.trim(),
+  ].filter(Boolean)
+  const responseNotes = [
+    report.facilityMuster ? `Facility muster: ${report.facilityMuster.toUpperCase()}` : null,
+    report.abandonStations
+      ? `Abandon stations: ${report.abandonStations.toUpperCase()}`
+      : null,
+    report.assistanceNeeded
+      ? `Assistance needed: ${report.assistanceNeeded.toUpperCase()}`
+      : null,
+    report.qiDrill ? `QI drill: ${report.qiDrill.toUpperCase()}` : null,
+    report.icNotified
+      ? `IC notified: ${report.icNotified.toUpperCase()}${report.icNotifiedName.trim() ? ` (${report.icNotifiedName.trim()})` : ''}`
+      : null,
+  ].filter((entry): entry is string => Boolean(entry))
+  if (responseNotes.length > 0) {
+    summaryParts.push(responseNotes.join('. ') + '.')
+  }
+  const lead =
+    report.ccmerAdvisors.length > 0
+      ? report.ccmerAdvisors.join(', ')
+      : report.callerName.trim() || 'CCMER Duty Desk'
+  const resourcesCommitted = [
+    report.ccmerAdvisors.length > 0 ? `CCMER advisor(s): ${report.ccmerAdvisors.join(', ')}` : null,
+    report.callerName.trim() ? `Caller: ${report.callerName.trim()}` : null,
+    report.callbackNumber.trim() ? `Callback: ${report.callbackNumber.trim()}` : null,
+    report.icNotifiedName.trim() ? `IC notified: ${report.icNotifiedName.trim()}` : null,
+  ]
+    .filter((entry): entry is string => Boolean(entry))
+    .join(' · ')
+  const isActiveEvent =
+    report.callType === 'incident' ||
+    report.assistanceNeeded === 'yes' ||
+    report.facilityMuster === 'yes' ||
+    report.abandonStations === 'yes'
+  const severity: EventListItem['severity'] =
+    report.callType === 'incident' || report.assistanceNeeded === 'yes' ? 'Medium' : 'Low'
+
+  return {
+    id: Date.now(),
+    name: displayName,
+    type: [callTypeLabel, scenarioLabel].filter(Boolean).join(' · ') || callTypeLabel,
+    status: isActiveEvent ? 'Active' : 'Monitoring',
+    severity,
+    region,
+    location,
+    lead,
+    startedAt,
+    lastUpdate: nowLabel,
+    summary: summaryParts.join(' ') || 'CCMER duty notification logged.',
+    resourcesCommitted: resourcesCommitted || 'CCMER advisor on duty',
+    businessUnit: region,
+    creationKind: 'user',
+    createdByUser: report.callerName.trim() || 'You',
+    thresholdDescription: null,
+    sendNotificationOnCreate: true,
+    notificationRecipients: [report.icNotifiedName.trim(), report.callerName.trim(), report.ccmerAdvisors.join('; ')]
+      .filter(Boolean)
+      .join('; '),
+    sourceReport: { ...report },
+  }
+}
+
+type CreateIncidentFormSeed = {
+  incidentName: string
+  incidentCategory: string[]
+  incidentWorkflow: string
+  incidentTemplate: string
+  incidentSituationReport: string
+  incidentAors: string[]
+  incidentRelatedEventIds: number[]
+  incidentStartTime: string
+  incidentLocation: string
+  incidentGeometrySummary: string
+  initialIncidentReport: InitialIncidentReportState
+}
+
+const parseEventStartedAtParts = (startedAt: string) => {
+  const match = startedAt.match(/(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2})/)
+  if (!match) {
+    return { date: '', time: '', datetimeLocal: '' }
+  }
+
+  return {
+    date: match[1],
+    time: match[2],
+    datetimeLocal: `${match[1]}T${match[2]}`,
+  }
+}
+
+const inferIncidentCategoriesFromEvent = (event: EventListItem) => {
+  const haystack = `${event.name} ${event.type} ${event.summary}`.toLowerCase()
+  const categories: string[] = []
+
+  if (haystack.includes('flood')) categories.push('Flood')
+  if (
+    haystack.includes('hurricane') ||
+    haystack.includes('cyclone') ||
+    haystack.includes('tropical storm') ||
+    haystack.includes('storm surge')
+  ) {
+    categories.push('Flood')
+  }
+  if (haystack.includes('hazmat') || haystack.includes('ammonia')) categories.push('Hazmat')
+  if (haystack.includes('fire')) categories.push('Fire')
+  if (
+    haystack.includes('oil') ||
+    haystack.includes('offshore') ||
+    haystack.includes('platform') ||
+    haystack.includes('spill')
+  ) {
+    categories.push('Oil Spill')
+  }
+  if (categories.length === 0) categories.push('Other')
+
+  return [...new Set(categories)]
+}
+
+const inferIncidentWorkflowFromEvent = (event: EventListItem) => {
+  const region = event.region.toLowerCase()
+  if (region.includes('gulf') || region.includes('offshore')) return 'bsee-ics'
+  if (region.includes('region 9') || region.includes('california')) return 'california-ics'
+  if (region.includes('washington')) return 'washington-ics'
+  if (region.includes('region 6') || region.includes('phmsa')) return 'phmsa-ics'
+  if (region.includes('epa') || event.summary.toLowerCase().includes('epa')) return 'epa-ics'
+  return 'uscg-ics'
+}
+
+const inferIncidentTemplateFromEvent = (event: EventListItem) => {
+  const haystack = `${event.type} ${event.summary}`.toLowerCase()
+  if (haystack.includes('evacuation') || haystack.includes('shelter')) return 'evacuation'
+  if (haystack.includes('flood') || haystack.includes('mass care')) return 'mass-care'
+  if (haystack.includes('power') || haystack.includes('utility') || haystack.includes('restoration')) {
+    return 'utility-restoration'
+  }
+  return 'utility-restoration'
+}
+
+const inferFacilityLocationsFromEvent = (event: EventListItem) => {
+  const haystack = `${event.name} ${event.summary}`.toLowerCase()
+  const matches: string[] = []
+
+  for (const facility of GOM_CCMER_FACILITY_LOCATIONS) {
+    const facilityHaystack = facility.toLowerCase()
+    if (haystack.includes('mad dog') && facilityHaystack.includes('mad dog')) {
+      matches.push(facility)
+      continue
+    }
+    if (haystack.includes('atlantis') && facilityHaystack.includes('atlantis')) {
+      matches.push(facility)
+      continue
+    }
+    if (haystack.includes('nakika') && facilityHaystack.includes('nakika')) {
+      matches.push(facility)
+      continue
+    }
+    if (haystack.includes('thunder horse') && facilityHaystack.includes('thunder horse')) {
+      matches.push(facility)
+      continue
+    }
+    if (haystack.includes('argos') && facilityHaystack.includes('argos')) {
+      matches.push(facility)
+    }
+  }
+
+  return matches
+}
+
+const inferScenariosFromEvent = (event: EventListItem) => {
+  const haystack = `${event.type} ${event.summary}`.toLowerCase()
+
+  if (haystack.includes('crew change') || haystack.includes('helicopter') || haystack.includes('helo')) {
+    return GOM_CCMER_ERP_SCENARIOS.filter(
+      (scenario) =>
+        scenario.toLowerCase().includes('medivac') ||
+        scenario.toLowerCase().includes('helicopter')
+    ).slice(0, 2)
+  }
+
+  if (haystack.includes('flood') || haystack.includes('weather')) {
+    return GOM_CCMER_ERP_SCENARIOS.filter((scenario) =>
+      scenario.toLowerCase().includes('severe weather')
+    ).slice(0, 1)
+  }
+
+  if (haystack.includes('debris') || haystack.includes('collision')) {
+    return GOM_CCMER_ERP_SCENARIOS.filter((scenario) =>
+      scenario.toLowerCase().includes('collision')
+    ).slice(0, 1)
+  }
+
+  return []
+}
+
+const buildInitialIncidentReportFromEvent = (event: EventListItem): InitialIncidentReportState => {
+  if (event.sourceReport) {
+    return {
+      ...event.sourceReport,
+      callType: 'incident',
+      shortDescription: event.sourceReport.shortDescription.trim() || event.name,
+      whatHappened: event.sourceReport.whatHappened.trim() || event.summary,
+    }
+  }
+
+  const { date, time } = parseEventStartedAtParts(event.startedAt)
+  const ccmerAdvisorMatch = GOM_CCMER_ADVISORS.find(
+    (advisor) =>
+      event.lead.toLowerCase().includes(advisor.toLowerCase()) ||
+      event.resourcesCommitted.toLowerCase().includes(advisor.toLowerCase())
+  )
+
+  return {
+    ...createDefaultInitialIncidentReport(),
+    shortDescription: event.name,
+    reportDate: date,
+    reportTime: time,
+    facilityLocations: inferFacilityLocationsFromEvent(event),
+    ccmerAdvisors: ccmerAdvisorMatch ? [ccmerAdvisorMatch] : [],
+    callerName: event.lead.split('·')[0]?.trim() ?? event.lead,
+    callType: 'incident',
+    whatHappened: [
+      event.summary,
+      event.resourcesCommitted
+        ? `Resources committed: ${event.resourcesCommitted}`
+        : '',
+    ]
+      .filter(Boolean)
+      .join('\n\n'),
+    assistanceNeeded:
+      event.severity === 'High' || event.status === 'Active' ? 'yes' : '',
+    scenarios: inferScenariosFromEvent(event),
+  }
+}
+
+const buildCreateIncidentFormFromEvent = (
+  event: EventListItem,
+  aorNames: string[]
+): CreateIncidentFormSeed => {
+  const [longitude, latitude] = event.location
+  const { datetimeLocal } = parseEventStartedAtParts(event.startedAt)
+  const matchingAor =
+    aorNames.find((name) => name === event.region) ??
+    aorNames.find((name) => event.region.includes(name) || name.includes(event.region))
+  const incidentAors =
+    matchingAor != null
+      ? [matchingAor]
+      : event.region.startsWith('FEMA Region')
+        ? [event.region]
+        : []
+
+  return {
+    incidentName: event.name,
+    incidentCategory: inferIncidentCategoriesFromEvent(event),
+    incidentWorkflow: inferIncidentWorkflowFromEvent(event),
+    incidentTemplate: inferIncidentTemplateFromEvent(event),
+    incidentSituationReport: event.summary,
+    incidentAors,
+    incidentRelatedEventIds: [event.id],
+    incidentStartTime: datetimeLocal,
+    incidentLocation: 'draw-point',
+    incidentGeometrySummary: `Point selected at ${latitude.toFixed(5)}, ${longitude.toFixed(5)}`,
+    initialIncidentReport: buildInitialIncidentReportFromEvent(event),
+  }
+}
+
+type CcmerDutyNotificationFormProps = {
+  idPrefix: string
+  value: InitialIncidentReportState
+  onChange: Dispatch<SetStateAction<InitialIncidentReportState>>
+}
+
+function CcmerDutyNotificationForm({
+  idPrefix,
+  value,
+  onChange,
+}: CcmerDutyNotificationFormProps) {
+  return (
+    <div className="grid gap-6">
+      <div>
+        <p className="text-sm font-medium">GOM CCMER Duty Notification Log</p>
+        <p className="text-xs text-muted-foreground">
+          Complete the duty notification log fields below.
+        </p>
+      </div>
+      <div className="grid gap-2">
+        <Label htmlFor={`${idPrefix}-short-description`}>Short Description</Label>
+        <Input
+          id={`${idPrefix}-short-description`}
+          value={value.shortDescription}
+          onChange={(event) =>
+            onChange((previous) => ({
+              ...previous,
+              shortDescription: event.target.value,
+            }))
+          }
+        />
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div className="grid gap-2">
+          <Label htmlFor={`${idPrefix}-date`}>Date (MM/DD/YYYY)</Label>
+          <Input
+            id={`${idPrefix}-date`}
+            placeholder="MM/DD/YYYY"
+            value={value.reportDate}
+            onChange={(event) =>
+              onChange((previous) => ({
+                ...previous,
+                reportDate: event.target.value,
+              }))
+            }
+          />
+        </div>
+        <div className="grid gap-2">
+          <Label htmlFor={`${idPrefix}-time`}>Time (24HR)</Label>
+          <Input
+            id={`${idPrefix}-time`}
+            placeholder="HH:mm"
+            value={value.reportTime}
+            onChange={(event) =>
+              onChange((previous) => ({
+                ...previous,
+                reportTime: event.target.value,
+              }))
+            }
+          />
+        </div>
+      </div>
+      <div className="grid gap-2">
+        <Label>Location</Label>
+        <div className="grid gap-2 sm:grid-cols-2">
+          {GOM_CCMER_FACILITY_LOCATIONS.map((location) => (
+            <div key={location} className="flex items-center gap-2">
+              <Checkbox
+                id={`${idPrefix}-facility-${location}`}
+                checked={value.facilityLocations.includes(location)}
+                onCheckedChange={() =>
+                  onChange((previous) => ({
+                    ...previous,
+                    facilityLocations: toggleStringSelection(previous.facilityLocations, location),
+                  }))
+                }
+              />
+              <Label htmlFor={`${idPrefix}-facility-${location}`} className="cursor-pointer font-normal">
+                {location}
+              </Label>
+            </div>
+          ))}
+          <div className="flex flex-wrap items-center gap-2 sm:col-span-2">
+            <Checkbox
+              id={`${idPrefix}-facility-other`}
+              checked={value.facilityLocations.includes('Other')}
+              onCheckedChange={() =>
+                onChange((previous) => ({
+                  ...previous,
+                  facilityLocations: toggleStringSelection(previous.facilityLocations, 'Other'),
+                }))
+              }
+            />
+            <Label htmlFor={`${idPrefix}-facility-other`} className="cursor-pointer font-normal">
+              Other:
+            </Label>
+            <Input
+              className="max-w-xs flex-1"
+              placeholder="Specify location"
+              value={value.facilityLocationOther}
+              onChange={(event) =>
+                onChange((previous) => ({
+                  ...previous,
+                  facilityLocationOther: event.target.value,
+                }))
+              }
+            />
+          </div>
+        </div>
+      </div>
+      <div className="grid gap-2">
+        <Label>BP CCMER Advisor Receiving the Call</Label>
+        <div className="grid gap-2 sm:grid-cols-2">
+          {GOM_CCMER_ADVISORS.map((advisor) => (
+            <div key={advisor} className="flex items-center gap-2">
+              <Checkbox
+                id={`${idPrefix}-advisor-${advisor}`}
+                checked={value.ccmerAdvisors.includes(advisor)}
+                onCheckedChange={() =>
+                  onChange((previous) => ({
+                    ...previous,
+                    ccmerAdvisors: toggleStringSelection(previous.ccmerAdvisors, advisor),
+                  }))
+                }
+              />
+              <Label htmlFor={`${idPrefix}-advisor-${advisor}`} className="cursor-pointer font-normal">
+                {advisor}
+              </Label>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div className="grid gap-2">
+          <Label htmlFor={`${idPrefix}-caller-name`}>Name of Person Calling</Label>
+          <Input
+            id={`${idPrefix}-caller-name`}
+            value={value.callerName}
+            onChange={(event) =>
+              onChange((previous) => ({
+                ...previous,
+                callerName: event.target.value,
+              }))
+            }
+          />
+        </div>
+        <div className="grid gap-2">
+          <Label htmlFor={`${idPrefix}-callback-number`}>Call Back Number</Label>
+          <Input
+            id={`${idPrefix}-callback-number`}
+            value={value.callbackNumber}
+            onChange={(event) =>
+              onChange((previous) => ({
+                ...previous,
+                callbackNumber: event.target.value,
+              }))
+            }
+          />
+        </div>
+      </div>
+      <div className="grid gap-2">
+        <Label>Type of Call</Label>
+        <RadioGroup
+          value={value.callType}
+          onValueChange={(nextValue) =>
+            onChange((previous) => ({
+              ...previous,
+              callType: nextValue as InitialIncidentReportState['callType'],
+            }))
+          }
+          className="flex gap-4"
+        >
+          <div className="flex items-center gap-2">
+            <RadioGroupItem value="drill" id={`${idPrefix}-call-type-drill`} />
+            <Label htmlFor={`${idPrefix}-call-type-drill`} className="cursor-pointer">
+              Drill
+            </Label>
+          </div>
+          <div className="flex items-center gap-2">
+            <RadioGroupItem value="incident" id={`${idPrefix}-call-type-incident`} />
+            <Label htmlFor={`${idPrefix}-call-type-incident`} className="cursor-pointer">
+              Incident
+            </Label>
+          </div>
+        </RadioGroup>
+      </div>
+      <div className="grid gap-2">
+        <Label htmlFor={`${idPrefix}-what-happened`}>What Happened?</Label>
+        <Textarea
+          id={`${idPrefix}-what-happened`}
+          value={value.whatHappened}
+          onChange={(event) =>
+            onChange((previous) => ({
+              ...previous,
+              whatHappened: event.target.value,
+            }))
+          }
+          className="min-h-24"
+        />
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2">
+        {(
+          [
+            ['facilityMuster', 'Facility Muster'],
+            ['abandonStations', 'Abandon Stations'],
+            ['assistanceNeeded', 'Assistance Needed'],
+            ['qiDrill', 'QI Drill'],
+            ['icNotified', 'IC Notified'],
+          ] as const
+        ).map(([fieldKey, fieldLabel]) => (
+          <div key={fieldKey} className="grid gap-2">
+            <Label>{fieldLabel}</Label>
+            <RadioGroup
+              value={value[fieldKey]}
+              onValueChange={(nextValue) =>
+                onChange((previous) => ({
+                  ...previous,
+                  [fieldKey]: nextValue as YesNoField,
+                }))
+              }
+              className="flex gap-4"
+            >
+              <div className="flex items-center gap-2">
+                <RadioGroupItem value="yes" id={`${idPrefix}-${fieldKey}-yes`} />
+                <Label htmlFor={`${idPrefix}-${fieldKey}-yes`} className="cursor-pointer">
+                  Yes
+                </Label>
+              </div>
+              <div className="flex items-center gap-2">
+                <RadioGroupItem value="no" id={`${idPrefix}-${fieldKey}-no`} />
+                <Label htmlFor={`${idPrefix}-${fieldKey}-no`} className="cursor-pointer">
+                  No
+                </Label>
+              </div>
+            </RadioGroup>
+          </div>
+        ))}
+      </div>
+      <div className="grid gap-2">
+        <Label htmlFor={`${idPrefix}-ic-notified-name`}>Name of IC Notified</Label>
+        <Input
+          id={`${idPrefix}-ic-notified-name`}
+          value={value.icNotifiedName}
+          onChange={(event) =>
+            onChange((previous) => ({
+              ...previous,
+              icNotifiedName: event.target.value,
+            }))
+          }
+        />
+      </div>
+      <div className="grid gap-2">
+        <Label>Scenario</Label>
+        <div className="grid max-h-64 gap-2 overflow-y-auto rounded-md border p-3 sm:grid-cols-2">
+          {GOM_CCMER_ERP_SCENARIOS.map((scenario) => (
+            <div key={scenario} className="flex items-start gap-2">
+              <Checkbox
+                id={`${idPrefix}-scenario-${scenario}`}
+                checked={value.scenarios.includes(scenario)}
+                onCheckedChange={() =>
+                  onChange((previous) => ({
+                    ...previous,
+                    scenarios: toggleStringSelection(previous.scenarios, scenario),
+                  }))
+                }
+                className="mt-0.5"
+              />
+              <Label
+                htmlFor={`${idPrefix}-scenario-${scenario}`}
+                className="cursor-pointer font-normal leading-snug"
+              >
+                {scenario}
+              </Label>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+type MeetingScheduleItem = {
+  id: number
+  start: string
+  end: string
+  meeting: string
+  attendees: string
+  agendaItems: string[]
+  createTeamsMeeting: boolean
+}
+
+type ExerciseObjectiveRow = {
+  id: number
+  name: string
+}
+
+type ExerciseObjectiveLibraryItem = {
+  id: string
+  name: string
+}
+
+type ExerciseObjectiveLibrarySet = {
+  id: string
+  name: string
+  description: string
+  objectives: ExerciseObjectiveLibraryItem[]
+}
+
+const EXERCISE_OBJECTIVE_LIBRARY_SETS: ExerciseObjectiveLibrarySet[] = [
+  {
+    id: 'life-safety-operations',
+    name: 'Life Safety & Operations',
+    description: 'Protect personnel and maintain operational coordination.',
+    objectives: [
+      {
+        id: 'life-safety',
+        name: 'Protect life safety in affected operational areas.',
+      },
+      {
+        id: 'situational-awareness',
+        name: 'Maintain shared situational awareness across participating units.',
+      },
+    ],
+  },
+  {
+    id: 'command-communications',
+    name: 'Command & Communications',
+    description: 'Exercise command structure and notification pathways.',
+    objectives: [
+      {
+        id: 'unified-command',
+        name: 'Demonstrate effective unified command coordination.',
+      },
+      {
+        id: 'notification',
+        name: 'Execute timely internal and external notification procedures.',
+      },
+      {
+        id: 'public-information',
+        name: 'Deliver accurate public information through approved channels.',
+      },
+    ],
+  },
+  {
+    id: 'resources-logistics',
+    name: 'Resources & Logistics',
+    description: 'Validate resource ordering, staging, and mutual-aid support.',
+    objectives: [
+      {
+        id: 'resource-coordination',
+        name: 'Coordinate mutual-aid and contractor resource deployments.',
+      },
+    ],
+  },
+  {
+    id: 'environment-business-continuity',
+    name: 'Environmental & Business Continuity',
+    description: 'Assess environmental protection and continuity of critical operations.',
+    objectives: [
+      {
+        id: 'environmental-protection',
+        name: 'Minimize environmental impact during response operations.',
+      },
+      {
+        id: 'business-continuity',
+        name: 'Maintain critical business operations during the exercise period.',
+      },
+    ],
+  },
+]
+
+type MselInjectRow = {
+  id: number
+  objectiveId: number | null
+  scheduledTime: string
+  category: string
+  inject: string
+  expectedAction: string
+}
+
+const defaultExerciseObjectives = (): ExerciseObjectiveRow[] => [
+  {
+    id: 1,
+    name: '',
+  },
+]
+
+const defaultExerciseMselInjects = (): MselInjectRow[] => [
+  {
+    id: 1,
+    objectiveId: 1,
+    scheduledTime: '',
+    category: 'Operations',
+    inject: '',
+    expectedAction: '',
+  },
+]
+
 type LeftTab =
   | 'notifications'
   | 'resources'
   | 'aors'
-  | 'incidents'
-  | 'safety'
-  | 'calendar'
-  | 'reports'
+  | 'fema-regions'
+  | 'incident-list'
+  | 'exercises'
+  | 'events'
+  | 'analytics'
   | 'briefing'
+  | 'msel'
   | 'sitreps'
+  | 'seerist'
+  | 'files'
   | `form-${string}`
 type PratusPlanStatus = 'pending' | 'accepted' | 'cancelled'
 type PratusAssignmentRecommendation = {
@@ -216,9 +3112,10 @@ type PratusAssignmentRecommendation = {
   resourceId: number
 }
 type PratusMessagePlan = {
-  action: 'add-3-objectives' | 'draft-ics-204-recommendation'
+  action: 'add-3-objectives' | 'draft-ics-204-recommendation' | 'draft-sitrep'
   status: PratusPlanStatus
   steps: string[]
+  sitrepScopeId?: string
 }
 type PratusAiMessage = {
   id: number
@@ -232,12 +3129,13 @@ type SearchResult = {
   kind:
     | 'notification'
     | 'resource'
+    | 'resource-request'
     | 'aor'
-    | 'roster'
-    | 'safety'
-    | 'calendar'
-    | 'report'
     | 'briefing'
+    | 'incident'
+    | 'exercise'
+    | 'event'
+    | 'business-unit'
   title: string
   subtitle: string
   location: [number, number]
@@ -270,6 +3168,113 @@ type Ics201SafetyRow = {
   mitigation: string
   ppe: string
   medicalPlan: string
+}
+type Ics209ReportVersion = 'Initial' | 'Updated' | 'Final'
+type Ics209IncidentType =
+  | 'SAR'
+  | 'Oil/Petroleum'
+  | 'Natural Disaster'
+  | 'Marine Disaster'
+  | 'Marine Salvage / Firefighting'
+  | 'Other'
+type Ics209ResourceRequest = {
+  id: number
+  request: string
+}
+type Ics209PlannedAction = {
+  id: number
+  task: string
+  poc: string
+  pocBriefed: boolean
+  startDate: string
+  deadline: string
+  status: string
+}
+type Ics209CommandPriority = {
+  id: number
+  priority: string
+}
+type Ics209NotableItem = {
+  id: number
+  item: string
+  totalThisPeriod: string
+  totalToDate: string
+}
+type Ics209EquipmentType = {
+  id: string
+  label: string
+  description?: string
+}
+type Ics209AssignedResource = {
+  id: number
+  agency: string
+  people: number
+  equipmentCounts: Record<string, number>
+}
+type Ics215ResourceAsset = {
+  id: string
+  org: string
+  location: string
+  status: string
+}
+type Ics215WorkAssignmentLine = {
+  id: number
+  kind: string
+  required: number
+  onHand: number
+  needed: number
+  workAssignment: string
+  overheadPositions: string
+  specialEquipment: string
+  reportingLocation: string
+  requestedArrivalTime: string
+  haveAssets: Ics215ResourceAsset[]
+}
+type Ics215Assignee = {
+  id: number
+  name: string
+  workAssignments: Ics215WorkAssignmentLine[]
+}
+type Ics215FormState = {
+  incidentName: string
+  incidentLocation: string
+  dateTimePrepared: string
+  operationalPeriodFrom: string
+  operationalPeriodTo: string
+  assignees: Ics215Assignee[]
+  preparedByName: string
+  preparedByPosition: string
+}
+type Ics209FormState = {
+  reportVersion: Ics209ReportVersion
+  incidentTypes: Ics209IncidentType[]
+  otherIncidentTypeSpecify: string
+  incidentName: string
+  incidentLocation: string
+  reportDate: string
+  reportTime: string
+  operationalPeriodFrom: string
+  operationalPeriodTo: string
+  situationSummary: string
+  lifeSafetyHealthIssues: string
+  mtsImpacts: string
+  resourceRequests: Ics209ResourceRequest[]
+  plannedActions: Ics209PlannedAction[]
+  commandPriorities: Ics209CommandPriority[]
+  notableItems: Ics209NotableItem[]
+  responderInjuriesThisPeriod: number
+  responderInjuriesToDate: number
+  responderDeathsThisPeriod: number
+  responderDeathsToDate: number
+  mediaPhotosOutreach: string
+  equipmentTypes: Ics209EquipmentType[]
+  assignedResources: Ics209AssignedResource[]
+  amplifyingInformation: string
+  comments: string
+  preparedByName: string
+  preparedByPositionTitle: string
+  preparedBySignature: string
+  preparedByDateTime: string
 }
 type Ics204ResourceAssignedRow = {
   id: number
@@ -386,22 +3391,2016 @@ type Ics204FormState = {
   communications: string
 }
 
+let crc32Table: Uint32Array | null = null
+function computeCrc32(bytes: Uint8Array): number {
+  if (!crc32Table) {
+    crc32Table = new Uint32Array(256)
+    for (let i = 0; i < 256; i += 1) {
+      let c = i
+      for (let k = 0; k < 8; k += 1) {
+        c = (c & 1) !== 0 ? 0xedb88320 ^ (c >>> 1) : c >>> 1
+      }
+      crc32Table[i] = c >>> 0
+    }
+  }
+  let crc = 0xffffffff
+  for (let i = 0; i < bytes.length; i += 1) {
+    crc = (crc32Table[(crc ^ bytes[i]) & 0xff] ^ (crc >>> 8)) >>> 0
+  }
+  return (crc ^ 0xffffffff) >>> 0
+}
+
+function buildStoredZip(files: Array<{ name: string; content: string }>): Uint8Array {
+  const encoder = new TextEncoder()
+  const parts: Uint8Array[] = []
+  const central: Uint8Array[] = []
+  let offset = 0
+  for (const file of files) {
+    const nameBytes = encoder.encode(file.name)
+    const contentBytes = encoder.encode(file.content)
+    const crc = computeCrc32(contentBytes)
+    const header = new Uint8Array(30 + nameBytes.length)
+    const headerView = new DataView(header.buffer)
+    headerView.setUint32(0, 0x04034b50, true)
+    headerView.setUint16(4, 20, true)
+    headerView.setUint16(6, 0, true)
+    headerView.setUint16(8, 0, true)
+    headerView.setUint16(10, 0, true)
+    headerView.setUint16(12, 0x21, true)
+    headerView.setUint32(14, crc, true)
+    headerView.setUint32(18, contentBytes.length, true)
+    headerView.setUint32(22, contentBytes.length, true)
+    headerView.setUint16(26, nameBytes.length, true)
+    headerView.setUint16(28, 0, true)
+    header.set(nameBytes, 30)
+    parts.push(header, contentBytes)
+
+    const cd = new Uint8Array(46 + nameBytes.length)
+    const cdView = new DataView(cd.buffer)
+    cdView.setUint32(0, 0x02014b50, true)
+    cdView.setUint16(4, 20, true)
+    cdView.setUint16(6, 20, true)
+    cdView.setUint16(8, 0, true)
+    cdView.setUint16(10, 0, true)
+    cdView.setUint16(12, 0, true)
+    cdView.setUint16(14, 0x21, true)
+    cdView.setUint32(16, crc, true)
+    cdView.setUint32(20, contentBytes.length, true)
+    cdView.setUint32(24, contentBytes.length, true)
+    cdView.setUint16(28, nameBytes.length, true)
+    cdView.setUint16(30, 0, true)
+    cdView.setUint16(32, 0, true)
+    cdView.setUint16(34, 0, true)
+    cdView.setUint16(36, 0, true)
+    cdView.setUint32(38, 0, true)
+    cdView.setUint32(42, offset, true)
+    cd.set(nameBytes, 46)
+    central.push(cd)
+
+    offset += header.length + contentBytes.length
+  }
+  const cdStart = offset
+  let cdSize = 0
+  for (const cd of central) {
+    parts.push(cd)
+    cdSize += cd.length
+    offset += cd.length
+  }
+  const eocd = new Uint8Array(22)
+  const eocdView = new DataView(eocd.buffer)
+  eocdView.setUint32(0, 0x06054b50, true)
+  eocdView.setUint16(4, 0, true)
+  eocdView.setUint16(6, 0, true)
+  eocdView.setUint16(8, files.length, true)
+  eocdView.setUint16(10, files.length, true)
+  eocdView.setUint32(12, cdSize, true)
+  eocdView.setUint32(16, cdStart, true)
+  eocdView.setUint16(20, 0, true)
+  parts.push(eocd)
+
+  const totalLength = parts.reduce((acc, part) => acc + part.length, 0)
+  const result = new Uint8Array(totalLength)
+  let position = 0
+  for (const part of parts) {
+    result.set(part, position)
+    position += part.length
+  }
+  return result
+}
+
+function escapeXml(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;')
+}
+
+type DocxBlock =
+  | { kind: 'title'; text: string }
+  | { kind: 'subtitle'; text: string }
+  | { kind: 'heading'; text: string }
+  | { kind: 'paragraph'; text: string }
+  | { kind: 'bullet'; text: string }
+
+type DocxHeaderFooterCell = {
+  label: string
+  value?: string
+}
+
+type DocxHeaderFooter = {
+  cells: DocxHeaderFooterCell[]
+  topLines?: string[]
+}
+
+type DocxOptions = {
+  header?: DocxHeaderFooter
+  footer?: DocxHeaderFooter
+}
+
+function buildDocxXml(blocks: DocxBlock[], options: DocxOptions = {}): string {
+  const paragraphs: string[] = []
+  for (const block of blocks) {
+    if (block.kind === 'title') {
+      paragraphs.push(
+        `<w:p><w:pPr><w:spacing w:before="0" w:after="120"/><w:jc w:val="left"/></w:pPr>` +
+          `<w:r><w:rPr><w:b/><w:sz w:val="40"/><w:szCs w:val="40"/></w:rPr><w:t xml:space="preserve">${escapeXml(block.text)}</w:t></w:r></w:p>`
+      )
+    } else if (block.kind === 'subtitle') {
+      paragraphs.push(
+        `<w:p><w:pPr><w:spacing w:before="0" w:after="240"/></w:pPr>` +
+          `<w:r><w:rPr><w:i/><w:color w:val="555555"/><w:sz w:val="22"/></w:rPr><w:t xml:space="preserve">${escapeXml(block.text)}</w:t></w:r></w:p>`
+      )
+    } else if (block.kind === 'heading') {
+      paragraphs.push(
+        `<w:p><w:pPr><w:spacing w:before="240" w:after="120"/></w:pPr>` +
+          `<w:r><w:rPr><w:b/><w:sz w:val="28"/><w:szCs w:val="28"/><w:color w:val="1F4E79"/></w:rPr><w:t xml:space="preserve">${escapeXml(block.text)}</w:t></w:r></w:p>`
+      )
+    } else if (block.kind === 'paragraph') {
+      paragraphs.push(
+        `<w:p><w:pPr><w:spacing w:after="120"/></w:pPr>` +
+          `<w:r><w:rPr><w:sz w:val="22"/><w:szCs w:val="22"/></w:rPr><w:t xml:space="preserve">${escapeXml(block.text)}</w:t></w:r></w:p>`
+      )
+    } else {
+      paragraphs.push(
+        `<w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr><w:spacing w:after="80"/></w:pPr>` +
+          `<w:r><w:rPr><w:sz w:val="22"/><w:szCs w:val="22"/></w:rPr><w:t xml:space="preserve">${escapeXml(block.text)}</w:t></w:r></w:p>`
+      )
+    }
+  }
+  let sectPr = '<w:sectPr>'
+  if (options.header) sectPr += '<w:headerReference w:type="default" r:id="rIdHdr"/>'
+  if (options.footer) sectPr += '<w:footerReference w:type="default" r:id="rIdFtr"/>'
+  sectPr +=
+    '<w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1800" w:right="1080" w:bottom="1800" w:left="1080" w:header="540" w:footer="540" w:gutter="0"/></w:sectPr>'
+  return (
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">` +
+    `<w:body>` +
+    paragraphs.join('') +
+    sectPr +
+    `</w:body></w:document>`
+  )
+}
+
+function buildHeaderFooterTableXml(data: DocxHeaderFooter): string {
+  const cells = data.cells
+  if (cells.length === 0) return ''
+  const cellWidth = Math.floor(5000 / cells.length)
+  const cellsXml = cells
+    .map((cell) => {
+      const labelXml =
+        `<w:p><w:pPr><w:spacing w:before="0" w:after="40"/></w:pPr>` +
+        `<w:r><w:rPr><w:b/><w:sz w:val="16"/><w:szCs w:val="16"/><w:color w:val="555555"/></w:rPr>` +
+        `<w:t xml:space="preserve">${escapeXml(cell.label)}</w:t></w:r></w:p>`
+      const valueText = (cell.value ?? '').trim()
+      const valueXml =
+        `<w:p><w:pPr><w:spacing w:before="0" w:after="0"/></w:pPr>` +
+        `<w:r><w:rPr><w:sz w:val="20"/><w:szCs w:val="20"/></w:rPr>` +
+        `<w:t xml:space="preserve">${escapeXml(valueText.length > 0 ? valueText : ' ')}</w:t></w:r></w:p>`
+      return (
+        `<w:tc><w:tcPr><w:tcW w:w="${cellWidth}" w:type="pct"/>` +
+        `<w:tcMar><w:top w:w="60" w:type="dxa"/><w:left w:w="80" w:type="dxa"/><w:bottom w:w="60" w:type="dxa"/><w:right w:w="80" w:type="dxa"/></w:tcMar>` +
+        `</w:tcPr>${labelXml}${valueXml}</w:tc>`
+      )
+    })
+    .join('')
+  return (
+    `<w:tbl>` +
+    `<w:tblPr><w:tblW w:w="5000" w:type="pct"/>` +
+    `<w:tblBorders>` +
+    `<w:top w:val="single" w:sz="6" w:space="0" w:color="000000"/>` +
+    `<w:left w:val="single" w:sz="6" w:space="0" w:color="000000"/>` +
+    `<w:bottom w:val="single" w:sz="6" w:space="0" w:color="000000"/>` +
+    `<w:right w:val="single" w:sz="6" w:space="0" w:color="000000"/>` +
+    `<w:insideH w:val="single" w:sz="6" w:space="0" w:color="000000"/>` +
+    `<w:insideV w:val="single" w:sz="6" w:space="0" w:color="000000"/>` +
+    `</w:tblBorders></w:tblPr>` +
+    `<w:tr>${cellsXml}</w:tr>` +
+    `</w:tbl>`
+  )
+}
+
+function buildDocxHeaderXml(data: DocxHeaderFooter): string {
+  const topLinesXml = (data.topLines ?? [])
+    .map(
+      (line, index) =>
+        `<w:p><w:pPr><w:jc w:val="center"/><w:spacing w:before="0" w:after="${index === (data.topLines ?? []).length - 1 ? 60 : 0}"/></w:pPr>` +
+        `<w:r><w:rPr><w:b/><w:sz w:val="18"/><w:szCs w:val="18"/></w:rPr>` +
+        `<w:t xml:space="preserve">${escapeXml(line)}</w:t></w:r></w:p>`
+    )
+    .join('')
+  return (
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">` +
+    topLinesXml +
+    buildHeaderFooterTableXml(data) +
+    `</w:hdr>`
+  )
+}
+
+function buildDocxFooterXml(data: DocxHeaderFooter): string {
+  const topLinesXml = (data.topLines ?? [])
+    .map(
+      (line) =>
+        `<w:p><w:pPr><w:jc w:val="center"/><w:spacing w:before="0" w:after="40"/></w:pPr>` +
+        `<w:r><w:rPr><w:b/><w:sz w:val="16"/><w:szCs w:val="16"/><w:color w:val="555555"/></w:rPr>` +
+        `<w:t xml:space="preserve">${escapeXml(line)}</w:t></w:r></w:p>`
+    )
+    .join('')
+  return (
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<w:ftr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">` +
+    topLinesXml +
+    buildHeaderFooterTableXml(data) +
+    `</w:ftr>`
+  )
+}
+
+function buildDocxNumberingXml(): string {
+  return (
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<w:numbering xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">` +
+    `<w:abstractNum w:abstractNumId="0"><w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="bullet"/><w:lvlText w:val="•"/><w:lvlJc w:val="left"/><w:pPr><w:ind w:left="720" w:hanging="360"/></w:pPr><w:rPr><w:rFonts w:ascii="Symbol" w:hAnsi="Symbol" w:hint="default"/></w:rPr></w:lvl></w:abstractNum>` +
+    `<w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num>` +
+    `</w:numbering>`
+  )
+}
+
+function buildContentTypesXml(options: { header?: boolean; footer?: boolean } = {}): string {
+  let xml =
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">` +
+    `<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>` +
+    `<Default Extension="xml" ContentType="application/xml"/>` +
+    `<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>` +
+    `<Override PartName="/word/numbering.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml"/>`
+  if (options.header) {
+    xml += `<Override PartName="/word/header1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/>`
+  }
+  if (options.footer) {
+    xml += `<Override PartName="/word/footer1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/>`
+  }
+  xml += `</Types>`
+  return xml
+}
+
+function buildPackageRelsXml(): string {
+  return (
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+    `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>` +
+    `</Relationships>`
+  )
+}
+
+function buildDocumentRelsXml(options: { header?: boolean; footer?: boolean } = {}): string {
+  let xml =
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+    `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering" Target="numbering.xml"/>`
+  if (options.header) {
+    xml += `<Relationship Id="rIdHdr" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="header1.xml"/>`
+  }
+  if (options.footer) {
+    xml += `<Relationship Id="rIdFtr" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer1.xml"/>`
+  }
+  xml += `</Relationships>`
+  return xml
+}
+
+function downloadDocx(
+  filename: string,
+  blocks: DocxBlock[],
+  options: DocxOptions = {}
+): void {
+  const hasHeader = !!options.header
+  const hasFooter = !!options.footer
+  const files: Array<{ name: string; content: string }> = [
+    {
+      name: '[Content_Types].xml',
+      content: buildContentTypesXml({ header: hasHeader, footer: hasFooter }),
+    },
+    { name: '_rels/.rels', content: buildPackageRelsXml() },
+    {
+      name: 'word/_rels/document.xml.rels',
+      content: buildDocumentRelsXml({ header: hasHeader, footer: hasFooter }),
+    },
+    { name: 'word/numbering.xml', content: buildDocxNumberingXml() },
+    { name: 'word/document.xml', content: buildDocxXml(blocks, options) },
+  ]
+  if (options.header) {
+    files.push({ name: 'word/header1.xml', content: buildDocxHeaderXml(options.header) })
+  }
+  if (options.footer) {
+    files.push({ name: 'word/footer1.xml', content: buildDocxFooterXml(options.footer) })
+  }
+  const zipBytes = buildStoredZip(files)
+  const blob = new Blob([zipBytes.buffer as ArrayBuffer], {
+    type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  })
+  const url = URL.createObjectURL(blob)
+  const anchor = document.createElement('a')
+  anchor.href = url
+  anchor.download = filename
+  document.body.appendChild(anchor)
+  anchor.click()
+  document.body.removeChild(anchor)
+  setTimeout(() => URL.revokeObjectURL(url), 0)
+}
+
+function buildIcs201DocxBlocks(form: Ics201FormState): DocxBlock[] {
+  const blocks: DocxBlock[] = []
+  const pushHeading = (text: string) => blocks.push({ kind: 'heading', text })
+  const pushParagraph = (text: string | undefined | null) => {
+    const trimmed = (text ?? '').trim()
+    if (trimmed.length === 0) return
+    blocks.push({ kind: 'paragraph', text: trimmed })
+  }
+  const pushBullet = (text: string | undefined | null) => {
+    const trimmed = (text ?? '').trim()
+    if (trimmed.length === 0) return
+    blocks.push({ kind: 'bullet', text: trimmed })
+  }
+  blocks.push({ kind: 'title', text: 'Incident Briefing (ICS-201)' })
+  const subtitleParts: string[] = []
+  if (form.incidentName.trim()) subtitleParts.push(form.incidentName.trim())
+  if (form.incidentNumber.trim()) subtitleParts.push(`Incident #${form.incidentNumber.trim()}`)
+  if (subtitleParts.length > 0) {
+    blocks.push({ kind: 'subtitle', text: subtitleParts.join(' • ') })
+  }
+  pushHeading('Header')
+  pushParagraph(form.incidentName && `Incident Name: ${form.incidentName}`)
+  pushParagraph(form.incidentNumber && `Incident Number: ${form.incidentNumber}`)
+  pushParagraph(form.preparedDateTime && `Date / Time Prepared: ${form.preparedDateTime}`)
+  pushParagraph(form.preparedBy && `Prepared By: ${form.preparedBy}`)
+  if (form.operationalPeriodStart.trim() || form.operationalPeriodEnd.trim()) {
+    pushParagraph(
+      `Operational Period: ${form.operationalPeriodStart.trim() || '—'} → ${form.operationalPeriodEnd.trim() || '—'}`
+    )
+  }
+  pushParagraph(form.jurisdiction && `Jurisdiction / Agency: ${form.jurisdiction}`)
+  pushHeading('Map Sketch')
+  pushParagraph(form.mapSketchDescription)
+  pushParagraph(form.mapSketchLegend)
+  pushHeading('Current Situation')
+  pushParagraph(form.currentSituationSummary)
+  if (form.weatherForecast.trim()) {
+    pushHeading('Weather Forecast')
+    pushParagraph(form.weatherForecast)
+  }
+  if (form.projectedIncidentCourse.trim()) {
+    pushHeading('Projected Incident Course')
+    pushParagraph(form.projectedIncidentCourse)
+  }
+  pushHeading('Objectives')
+  if (form.objectives.length === 0) {
+    pushParagraph('No objectives recorded.')
+  } else {
+    form.objectives.forEach((objective, index) => {
+      pushBullet(objective || `Objective ${index + 1}`)
+    })
+  }
+  pushHeading('Actions')
+  if (form.actions.length === 0) {
+    pushParagraph('No actions recorded.')
+  } else {
+    form.actions.forEach((action) => {
+      const meta: string[] = []
+      if (action.owner.trim()) meta.push(`Owner: ${action.owner.trim()}`)
+      if (action.startTime.trim()) meta.push(`Start: ${action.startTime.trim()}`)
+      if (action.endTime.trim()) meta.push(`End: ${action.endTime.trim()}`)
+      if (action.status.trim()) meta.push(`Status: ${action.status.trim()}`)
+      const text =
+        (action.task.trim() || 'Untitled action') +
+        (meta.length > 0 ? ` — ${meta.join(' · ')}` : '')
+      pushBullet(text)
+    })
+  }
+  pushHeading('Organization Chart')
+  const orgEntries: Array<[string, string]> = [
+    ['Incident Commander', form.orgChart.incidentCommander],
+    ['Operations Section Chief', form.orgChart.operationsSectionChief],
+    ['Planning Section Chief', form.orgChart.planningSectionChief],
+    ['Logistics Section Chief', form.orgChart.logisticsSectionChief],
+    ['Finance Section Chief', form.orgChart.financeSectionChief],
+    ['Public Information Officer', form.orgChart.publicInformationOfficer],
+    ['Safety Officer', form.orgChart.safetyOfficer],
+    ['Liaison Officer', form.orgChart.liaisonOfficer],
+  ]
+  const populatedOrg = orgEntries.filter(([, name]) => name.trim().length > 0)
+  if (populatedOrg.length === 0) {
+    pushParagraph('No organization chart entries recorded.')
+  } else {
+    populatedOrg.forEach(([role, name]) => pushBullet(`${role}: ${name.trim()}`))
+  }
+  pushHeading('Resources Summary')
+  if (form.resources.length === 0) {
+    pushParagraph('No resources recorded.')
+  } else {
+    form.resources.forEach((resource) => {
+      const head: string[] = []
+      if (resource.category.trim()) head.push(resource.category.trim())
+      if (resource.identifier.trim()) head.push(resource.identifier.trim())
+      const meta: string[] = []
+      if (resource.quantity.trim()) meta.push(`Qty: ${resource.quantity.trim()}`)
+      if (resource.status.trim()) meta.push(`Status: ${resource.status.trim()}`)
+      if (resource.assignment.trim()) meta.push(`Assignment: ${resource.assignment.trim()}`)
+      const text =
+        (head.join(' — ') || 'Resource') +
+        (meta.length > 0 ? ` (${meta.join(' · ')})` : '')
+      pushBullet(text)
+    })
+  }
+  pushHeading('Safety Analysis')
+  if (form.safetyAnalysis.length === 0) {
+    pushParagraph('No safety analysis recorded.')
+  } else {
+    form.safetyAnalysis.forEach((safety, index) => {
+      pushParagraph(`Row ${index + 1}`)
+      pushParagraph(safety.hazard && `Hazard: ${safety.hazard}`)
+      pushParagraph(safety.mitigation && `Mitigation: ${safety.mitigation}`)
+      pushParagraph(safety.ppe && `PPE: ${safety.ppe}`)
+      pushParagraph(safety.medicalPlan && `Medical Plan: ${safety.medicalPlan}`)
+    })
+  }
+  return blocks
+}
+
+function buildIcs209DocxBlocks(
+  form: Ics209FormState,
+  incidentName?: string
+): DocxBlock[] {
+  const blocks: DocxBlock[] = []
+  const pushHeading = (text: string) => blocks.push({ kind: 'heading', text })
+  const pushParagraph = (text: string | undefined | null) => {
+    const trimmed = (text ?? '').trim()
+    if (trimmed.length === 0) return
+    for (const line of trimmed.split(/\r?\n/)) {
+      const segment = line.trim()
+      if (segment.length === 0) continue
+      blocks.push({ kind: 'paragraph', text: segment })
+    }
+  }
+  const pushBullet = (text: string | undefined | null) => {
+    const trimmed = (text ?? '').trim()
+    if (trimmed.length === 0) return
+    blocks.push({ kind: 'bullet', text: trimmed })
+  }
+  blocks.push({ kind: 'title', text: 'Incident Status Summary (ICS-209)' })
+  if (incidentName?.trim()) {
+    blocks.push({ kind: 'subtitle', text: incidentName.trim() })
+  }
+
+  pushHeading('Operational Period Covered')
+  const fromText = form.operationalPeriodFrom.trim().replace('T', ' ')
+  const toText = form.operationalPeriodTo.trim().replace('T', ' ')
+  pushParagraph(`From: ${fromText || '—'}`)
+  pushParagraph(`To: ${toText || '—'}`)
+
+  pushHeading('Report Version')
+  pushParagraph(form.reportVersion)
+
+  pushHeading('Type of Incident')
+  if (form.incidentTypes.length === 0) {
+    pushParagraph('No incident types selected.')
+  } else {
+    form.incidentTypes.forEach((type) => pushBullet(type))
+  }
+  if (
+    form.incidentTypes.includes('Other') &&
+    form.otherIncidentTypeSpecify.trim().length > 0
+  ) {
+    pushParagraph(`Other: ${form.otherIncidentTypeSpecify.trim()}`)
+  }
+
+  pushHeading('Situation Summary')
+  if (form.situationSummary.trim().length === 0) {
+    pushParagraph('No situation summary recorded.')
+  } else {
+    pushParagraph(form.situationSummary)
+  }
+
+  pushHeading('Command Priorities')
+  if (form.commandPriorities.length === 0) {
+    pushParagraph('No command priorities recorded.')
+  } else {
+    form.commandPriorities.forEach((priority, index) =>
+      pushBullet(priority.priority || `Priority ${index + 1}`)
+    )
+  }
+
+  pushHeading('Notable Items')
+  if (form.notableItems.length === 0) {
+    pushParagraph('No notable items recorded.')
+  } else {
+    form.notableItems.forEach((item, index) => {
+      const label = item.item || `Item ${index + 1}`
+      const meta: string[] = []
+      if (item.totalThisPeriod.trim()) meta.push(`This period: ${item.totalThisPeriod.trim()}`)
+      if (item.totalToDate.trim()) meta.push(`To date: ${item.totalToDate.trim()}`)
+      pushBullet(meta.length > 0 ? `${label} — ${meta.join(' · ')}` : label)
+    })
+  }
+
+  pushHeading('Responder Injuries')
+  pushParagraph(
+    `Total Responder Injuries This Reporting Period: ${form.responderInjuriesThisPeriod}`
+  )
+  pushParagraph(`Total Responder Injuries To Date: ${form.responderInjuriesToDate}`)
+
+  pushHeading('Responder Deaths')
+  pushParagraph(
+    `Total Responder Deaths This Reporting Period: ${form.responderDeathsThisPeriod}`
+  )
+  pushParagraph(`Total Responder Deaths To Date: ${form.responderDeathsToDate}`)
+
+  pushHeading('Life, Safety, and Health Issues')
+  if (form.lifeSafetyHealthIssues.trim().length === 0) {
+    pushParagraph('Nothing significant to report.')
+  } else {
+    pushParagraph(form.lifeSafetyHealthIssues)
+  }
+
+  pushHeading('Impacts to Marine Transportation System and Critical Infrastructure')
+  if (form.mtsImpacts.trim().length === 0) {
+    pushParagraph('No impacts recorded.')
+  } else {
+    pushParagraph(form.mtsImpacts)
+  }
+
+  pushHeading('Critical Resource Requests & Unmet Needs')
+  if (form.resourceRequests.length === 0) {
+    pushParagraph('No resource requests recorded.')
+  } else {
+    form.resourceRequests.forEach((row, index) =>
+      pushBullet(row.request || `Request ${index + 1}`)
+    )
+  }
+
+  pushHeading('Planned Actions for Next Operational Period')
+  if (form.plannedActions.length === 0) {
+    pushParagraph('No planned actions recorded.')
+  } else {
+    form.plannedActions.forEach((row, index) => {
+      const label = row.task || `Action ${index + 1}`
+      const meta: string[] = []
+      if (row.poc.trim()) meta.push(`POC: ${row.poc.trim()}`)
+      meta.push(`POC Briefed: ${row.pocBriefed ? 'Yes' : 'No'}`)
+      if (row.startDate.trim()) meta.push(`Start: ${row.startDate.trim()}`)
+      if (row.deadline.trim()) meta.push(`Deadline: ${row.deadline.trim()}`)
+      if (row.status.trim()) meta.push(`Status: ${row.status.trim()}`)
+      pushBullet(`${label} — ${meta.join(' · ')}`)
+    })
+  }
+
+  pushHeading('Assigned Resources')
+  if (form.assignedResources.length === 0) {
+    pushParagraph('No assigned resources recorded.')
+  } else {
+    form.assignedResources.forEach((row, index) => {
+      const label = row.agency || `Agency ${index + 1}`
+      const counts: string[] = [`People: ${row.people}`]
+      form.equipmentTypes.forEach((type) => {
+        counts.push(`${type.label}: ${row.equipmentCounts[type.id] ?? 0}`)
+      })
+      pushBullet(`${label} — ${counts.join(' · ')}`)
+    })
+    const totals: string[] = []
+    let totalPeople = 0
+    form.assignedResources.forEach((row) => {
+      totalPeople += row.people
+    })
+    totals.push(`People: ${totalPeople}`)
+    form.equipmentTypes.forEach((type) => {
+      let typeTotal = 0
+      form.assignedResources.forEach((row) => {
+        typeTotal += row.equipmentCounts[type.id] ?? 0
+      })
+      totals.push(`${type.label}: ${typeTotal}`)
+    })
+    pushParagraph(`Totals — ${totals.join(' · ')}`)
+  }
+
+  pushHeading('Amplifying Information')
+  if (form.amplifyingInformation.trim().length === 0) {
+    pushParagraph('No amplifying information recorded.')
+  } else {
+    pushParagraph(form.amplifyingInformation)
+  }
+
+  pushHeading('Comments')
+  if (form.comments.trim().length === 0) {
+    pushParagraph('No comments recorded.')
+  } else {
+    pushParagraph(form.comments)
+  }
+
+  pushHeading('Media, Photos, and Public Outreach')
+  if (form.mediaPhotosOutreach.trim().length === 0) {
+    pushParagraph('No media or outreach activities recorded.')
+  } else {
+    pushParagraph(form.mediaPhotosOutreach)
+  }
+
+  return blocks
+}
+
+function buildIcs215DocxBlocks(form: Ics215FormState): DocxBlock[] {
+  const blocks: DocxBlock[] = []
+  const pushHeading = (text: string) => blocks.push({ kind: 'heading', text })
+  const pushParagraph = (text: string | undefined | null) => {
+    const trimmed = (text ?? '').trim()
+    if (trimmed.length === 0) return
+    for (const line of trimmed.split(/\r?\n/)) {
+      const segment = line.trim()
+      if (segment.length === 0) continue
+      blocks.push({ kind: 'paragraph', text: segment })
+    }
+  }
+  const pushBullet = (text: string) => blocks.push({ kind: 'bullet', text })
+
+  blocks.push({ kind: 'title', text: 'Operational Planning Worksheet (ICS-215)' })
+  if (form.incidentName.trim()) {
+    blocks.push({ kind: 'subtitle', text: form.incidentName.trim() })
+  }
+
+  pushHeading('Operational Period Covered')
+  pushParagraph(`From: ${form.operationalPeriodFrom.trim().replace('T', ' ') || '—'}`)
+  pushParagraph(`To: ${form.operationalPeriodTo.trim().replace('T', ' ') || '—'}`)
+
+  pushHeading('Work Assignments by Assignee')
+  const allLines = form.assignees.flatMap((a) => a.workAssignments)
+  if (form.assignees.length === 0) {
+    pushParagraph('No assignees recorded.')
+  } else {
+    form.assignees.forEach((assignee, aIndex) => {
+      const assigneeLabel = assignee.name || `Assignee ${aIndex + 1}`
+      const subReq = assignee.workAssignments.reduce((s, r) => s + (r.required || 0), 0)
+      const subHave = assignee.workAssignments.reduce((s, r) => s + (r.onHand || 0), 0)
+      const subNeed = assignee.workAssignments.reduce((s, r) => s + (r.needed || 0), 0)
+      pushBullet(
+        `${assigneeLabel} — Totals: REQ ${subReq} · HAVE ${subHave} · NEED ${subNeed}`
+      )
+      if (assignee.workAssignments.length === 0) {
+        pushParagraph('No work assignments recorded for this assignee.')
+        return
+      }
+      assignee.workAssignments.forEach((row, index) => {
+        const label = row.kind || `Resource ${index + 1}`
+        pushParagraph(
+          `• ${label} — REQ ${row.required} · HAVE ${row.onHand} · NEED ${row.needed}`
+        )
+        if (row.workAssignment.trim()) {
+          pushParagraph(`   Work Assignment: ${row.workAssignment.trim()}`)
+        }
+        if (row.overheadPositions.trim()) {
+          pushParagraph(`   Overhead Positions: ${row.overheadPositions.trim()}`)
+        }
+        if (row.specialEquipment.trim()) {
+          pushParagraph(`   Special Equipment & Supplies: ${row.specialEquipment.trim()}`)
+        }
+        if (row.reportingLocation.trim()) {
+          pushParagraph(`   Reporting Location: ${row.reportingLocation.trim()}`)
+        }
+        if (row.requestedArrivalTime.trim()) {
+          pushParagraph(
+            `   Requested Arrival Time: ${row.requestedArrivalTime.trim().replace('T', ' ')}`
+          )
+        }
+      })
+    })
+  }
+
+  const totalReq = allLines.reduce((sum, row) => sum + (row.required || 0), 0)
+  const totalHave = allLines.reduce((sum, row) => sum + (row.onHand || 0), 0)
+  const totalNeed = allLines.reduce((sum, row) => sum + (row.needed || 0), 0)
+  pushHeading('Resource Totals')
+  pushParagraph(`12. Total Resources Required: ${totalReq}`)
+  pushParagraph(`13. Total Resources On Hand: ${totalHave}`)
+  pushParagraph(`14. Total Resources Needed: ${totalNeed}`)
+
+  pushHeading('Prepared By')
+  pushParagraph(`Name: ${form.preparedByName || '—'}`)
+  pushParagraph(`Position: ${form.preparedByPosition || '—'}`)
+
+  return blocks
+}
+
+type SitrepDocxCollaborator = {
+  name: string
+  role: string
+  initials: string
+  color: string
+  isYou?: boolean
+}
+
+type SitrepDocxFile = {
+  name: string
+  meta: string
+  author: string
+  blocks: DocxBlock[]
+  embedUrl: string
+  collaborators: SitrepDocxCollaborator[]
+}
+
+const SITREP_SAMPLE_DOCX_URL =
+  'https://file-examples.com/wp-content/storage/2017/02/file-sample_100kB.docx'
+
+function buildOfficeOnlineEmbedUrl(srcDocxUrl: string): string {
+  return `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(srcDocxUrl)}`
+}
+
+const SITUATION_REPORT_DOCX_FILES: SitrepDocxFile[] = [
+  {
+    name: 'SITREP_v3_2026-05-14.docx',
+    meta: '142 KB • Today 04:38 PM',
+    author: 'Planning Section Chief You',
+    embedUrl: buildOfficeOnlineEmbedUrl(SITREP_SAMPLE_DOCX_URL),
+    collaborators: [
+      {
+        name: 'You',
+        role: 'Planning Section Chief',
+        initials: 'YO',
+        color: 'bg-emerald-600',
+        isYou: true,
+      },
+      {
+        name: 'A. Rivera',
+        role: 'Liaison Officer',
+        initials: 'AR',
+        color: 'bg-blue-600',
+      },
+      {
+        name: 'M. Park',
+        role: 'Situation Unit Leader',
+        initials: 'MP',
+        color: 'bg-fuchsia-600',
+      },
+    ],
+    blocks: [
+      { kind: 'title', text: 'Incident Alpha — Situation Report (v3)' },
+      {
+        kind: 'subtitle',
+        text: 'Operational Period 3 • Issued 2026-05-14 04:38 PM PT • Prepared by Planning Section Chief You',
+      },
+      { kind: 'heading', text: 'Reporting Unit' },
+      {
+        kind: 'paragraph',
+        text: 'Sector San Francisco / Liaison Officer A. Rivera. Incident Command Post: Yerba Buena Island ICP, Building 262.',
+      },
+      { kind: 'heading', text: 'Executive Summary' },
+      {
+        kind: 'paragraph',
+        text: 'Operations remain in the life-safety phase. Two evacuation orders are active for Sectors A and B; shelter occupancy is at 78%. No new casualties since the previous reporting period. Coordinated mutual-aid response continues with Alameda County OES and CAL FIRE.',
+      },
+      { kind: 'heading', text: 'Readiness Assessment' },
+      { kind: 'bullet', text: 'Air Operations: 2 MH-65 ready, 1 in maintenance (RTO 18:00 PT).' },
+      { kind: 'bullet', text: 'Boat Forces: 3x RBM crews on rotation, 1 standby crew rest cycle.' },
+      { kind: 'bullet', text: 'Logistics: Fuel reserves at 72%; resupply convoy ETA 21:00 PT.' },
+      { kind: 'heading', text: 'Risk to Mission' },
+      {
+        kind: 'paragraph',
+        text: 'Marine weather degrading after 22:00 PT — sustained winds 25 kt, seas 6-8 ft. Air Ops curfew likely. Continued media presence at Pier 39 may complicate ground movement.',
+      },
+      { kind: 'heading', text: 'Outstanding RFIs / RFRs' },
+      { kind: 'bullet', text: 'RFI-014: Confirm shelter capacity at Treasure Island annex.' },
+      { kind: 'bullet', text: 'RFR-022: Additional 2x USCG Auxiliary patrols for OP4 night ops.' },
+      { kind: 'heading', text: 'Previous Critical Incident Communications' },
+      {
+        kind: 'paragraph',
+        text: 'Briefed FEMA Region IX liaison at 14:10 PT. Press statement coordinated with PIO and released 15:00 PT. No outstanding congressional inquiries.',
+      },
+      { kind: 'heading', text: 'General Comments' },
+      {
+        kind: 'paragraph',
+        text: 'Morale remains high. ICS-204 Division A assignments confirmed and acknowledged. Next operational period briefing at 22:00 PT.',
+      },
+      { kind: 'heading', text: 'Imagery Notes' },
+      {
+        kind: 'paragraph',
+        text: 'Drone oblique imagery captured 09:20 PT shows continued pier damage at Berths 31-33. Archived in /Photos/drone_oblique_aor.jpg.',
+      },
+    ],
+  },
+  {
+    name: 'SITREP_v2_2026-05-14.docx',
+    meta: '128 KB • Today 11:22 AM',
+    author: 'Liaison Officer A. Rivera',
+    embedUrl: buildOfficeOnlineEmbedUrl(SITREP_SAMPLE_DOCX_URL),
+    collaborators: [
+      {
+        name: 'A. Rivera',
+        role: 'Liaison Officer',
+        initials: 'AR',
+        color: 'bg-blue-600',
+      },
+      {
+        name: 'You',
+        role: 'Planning Section Chief',
+        initials: 'YO',
+        color: 'bg-emerald-600',
+        isYou: true,
+      },
+    ],
+    blocks: [
+      { kind: 'title', text: 'Incident Alpha — Situation Report (v2)' },
+      {
+        kind: 'subtitle',
+        text: 'Operational Period 2 • Issued 2026-05-14 11:22 AM PT • Prepared by Liaison Officer A. Rivera',
+      },
+      { kind: 'heading', text: 'Reporting Unit' },
+      {
+        kind: 'paragraph',
+        text: 'Sector San Francisco / Liaison Officer A. Rivera. ICP relocated from Crissy Field to Yerba Buena Island at 10:15 PT.',
+      },
+      { kind: 'heading', text: 'Executive Summary' },
+      {
+        kind: 'paragraph',
+        text: 'Transition from life-safety to incident-stabilization phase underway. Sectors A and B remain under evacuation order. No fatalities reported. One minor injury (response team) transported to UCSF Mission Bay.',
+      },
+      { kind: 'heading', text: 'Readiness Assessment' },
+      { kind: 'bullet', text: 'Air Operations: 3 MH-65 mission-capable.' },
+      { kind: 'bullet', text: 'Boat Forces: 4 RBM crews on duty, 1 in transit.' },
+      { kind: 'bullet', text: 'Logistics: Fuel reserves at 84%; on-hand consumables nominal.' },
+      { kind: 'heading', text: 'Risk to Mission' },
+      {
+        kind: 'paragraph',
+        text: 'Forecast wind shift after 18:00 PT may push smoke plume south-southwest. Coordinating with Bay Area Air Quality Management District for advisory.',
+      },
+      { kind: 'heading', text: 'Outstanding RFIs / RFRs' },
+      { kind: 'bullet', text: 'RFI-011: Tidal current windows for Berth 33 dive ops.' },
+      { kind: 'bullet', text: 'RFR-018: Additional ambulance cover for SDA west.' },
+      { kind: 'heading', text: 'Previous Critical Incident Communications' },
+      {
+        kind: 'paragraph',
+        text: 'Hourly comms with Alameda County OES; mutual-aid coordination call at 11:00 PT. Next scheduled comms with CAL FIRE Incident Commander at 12:30 PT.',
+      },
+      { kind: 'heading', text: 'General Comments' },
+      {
+        kind: 'paragraph',
+        text: 'Personnel rotation on track. ICS-204 OP2 distributed and acknowledged. Operational period briefing slated for 17:00 PT.',
+      },
+      { kind: 'heading', text: 'Imagery Notes' },
+      {
+        kind: 'paragraph',
+        text: 'Sector overview imagery refreshed 10:40 PT (Sector_Alpha_overview.png). Drone oblique captures pending afternoon flight window.',
+      },
+    ],
+  },
+  {
+    name: 'SITREP_v1_2026-05-14.docx',
+    meta: '110 KB • Today 06:05 AM',
+    author: 'Situation Unit Leader M. Park',
+    embedUrl: buildOfficeOnlineEmbedUrl(SITREP_SAMPLE_DOCX_URL),
+    collaborators: [
+      {
+        name: 'M. Park',
+        role: 'Situation Unit Leader',
+        initials: 'MP',
+        color: 'bg-fuchsia-600',
+      },
+      {
+        name: 'You',
+        role: 'Planning Section Chief',
+        initials: 'YO',
+        color: 'bg-emerald-600',
+        isYou: true,
+      },
+    ],
+    blocks: [
+      { kind: 'title', text: 'Incident Alpha — Situation Report (v1)' },
+      {
+        kind: 'subtitle',
+        text: 'Operational Period 1 • Issued 2026-05-14 06:05 AM PT • Prepared by Situation Unit Leader M. Park',
+      },
+      { kind: 'heading', text: 'Reporting Unit' },
+      {
+        kind: 'paragraph',
+        text: 'Sector San Francisco / Situation Unit. ICP established at Crissy Field at 04:30 PT. Initial recon complete.',
+      },
+      { kind: 'heading', text: 'Executive Summary' },
+      {
+        kind: 'paragraph',
+        text: 'Initial response activated at 02:18 PT following report of vessel grounding and resulting structural damage at Pier 33. Life-safety phase active. Evacuation order issued for Sectors A and B. Search-and-rescue ongoing.',
+      },
+      { kind: 'heading', text: 'Readiness Assessment' },
+      { kind: 'bullet', text: 'Air Operations: 1 MH-65 on station, 1 inbound from Air Station SF.' },
+      { kind: 'bullet', text: 'Boat Forces: 2 RBM crews on station; standby crew alerted.' },
+      { kind: 'bullet', text: 'Logistics: Initial supply staging at Ft. Mason in progress.' },
+      { kind: 'heading', text: 'Risk to Mission' },
+      {
+        kind: 'paragraph',
+        text: 'Fog ceiling 200 ft with visibility 1/4 mile until approximately 09:00 PT limiting air ops. Surface currents running 3.2 kt outbound.',
+      },
+      { kind: 'heading', text: 'Outstanding RFIs / RFRs' },
+      { kind: 'bullet', text: 'RFI-001: POB manifest for grounded vessel.' },
+      { kind: 'bullet', text: 'RFR-003: Additional EOC liaison from Alameda County.' },
+      { kind: 'heading', text: 'Previous Critical Incident Communications' },
+      {
+        kind: 'paragraph',
+        text: 'Notification to District 11 watchstander at 02:24 PT. EOC activation acknowledged 02:51 PT. Public warning broadcast at 03:10 PT.',
+      },
+      { kind: 'heading', text: 'General Comments' },
+      {
+        kind: 'paragraph',
+        text: 'IAP for OP1 will be issued NLT 06:30 PT. Operational period briefing at 06:00 PT held at ICP.',
+      },
+      { kind: 'heading', text: 'Imagery Notes' },
+      {
+        kind: 'paragraph',
+        text: 'No drone imagery yet due to ceiling. Hand-held photography from initial recon archived in /Photos.',
+      },
+    ],
+  },
+]
+
+type IncidentFile = {
+  name: string
+  meta: string
+  author: string
+}
+
+type IncidentFileFolder = {
+  id: string
+  name: string
+  description: string
+  files: IncidentFile[]
+}
+
+const INCIDENT_FILE_FOLDERS: IncidentFileFolder[] = [
+  {
+    id: 'situation-reports',
+    name: 'Situation Reports',
+    description: 'Drafts, submitted, and signed SITREPs',
+    files: SITUATION_REPORT_DOCX_FILES.map((file) => ({
+      name: file.name,
+      meta: file.meta,
+      author: file.author,
+    })),
+  },
+  {
+    id: 'iaps',
+    name: 'Incident Action Plans',
+    description: 'IAPs by operational period',
+    files: [
+      {
+        name: 'IAP_OP3_signed.pdf',
+        meta: '2.4 MB • Today 06:00 AM',
+        author: 'Planning Section Chief You',
+      },
+      {
+        name: 'IAP_OP2_signed.pdf',
+        meta: '2.2 MB • Yesterday 06:00 PM',
+        author: 'Planning Section Chief You',
+      },
+    ],
+  },
+  {
+    id: 'maps-imagery',
+    name: 'Maps & Imagery',
+    description: 'AOR overlays, KMZ packages, drone imagery',
+    files: [
+      {
+        name: 'Sector_Alpha_overview.png',
+        meta: '4.8 MB • Today 08:14 AM',
+        author: 'GIS Specialist J. Lin',
+      },
+      {
+        name: 'Evacuation_zones.kmz',
+        meta: '612 KB • Yesterday 10:02 PM',
+        author: 'Situation Unit Leader M. Park',
+      },
+    ],
+  },
+  {
+    id: 'photos',
+    name: 'Photos',
+    description: 'Field photography and drone captures',
+    files: [
+      {
+        name: 'DSC_0103_pier-damage.jpg',
+        meta: '6.1 MB • Today 09:51 AM',
+        author: 'Safety Officer K. Doe',
+      },
+      {
+        name: 'drone_oblique_aor.jpg',
+        meta: '5.4 MB • Today 09:20 AM',
+        author: 'Air Ops T. Brown',
+      },
+    ],
+  },
+  {
+    id: 'briefings',
+    name: 'Briefing Slides',
+    description: 'Operational period briefing decks',
+    files: [
+      {
+        name: 'OP3_briefing.pdf',
+        meta: '3.2 MB • Today 05:50 AM',
+        author: 'Planning Section Chief You',
+      },
+    ],
+  },
+  {
+    id: 'forms',
+    name: 'Forms',
+    description: 'ICS-204, ICS-233, and other signed forms',
+    files: [
+      {
+        name: 'ICS-204_Division-A_signed.pdf',
+        meta: '188 KB • Today 05:30 AM',
+        author: 'Operations Section Chief M. Chen',
+      },
+      {
+        name: 'ICS-233_OpenActions.pdf',
+        meta: '94 KB • Today 03:10 PM',
+        author: 'Planning Section Chief You',
+      },
+    ],
+  },
+  {
+    id: 'comms-log',
+    name: 'Communications Log',
+    description: 'Radio and message traffic exports',
+    files: [
+      {
+        name: 'Comms_log_OP3.csv',
+        meta: '52 KB • Today 04:01 PM',
+        author: 'Comms Unit Leader',
+      },
+    ],
+  },
+]
+
+type Ics201FormStateForGenerator = {
+  incidentName: string
+  incidentNumber: string
+  preparedDateTime: string
+  operationalPeriodStart: string
+  operationalPeriodEnd: string
+  jurisdiction: string
+  preparedBy: string
+  mapSketchDescription: string
+  mapSketchLegend: string
+  currentSituationSummary: string
+  weatherForecast: string
+  projectedIncidentCourse: string
+  objectives: string[]
+  actions: Array<{
+    id: number
+    task: string
+    owner: string
+    startTime: string
+    endTime: string
+    status: 'Planned' | 'In Progress' | 'Completed'
+  }>
+  orgChart: {
+    incidentCommander: string
+    operationsSectionChief: string
+    planningSectionChief: string
+    logisticsSectionChief: string
+    financeSectionChief: string
+    publicInformationOfficer: string
+    safetyOfficer: string
+    liaisonOfficer: string
+  }
+  resources: Array<{
+    id: number
+    category: string
+    identifier: string
+    quantity: string
+    status: string
+    assignment: string
+  }>
+  safetyAnalysis: Array<{
+    id: number
+    hazard: string
+    mitigation: string
+    ppe: string
+    medicalPlan: string
+  }>
+}
+
+function buildIcs201Baseline(preparedBy?: string): Ics201FormStateForGenerator {
+  const nowIso = new Date().toISOString().slice(0, 16).replace('T', ' ') + ' UTC'
+  return {
+    incidentName: 'Incident Alpha',
+    incidentNumber: 'ALPHA-2026-001',
+    preparedDateTime: nowIso,
+    operationalPeriodStart: '2026-05-14 06:00 PT',
+    operationalPeriodEnd: '2026-05-14 18:00 PT',
+    jurisdiction: 'USCG Sector San Francisco',
+    preparedBy:
+      preparedBy ?? 'Planning Section Chief You (autogenerated baseline draft)',
+    mapSketchDescription: BASELINE_MAP_SKETCH_DESCRIPTION,
+    mapSketchLegend: BASELINE_MAP_SKETCH_LEGEND,
+    currentSituationSummary: BASELINE_CURRENT_SITUATION_SUMMARY,
+    weatherForecast: BASELINE_WEATHER_FORECAST,
+    projectedIncidentCourse: BASELINE_PROJECTED_COURSE,
+    objectives: [...BASELINE_OBJECTIVES],
+    actions: BASELINE_ACTIONS.map((action) => ({ ...action })),
+    orgChart: { ...BASELINE_ORG_CHART },
+    resources: BASELINE_RESOURCES.map((resource) => ({ ...resource })),
+    safetyAnalysis: BASELINE_SAFETY_ANALYSIS.map((row) => ({ ...row })),
+  }
+}
+
+const BASELINE_MAP_SKETCH_DESCRIPTION =
+  'Map sketch depicts incident perimeter at Pier 33, branch/division boundaries across Sectors A and B, staging area at Ft. Mason, access control points at Embarcadero entry corridors, and evacuation routes inland to designated shelters.'
+
+const BASELINE_MAP_SKETCH_LEGEND =
+  'Legend: Red = active incident area, Orange = control lines, Blue = staging, Green = shelter/resource hubs, Yellow = evacuation routes.'
+
+const BASELINE_CURRENT_SITUATION_SUMMARY =
+  'Operations remain in the life-safety phase following vessel grounding and resulting structural damage at Pier 33. Evacuation orders active for Sectors A and B. Mutual-aid response continues with Alameda County OES and CAL FIRE.'
+
+const BASELINE_WEATHER_FORECAST =
+  'Marine forecast: winds 15-25 kt with gusts to 30 kt, seas 4-6 ft building to 6-8 ft after 22:00 PT. Fog ceiling lifting to 1,500 ft by 11:00 PT.'
+
+const BASELINE_PROJECTED_COURSE =
+  'Expect transition from life-safety to incident-stabilization phase by next operational period. Sustained Air Ops curfew likely after 22:00 PT due to deteriorating marine weather.'
+
+const BASELINE_OBJECTIVES: string[] = [
+  'Protect life safety in evacuated Sectors A and B.',
+  'Maintain access for emergency medical transport routes.',
+  'Stabilize shelter operations at Treasure Island annex.',
+  'Coordinate mutual-aid resources with Alameda County OES.',
+]
+
+const BASELINE_ACTIONS: Ics201FormStateForGenerator['actions'] = [
+  {
+    id: 1,
+    task: 'Maintain evacuation perimeter at Sectors A and B; rotate barricade teams.',
+    owner: 'Operations Branch I',
+    startTime: '2026-05-14 06:00 PT',
+    endTime: '2026-05-14 18:00 PT',
+    status: 'In Progress',
+  },
+  {
+    id: 2,
+    task: 'Coordinate utility assessment sweep for Pier 33 and adjacent berths.',
+    owner: 'Infrastructure Group',
+    startTime: '2026-05-14 07:00 PT',
+    endTime: '2026-05-14 12:00 PT',
+    status: 'In Progress',
+  },
+  {
+    id: 3,
+    task: 'Stand up shelter coverage at Treasure Island annex.',
+    owner: 'Logistics Section',
+    startTime: '2026-05-14 06:00 PT',
+    endTime: '2026-05-14 18:00 PT',
+    status: 'Planned',
+  },
+]
+
+const BASELINE_ORG_CHART: Ics201FormStateForGenerator['orgChart'] = {
+  incidentCommander: 'R. Morgan',
+  operationsSectionChief: 'M. Chen',
+  planningSectionChief: 'You',
+  logisticsSectionChief: 'J. Nguyen',
+  financeSectionChief: 'D. Ortiz',
+  publicInformationOfficer: 'M. Wells',
+  safetyOfficer: 'K. Doe',
+  liaisonOfficer: 'A. Rivera',
+}
+
+const BASELINE_RESOURCES: Ics201FormStateForGenerator['resources'] = [
+  {
+    id: 1,
+    category: 'Air Operations',
+    identifier: 'MH-65 (3x airframes)',
+    quantity: '2',
+    status: 'Mission Capable',
+    assignment: 'Sector overflight + medevac standby',
+  },
+  {
+    id: 2,
+    category: 'Boat Forces',
+    identifier: 'Response Boat - Medium',
+    quantity: '3',
+    status: 'On Scene',
+    assignment: 'Berths 31-33 perimeter security',
+  },
+  {
+    id: 3,
+    category: 'USAR',
+    identifier: 'Urban Search Team Alpha',
+    quantity: '1',
+    status: 'Assigned',
+    assignment: 'Pier 33 structural assessment',
+  },
+]
+
+const BASELINE_SAFETY_ANALYSIS: Ics201FormStateForGenerator['safetyAnalysis'] = [
+  {
+    id: 1,
+    hazard: 'Deteriorating marine weather (wind 25+ kt, seas 6-8 ft) after 22:00 PT',
+    mitigation: 'Curfew Air Ops after 22:00 PT; rotate boat crews; monitor sea state',
+    ppe: 'PFD Type III, water-resistant comms, foul-weather gear',
+    medicalPlan: 'EMS staged at Embarcadero ICP; UCSF Mission Bay as primary trauma',
+  },
+  {
+    id: 2,
+    hazard: 'Unstable pier structure at Berths 31-33',
+    mitigation: 'Maintain 50 ft exclusion zone landside; dive ops only at slack tide',
+    ppe: 'Hardhat, steel-toe boots, fall protection for elevated work',
+    medicalPlan: 'Trauma kit and AED at Pier 35 staging',
+  },
+]
+
+function buildIcs201BaseFromFile(
+  folderId: string,
+  file: IncidentFile
+): Ics201FormStateForGenerator {
+  const base = buildIcs201Baseline(
+    `Planning Section Chief You (autogenerated from ${file.name})`
+  )
+
+  if (folderId === 'situation-reports') {
+    const sitrep = SITUATION_REPORT_DOCX_FILES.find((entry) => entry.name === file.name)
+    if (sitrep) {
+      const findHeading = (heading: string): string | null => {
+        const headingIndex = sitrep.blocks.findIndex(
+          (block) => block.kind === 'heading' && block.text === heading
+        )
+        if (headingIndex < 0) return null
+        const collected: string[] = []
+        for (let i = headingIndex + 1; i < sitrep.blocks.length; i += 1) {
+          const block = sitrep.blocks[i]
+          if (block.kind === 'heading') break
+          if (block.kind === 'paragraph' || block.kind === 'bullet') {
+            collected.push(block.text)
+          }
+        }
+        return collected.length > 0 ? collected.join(' ') : null
+      }
+      const collectBullets = (heading: string): string[] => {
+        const headingIndex = sitrep.blocks.findIndex(
+          (block) => block.kind === 'heading' && block.text === heading
+        )
+        if (headingIndex < 0) return []
+        const collected: string[] = []
+        for (let i = headingIndex + 1; i < sitrep.blocks.length; i += 1) {
+          const block = sitrep.blocks[i]
+          if (block.kind === 'heading') break
+          if (block.kind === 'bullet') collected.push(block.text)
+        }
+        return collected
+      }
+      const exec = findHeading('Executive Summary')
+      const risk = findHeading('Risk to Mission')
+      const general = findHeading('General Comments')
+      const readinessBullets = collectBullets('Readiness Assessment')
+      const rfis = collectBullets('Outstanding RFIs / RFRs')
+      if (exec) base.currentSituationSummary = exec
+      if (risk) base.weatherForecast = risk
+      if (general) base.projectedIncidentCourse = general
+      if (readinessBullets.length > 0) {
+        base.objectives = readinessBullets.map((text) => text.replace(/:.*$/, ''))
+      }
+      if (rfis.length > 0) {
+        base.actions = rfis.map((text, index) => ({
+          id: index + 1,
+          task: text,
+          owner: index === 0 ? 'Planning Section' : 'Logistics Section',
+          startTime: '2026-05-14 06:00 PT',
+          endTime: '2026-05-14 18:00 PT',
+          status: 'Planned',
+        }))
+      }
+      base.preparedBy = `${sitrep.author} (autogenerated from ${file.name})`
+    }
+  } else if (folderId === 'iaps') {
+    base.currentSituationSummary =
+      'Operational Period 3 IAP carried forward. Continued focus on life-safety, structural assessment at Pier 33, and shelter stabilization. Personnel rotations on schedule.'
+    base.objectives = [
+      'Execute approved IAP objectives for Operational Period 3.',
+      'Maintain branch/division command structure per ICS-203 attached.',
+      'Sustain joint mutual-aid coordination with Alameda County OES.',
+      'Complete structural assessment at Pier 33 and adjacent berths.',
+    ]
+    base.actions = [
+      {
+        id: 1,
+        task: 'Branch I work assignments per ICS-204 (Division A) — Pier 33 perimeter security.',
+        owner: 'Operations Branch I',
+        startTime: '2026-05-14 06:00 PT',
+        endTime: '2026-05-14 18:00 PT',
+        status: 'In Progress',
+      },
+      {
+        id: 2,
+        task: 'Branch II work assignments per ICS-204 (Division B) — shelter operations.',
+        owner: 'Operations Branch II',
+        startTime: '2026-05-14 06:00 PT',
+        endTime: '2026-05-14 18:00 PT',
+        status: 'In Progress',
+      },
+    ]
+  } else if (folderId === 'maps-imagery') {
+    base.mapSketchDescription = `Map sketch sourced from ${file.name}. Depicts current incident perimeter at Pier 33, branch/division boundaries across Sectors A and B, staging at Ft. Mason, access control points at Embarcadero, and evacuation routes inland.`
+    base.mapSketchLegend = `Legend imported from ${file.name}: Red = active incident area, Orange = control lines, Blue = staging, Green = shelter/resource hubs, Yellow = evacuation routes, Purple = mutual-aid staging.`
+    base.currentSituationSummary = `Geospatial overlay reflects active perimeter and evacuation zones. Reference layer: ${file.name}. Continued life-safety phase with two evacuation orders.`
+  } else if (folderId === 'photos') {
+    base.mapSketchDescription = `Field photography (${file.name}) confirms structural damage at Pier 33 with debris in adjacent waterway. Pier surface compromised at Berths 31-33; landside access restricted to ICP traffic only.`
+    base.currentSituationSummary = `Visual confirmation of pier damage per ${file.name}. Damage limited to Berths 31-33; adjacent structures appear intact pending engineering assessment.`
+  } else if (folderId === 'briefings') {
+    base.currentSituationSummary = `Briefing deck (${file.name}) outlines OP3 operational picture: life-safety phase active, evacuation orders in effect for Sectors A and B, mutual-aid response with Alameda County OES coordinated.`
+    base.weatherForecast =
+      'Per briefing slides: wind 15-25 kt with gusts to 30 kt, seas 4-6 ft, fog ceiling lifting after 11:00 PT.'
+    base.projectedIncidentCourse =
+      'Per briefing: transition from life-safety to incident-stabilization phase projected for OP4. Air Ops curfew likely after 22:00 PT.'
+    base.objectives = [
+      'Execute OP3 objectives per briefing slides.',
+      'Protect life safety in evacuated Sectors A and B.',
+      'Maintain mutual-aid coordination with Alameda County OES.',
+      'Complete structural assessment at Pier 33.',
+    ]
+  } else if (folderId === 'forms') {
+    if (file.name.startsWith('ICS-204')) {
+      base.actions = [
+        {
+          id: 1,
+          task: 'Division A perimeter security at Pier 33 per ICS-204.',
+          owner: 'Division A Supervisor',
+          startTime: '2026-05-14 06:00 PT',
+          endTime: '2026-05-14 18:00 PT',
+          status: 'In Progress',
+        },
+        {
+          id: 2,
+          task: 'Division A access control at Embarcadero entry points.',
+          owner: 'Division A Supervisor',
+          startTime: '2026-05-14 06:00 PT',
+          endTime: '2026-05-14 18:00 PT',
+          status: 'In Progress',
+        },
+      ]
+      base.resources = [
+        {
+          id: 1,
+          category: 'Strike Team',
+          identifier: 'Strike Team Alpha (Division A)',
+          quantity: '1',
+          status: 'Assigned',
+          assignment: 'Pier 33 perimeter security',
+        },
+        {
+          id: 2,
+          category: 'Task Force',
+          identifier: 'Task Force Bravo (Division A)',
+          quantity: '1',
+          status: 'Assigned',
+          assignment: 'Embarcadero access control',
+        },
+      ]
+    } else if (file.name.startsWith('ICS-233')) {
+      base.actions = [
+        {
+          id: 1,
+          task: 'RFI-014: Confirm shelter capacity at Treasure Island annex.',
+          owner: 'Planning Section',
+          startTime: '2026-05-14 08:00 PT',
+          endTime: '2026-05-14 12:00 PT',
+          status: 'Planned',
+        },
+        {
+          id: 2,
+          task: 'RFR-022: Request additional USCG Auxiliary patrols for OP4 night ops.',
+          owner: 'Logistics Section',
+          startTime: '2026-05-14 09:00 PT',
+          endTime: '2026-05-14 15:00 PT',
+          status: 'Planned',
+        },
+      ]
+    }
+  } else if (folderId === 'comms-log') {
+    base.actions = [
+      {
+        id: 1,
+        task: 'Maintain hourly comms with Alameda County OES per comms log.',
+        owner: 'Comms Unit',
+        startTime: '2026-05-14 06:00 PT',
+        endTime: '2026-05-14 18:00 PT',
+        status: 'In Progress',
+      },
+      {
+        id: 2,
+        task: 'Coordinate mutual-aid traffic with CAL FIRE Incident Commander.',
+        owner: 'Liaison Officer',
+        startTime: '2026-05-14 12:30 PT',
+        endTime: '2026-05-14 13:00 PT',
+        status: 'Planned',
+      },
+    ]
+    base.currentSituationSummary =
+      'Comms log indicates steady traffic with Alameda County OES, CAL FIRE liaison, and FEMA Region IX. No outstanding congressional inquiries.'
+  }
+  return base
+}
+
+type SitrepCitationEntry = {
+  marker: string
+  index: number
+  label: string
+}
+
+const parseSitrepCitations = (text: string): SitrepCitationEntry[] => {
+  if (!text) return []
+  const referencesIndex = text.search(/(^|\n)References:/)
+  const referencesBlock = referencesIndex >= 0 ? text.slice(referencesIndex) : ''
+  const labelByIndex = new Map<number, string>()
+  if (referencesBlock) {
+    for (const line of referencesBlock.split('\n')) {
+      const match = line.match(/^\[(\d+)\]\s+(.+)$/)
+      if (match) {
+        labelByIndex.set(Number.parseInt(match[1], 10), match[2].trim())
+      }
+    }
+  }
+  const seen = new Set<number>()
+  const matches = text.matchAll(/\[(\d+)\]/g)
+  for (const m of matches) {
+    seen.add(Number.parseInt(m[1], 10))
+  }
+  return [...seen]
+    .sort((a, b) => a - b)
+    .map((index) => ({
+      marker: `[${index}]`,
+      index,
+      label: labelByIndex.get(index) ?? `Source ${index}`,
+    }))
+}
+
+const SITREP_REGION1_EXECUTIVE_CITATIONS = [
+  'Incident Data — Cape Cod Coastal Storm Response',
+  'Incident Data — Boston Metro Water Main Break — I-93 Corridor',
+  'Incident Data — Connecticut River Ice Jam Watch',
+  'Uploaded Doc — MassDOT_REG1_Readiness_Snapshot.csv',
+  'Uploaded Doc — Mass511_Transport_Alerts_2026-05-09.csv',
+] as const
+
+const buildRegion1DotExecutiveSummary = (scopeLabel: string): string => {
+  const body =
+    `Transportation operations across ${scopeLabel} remain at AMBER posture with three concurrent events affecting state DOT corridors and Mass511 traveler information systems[1][2][3]. ` +
+    `Nor'easter winds and coastal flood advisories on Cape Cod have triggered periodic Route 6A lane closures; MassDOT District 5 IRT crews and Barnstable County shelter standby are aligned with USCG Sector SE New England patrol coverage[1]. ` +
+    `A 48-inch water main rupture near Boston South Station has reduced I-93 northbound to two lanes; Mass511 detours via I-90 westbound are active while MWRA and Boston DPW coordinate an estimated six-hour restoration window with MassDOT Highway Division support[2]. ` +
+    `Connecticut DEM and CT DOT continue monitoring an ice jam upstream of Hartford with barricades pre-positioned along Route 17; no evacuations ordered and NWS WFO Hartford maintains a breakup watch over the next 24 hours[3]. ` +
+    `Regional MassDOT maintenance availability is 87% mission-capable with additional Highway Division crews staging in Districts 4 and 5 per the latest organizational readiness snapshot[4]. ` +
+    `No new DOT personnel injuries reported this period; mutual-aid barricade and pump stock remain sufficient for the next operational period based on Mass511 and regional alert feeds[5].`
+  const references = SITREP_REGION1_EXECUTIVE_CITATIONS.map(
+    (source, index) => `[${index + 1}] ${source}`
+  ).join('\n')
+  return `${body}\n\nReferences:\n${references}`
+}
+
 function App() {
   const mapContainerRef = useRef<HTMLDivElement | null>(null)
   const leftPanelRef = useRef<HTMLDivElement | null>(null)
   const searchComponentRef = useRef<HTMLDivElement | null>(null)
   const mapViewRef = useRef<MapView | null>(null)
   const mapGraphicsLayerRef = useRef<GraphicsLayer | null>(null)
+  const femaRegionsLayerRef = useRef<GraphicsLayer | null>(null)
+  const femaRegionGraphicsRef = useRef(new globalThis.Map<number, Graphic>())
+  const openFemaAorMapPopupRef = useRef<
+    (aorId: number, mapPoint: Point) => Promise<void>
+  >(() => Promise.resolve())
+  const openMapGraphicPopupRef = useRef<
+    (
+      graphic: Graphic,
+      location: [number, number],
+      mapKey: string,
+      scale?: number
+    ) => Promise<void>
+  >(() => Promise.resolve())
   const drawLocationLayerRef = useRef<GraphicsLayer | null>(null)
   const drawLocationGraphicRef = useRef<Graphic | null>(null)
+  const analyticsCategoryLayersRef = useRef(new globalThis.Map<string, FeatureLayer>())
+  const analyticsResolutionLayersRef = useRef(new globalThis.Map<string, FeatureLayer>())
+  const analyticsLayerZoomTargetRef = useRef<string | null>(null)
+  const analyticsResolutionLayerZoomTargetRef = useRef<string | null>(null)
+  const analyticsResolutionBulkZoomRecordsRef = useRef<AnalyticsSeedRecord[] | null>(null)
   const mapGraphicsRef = useRef(new globalThis.Map<string, Graphic>())
+  const createIncidentMapContainerRef = useRef<HTMLDivElement | null>(null)
+  const createIncidentMapViewRef = useRef<MapView | null>(null)
+  const createIncidentDrawLayerRef = useRef<GraphicsLayer | null>(null)
+  const createIncidentSketchViewModelRef = useRef<SketchViewModel | null>(null)
+  const preserveIncidentGeometryRef = useRef(false)
   const [isObjectivesOpen, setIsObjectivesOpen] = useState(true)
   const [panelWidthMode, setPanelWidthMode] = useState<'one-third' | 'one-half'>(
     'one-half'
   )
   const [activeTab, setActiveTab] = useState<LeftTab>('notifications')
+  const [isLeftSidebarOpen, setIsLeftSidebarOpen] = useState(false)
+  const [incidentWorkspaceNavQuery, setIncidentWorkspaceNavQuery] = useState('')
+  const [exerciseWorkspaceNavQuery, setExerciseWorkspaceNavQuery] = useState('')
+  useEffect(() => {
+    if (!isLeftSidebarOpen) {
+      setIncidentWorkspaceNavQuery('')
+      setExerciseWorkspaceNavQuery('')
+    }
+  }, [isLeftSidebarOpen])
+  const [isCreateIncidentOpen, setIsCreateIncidentOpen] = useState(false)
+  const [createIncidentStep, setCreateIncidentStep] = useState(0)
+  const [incidentName, setIncidentName] = useState('')
+  const [incidentLocation, setIncidentLocation] = useState('')
+  const [incidentCategory, setIncidentCategory] = useState<string[]>([])
+  const [incidentWorkflow, setIncidentWorkflow] = useState('')
+  const [incidentTemplate, setIncidentTemplate] = useState('')
+  const [previewTemplateId, setPreviewTemplateId] = useState<string | null>(null)
+  const [incidentSituationReport, setIncidentSituationReport] = useState('')
+  const [incidentAors, setIncidentAors] = useState<string[]>([])
+  const [incidentRelatedEventIds, setIncidentRelatedEventIds] = useState<number[]>([])
+  const [incidentStartTime, setIncidentStartTime] = useState('')
+  const [incidentTeamTemplate, setIncidentTeamTemplate] = useState('')
+  const [incidentGeometrySummary, setIncidentGeometrySummary] = useState('')
+  const [isCreateIncidentMapReady, setIsCreateIncidentMapReady] = useState(false)
+  const [expandedMeetingItemId, setExpandedMeetingItemId] = useState<number | null>(null)
+  const defaultMeetingScheduleItems: MeetingScheduleItem[] = [
+    {
+      id: 1,
+      start: '2026-04-01T09:00',
+      end: '2026-04-01T09:30',
+      meeting: 'Operational Briefing',
+      attendees: 'IC, Ops, Logistics',
+      agendaItems: ['Safety briefing', 'Incident objectives', 'Resource assignments'],
+      createTeamsMeeting: true,
+    },
+    {
+      id: 2,
+      start: '2026-04-01T12:00',
+      end: '2026-04-01T12:45',
+      meeting: 'Planning Sync',
+      attendees: 'Planning Section',
+      agendaItems: ['Status update', 'Projected needs', 'Planning assumptions'],
+      createTeamsMeeting: false,
+    },
+    {
+      id: 3,
+      start: '2026-04-01T16:00',
+      end: '2026-04-01T16:30',
+      meeting: 'Command Update',
+      attendees: 'Unified Command',
+      agendaItems: ['Key decisions', 'Priority alignment', 'Communication plan'],
+      createTeamsMeeting: true,
+    },
+  ]
+  const [meetingScheduleItems, setMeetingScheduleItems] = useState<MeetingScheduleItem[]>(
+    defaultMeetingScheduleItems
+  )
+  const [initialIncidentReport, setInitialIncidentReport] =
+    useState<InitialIncidentReportState>(createDefaultInitialIncidentReport)
+  const [isCreateEventOpen, setIsCreateEventOpen] = useState(false)
+  const [isCreateExerciseOpen, setIsCreateExerciseOpen] = useState(false)
+  const [createEventReport, setCreateEventReport] =
+    useState<InitialIncidentReportState>(createDefaultInitialIncidentReport)
+  const [analyticsStartTime, setAnalyticsStartTime] = useState('2026-01-01T00:00')
+  const [analyticsEndTime, setAnalyticsEndTime] = useState('2026-05-31T23:59')
+  const [analyticsSelectedRegions, setAnalyticsSelectedRegions] = useState<string[]>([
+    ...ANALYTICS_REGIONS,
+  ])
+  const [analyticsVisibleLayerKeys, setAnalyticsVisibleLayerKeys] = useState<Set<string>>(
+    () => new Set()
+  )
+  const [analyticsVisibleResolutionLayerKeys, setAnalyticsVisibleResolutionLayerKeys] =
+    useState<Set<string>>(() => new Set())
+  const [analyticsResolutionKindFilter, setAnalyticsResolutionKindFilter] =
+    useState<AnalyticsResolutionKindFilter>('incidents')
+  const [analyticsSpendKindFilter, setAnalyticsSpendKindFilter] =
+    useState<AnalyticsResolutionKindFilter>('incidents')
+  const createIncidentSteps = [
+    'Name & Location',
+    'Initial Incident Report',
+    'Build Team',
+    'Schedule Meetings',
+  ] as const
+  const createExerciseSteps = [
+    'Name & Location',
+    'Exercise Objectives',
+    'Initial Exercise Report',
+    'Build Team',
+    'Schedule Meetings',
+    'Define MSEL Injects',
+  ] as const
+  const [createExerciseStep, setCreateExerciseStep] = useState(0)
+  const [exerciseObjectives, setExerciseObjectives] = useState<ExerciseObjectiveRow[]>(
+    defaultExerciseObjectives
+  )
+  const [isExerciseObjectiveLibraryOpen, setIsExerciseObjectiveLibraryOpen] = useState(false)
+  const [selectedExerciseLibraryObjectiveIds, setSelectedExerciseLibraryObjectiveIds] = useState<
+    string[]
+  >([])
+  const [exerciseObjectiveLibraryQuery, setExerciseObjectiveLibraryQuery] = useState('')
+  const [exerciseObjectiveDrafts, setExerciseObjectiveDrafts] = useState<Record<number, string>>({})
+  const [exerciseMselInjects, setExerciseMselInjects] = useState<MselInjectRow[]>(
+    defaultExerciseMselInjects
+  )
+  const [expandedExerciseMselInjectId, setExpandedExerciseMselInjectId] = useState<number | null>(
+    1
+  )
+  const incidentCategoryOptions = [
+    'Power',
+    'Fire',
+    'Hazmat',
+    'Flood',
+    'Oil Spill',
+    'Terrorism',
+    'UAS Event',
+    'Other',
+  ] as const
+  const incidentWorkflowOptions = [
+    { value: 'uscg-ics', label: 'United States Coast Guard ICS' },
+    { value: 'epa-ics', label: 'Environmental Protection Agency ICS' },
+    { value: 'bsee-ics', label: 'Bureau of Safety and Environmental Enforcement ICS' },
+    { value: 'california-ics', label: 'California ICS' },
+    { value: 'washington-ics', label: 'Washington ICS' },
+    { value: 'phmsa-ics', label: 'Pipeline and Hazardous Materials Safety Administration ICS' },
+  ] as const
+  const incidentTeamTemplateOptions = [
+    'Unified Command',
+    'Operations Focused',
+    'Logistics Heavy',
+    'Public Safety Coordination',
+  ] as const
+  const incidentTemplateOptions = [
+    {
+      id: 'utility-restoration',
+      label: 'Utility Restoration',
+      previewItems: ['Power restoration staging', 'Substation assessment', 'Crew dispatch plan'],
+    },
+    {
+      id: 'mass-care',
+      label: 'Mass Care',
+      previewItems: ['Shelter activation', 'Medical support coordination', 'Supply distribution'],
+    },
+    {
+      id: 'evacuation',
+      label: 'Evacuation',
+      previewItems: ['Zone definition', 'Route control plan', 'Public notification sequence'],
+    },
+  ] as const
+  const resetCreateIncidentForm = () => {
+    setCreateIncidentStep(0)
+    setIncidentName('')
+    setIncidentLocation('')
+    setIncidentCategory([])
+    setIncidentWorkflow('')
+    setIncidentTemplate('')
+    setPreviewTemplateId(null)
+    setIncidentSituationReport('')
+    setIncidentAors([])
+    setIncidentRelatedEventIds([])
+    setIncidentStartTime('')
+    setIncidentTeamTemplate('')
+    setIncidentGeometrySummary('')
+    createIncidentSketchViewModelRef.current?.cancel()
+    createIncidentDrawLayerRef.current?.removeAll()
+    setExpandedMeetingItemId(null)
+    setMeetingScheduleItems(defaultMeetingScheduleItems)
+    setInitialIncidentReport(createDefaultInitialIncidentReport())
+    setCreateExerciseStep(0)
+    setExerciseObjectives(defaultExerciseObjectives())
+    setIsExerciseObjectiveLibraryOpen(false)
+    setSelectedExerciseLibraryObjectiveIds([])
+    setExerciseObjectiveLibraryQuery('')
+    setExerciseObjectiveDrafts({})
+    setExerciseMselInjects(defaultExerciseMselInjects())
+    setExpandedExerciseMselInjectId(1)
+  }
+  const resetCreateEventForm = () => {
+    setCreateEventReport(createDefaultInitialIncidentReport())
+  }
+  const handleCreateEventSubmit = () => {
+    const newEvent = buildEventFromCcmerReport(createEventReport)
+    setEventList((previous) => [newEvent, ...previous])
+    toast.success(`${newEvent.name} created and added to Events.`)
+    setIsCreateEventOpen(false)
+    resetCreateEventForm()
+    setActiveTab('events')
+  }
+  const handleCreateExerciseSubmit = () => {
+    const fallbackLocation: [number, number] = [-98.5795, 39.8283]
+    let location: [number, number] = fallbackLocation
+    const coordsMatch = incidentGeometrySummary.match(
+      /(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)/
+    )
+    if (coordsMatch) {
+      const lat = Number.parseFloat(coordsMatch[1])
+      const lng = Number.parseFloat(coordsMatch[2])
+      if (!Number.isNaN(lat) && !Number.isNaN(lng)) {
+        location = [lng, lat]
+      }
+    }
+    const trimmedName = incidentName.trim()
+    const displayName = trimmedName.length > 0 ? trimmedName : 'New Exercise'
+    const workflowLabel = incidentWorkflowOptions.find(
+      (option) => option.value === incidentWorkflow
+    )?.label
+    const templateLabel = incidentTemplateOptions.find(
+      (option) => option.id === incidentTemplate
+    )?.label
+    const typeParts = [
+      incidentCategory.length > 0 ? incidentCategory.join(' / ') : null,
+      templateLabel ?? null,
+    ].filter((entry): entry is string => Boolean(entry))
+    const exerciseType = typeParts.length > 0 ? typeParts.join(' · ') : 'Exercise'
+    const region =
+      incidentAors.length > 0 ? incidentAors.join(', ') : 'Unassigned AOR'
+    const formatTimestamp = (iso: string) => {
+      if (!iso) return ''
+      const parsed = new Date(iso)
+      if (Number.isNaN(parsed.getTime())) return ''
+      return parsed.toLocaleString([], {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+      })
+    }
+    const nowLabel = new Date().toLocaleString([], {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+    })
+    const startedAt = formatTimestamp(incidentStartTime) || nowLabel
+    const meetingsScheduled = meetingScheduleItems.length
+    const mselCount = exerciseMselInjects.filter(
+      (row) => row.inject.trim().length > 0 || row.expectedAction.trim().length > 0
+    ).length
+    const objectiveCount = exerciseObjectives.filter((row) => row.name.trim().length > 0).length
+    const summaryParts: string[] = []
+    if (initialIncidentReport.shortDescription.trim()) {
+      summaryParts.push(initialIncidentReport.shortDescription.trim())
+    }
+    if (initialIncidentReport.whatHappened.trim()) {
+      summaryParts.push(initialIncidentReport.whatHappened.trim())
+    }
+    if (workflowLabel) summaryParts.push(`${workflowLabel} workspace activated.`)
+    if (templateLabel) summaryParts.push(`${templateLabel} template applied.`)
+    if (objectiveCount > 0) {
+      summaryParts.push(
+        `${objectiveCount} exercise objective${objectiveCount === 1 ? '' : 's'} defined.`
+      )
+    }
+    summaryParts.push(
+      `${meetingsScheduled} meeting${meetingsScheduled === 1 ? '' : 's'} scheduled.`
+    )
+    summaryParts.push(
+      `${mselCount} MSEL inject${mselCount === 1 ? '' : 's'} defined.`
+    )
+    const summary = summaryParts.join(' ')
+    const resourcesCommitted = incidentTeamTemplate
+      ? `${incidentTeamTemplate} exercise team standing up`
+      : 'Exercise planning cell forming'
+    const newExercise: ExerciseListItem = {
+      id: Date.now(),
+      name: displayName,
+      type: exerciseType,
+      status: 'Active',
+      severity: 'Medium',
+      region,
+      location,
+      lead: 'You',
+      startedAt,
+      lastUpdate: nowLabel,
+      summary,
+      resourcesCommitted,
+      relatedEventIds: [],
+    }
+    setExerciseList((previous) => [newExercise, ...previous])
+    toast.success(`${displayName} created. Exercise activation requests have been sent.`)
+    setIsCreateExerciseOpen(false)
+    resetCreateIncidentForm()
+    setActiveTab('exercises')
+  }
+  const handleCreateIncidentSubmit = () => {
+    const fallbackLocation: [number, number] = [-98.5795, 39.8283]
+    let location: [number, number] = fallbackLocation
+    const coordsMatch = incidentGeometrySummary.match(
+      /(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)/
+    )
+    if (coordsMatch) {
+      const lat = Number.parseFloat(coordsMatch[1])
+      const lng = Number.parseFloat(coordsMatch[2])
+      if (!Number.isNaN(lat) && !Number.isNaN(lng)) {
+        location = [lng, lat]
+      }
+    }
+    const trimmedName = incidentName.trim()
+    const displayName = trimmedName.length > 0 ? trimmedName : 'New Incident'
+    const workflowLabel = incidentWorkflowOptions.find(
+      (option) => option.value === incidentWorkflow
+    )?.label
+    const templateLabel = incidentTemplateOptions.find(
+      (option) => option.id === incidentTemplate
+    )?.label
+    const typeParts = [
+      incidentCategory.length > 0 ? incidentCategory.join(' / ') : null,
+      templateLabel ?? null,
+    ].filter((entry): entry is string => Boolean(entry))
+    const incidentType = typeParts.length > 0 ? typeParts.join(' · ') : 'New Incident'
+    const region =
+      incidentAors.length > 0 ? incidentAors.join(', ') : 'Unassigned AOR'
+    const formatTimestamp = (iso: string) => {
+      if (!iso) return ''
+      const parsed = new Date(iso)
+      if (Number.isNaN(parsed.getTime())) return ''
+      return parsed.toLocaleString([], {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+      })
+    }
+    const nowLabel = new Date().toLocaleString([], {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+    })
+    const startedAt = formatTimestamp(incidentStartTime) || nowLabel
+    const meetingsScheduled = meetingScheduleItems.length
+    const summaryParts: string[] = []
+    if (initialIncidentReport.shortDescription.trim()) {
+      summaryParts.push(initialIncidentReport.shortDescription.trim())
+    }
+    if (initialIncidentReport.whatHappened.trim()) {
+      summaryParts.push(initialIncidentReport.whatHappened.trim())
+    }
+    if (workflowLabel) summaryParts.push(`${workflowLabel} workspace activated.`)
+    if (templateLabel) summaryParts.push(`${templateLabel} template applied.`)
+    const relatedEvents = eventList.filter((event) =>
+      incidentRelatedEventIds.includes(event.id)
+    )
+    if (relatedEvents.length > 0) {
+      summaryParts.push(
+        `Related event${relatedEvents.length === 1 ? '' : 's'}: ${relatedEvents.map((event) => event.name).join('; ')}.`
+      )
+    }
+    summaryParts.push(
+      `${meetingsScheduled} meeting${meetingsScheduled === 1 ? '' : 's'} scheduled.`
+    )
+    const summary = summaryParts.join(' ')
+    const resourcesCommitted = incidentTeamTemplate
+      ? `${incidentTeamTemplate} team standing up`
+      : 'Initial responders mobilizing'
+    const newIncident: IncidentListItem = {
+      id: Date.now(),
+      name: displayName,
+      type: incidentType,
+      status: 'Active',
+      severity: 'Medium',
+      region,
+      location,
+      lead: 'You',
+      startedAt,
+      lastUpdate: nowLabel,
+      summary,
+      resourcesCommitted,
+      relatedEventIds: [...incidentRelatedEventIds],
+    }
+    setIncidentList((previous) => [newIncident, ...previous])
+    toast.success(
+      `${displayName} created. Activation requests have been sent.`
+    )
+    setIsCreateIncidentOpen(false)
+    resetCreateIncidentForm()
+  }
+  const restartIncidentGeometryDraw = () => {
+    if (incidentLocation !== 'draw-point' && incidentLocation !== 'draw-polygon') {
+      return
+    }
+
+    if (!isCreateIncidentMapReady) {
+      return
+    }
+
+    const sketchViewModel = createIncidentSketchViewModelRef.current
+    const drawLayer = createIncidentDrawLayerRef.current
+    if (!sketchViewModel || !drawLayer) {
+      return
+    }
+
+    sketchViewModel.cancel()
+    drawLayer.removeAll()
+    setIncidentGeometrySummary('')
+    void sketchViewModel.create(incidentLocation === 'draw-point' ? 'point' : 'polygon')
+  }
+  const [expandedFilesFolderId, setExpandedFilesFolderId] = useState<string | null>(
+    'situation-reports'
+  )
+  const [openWordDocFileName, setOpenWordDocFileName] = useState<string | null>(null)
+  const [editableDocBlocks, setEditableDocBlocks] = useState<Record<string, DocxBlock[]>>({})
+  const getOriginalDocBlocks = (name: string | null): DocxBlock[] => {
+    if (!name) return []
+    return SITUATION_REPORT_DOCX_FILES.find((entry) => entry.name === name)?.blocks ?? []
+  }
+  const getDocBlocks = (name: string | null): DocxBlock[] => {
+    if (!name) return []
+    return editableDocBlocks[name] ?? getOriginalDocBlocks(name)
+  }
+  const hasDocEdits = (name: string | null): boolean => {
+    if (!name) return false
+    const edited = editableDocBlocks[name]
+    if (!edited) return false
+    const original = getOriginalDocBlocks(name)
+    if (edited.length !== original.length) return true
+    return edited.some((block, index) => {
+      const originalBlock = original[index]
+      return !originalBlock || originalBlock.kind !== block.kind || originalBlock.text !== block.text
+    })
+  }
+  const mutateDocBlocks = (
+    name: string,
+    mutator: (blocks: DocxBlock[]) => DocxBlock[]
+  ) => {
+    setEditableDocBlocks((previous) => {
+      const current = previous[name] ?? getOriginalDocBlocks(name)
+      return { ...previous, [name]: mutator(current) }
+    })
+  }
+  const updateDocBlockText = (name: string, index: number, text: string) => {
+    mutateDocBlocks(name, (blocks) =>
+      blocks.map((block, blockIndex) =>
+        blockIndex === index ? ({ ...block, text } as DocxBlock) : block
+      )
+    )
+  }
+  const removeDocBlock = (name: string, index: number) => {
+    mutateDocBlocks(name, (blocks) => blocks.filter((_, blockIndex) => blockIndex !== index))
+  }
+  const insertDocBlockAfter = (name: string, index: number, kind: DocxBlock['kind']) => {
+    mutateDocBlocks(name, (blocks) => {
+      const next = [...blocks]
+      next.splice(index + 1, 0, { kind, text: '' } as DocxBlock)
+      return next
+    })
+  }
+  const appendDocBlock = (name: string, kind: DocxBlock['kind']) => {
+    mutateDocBlocks(name, (blocks) => [...blocks, { kind, text: '' } as DocxBlock])
+  }
+  const resetDocBlocks = (name: string) => {
+    setEditableDocBlocks((previous) => {
+      if (!(name in previous)) return previous
+      const next = { ...previous }
+      delete next[name]
+      return next
+    })
+  }
+  const [ics201GeneratingFromFile, setIcs201GeneratingFromFile] = useState<string | null>(
+    null
+  )
+  const [sitrepGeneratingFromScope, setSitrepGeneratingFromScope] = useState<string | null>(
+    null
+  )
+  const [pratusAiIntent, setPratusAiIntent] = useState<
+    'default' | 'ics201-generation' | 'sitrep-generation' | 'event-rule-generation' | 'notification-rule-generation'
+  >('default')
   const [expandedItemId, setExpandedItemId] = useState<string | null>(null)
+  const [expandedThreats, setExpandedThreats] = useState<Set<string>>(new Set())
+  const [completedResponseActions, setCompletedResponseActions] = useState<Set<string>>(
+    new Set()
+  )
+  const [isCreateTaskOpen, setIsCreateTaskOpen] = useState(false)
+  const [viewingEventModalId, setViewingEventModalId] = useState<number | null>(null)
+  const [activeTaskAction, setActiveTaskAction] = useState<{
+    id: string
+    label: string
+  } | null>(null)
+  const [taskAssignmentResource, setTaskAssignmentResource] = useState('')
+  const [taskAssignments, setTaskAssignments] = useState<
+    Record<string, { resource: string; timestamp: string }>
+  >({})
   const [selectedPanelItemId, setSelectedPanelItemId] = useState<string | null>(null)
+  const [selectedNestedItemId, setSelectedNestedItemId] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [isSearchExpanded, setIsSearchExpanded] = useState(false)
   const [isSearchResultsOpen, setIsSearchResultsOpen] = useState(false)
@@ -432,6 +5431,7 @@ function App() {
   >([])
   const [pratusAiDataSources, setPratusAiDataSources] = useState({
     web: true,
+    organizationData: true,
     incidentData: true,
     files: false,
   })
@@ -524,6 +5524,625 @@ function App() {
     ],
   }
   const [ics201Form, setIcs201Form] = useState<Ics201FormState>(INITIAL_ICS201_FORM)
+  const INITIAL_ICS209_FORM: Ics209FormState = {
+    reportVersion: 'Initial',
+    incidentTypes: ['Oil/Petroleum', 'Other'],
+    otherIncidentTypeSpecify: 'Maritime Security',
+    incidentName: 'Tall Ships New Orleans 250',
+    incidentLocation: 'Lower Mississippi River, New Orleans, LA',
+    reportDate: '2026-05-27',
+    reportTime: '08:00',
+    operationalPeriodFrom: '2026-05-27T08:00',
+    operationalPeriodTo: '2026-05-27T20:00',
+    situationSummary:
+      "Sector New Orleans is actively preparing for the upcoming 250th Celebration of the United States commemorated by the arrival of the world's tall ships to New Orleans, scheduled to commence on 27MAY2026, and concluding on 01JUN2026. To ensure readiness to support this mission, preoperational measures have been implemented, including coordination with local LE personnel to maximize coordination for both safety and security during the event. Additionally, the Incident Management Team (IMT) has worked to ensure adequate staffing of personnel to maintain operational readiness. The IMT continues to work closely with interagency partners to ensure flexibility and rapid response posture for the duration of the event.",
+    lifeSafetyHealthIssues: 'Nothing significant to report.',
+    mtsImpacts:
+      'Security Zone Enforcement\nStationary Security Zone: Enforced from Mile Marker (MM) 92.7 to MM 96, extending 500 yards from the left descending bank, in accordance with MSIB Vol XXVI, Issue 011 (fixed security zone).\nMoving Security Zone: Enforced as a moving exclusion zone around tall ship transits along the Lower Mississippi River, 500-yard standoff fore/aft and abeam, in effect from 27MAY2026 through 01JUN2026 in accordance with MSIB Vol XXVI, Issue 012.',
+    resourceRequests: [],
+    plannedActions: [],
+    commandPriorities: [
+      { id: 1, priority: 'Safety of Public and Responders' },
+      { id: 2, priority: 'Homeland Security' },
+      { id: 3, priority: 'Threat/attack prevention' },
+      { id: 4, priority: 'Support of partner agencies' },
+      { id: 5, priority: 'Information management and situation awareness' },
+    ],
+    notableItems: [],
+    responderInjuriesThisPeriod: 0,
+    responderInjuriesToDate: 0,
+    responderDeathsThisPeriod: 0,
+    responderDeathsToDate: 0,
+    mediaPhotosOutreach:
+      'Public Affairs: High-visibility media posture from May 26-Jun 1. Key events: Press conferences, CGC EAGLE ride-ins/tours (Fox, PBS, TODAY Show), and security zone ride-alongs. Metrics: 18 inquiries, 48 articles, and 24 broadcasts reaching an audience of approximately 4 million.',
+    equipmentTypes: [
+      { id: 'cedt', label: 'CEDT', description: '1 K-9, 1 handler, 1 cover officer' },
+      { id: 'crew', label: 'Crew', description: '4 mbrs' },
+      { id: 'rbs', label: 'RBS' },
+    ],
+    assignedResources: [
+      {
+        id: 1,
+        agency: 'MSRT-E C-UAS Package',
+        people: 20,
+        equipmentCounts: { cedt: 0, crew: 0, rbs: 0 },
+      },
+      { id: 2, agency: 'MSST Cape Cod', people: 0, equipmentCounts: { cedt: 0, crew: 1, rbs: 0 } },
+      { id: 3, agency: 'MSST New York', people: 0, equipmentCounts: { cedt: 1, crew: 5, rbs: 0 } },
+      { id: 4, agency: 'MSST Kings Bay', people: 0, equipmentCounts: { cedt: 2, crew: 0, rbs: 0 } },
+      { id: 5, agency: 'MSST Houston', people: 0, equipmentCounts: { cedt: 1, crew: 5, rbs: 2 } },
+      { id: 6, agency: 'MSST NOLA', people: 0, equipmentCounts: { cedt: 0, crew: 5, rbs: 6 } },
+      { id: 7, agency: 'MSRT-E', people: 0, equipmentCounts: { cedt: 1, crew: 0, rbs: 0 } },
+    ],
+    amplifyingInformation:
+      'Sector New Orleans has manned an incident command post at Sector proper. Additionally, a CG agency representative is embedded with the Unified Command Post over at Julia Street Terminal.',
+    comments:
+      'Significant event timeline:\n26MAY26: Sector NOLA conducted operations brief with all DSF units.\n27MAY26: CGC EAGLE moored at the Lower Mississippi River (LMR) operational pier to commence MSRO patrols and search hull sweeps. CGC EAGLE conducted port visit with senior leadership tours, including Fox News, PBS, and TODAY Show interviews.\n28-31MAY26: Continuous tall ship arrivals, parade of sail, public visitation hours, and waterborne security patrols. Coordination with USCG Auxiliary, NOPD Harbor Patrol, and Louisiana State Police Marine Unit.\n01JUN2026: Final departure ceremony, demobilization phase commenced.',
+    preparedByName: 'CDR A. Rivera',
+    preparedByPositionTitle: 'Planning Section Chief',
+    preparedBySignature: 'A. Rivera',
+    preparedByDateTime: '2026-05-27 08:15',
+  }
+  const [ics209Form, setIcs209Form] = useState<Ics209FormState>(INITIAL_ICS209_FORM)
+  const updateIcs209Field = <K extends keyof Ics209FormState>(
+    field: K,
+    value: Ics209FormState[K]
+  ) => {
+    setIcs209Form((previous) => ({ ...previous, [field]: value }))
+  }
+  const INITIAL_ICS215_FORM: Ics215FormState = {
+    incidentName: 'Tall Ships New Orleans 250',
+    incidentLocation: 'Lower Mississippi River, New Orleans, LA',
+    dateTimePrepared: '2026-05-26T16:30',
+    operationalPeriodFrom: '2026-05-27T08:00',
+    operationalPeriodTo: '2026-05-27T20:00',
+    assignees: [
+      {
+        id: 1,
+        name: 'Division A',
+        workAssignments: [
+          {
+            id: 101,
+            kind: 'Boat Crews',
+            required: 6,
+            onHand: 4,
+            needed: 2,
+            workAssignment:
+              'Enforce moving security zone around tall ship transits MM 92.7-MM 96',
+            overheadPositions: 'BO/CXO',
+            specialEquipment: '2x RBS-29, blue light enforcement package',
+            reportingLocation: 'Sector NOLA Pier 1',
+            requestedArrivalTime: '2026-05-27T06:00',
+            haveAssets: [
+              {
+                id: 'RBS-29-2741',
+                org: 'USCG Station New Orleans',
+                location: 'Pier 1, Sector NOLA',
+                status: 'Available',
+              },
+              {
+                id: 'RBS-29-2756',
+                org: 'USCG Station New Orleans',
+                location: 'Pier 1, Sector NOLA',
+                status: 'Available',
+              },
+              {
+                id: 'RBS-25-1182',
+                org: 'USCG Station Venice',
+                location: 'Venice, LA',
+                status: 'In Service',
+              },
+              {
+                id: 'RBS-25-1190',
+                org: 'USCG Station Grand Isle',
+                location: 'Grand Isle, LA',
+                status: 'In Service',
+              },
+            ],
+          },
+          {
+            id: 102,
+            kind: 'Shoreside Security Patrol',
+            required: 2,
+            onHand: 2,
+            needed: 0,
+            workAssignment:
+              'Foot patrol Riverwalk waterfront promenade during public visiting hours',
+            overheadPositions: 'PSU Squad Leader',
+            specialEquipment: 'Handheld VHF radios, BWC',
+            reportingLocation: 'Sector NOLA Pier 1',
+            requestedArrivalTime: '2026-05-27T08:00',
+            haveAssets: [
+              {
+                id: 'PSU-308-A1',
+                org: 'PSU 308',
+                location: 'Riverwalk North',
+                status: 'Available',
+              },
+              {
+                id: 'PSU-308-A2',
+                org: 'PSU 308',
+                location: 'Riverwalk South',
+                status: 'Available',
+              },
+            ],
+          },
+        ],
+      },
+      {
+        id: 2,
+        name: 'Division B',
+        workAssignments: [
+          {
+            id: 201,
+            kind: 'MSST Boat Teams',
+            required: 4,
+            onHand: 4,
+            needed: 0,
+            workAssignment: 'Static security zone enforcement around CGC EAGLE moorage',
+            overheadPositions: 'MSST Cmdr',
+            specialEquipment: '2x RBS-25, night vision optics',
+            reportingLocation: 'Julia Street Terminal',
+            requestedArrivalTime: '2026-05-27T07:00',
+            haveAssets: [
+              {
+                id: 'MSST-NOLA-01',
+                org: 'MSST New Orleans',
+                location: 'Julia Street Terminal',
+                status: 'Available',
+              },
+              {
+                id: 'MSST-NOLA-02',
+                org: 'MSST New Orleans',
+                location: 'Julia Street Terminal',
+                status: 'Available',
+              },
+              {
+                id: 'MSST-GAL-04',
+                org: 'MSST Galveston',
+                location: 'Houma, LA (staging)',
+                status: 'Available',
+              },
+              {
+                id: 'MSST-GAL-05',
+                org: 'MSST Galveston',
+                location: 'Houma, LA (staging)',
+                status: 'Reserved',
+              },
+            ],
+          },
+        ],
+      },
+      {
+        id: 3,
+        name: 'Air Ops Group',
+        workAssignments: [
+          {
+            id: 301,
+            kind: 'C-UAS Package',
+            required: 1,
+            onHand: 1,
+            needed: 0,
+            workAssignment:
+              'Counter-UAS over visitor anchorage and parade transit corridor',
+            overheadPositions: 'MSRT-E LE',
+            specialEquipment: 'C-UAS package, RF detection kit',
+            reportingLocation: 'Sector NOLA C2',
+            requestedArrivalTime: '2026-05-27T05:30',
+            haveAssets: [
+              {
+                id: 'C-UAS-KIT-07',
+                org: 'MSRT-East',
+                location: 'Sector NOLA C2',
+                status: 'Operational',
+              },
+            ],
+          },
+          {
+            id: 302,
+            kind: 'MH-65 Helicopter',
+            required: 2,
+            onHand: 1,
+            needed: 1,
+            workAssignment: 'Aerial overwatch and SAR ready cover for parade transits',
+            overheadPositions: 'Air Ops Branch Director',
+            specialEquipment: 'FLIR, rescue hoist, downlink',
+            reportingLocation: 'Air Station NOLA',
+            requestedArrivalTime: '2026-05-27T07:30',
+            haveAssets: [
+              {
+                id: 'CG-6577',
+                org: 'CGAS New Orleans',
+                location: 'Air Station NOLA',
+                status: 'Ready',
+              },
+            ],
+          },
+        ],
+      },
+    ],
+    preparedByName: 'CDR A. Rivera',
+    preparedByPosition: 'Planning Section Chief',
+  }
+  const [ics215Form, setIcs215Form] = useState<Ics215FormState>(INITIAL_ICS215_FORM)
+  const addIcs215Assignee = () => {
+    setIcs215Form((previous) => ({
+      ...previous,
+      assignees: [
+        ...previous.assignees,
+        {
+          id: Date.now() + previous.assignees.length,
+          name: '',
+          workAssignments: [],
+        },
+      ],
+    }))
+  }
+  const removeIcs215Assignee = (id: number) => {
+    setIcs215Form((previous) => ({
+      ...previous,
+      assignees: previous.assignees.filter((assignee) => assignee.id !== id),
+    }))
+  }
+  const addIcs215WorkAssignmentLine = (assigneeId: number) => {
+    setIcs215Form((previous) => ({
+      ...previous,
+      assignees: previous.assignees.map((assignee) =>
+        assignee.id !== assigneeId
+          ? assignee
+          : {
+              ...assignee,
+              workAssignments: [
+                ...assignee.workAssignments,
+                {
+                  id: Date.now() + assignee.workAssignments.length + 1,
+                  kind: '',
+                  required: 0,
+                  onHand: 0,
+                  needed: 0,
+                  workAssignment: '',
+                  overheadPositions: '',
+                  specialEquipment: '',
+                  reportingLocation: '',
+                  requestedArrivalTime: '',
+                  haveAssets: [],
+                },
+              ],
+            }
+      ),
+    }))
+  }
+  const removeIcs215WorkAssignmentLine = (assigneeId: number, lineId: number) => {
+    setIcs215Form((previous) => ({
+      ...previous,
+      assignees: previous.assignees.map((assignee) =>
+        assignee.id !== assigneeId
+          ? assignee
+          : {
+              ...assignee,
+              workAssignments: assignee.workAssignments.filter((row) => row.id !== lineId),
+            }
+      ),
+    }))
+  }
+  const [ics215WorkAssignmentSearch, setIcs215WorkAssignmentSearch] = useState('')
+  const [ics215ExpandedAssignees, setIcs215ExpandedAssignees] = useState<Set<number>>(
+    () => new Set<number>()
+  )
+  const toggleIcs215AssigneeExpanded = (id: number) => {
+    setIcs215ExpandedAssignees((previous) => {
+      const next = new Set(previous)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+  const [ics215EditingAssigneeId, setIcs215EditingAssigneeId] = useState<number | null>(null)
+  const [ics215AssigneeDraftName, setIcs215AssigneeDraftName] = useState('')
+  const [ics215EditingWorkAssignmentId, setIcs215EditingWorkAssignmentId] = useState<
+    number | null
+  >(null)
+  const [ics215WorkAssignmentDraft, setIcs215WorkAssignmentDraft] =
+    useState<Ics215WorkAssignmentLine | null>(null)
+  const [ics215EditingReportInfo, setIcs215EditingReportInfo] = useState(false)
+  const [ics215ReportInfoDraft, setIcs215ReportInfoDraft] = useState<{
+    incidentName: string
+    incidentLocation: string
+    dateTimePrepared: string
+  }>({ incidentName: '', incidentLocation: '', dateTimePrepared: '' })
+  const [ics215EditingOperationalPeriod, setIcs215EditingOperationalPeriod] = useState(false)
+  const [ics215OperationalPeriodDraft, setIcs215OperationalPeriodDraft] = useState<{
+    from: string
+    to: string
+  }>({ from: '', to: '' })
+  const [ics215EditingPreparedBy, setIcs215EditingPreparedBy] = useState(false)
+  const [ics215PreparedByDraft, setIcs215PreparedByDraft] = useState<{
+    preparedByName: string
+    preparedByPosition: string
+  }>({ preparedByName: '', preparedByPosition: '' })
+  const [ics215HaveAssetsDialog, setIcs215HaveAssetsDialog] = useState<
+    { assigneeId: number; lineId: number | null } | null
+  >(null)
+  const toggleIcs209IncidentType = (type: Ics209IncidentType) => {
+    setIcs209Form((previous) => ({
+      ...previous,
+      incidentTypes: previous.incidentTypes.includes(type)
+        ? previous.incidentTypes.filter((value) => value !== type)
+        : [...previous.incidentTypes, type],
+    }))
+  }
+  const addIcs209ResourceRequest = () => {
+    setIcs209Form((previous) => ({
+      ...previous,
+      resourceRequests: [
+        ...previous.resourceRequests,
+        { id: Date.now() + previous.resourceRequests.length, request: '' },
+      ],
+    }))
+  }
+  const removeIcs209ResourceRequest = (id: number) => {
+    setIcs209Form((previous) => ({
+      ...previous,
+      resourceRequests: previous.resourceRequests.filter((row) => row.id !== id),
+    }))
+  }
+  const addIcs209PlannedAction = () => {
+    setIcs209Form((previous) => ({
+      ...previous,
+      plannedActions: [
+        ...previous.plannedActions,
+        {
+          id: Date.now() + previous.plannedActions.length,
+          task: '',
+          poc: '',
+          pocBriefed: false,
+          startDate: '',
+          deadline: '',
+          status: 'Pending',
+        },
+      ],
+    }))
+  }
+  const removeIcs209PlannedAction = (id: number) => {
+    setIcs209Form((previous) => ({
+      ...previous,
+      plannedActions: previous.plannedActions.filter((row) => row.id !== id),
+    }))
+  }
+  const addIcs209CommandPriority = () => {
+    setIcs209Form((previous) => ({
+      ...previous,
+      commandPriorities: [
+        ...previous.commandPriorities,
+        { id: Date.now() + previous.commandPriorities.length, priority: '' },
+      ],
+    }))
+  }
+  const removeIcs209CommandPriority = (id: number) => {
+    setIcs209Form((previous) => ({
+      ...previous,
+      commandPriorities: previous.commandPriorities.filter((row) => row.id !== id),
+    }))
+  }
+  const addIcs209NotableItem = () => {
+    setIcs209Form((previous) => ({
+      ...previous,
+      notableItems: [
+        ...previous.notableItems,
+        {
+          id: Date.now() + previous.notableItems.length,
+          item: '',
+          totalThisPeriod: '',
+          totalToDate: '',
+        },
+      ],
+    }))
+  }
+  const removeIcs209NotableItem = (id: number) => {
+    setIcs209Form((previous) => ({
+      ...previous,
+      notableItems: previous.notableItems.filter((row) => row.id !== id),
+    }))
+  }
+  const addIcs209AssignedResource = () => {
+    setIcs209Form((previous) => {
+      const blankCounts: Record<string, number> = {}
+      previous.equipmentTypes.forEach((type) => {
+        blankCounts[type.id] = 0
+      })
+      return {
+        ...previous,
+        assignedResources: [
+          ...previous.assignedResources,
+          {
+            id: Date.now() + previous.assignedResources.length,
+            agency: '',
+            people: 0,
+            equipmentCounts: blankCounts,
+          },
+        ],
+      }
+    })
+  }
+  const removeIcs209AssignedResource = (id: number) => {
+    setIcs209Form((previous) => ({
+      ...previous,
+      assignedResources: previous.assignedResources.filter((row) => row.id !== id),
+    }))
+  }
+  const [ics209ResourceSearch, setIcs209ResourceSearch] = useState('')
+  const [ics209ActionSearch, setIcs209ActionSearch] = useState('')
+  const [ics209PrioritySearch, setIcs209PrioritySearch] = useState('')
+  const [ics209NotableSearch, setIcs209NotableSearch] = useState('')
+  const [ics209AssignedSearch, setIcs209AssignedSearch] = useState('')
+  // Per-row edit state (id of row currently being edited + a draft copy)
+  const [ics209EditingResourceRequestId, setIcs209EditingResourceRequestId] = useState<
+    number | null
+  >(null)
+  const [ics209ResourceRequestDraft, setIcs209ResourceRequestDraft] =
+    useState<Ics209ResourceRequest | null>(null)
+  const [ics209EditingPlannedActionId, setIcs209EditingPlannedActionId] = useState<
+    number | null
+  >(null)
+  const [ics209PlannedActionDraft, setIcs209PlannedActionDraft] =
+    useState<Ics209PlannedAction | null>(null)
+  const [ics209EditingCommandPriorityId, setIcs209EditingCommandPriorityId] = useState<
+    number | null
+  >(null)
+  const [ics209CommandPriorityDraft, setIcs209CommandPriorityDraft] =
+    useState<Ics209CommandPriority | null>(null)
+  const [ics209EditingNotableItemId, setIcs209EditingNotableItemId] = useState<number | null>(
+    null
+  )
+  const [ics209NotableItemDraft, setIcs209NotableItemDraft] =
+    useState<Ics209NotableItem | null>(null)
+  const [ics209EditingAssignedResourceId, setIcs209EditingAssignedResourceId] = useState<
+    number | null
+  >(null)
+  const [ics209AssignedResourceDraft, setIcs209AssignedResourceDraft] =
+    useState<Ics209AssignedResource | null>(null)
+  const [ics209EditingResponderInjuries, setIcs209EditingResponderInjuries] = useState(false)
+  const [ics209ResponderInjuriesDraft, setIcs209ResponderInjuriesDraft] = useState<{
+    thisPeriod: number
+    toDate: number
+  }>({ thisPeriod: 0, toDate: 0 })
+  const [ics209EditingResponderDeaths, setIcs209EditingResponderDeaths] = useState(false)
+  const [ics209ResponderDeathsDraft, setIcs209ResponderDeathsDraft] = useState<{
+    thisPeriod: number
+    toDate: number
+  }>({ thisPeriod: 0, toDate: 0 })
+  const [ics209EditingReportInfo, setIcs209EditingReportInfo] = useState(false)
+  const [ics209ReportInfoDraft, setIcs209ReportInfoDraft] = useState<{
+    incidentName: string
+    incidentLocation: string
+    reportDate: string
+    reportTime: string
+  }>({ incidentName: '', incidentLocation: '', reportDate: '', reportTime: '' })
+  const [ics209EditingOperationalPeriod, setIcs209EditingOperationalPeriod] = useState(false)
+  const [ics209OperationalPeriodDraft, setIcs209OperationalPeriodDraft] = useState<{
+    from: string
+    to: string
+  }>({ from: '', to: '' })
+  const [ics209EditingPreparedBy, setIcs209EditingPreparedBy] = useState(false)
+  const [ics209PreparedByDraft, setIcs209PreparedByDraft] = useState<{
+    preparedByName: string
+    preparedByPositionTitle: string
+    preparedBySignature: string
+    preparedByDateTime: string
+  }>({
+    preparedByName: '',
+    preparedByPositionTitle: '',
+    preparedBySignature: '',
+    preparedByDateTime: '',
+  })
+  // Per-textarea edit state
+  const [ics209EditingTextareaField, setIcs209EditingTextareaField] = useState<
+    | 'situationSummary'
+    | 'lifeSafetyHealthIssues'
+    | 'mtsImpacts'
+    | 'amplifyingInformation'
+    | 'comments'
+    | 'mediaPhotosOutreach'
+    | 'otherIncidentTypeSpecify'
+    | null
+  >(null)
+  const [ics209TextareaDraft, setIcs209TextareaDraft] = useState('')
+  const startEditTextarea = (
+    field:
+      | 'situationSummary'
+      | 'lifeSafetyHealthIssues'
+      | 'mtsImpacts'
+      | 'amplifyingInformation'
+      | 'comments'
+      | 'mediaPhotosOutreach'
+      | 'otherIncidentTypeSpecify'
+  ) => {
+    setIcs209TextareaDraft(ics209Form[field])
+    setIcs209EditingTextareaField(field)
+  }
+  const cancelEditTextarea = () => {
+    setIcs209EditingTextareaField(null)
+    setIcs209TextareaDraft('')
+  }
+  const saveEditTextarea = () => {
+    if (ics209EditingTextareaField) {
+      updateIcs209Field(ics209EditingTextareaField, ics209TextareaDraft)
+    }
+    setIcs209EditingTextareaField(null)
+    setIcs209TextareaDraft('')
+  }
+  // Edit Equipment Types dialog
+  const [ics209EquipmentTypesDialogOpen, setIcs209EquipmentTypesDialogOpen] = useState(false)
+  const [ics209EquipmentTypesDraft, setIcs209EquipmentTypesDraft] = useState<
+    Ics209EquipmentType[]
+  >([])
+  const openEquipmentTypesDialog = () => {
+    setIcs209EquipmentTypesDraft(
+      ics209Form.equipmentTypes.map((type) => ({ ...type }))
+    )
+    setIcs209EquipmentTypesDialogOpen(true)
+  }
+  const addDraftEquipmentType = () => {
+    setIcs209EquipmentTypesDraft((previous) => [
+      ...previous,
+      {
+        id: `equip_${Date.now()}_${previous.length}`,
+        label: '',
+        description: '',
+      },
+    ])
+  }
+  const updateDraftEquipmentType = (
+    index: number,
+    field: 'label' | 'description',
+    value: string
+  ) => {
+    setIcs209EquipmentTypesDraft((previous) =>
+      previous.map((type, position) =>
+        position === index ? { ...type, [field]: value } : type
+      )
+    )
+  }
+  const removeDraftEquipmentType = (index: number) => {
+    setIcs209EquipmentTypesDraft((previous) => previous.filter((_, position) => position !== index))
+  }
+  const saveEquipmentTypes = () => {
+    const cleaned = ics209EquipmentTypesDraft
+      .map((type) => ({
+        ...type,
+        label: type.label.trim(),
+        description: type.description?.trim() || undefined,
+      }))
+      .filter((type) => type.label.length > 0)
+    const validIds = new Set(cleaned.map((type) => type.id))
+    setIcs209Form((previous) => ({
+      ...previous,
+      equipmentTypes: cleaned,
+      assignedResources: previous.assignedResources.map((row) => {
+        const nextCounts: Record<string, number> = {}
+        cleaned.forEach((type) => {
+          nextCounts[type.id] = row.equipmentCounts[type.id] ?? 0
+        })
+        return { ...row, equipmentCounts: nextCounts }
+      }),
+    }))
+    // Also update any in-flight assigned-resource draft to keep columns in sync
+    setIcs209AssignedResourceDraft((draft) => {
+      if (!draft) return draft
+      const nextCounts: Record<string, number> = {}
+      cleaned.forEach((type) => {
+        nextCounts[type.id] = draft.equipmentCounts[type.id] ?? 0
+      })
+      // Remove counts for types that no longer exist
+      Object.keys(draft.equipmentCounts).forEach((key) => {
+        if (!validIds.has(key)) {
+          delete nextCounts[key]
+        }
+      })
+      return { ...draft, equipmentCounts: nextCounts }
+    })
+    setIcs209EquipmentTypesDialogOpen(false)
+  }
   const ics201Collaborators = [
     { id: 'maya', name: 'Maya Chen', initials: 'MC', color: '#ef4444' },
     { id: 'diego', name: 'Diego Alvarez', initials: 'DA', color: '#3b82f6' },
@@ -695,6 +6314,7 @@ function App() {
     signatures: Ics201VersionSignature[]
     submittedForReviewTo?: Array<{ name: string; role: string }>
     submittedForReviewAt?: number
+    aiGeneratedSections?: SitrepSection[]
   }
   const [sitrepVersions, setSitrepVersions] = useState<SitrepVersion[]>(() => {
     const now = Date.now()
@@ -737,7 +6357,12 @@ function App() {
       const creator = authors[(index + 2) % authors.length]
       const isSubmittedSeed = !isSigned && index === latestUnsignedIndex
       const submittedForReviewTo = isSubmittedSeed
-        ? [{ name: 'R. Morgan', role: 'Incident Commander' }]
+        ? [
+            { name: 'D. Alvarez', role: 'Situation Unit Leader' },
+            { name: 'M. Tanaka', role: 'Situation Unit Leader' },
+            { name: 'A. Rivera', role: 'Planning Section Chief' },
+            { name: 'Maya Chen', role: 'Planning Section Chief' },
+          ]
         : undefined
       const submittedForReviewAt = isSubmittedSeed ? createdAt + 60_000 : undefined
       return {
@@ -763,30 +6388,51 @@ function App() {
   const [isSitrepSignNameDialogOpen, setIsSitrepSignNameDialogOpen] = useState(false)
   const [sitrepSignNameInput, setSitrepSignNameInput] = useState('You')
   const [viewingSitrepVersion, setViewingSitrepVersion] = useState<SitrepVersion | null>(null)
+  const [viewingSitrepVersionOrigin, setViewingSitrepVersionOrigin] = useState<
+    SitrepViewMode | null
+  >(null)
   const [activeSitrepDraftId, setActiveSitrepDraftId] = useState<string | null>(null)
   const [requestedApprovalSitrepDraftIds, setRequestedApprovalSitrepDraftIds] = useState<
     Set<string>
   >(() => new Set())
-  const [expandedSitrepReviewStatusDraftId, setExpandedSitrepReviewStatusDraftId] = useState<
-    string | null
-  >(null)
+  const [sitrepDraftSulApprovals, setSitrepDraftSulApprovals] = useState<
+    Record<string, { name: string; role: string; approvedAt: number }>
+  >({})
+  const markSitrepDraftSulApproved = (
+    versionId: string,
+    approver: { name: string; role: string }
+  ) => {
+    setSitrepDraftSulApprovals((previous) =>
+      previous[versionId]
+        ? previous
+        : {
+            ...previous,
+            [versionId]: { ...approver, approvedAt: Date.now() },
+          }
+    )
+  }
   const [sitrepApprovalRequestConfirmation, setSitrepApprovalRequestConfirmation] = useState<{
     versionLabel: string
     authorName: string
-    recipients: Array<{ name: string; role: string }>
   } | null>(null)
   type SitrepApprovalAssignee = { name: string; email: string }
   const SITREP_SITUATION_UNIT_LEADERS: SitrepApprovalAssignee[] = [
-    { name: 'D. Alvarez', email: 'd.alvarez@incident.gov' },
-    { name: 'M. Tanaka', email: 'm.tanaka@incident.gov' },
+    { name: 'D. Alvarez', email: 'd.alvarez@dot.gov' },
+    { name: 'M. Tanaka', email: 'm.tanaka@dot.gov' },
   ]
   const SITREP_PLANNING_SECTION_CHIEFS: SitrepApprovalAssignee[] = [
-    { name: 'A. Rivera', email: 'a.rivera@incident.gov' },
-    { name: 'Maya Chen', email: 'maya.chen@incident.gov' },
+    { name: 'A. Rivera', email: 'a.rivera@dot.gov' },
+    { name: 'Maya Chen', email: 'maya.chen@dot.gov' },
   ]
   const SITREP_INCIDENT_COMMANDERS: SitrepApprovalAssignee[] = [
-    { name: 'R. Morgan', email: 'r.morgan@incident.gov' },
-    { name: 'P. Whitfield', email: 'p.whitfield@incident.gov' },
+    { name: 'R. Morgan', email: 'r.morgan@dot.gov' },
+    { name: 'P. Whitfield', email: 'p.whitfield@dot.gov' },
+  ]
+  const SITREP_AOR_APPROVERS: SitrepApprovalAssignee[] = [
+    { name: 'CAPT J. Holloway', email: 'j.holloway@dot.gov' },
+    { name: 'CDR L. Brennan', email: 'l.brennan@dot.gov' },
+    { name: 'CDR S. Okafor', email: 's.okafor@dot.gov' },
+    { name: 'LCDR K. Ramirez', email: 'k.ramirez@dot.gov' },
   ]
   const [sitrepApprovalRecipientPicker, setSitrepApprovalRecipientPicker] = useState<{
     draftId: string
@@ -836,27 +6482,17 @@ function App() {
     })
     setSitrepApprovalRequestConfirmation({
       versionLabel: picker.versionLabel,
-      authorName: picker.authorName,
-      recipients: selectedRecipients,
+      authorName: getHumanSitrepAuthorName(
+        sitrepVersions.find((entry) => entry.id === picker.draftId)
+      ),
     })
     setSitrepApprovalRecipientPicker(null)
   }
   type SitrepViewMode = 'current' | 'historical' | 'drafts' | 'review-queue'
   const [sitrepViewMode, setSitrepViewMode] = useState<SitrepViewMode>('current')
   type SitrepScopeKind = 'aor' | 'incident'
-  const SITREP_SCOPE_OPTIONS: Array<{ id: string; kind: SitrepScopeKind; label: string }> = [
-    { id: 'aor-d1', kind: 'aor', label: 'USCG District 1 (Boston)' },
-    { id: 'aor-d5', kind: 'aor', label: 'USCG District 5 (Portsmouth)' },
-    { id: 'aor-d7', kind: 'aor', label: 'USCG District 7 (Miami)' },
-    { id: 'aor-d8', kind: 'aor', label: 'USCG District 8 (New Orleans)' },
-    { id: 'aor-d11', kind: 'aor', label: 'USCG District 11 (Alameda)' },
-    { id: 'aor-d13', kind: 'aor', label: 'USCG District 13 (Seattle)' },
-    { id: 'aor-d14', kind: 'aor', label: 'USCG District 14 (Honolulu)' },
-    { id: 'aor-d17', kind: 'aor', label: 'USCG District 17 (Juneau)' },
-    { id: 'aor-sector-ny', kind: 'aor', label: 'USCG Sector New York' },
-    { id: 'aor-sector-la', kind: 'aor', label: 'USCG Sector Los Angeles' },
-    { id: 'aor-sector-houston', kind: 'aor', label: 'USCG Sector Houston-Galveston' },
-    { id: 'aor-sector-miami', kind: 'aor', label: 'USCG Sector Miami' },
+  type SitrepScopeOption = { id: string; kind: SitrepScopeKind; label: string }
+  const SITREP_INCIDENT_SCOPE_OPTIONS: SitrepScopeOption[] = [
     { id: 'incident-mateo', kind: 'incident', label: 'Hurricane Mateo Response' },
     { id: 'incident-caspian-star', kind: 'incident', label: 'M/V Caspian Star Distress' },
     { id: 'incident-port-houston-spill', kind: 'incident', label: 'Port Houston Oil Spill' },
@@ -866,7 +6502,7 @@ function App() {
       label: 'Florida Straits Migrant Interdiction',
     },
   ]
-  const [selectedSitrepScopeId, setSelectedSitrepScopeId] = useState<string>('aor-d7')
+  const [selectedSitrepScopeId, setSelectedSitrepScopeId] = useState<string>('aor-fema-1')
   const createNewSitrepDraft = () => {
     const now = Date.now()
     const newId = `${now}-sitrep-draft-${Math.random().toString(36).slice(2, 8)}`
@@ -900,8 +6536,8 @@ function App() {
     setSitrepVersions((previous) => [...previous, newDraft].slice(-100))
     setSitrepForm(seedSnapshot)
     setSitrepSectionEdits({
-      'reporting-unit': null,
       'executive-summary': null,
+      'ongoing-incidents': null,
       'readiness-assessment': null,
       'risk-to-mission': null,
       'outstanding-rfi-rfr': null,
@@ -914,8 +6550,8 @@ function App() {
     setActiveSitrepDraftId(newId)
   }
   type SitrepSection =
-    | 'reporting-unit'
     | 'executive-summary'
+    | 'ongoing-incidents'
     | 'readiness-assessment'
     | 'risk-to-mission'
     | 'outstanding-rfi-rfr'
@@ -923,8 +6559,8 @@ function App() {
     | 'general-comments'
     | 'imagery'
   const SITREP_SECTIONS: { id: SitrepSection; label: string }[] = [
-    { id: 'reporting-unit', label: 'Reporting Unit (Sector/LNO)' },
     { id: 'executive-summary', label: 'Executive Summary' },
+    { id: 'ongoing-incidents', label: 'Ongoing Incidents' },
     { id: 'readiness-assessment', label: 'Readiness Assessment' },
     { id: 'risk-to-mission', label: 'Risk to Mission' },
     { id: 'outstanding-rfi-rfr', label: 'Outstanding RFI/RFR' },
@@ -932,13 +6568,372 @@ function App() {
     { id: 'general-comments', label: 'General Comments' },
     { id: 'imagery', label: 'Imagery' },
   ]
-  const [sitrepActiveSection, setSitrepActiveSection] = useState<SitrepSection>('reporting-unit')
+  const SITREP_AI_COMPATIBLE_SECTIONS: SitrepSection[] = [
+    'executive-summary',
+    'readiness-assessment',
+    'risk-to-mission',
+    'outstanding-rfi-rfr',
+    'previous-critical-incident-comms',
+    'general-comments',
+  ]
+  const [sitrepActiveSection, setSitrepActiveSection] = useState<SitrepSection>('executive-summary')
+  type SitrepSectionType = 'manual' | 'ai'
+  type SitrepOutputFormat = 'paragraph' | 'table' | 'list'
+  type SitrepDataSource = 'incident-data' | 'web' | 'files'
+  type SitrepSectionConfig = {
+    name: string
+    sectionType: SitrepSectionType
+    aiInstructions: string
+    outputFormats: SitrepOutputFormat[]
+    dataSources: SitrepDataSource[]
+    selectedIncidents: string[]
+    selectedFiles: string[]
+  }
+  const SITREP_DATA_SOURCE_OPTIONS: { id: SitrepDataSource; label: string }[] = [
+    { id: 'incident-data', label: 'Incident Data' },
+    { id: 'web', label: 'Web' },
+    { id: 'files', label: 'Files' },
+  ]
+  const SITREP_AVAILABLE_INCIDENTS: { id: string; label: string }[] = [
+    { id: 'world-cup-security', label: 'FIFA World Cup Security Operations — Boston' },
+    { id: 'hurricane-laelia', label: 'Hurricane Laelia Response — Gulf Coast' },
+    { id: 'cape-cod-storm', label: 'Cape Cod Coastal Storm Response' },
+    { id: 'boston-water-main', label: 'Boston Metro Water Main Break — I-93 Corridor' },
+    { id: 'ct-ice-jam', label: 'Connecticut River Ice Jam Watch' },
+    { id: 'tanker-overture', label: 'Tanker MV Overture Casualty — Port of Houston' },
+    { id: 'sf-mass-casualty', label: 'San Francisco Mass Casualty Exercise' },
+  ]
+  const SITREP_AVAILABLE_FILES: { id: string; label: string }[] = [
+    { id: 'sitrep-template.docx', label: 'SITREP_Template_v3.docx' },
+    { id: 'ops-plan-2026.pdf', label: 'OPS_Plan_2026.pdf' },
+    { id: 'comms-matrix.xlsx', label: 'Comms_Matrix_OP4.xlsx' },
+    { id: 'levee-report.pdf', label: 'NorthLevee_Geotech_Report.pdf' },
+    { id: 'shelter-tracker.csv', label: 'Shelter_Occupancy_Tracker.csv' },
+    { id: 'massdot-readiness.csv', label: 'MassDOT_REG1_Readiness_Snapshot.csv' },
+    { id: 'mass511-alerts.csv', label: 'Mass511_Transport_Alerts_2026-05-09.csv' },
+  ]
+  const buildInitialSitrepSectionConfigs = (): Record<SitrepSection, SitrepSectionConfig> => {
+    const defaults: Record<SitrepSection, SitrepSectionConfig> = {
+      'executive-summary': {
+        name: 'Executive Summary',
+        sectionType: 'manual',
+        aiInstructions:
+          'Summarize the highest-priority developments since the last reporting period in 3-5 sentences.',
+        outputFormats: ['paragraph'],
+        dataSources: ['incident-data', 'web'],
+        selectedIncidents: ['cape-cod-storm', 'boston-water-main', 'ct-ice-jam'],
+        selectedFiles: ['massdot-readiness.csv', 'mass511-alerts.csv'],
+      },
+      'ongoing-incidents': {
+        name: 'Ongoing Incidents',
+        sectionType: 'manual',
+        aiInstructions:
+          'List active and monitoring incidents within the AOR with status, severity, and lead agency.',
+        outputFormats: ['list'],
+        dataSources: ['incident-data'],
+        selectedIncidents: ['world-cup-security', 'cape-cod-storm'],
+        selectedFiles: [],
+      },
+      'readiness-assessment': {
+        name: 'Readiness Assessment',
+        sectionType: 'manual',
+        aiInstructions:
+          'Assess personnel, equipment, logistics, and communications readiness. Note degraded items and overall posture.',
+        outputFormats: ['list'],
+        dataSources: ['incident-data', 'files'],
+        selectedIncidents: ['world-cup-security'],
+        selectedFiles: ['comms-matrix.xlsx'],
+      },
+      'risk-to-mission': {
+        name: 'Risk to Mission',
+        sectionType: 'manual',
+        aiInstructions:
+          'Identify top risks to the mission with likelihood, impact, and recommended mitigations.',
+        outputFormats: ['table'],
+        dataSources: ['incident-data', 'web'],
+        selectedIncidents: ['world-cup-security'],
+        selectedFiles: [],
+      },
+      'outstanding-rfi-rfr': {
+        name: 'Outstanding RFI/RFR',
+        sectionType: 'manual',
+        aiInstructions:
+          'List outstanding requests for information / resources, requestor, status, and required-by time.',
+        outputFormats: ['table'],
+        dataSources: ['incident-data'],
+        selectedIncidents: ['world-cup-security'],
+        selectedFiles: [],
+      },
+      'previous-critical-incident-comms': {
+        name: 'Previous Critical Incident Communications',
+        sectionType: 'manual',
+        aiInstructions:
+          'Summarize critical incident communications from the previous operational period.',
+        outputFormats: ['list'],
+        dataSources: ['incident-data'],
+        selectedIncidents: ['world-cup-security'],
+        selectedFiles: [],
+      },
+      'general-comments': {
+        name: 'General Comments',
+        sectionType: 'manual',
+        aiInstructions:
+          'Capture any additional commander notes, coordination items, or context not covered elsewhere.',
+        outputFormats: ['paragraph'],
+        dataSources: ['incident-data'],
+        selectedIncidents: ['world-cup-security'],
+        selectedFiles: [],
+      },
+      imagery: {
+        name: 'Imagery',
+        sectionType: 'manual',
+        aiInstructions:
+          'Summarize key imagery products, capture time, source, and notable observations.',
+        outputFormats: ['list'],
+        dataSources: ['incident-data', 'files'],
+        selectedIncidents: ['world-cup-security'],
+        selectedFiles: ['levee-report.pdf'],
+      },
+    }
+    return defaults
+  }
+  const [sitrepSectionConfigs, setSitrepSectionConfigs] = useState<
+    Record<SitrepSection, SitrepSectionConfig>
+  >(() => buildInitialSitrepSectionConfigs())
+  const [sitrepSectionSettingsTarget, setSitrepSectionSettingsTarget] =
+    useState<SitrepSection | null>(null)
+  const [sitrepSectionSettingsDraft, setSitrepSectionSettingsDraft] =
+    useState<SitrepSectionConfig | null>(null)
+  const [sitrepSectionGenerating, setSitrepSectionGenerating] = useState<SitrepSection | null>(
+    null
+  )
+  const [sitrepCitationDoc, setSitrepCitationDoc] = useState<SitrepCitationEntry | null>(null)
+  const openSitrepSectionSettings = (section: SitrepSection) => {
+    setSitrepSectionSettingsTarget(section)
+    setSitrepSectionSettingsDraft({ ...sitrepSectionConfigs[section] })
+  }
+  const closeSitrepSectionSettings = () => {
+    setSitrepSectionSettingsTarget(null)
+    setSitrepSectionSettingsDraft(null)
+  }
+  const toggleSitrepSectionOutputFormat = (format: SitrepOutputFormat) => {
+    setSitrepSectionSettingsDraft((previous) =>
+      previous
+        ? {
+            ...previous,
+            outputFormats: previous.outputFormats.includes(format)
+              ? previous.outputFormats.filter((entry) => entry !== format)
+              : [...previous.outputFormats, format],
+          }
+        : previous
+    )
+  }
+  const toggleSitrepSectionDataSource = (source: SitrepDataSource) => {
+    setSitrepSectionSettingsDraft((previous) => {
+      if (!previous) return previous
+      const enabled = previous.dataSources.includes(source)
+      const nextDataSources = enabled
+        ? previous.dataSources.filter((entry) => entry !== source)
+        : [...previous.dataSources, source]
+      let nextSelectedIncidents = previous.selectedIncidents
+      let nextSelectedFiles = previous.selectedFiles
+      if (source === 'incident-data' && enabled) {
+        nextSelectedIncidents = []
+      }
+      if (source === 'files' && enabled) {
+        nextSelectedFiles = []
+      }
+      return {
+        ...previous,
+        dataSources: nextDataSources,
+        selectedIncidents: nextSelectedIncidents,
+        selectedFiles: nextSelectedFiles,
+      }
+    })
+  }
+  const toggleSitrepSectionIncident = (incidentId: string) => {
+    setSitrepSectionSettingsDraft((previous) =>
+      previous
+        ? {
+            ...previous,
+            selectedIncidents: previous.selectedIncidents.includes(incidentId)
+              ? previous.selectedIncidents.filter((entry) => entry !== incidentId)
+              : [...previous.selectedIncidents, incidentId],
+          }
+        : previous
+    )
+  }
+  const toggleSitrepSectionFile = (fileId: string) => {
+    setSitrepSectionSettingsDraft((previous) =>
+      previous
+        ? {
+            ...previous,
+            selectedFiles: previous.selectedFiles.includes(fileId)
+              ? previous.selectedFiles.filter((entry) => entry !== fileId)
+              : [...previous.selectedFiles, fileId],
+          }
+        : previous
+    )
+  }
+  const generateContentForSitrepSection = (
+    section: SitrepSection,
+    config: SitrepSectionConfig
+  ): string => {
+    if (section === 'executive-summary' && sitrepForm.incidentName.includes('Region 1')) {
+      return buildRegion1DotExecutiveSummary(sitrepForm.incidentName)
+    }
+    const formatHints = config.outputFormats
+    const blocks: string[] = []
+    // Build citation pool from selected incident-data + uploaded files. Fall back to
+    // a plausible default mix so the generated text always carries inline citations.
+    const incidentSources: string[] = (config.selectedIncidents.length > 0
+      ? config.selectedIncidents
+      : SITREP_AVAILABLE_INCIDENTS.slice(0, 2).map((entry) => entry.id)
+    )
+      .map((incidentId) => {
+        const entry = SITREP_AVAILABLE_INCIDENTS.find((option) => option.id === incidentId)
+        return entry ? `Incident Data — ${entry.label}` : null
+      })
+      .filter((value): value is string => value !== null)
+    const fileSources: string[] = (config.selectedFiles.length > 0
+      ? config.selectedFiles
+      : SITREP_AVAILABLE_FILES.slice(0, 2).map((entry) => entry.id)
+    )
+      .map((fileId) => {
+        const entry = SITREP_AVAILABLE_FILES.find((option) => option.id === fileId)
+        return entry ? `Uploaded Doc — ${entry.label}` : null
+      })
+      .filter((value): value is string => value !== null)
+    const citationSources = [...incidentSources, ...fileSources]
+    const c = (...indexes: number[]): string =>
+      indexes
+        .filter((index) => index >= 0 && index < citationSources.length)
+        .map((index) => `[${index + 1}]`)
+        .join('')
+    const inc = (offset: number): number => (incidentSources.length > 0 ? offset : -1)
+    const file = (offset: number): number => {
+      if (fileSources.length === 0) return -1
+      return incidentSources.length + (offset % fileSources.length)
+    }
+    if (formatHints.includes('paragraph') || formatHints.length === 0) {
+      const summaries: Record<SitrepSection, string> = {
+        'executive-summary':
+          `Operations remain in life-safety phase${c(inc(0))}. Two evacuation orders remain active; shelter occupancy is 64% and trending up${c(file(1))}. One swift-water rescue completed without injury${c(inc(1))}. No new casualties this period; one ICU transport closed${c(inc(0))}.`,
+        'ongoing-incidents':
+          `Three ongoing incidents tracked in the AOR: Cape Cod coastal storm response (Active), Boston Metro water main break (Active), and Connecticut River ice jam watch (Monitoring)${c(inc(0))}.`,
+        'readiness-assessment':
+          `Personnel readiness is GREEN at 92% on-shift${c(inc(0))}. Equipment readiness is AMBER with two pumps deadlined awaiting parts${c(file(0))}. Logistics holds 36 hours of fuel and water on hand${c(file(1))}. Communications primary/alternate nets are stable per the comms matrix${c(file(0))}.`,
+        'risk-to-mission':
+          `Highest risk is North Levee Sector breach within the next two operational periods (likelihood: moderate-high, impact: high), informed by the latest geotechnical assessment${c(file(0))}. Secondary risk is shelter overflow at Central Aid Station if intake continues at current rate${c(file(1))}. Mitigations: pre-position pumps, surge shelter staff, activate transportation contracts${c(inc(0))}.`,
+        'outstanding-rfi-rfr':
+          `RFI-014 (USACE) — levee geotechnical assessment, requested 16:00, due 22:00${c(file(0))}. RFR-022 (Logistics) — 4× additional high-volume pumps, requested 15:30, due before next op period${c(inc(0))}. RFI-016 (Public Information) — Spanish-language messaging package, due 19:00${c(inc(1))}.`,
+        'previous-critical-incident-comms':
+          `Previous period included two critical incident comms: (1) 13:42 mass-notification on evacuation of Districts 4 & 7 via WEA + reverse-911${c(inc(0))}; (2) 14:05 inter-agency conference with NWS, USCG, and State DOT on rising-water decision criteria${c(inc(1))}.`,
+        'general-comments':
+          `Coordination with state partners is steady${c(inc(0))}. Liaison-officer rotation occurs at 20:00 per the comms matrix${c(file(0))}. Commander emphasis remains on disciplined accountability and clear briefings into the next op period${c(file(1))}.`,
+        imagery:
+          `Drone overflight at 17:30 captured the North Levee Sector with visible seepage in three locations${c(file(0))}. Satellite imagery (00:30 UTC) shows widening floodplain east of the levee${c(inc(0))}. Photogrammetry mosaics archived to Pratus repository, item set 2026-04-25-NL${c(file(1))}.`,
+      }
+      blocks.push(summaries[section])
+    }
+    if (formatHints.includes('list')) {
+      const lists: Record<SitrepSection, string[]> = {
+        'executive-summary': [
+          'Life-safety phase active',
+          'Shelter occupancy: 64%',
+          'Swift-water rescue completed',
+        ],
+        'ongoing-incidents': [
+          'Cape Cod Coastal Storm Response — Active',
+          'Boston Metro Water Main Break — Active',
+          'Connecticut River Ice Jam Watch — Monitoring',
+        ],
+        'readiness-assessment': [
+          'Personnel: GREEN (92% on-shift)',
+          'Equipment: AMBER (2 pumps deadlined)',
+          'Logistics: GREEN (36 hr fuel/water)',
+          'Comms: GREEN (primary + alt stable)',
+        ],
+        'risk-to-mission': [
+          'Levee breach — likelihood mod-high, impact high',
+          'Shelter overflow — likelihood moderate, impact moderate',
+          'Mitigations: pre-position pumps, surge staffing',
+        ],
+        'outstanding-rfi-rfr': [
+          'RFI-014 (USACE) — levee assessment, due 22:00',
+          'RFR-022 (Logistics) — 4× high-volume pumps, due next op period',
+          'RFI-016 (PIO) — Spanish messaging package, due 19:00',
+        ],
+        'previous-critical-incident-comms': [
+          '13:42 WEA + reverse-911 evacuation notice',
+          '14:05 NWS/USCG/DOT decision conference',
+        ],
+        'general-comments': [
+          'LNO rotation at 20:00',
+          'Maintain disciplined accountability',
+          'Clear briefings into next op period',
+        ],
+        imagery: [
+          'Drone overflight 17:30 — North Levee seepage (×3)',
+          'Satellite 00:30 UTC — widening floodplain east',
+          'Mosaics archived: Pratus item set 2026-04-25-NL',
+        ],
+      }
+      blocks.push(lists[section].map((entry) => `• ${entry}`).join('\n'))
+    }
+    if (formatHints.includes('table')) {
+      const tables: Record<SitrepSection, string> = {
+        'executive-summary':
+          'Metric            | Value\n------------------|-------\nEvac orders       | 2 active\nShelter occupancy | 64%\nRescues this OP   | 1 (swift-water)',
+        'ongoing-incidents':
+          'Incident                              | Status     | Severity\n--------------------------------------|------------|----------\nCape Cod Coastal Storm Response       | Active     | Medium\nBoston Metro Water Main Break         | Active     | High\nConnecticut River Ice Jam Watch       | Monitoring | Low',
+        'readiness-assessment':
+          'Domain      | Status | Notes\n------------|--------|---------------------------\nPersonnel   | GREEN  | 92% on-shift\nEquipment   | AMBER  | 2 pumps deadlined\nLogistics   | GREEN  | 36 hr fuel/water on hand\nComms       | GREEN  | Primary + alt nets stable',
+        'risk-to-mission':
+          'Risk                 | Likelihood | Impact | Mitigation\n---------------------|------------|--------|---------------------------\nLevee breach         | Mod-High   | High   | Pre-position pumps, surge staff\nShelter overflow     | Moderate   | Mod    | Surge intake staff, activate transport',
+        'outstanding-rfi-rfr':
+          'ID      | Requestor | Need                       | Due\n--------|-----------|----------------------------|------\nRFI-014 | USACE     | Levee geotech assessment   | 22:00\nRFR-022 | Logistics | 4× high-volume pumps       | Next OP\nRFI-016 | PIO       | Spanish messaging package  | 19:00',
+        'previous-critical-incident-comms':
+          'Time  | Channel              | Action\n------|----------------------|------------------------------\n13:42 | WEA + reverse-911    | Evacuation notice D4 & D7\n14:05 | Inter-agency bridge  | NWS/USCG/DOT decision conf',
+        'general-comments':
+          'Item                          | Owner | Time\n------------------------------|-------|------\nLNO rotation                  | PSC   | 20:00\nAccountability check          | All   | Recur\nBriefing prep next OP         | PSC   | 21:30',
+        imagery:
+          'Capture     | Time       | Source     | Notable\n------------|------------|------------|------------------------\nDrone       | 17:30      | NL Sector  | Seepage at 3 locations\nSatellite   | 00:30 UTC  | Commercial | Widening floodplain E\nMosaics     | Archived   | Pratus     | Item set 2026-04-25-NL',
+      }
+      blocks.push(tables[section])
+    }
+    if (citationSources.length > 0) {
+      const referenceLines = citationSources.map(
+        (source, index) => `[${index + 1}] ${source}`
+      )
+      blocks.push(['References:', ...referenceLines].join('\n'))
+    }
+    return blocks.join('\n\n')
+  }
+  const saveSitrepSectionSettings = () => {
+    const section = sitrepSectionSettingsTarget
+    const draft = sitrepSectionSettingsDraft
+    if (!section || !draft) return
+    setSitrepSectionConfigs((previous) => ({ ...previous, [section]: draft }))
+    setSitrepSectionSettingsTarget(null)
+    setSitrepSectionSettingsDraft(null)
+    if (draft.sectionType === 'ai') {
+      setSitrepSectionGenerating(section)
+      cancelSitrepSectionEdit(section)
+      window.setTimeout(() => {
+        const content = generateContentForSitrepSection(section, draft)
+        const primaryField = SITREP_SECTION_PRIMARY[section].field
+        updateSitrepField(primaryField, content)
+        setSitrepSectionGenerating((current) => (current === section ? null : current))
+      }, 5000)
+    }
+  }
   const SITREP_SECTION_PRIMARY: Record<
     SitrepSection,
     { field: keyof SitrepFormState; label: string }
   > = {
-    'reporting-unit': { field: 'sectorLno', label: 'Reporting Unit (Sector/LNO)' },
     'executive-summary': { field: 'executiveSummary', label: 'Executive Summary' },
+    'ongoing-incidents': { field: 'generalComments', label: 'Ongoing Incidents' },
     'readiness-assessment': { field: 'readinessAssessment', label: 'Readiness Assessment' },
     'risk-to-mission': { field: 'riskToMission', label: 'Risk to Mission' },
     'outstanding-rfi-rfr': { field: 'outstandingRfiRfr', label: 'Outstanding RFI/RFR' },
@@ -949,29 +6944,11 @@ function App() {
     'general-comments': { field: 'generalComments', label: 'General Comments' },
     'imagery': { field: 'imageryNotes', label: 'Imagery' },
   }
-  const SIMULATED_REMOTE_SITREP_SECTION_EDITS: Record<SitrepSection, string> = {
-    'reporting-unit':
-      'Sector North-1 • LNO: M. Wells (State EOC) • Backup LNO: R. Patel (County EOC) • Updated boundary coordination with Sector North-2 lead at 17:55.',
-    'executive-summary':
-      'Operations remain in life-safety phase. Updated counts: 3 evacuation orders active; shelter occupancy at 71% and rising. One additional rescue completed at 17:42; no new injuries reported. Mutual aid request submitted for two strike teams.',
-    'readiness-assessment':
-      'Personnel: 88% on-shift after late shift change. Equipment: 82% mission-capable; 3 pumps deadlined awaiting parts (1 added since last update). Logistics: 30-hour fuel reserve, 24-hour potable water reserve. Communications: alternate net experiencing intermittent dropouts in Sector 7. Overall readiness: AMBER trending RED if equipment status not restored.',
-    'risk-to-mission':
-      'Highest: levee breach probability raised to 60% within 90 minutes; pre-stage shelter relocation buses now. Medium: degraded medical transport routes between Sector 4 and Hospital A. Medium: communication dropouts in Sector 7. Low: weather-driven shelter surge plateauing.',
-    'outstanding-rfi-rfr':
-      'RFI-014 (open): updated 12-hour rainfall forecast from NWS — response expected within 30 min. RFI-016 (open): power restoration ETA for Districts 4 & 7. RFR-009 (approved): two additional water tenders en route, ETA 19:00. RFR-011 (approved): mutual aid medical strike team activated, ETA 19:30. RFR-013 (new): request for swift water rescue team augmentation.',
-    'previous-critical-incident-comms':
-      '15:12 — Notified IC of swift water rescue at River Bend Corridor (resolved). 16:40 — Coordinated evacuation messaging with PIO for Districts 4 & 7. 17:05 — Briefed County EOC on shelter capacity trend. 17:42 — Casualty transport coordinated with Hospital Liaison. 18:10 — Activated mutual aid medical strike team via State EOC.',
-    'general-comments':
-      'Inter-agency cooperation strong this period. Recommend standing up mutual aid coordination cell next op period. Consider pre-positioning sandbag teams at North Levee Sector ahead of forecast rainfall. Recommend public messaging update at top of next hour given evacuation expansion.',
-    'imagery':
-      'Aerial drone footage of North Levee Sector captured at 17:30 (3 frames) and supplemental sweep at 18:05 (2 frames). Ground photos of River Bend Corridor staging at 16:15 (2 frames). Shelter occupancy photos at 17:50 (1 frame). All imagery archived to Incident Archive folder /alpha-2026-001/sitrep-014/.',
-  }
   const [sitrepSectionEdits, setSitrepSectionEdits] = useState<
     Record<SitrepSection, string | null>
   >({
-    'reporting-unit': null,
     'executive-summary': null,
+    'ongoing-incidents': null,
     'readiness-assessment': null,
     'risk-to-mission': null,
     'outstanding-rfi-rfr': null,
@@ -979,17 +6956,8 @@ function App() {
     'general-comments': null,
     'imagery': null,
   })
-  const [sitrepSectionConflict, setSitrepSectionConflict] = useState<{
-    section: SitrepSection
-    sectionLabel: string
-    yourDraft: string
-    currentContent: string
-    remoteAuthor: string
-    remoteAuthorRole: string
-    remoteColor: string
-    remoteAt: number
-  } | null>(null)
   const beginSitrepSectionEdit = (section: SitrepSection) => {
+    if (section === 'ongoing-incidents') return
     if (sitrepSectionEdits[section] !== null) return
     const primaryField = SITREP_SECTION_PRIMARY[section].field
     setSitrepSectionEdits((previous) => ({
@@ -1006,19 +6974,29 @@ function App() {
   const saveSitrepSectionEdit = (section: SitrepSection) => {
     const yourDraft = sitrepSectionEdits[section]
     if (yourDraft === null) return
-    const { field: primaryField, label: sectionLabel } = SITREP_SECTION_PRIMARY[section]
-    const remoteContent = SIMULATED_REMOTE_SITREP_SECTION_EDITS[section]
-    updateSitrepField(primaryField, remoteContent)
-    setSitrepSectionConflict({
-      section,
-      sectionLabel,
-      yourDraft,
-      currentContent: remoteContent,
-      remoteAuthor: SIMULATED_REMOTE_AUTHOR.name,
-      remoteAuthorRole: SIMULATED_REMOTE_AUTHOR.role,
-      remoteColor: SIMULATED_REMOTE_AUTHOR.color,
-      remoteAt: Date.now(),
-    })
+    const { field: primaryField } = SITREP_SECTION_PRIMARY[section]
+    updateSitrepField(primaryField, yourDraft)
+    if (activeSitrepDraftId !== null) {
+      const editedAt = Date.now()
+      setSitrepVersions((previous) =>
+        previous.map((entry) =>
+          entry.id === activeSitrepDraftId
+            ? {
+                ...entry,
+                createdAt: editedAt,
+                authorName: 'You',
+                authorRole: '',
+                authorColor: '#16a34a',
+                snapshot: {
+                  ...entry.snapshot,
+                  [primaryField]: yourDraft,
+                },
+              }
+            : entry
+        )
+      )
+    }
+    cancelSitrepSectionEdit(section)
   }
   const liveSitrepFormRef = useRef<SitrepFormState | null>(null)
   const updateSitrepField = <K extends keyof SitrepFormState>(
@@ -1247,6 +7225,62 @@ function App() {
   )
   const [notifications] = useState<NotificationItem[]>([
     {
+      id: 0,
+      title: 'Hurricane EDGAR threatening Southeast agricultural operations',
+      severity: 'Critical',
+      status: 'New',
+      category: 'Weather',
+      timestamp: '2026-05-09 09:45',
+      owner: 'USDA Office of Homeland Security / NHC Liaison',
+      summary:
+        'Cat-4 hurricane EDGAR tracking toward the Florida peninsula with landfall expected within 48 hours.',
+      impact:
+        'Statewide agricultural impacts forecast across FL with cascading risks across FEMA Region 4 (AL, FL, GA, KY, MS, NC, SC, TN).',
+      location: [-81.5158, 27.6648],
+      relatedEventId: 11,
+      regionalThreats: {
+        region: 'FEMA Region 4',
+        description:
+          'Projected high winds, storm surge, and inland flooding place the following USDA resources in Region 4 at elevated risk:',
+        threats: [
+          {
+            resource: 'Miami-Dade County FSA Service Center',
+            risk: 'Storm surge and sustained hurricane-force winds would inundate the service center, disrupt FSA loan and disaster assistance intake, and delay producer indemnity filings for 72+ hours.',
+            location: [-80.1936, 25.7617],
+            operationalStatus: 'Operational',
+          },
+          {
+            resource: 'USDA Agricultural Research Service — Tropical Research Station (Homestead)',
+            risk: '140 mph winds and saltwater intrusion would damage field plots, greenhouses, and germplasm collections; research operations suspended pending structural assessment.',
+            location: [-80.4242, 25.4889],
+            operationalStatus: 'Operational',
+          },
+          {
+            resource: 'Ocala National Forest — Forest Service Dispatch & Fire Cache',
+            risk: 'Inland tropical-storm winds and saturated soils would compromise fire cache staging and limit initial attack capacity across central Florida wildland interfaces.',
+            location: [-81.6702, 29.1736],
+            operationalStatus: 'Operational',
+          },
+          {
+            resource: 'USDA Southeast Regional Food Distribution Warehouse (Jacksonville)',
+            risk: 'Coastal flooding and port disruptions would interrupt commodity flow to disaster feeding sites across the Southeast and delay FEMA mission-assignment deliveries.',
+            location: [-81.6326, 30.3322],
+            operationalStatus: 'Operational',
+          },
+        ],
+        responseChecklist: [
+          {
+            label:
+              'Activate USDA Emergency Support Function #11 (Agriculture) coordination cell and notify FSA state offices.',
+          },
+          {
+            label:
+              'Pre-position FSA disaster assessment teams and livestock indemnity intake staff in inland staging areas.',
+          },
+        ],
+      },
+    },
+    {
       id: 1,
       title: 'Power outage reported in North Levee Sector',
       severity: 'Critical',
@@ -1313,6 +7347,11 @@ function App() {
       currentOpPeriodAssignment: '---',
       nextOpPeriodAssignment: 'Division A perimeter sweep',
       checkInStatus: 'Onsite',
+      costUnitType: 'per day',
+      costPerUnit: 4200,
+      deploymentKind: 'incident',
+      assignedIncidentName: 'Hurricane Edgar — Florida Landfall',
+      assignedExerciseName: null,
     },
     {
       id: 2,
@@ -1343,6 +7382,11 @@ function App() {
       currentOpPeriodAssignment: '---',
       nextOpPeriodAssignment: '---',
       checkInStatus: 'Onsite',
+      costUnitType: 'per hour',
+      costPerUnit: 185,
+      deploymentKind: 'exercise',
+      assignedIncidentName: null,
+      assignedExerciseName: 'Gulf Coast Unified Command Tabletop — Edgar Scenario',
     },
     {
       id: 3,
@@ -1373,8 +7417,649 @@ function App() {
       currentOpPeriodAssignment: '---',
       nextOpPeriodAssignment: 'Central medical corridor standby',
       checkInStatus: 'Onsite',
+      costUnitType: 'per day',
+      costPerUnit: 3100,
+      deploymentKind: 'available',
+      assignedIncidentName: null,
+      assignedExerciseName: null,
     },
   ])
+  const [resourceRequests] = useState<ResourceRequestItem[]>(DEFAULT_ICS213RR_RESOURCE_REQUESTS)
+  const [resourcesPanelView, setResourcesPanelView] = useState<ResourcesPanelView>('resources')
+  const [resourcesDisplayMode, setResourcesDisplayMode] = useState<ResourcesDisplayMode>('list')
+  const [resourcesFieldFiltersByView, setResourcesFieldFiltersByView] = useState<
+    Record<ResourcesPanelView, ResourcesFieldFilterRule[]>
+  >({
+    resources: [],
+    'resource-requests': [],
+  })
+  const [resourcesFieldFilterDraft, setResourcesFieldFilterDraft] = useState<
+    ResourcesFieldFilterRule[]
+  >([])
+  const [isResourcesFilterOpen, setIsResourcesFilterOpen] = useState(false)
+  const [openResourceRequestPreviewId, setOpenResourceRequestPreviewId] = useState<number | null>(
+    null
+  )
+  const [incidentList, setIncidentList] = useState<IncidentListItem[]>([
+    {
+      id: 1,
+      name: 'Hurricane Edgar — Florida Landfall',
+      type: 'Tropical Cyclone',
+      status: 'Active',
+      severity: 'High',
+      region: 'FEMA Region 4 — Southeast',
+      location: [-81.3792, 28.5383],
+      lead: 'IC Morgan · RA Atlanta, GA',
+      startedAt: '2026-05-07 14:20 EST',
+      lastUpdate: '2026-05-09 09:46 EST',
+      summary:
+        'Cat-2 landfall vicinity Sebastian Inlet. Multi-state contraflow active on I-75/I-95; MCO ground stop holding. 8 active DOT incidents tracked under unified command.',
+      resourcesCommitted:
+        '14 FEMA IMAT, 6 USAR task forces, 32 ESF-1 trucks, FDOT TMC surge ops',
+      relatedEventIds: [1, 7],
+    },
+    {
+      id: 2,
+      name: 'LBJ Express Hazmat Release — Dallas, TX',
+      type: 'Hazmat / Surface Transport',
+      status: 'Active',
+      severity: 'High',
+      region: 'FEMA Region 6 — South Central',
+      location: [-96.8717, 32.9067],
+      lead: 'PHMSA On-Scene Coordinator · RA Denton, TX',
+      startedAt: '2026-05-09 04:12 CST',
+      lastUpdate: '2026-05-09 08:11 CST',
+      summary:
+        'Anhydrous ammonia tanker rollover on I-635 westbound. PHMSA on-scene; 1.5-mile shelter-in-place issued by Dallas OEM. Northbound Dallas North Tollway diverted via Forest Lane.',
+      resourcesCommitted:
+        'TxDOT IRT, Dallas Fire-Rescue HazMat 19, PHMSA team, 2 EPA Region 6 OSCs',
+      relatedEventIds: [10],
+    },
+    {
+      id: 3,
+      name: 'Inland California Red Flag Wildfire Watch',
+      type: 'Wildfire / Red Flag Warning',
+      status: 'Monitoring',
+      severity: 'Medium',
+      region: 'FEMA Region 9 — Pacific',
+      location: [-119.7026, 34.4208],
+      lead: 'CAL FIRE IC · RA Oakland, CA',
+      startedAt: '2026-05-08 17:00 PST',
+      lastUpdate: '2026-05-09 08:18 PST',
+      summary:
+        'Red Flag Warning posted for inland Ventura and Santa Barbara counties. Caltrans staging detour resources along SR-1; pre-positioned strike teams in Los Padres NF. No active ignitions at this time.',
+      resourcesCommitted:
+        '3 CAL FIRE strike teams, Caltrans D7 detour cache, USFS Region 5 air attack on standby',
+      relatedEventIds: [4],
+    },
+  ])
+  const [incidentEventFilters, setIncidentEventFilters] = useState<number[]>([])
+  const [exerciseList, setExerciseList] = useState<ExerciseListItem[]>(DEFAULT_EXERCISE_LIST)
+  const [activeIncidentWorkspaceId, setActiveIncidentWorkspaceId] = useState<number | null>(null)
+  const [activeExerciseWorkspaceId, setActiveExerciseWorkspaceId] = useState<number | null>(null)
+  const [eventList, setEventList] = useState<EventListItem[]>(DEFAULT_EVENT_LIST)
+  const [eventSeverityFilters, setEventSeverityFilters] = useState<EventListItem['severity'][]>([])
+  const [eventBusinessUnitFilters, setEventBusinessUnitFilters] = useState<string[]>([])
+  const [isEventsSettingsOpen, setIsEventsSettingsOpen] = useState(false)
+  const [isNotificationSettingsOpen, setIsNotificationSettingsOpen] = useState(false)
+  const [eventCreationRules, setEventCreationRules] = useState<EventCreationRule[]>(
+    DEFAULT_EVENT_CREATION_RULES
+  )
+  const [notificationCreationRules, setNotificationCreationRules] = useState<
+    NotificationCreationRule[]
+  >(DEFAULT_NOTIFICATION_CREATION_RULES)
+  const eventBusinessUnitOptions = useMemo(
+    () => [...new Set(eventList.map((event) => event.businessUnit))].sort(),
+    [eventList]
+  )
+  const notificationCategoryOptions = useMemo(
+    () => [...new Set(notifications.map((notification) => notification.category))].sort(),
+    [notifications]
+  )
+  const [femaAors] = useState<FemaAorItem[]>([
+    {
+      id: 1,
+      name: 'FEMA Region 1 — New England',
+      lead: 'RA — Boston, MA',
+      incidents: 0,
+      priority: 'Low',
+      population: '14.8M',
+      lastUpdate: '2026-05-09 08:30 EST',
+      evacuationStatus: 'None',
+      notes: 'CT, ME, MA, NH, RI, VT — steady-state DOT operations.',
+      sitrep:
+        'Steady-state DOT operations across CT, ME, MA, NH, RI, VT. NWS marine forecasts stable; no active surface-transport disruptions reported.',
+      sitrepUpdatedBy: 'RA Boston, MA',
+      sitrepSources: [
+        'NWS Marine Forecast (WFO Boston, Caribou, Gray)',
+        'Mass511 / 511CT / 511NH traffic feeds',
+        'USCG First District COTP log',
+        'FAA OIS — BOS/BDL/PWM',
+      ],
+      location: [-71.5, 43.8],
+    },
+    {
+      id: 2,
+      name: 'FEMA Region 2 — NY/NJ/PR/USVI',
+      lead: 'RA — New York, NY',
+      incidents: 0,
+      priority: 'Low',
+      population: '31.5M',
+      lastUpdate: '2026-05-09 08:32 EST',
+      evacuationStatus: 'None',
+      notes: 'NJ, NY, PR, USVI — monitoring downstream coastal impacts.',
+      sitrep:
+        'Monitoring downstream coastal swell from Atlantic system. Port of NY/NJ traffic normal; PR/USVI EOC reports no DOT impacts at this time.',
+      sitrepUpdatedBy: 'RA New York, NY',
+      sitrepSources: [
+        'NHC Atlantic basin swell guidance',
+        'PANYNJ TRANSCOM port traffic feed',
+        'USCG Sector NY COTP log',
+        'PR/USVI EOC WebEOC reports',
+        '511NY traffic API',
+      ],
+      location: [-74.5, 41.8],
+    },
+    {
+      id: 3,
+      name: 'FEMA Region 3 — Mid-Atlantic',
+      lead: 'RA — Philadelphia, PA',
+      incidents: 0,
+      priority: 'Medium',
+      population: '32.1M',
+      lastUpdate: '2026-05-09 08:34 EST',
+      evacuationStatus: 'None',
+      notes: 'DE, DC, MD, PA, VA, WV — staging ESF-1 backfill assets for Region 4.',
+      sitrep:
+        'ESF-1 backfill assets staged at Richmond and Petersburg in support of Region 4. I-95 corridor flowing southbound; contraflow plans on standby pending FDOT request.',
+      sitrepUpdatedBy: 'RA Philadelphia, PA',
+      sitrepSources: [
+        'FHWA ESF-1 staging tracker',
+        'VDOT 511 / Maryland CHART probe data',
+        'FEMA Region 3 WebEOC',
+        'I-95 Corridor Coalition contraflow plan',
+        'PennDOT 511 / DelDOT DelTrac',
+      ],
+      location: [-78.0, 39.2],
+    },
+    {
+      id: 4,
+      name: 'FEMA Region 4 — Southeast',
+      lead: 'RA — Atlanta, GA',
+      incidents: 8,
+      priority: 'High',
+      population: '67.2M',
+      lastUpdate: '2026-05-09 09:46 EST',
+      evacuationStatus: 'Active',
+      notes:
+        'AL, FL, GA, KY, MS, NC, SC, TN — major hurricane response, multi-state contraflow active.',
+      sitrep:
+        'Multi-state contraflow active on I-75/I-95; FDOT TMC managing Wildwood gridlock. 8 active DOT incidents; FEMA airlift staging at MCO holding through current ground stop.',
+      sitrepUpdatedBy: 'RA Atlanta, GA',
+      sitrepSources: [
+        'FDOT SunGuide TMC live traffic feed',
+        'FAA NAS Status / OIS — MCO ground stop',
+        'NHC advisories on Hurricane Edgar',
+        'FL/GA/SC/AL State EOC ESF-1 reports',
+        'FEMA WebEOC / IRRIS logistics tracker',
+        'INRIX/HERE corridor probe data',
+      ],
+      location: [-84.5, 32.5],
+    },
+    {
+      id: 5,
+      name: 'FEMA Region 5 — Great Lakes',
+      lead: 'RA — Chicago, IL',
+      incidents: 0,
+      priority: 'Low',
+      population: '52.6M',
+      lastUpdate: '2026-05-09 08:28 EST',
+      evacuationStatus: 'None',
+      notes: 'IL, IN, MI, MN, OH, WI — steady-state DOT operations.',
+      sitrep:
+        'Steady-state DOT operations across IL, IN, MI, MN, OH, WI. Lake-effect bands forecast for upper MI; salt brine staged but no closures in effect.',
+      sitrepUpdatedBy: 'RA Chicago, IL',
+      sitrepSources: [
+        'NWS WFO Marquette / Gaylord / Milwaukee',
+        'MDOT / MnDOT / WisDOT 511 winter ops',
+        'NOAA GLERL ice cover analysis',
+        'IDOT Gateway / OHGO traffic feeds',
+      ],
+      location: [-87.5, 43.5],
+    },
+    {
+      id: 6,
+      name: 'FEMA Region 6 — South Central',
+      lead: 'RA — Denton, TX',
+      incidents: 3,
+      priority: 'High',
+      population: '41.0M',
+      lastUpdate: '2026-05-09 08:11 EST',
+      evacuationStatus: 'None',
+      notes:
+        'AR, LA, NM, OK, TX — multiple active surface-transport incidents under DOT response.',
+      sitrep:
+        '3 active surface-transport incidents in TX. PHMSA on-scene at LBJ Express hazmat; AUS runway closure expected to lift this afternoon. NWS flash-flood watch over Houston metro.',
+      sitrepUpdatedBy: 'RA Denton, TX',
+      sitrepSources: [
+        'TxDOT Lone Star ITS / DriveTexas feed',
+        'PHMSA NRC hazmat incident log',
+        'FAA AUS ATCT runway status',
+        'NWS WFO Houston/Galveston flash-flood watch',
+        'Louisiana DOTD 511 / NMRoads',
+      ],
+      location: [-97.5, 32.5],
+    },
+    {
+      id: 7,
+      name: 'FEMA Region 7 — Heartland',
+      lead: 'RA — Kansas City, MO',
+      incidents: 0,
+      priority: 'Low',
+      population: '14.3M',
+      lastUpdate: '2026-05-09 08:25 EST',
+      evacuationStatus: 'None',
+      notes: 'IA, KS, MO, NE — steady-state DOT operations.',
+      sitrep:
+        'Steady-state DOT operations across IA, KS, MO, NE. NWS severe weather outlook marginal; FRA monitoring elevated grain-train activity but no incidents reported.',
+      sitrepUpdatedBy: 'RA Kansas City, MO',
+      sitrepSources: [
+        'NWS SPC Day-1 Convective Outlook',
+        'FRA Office of Safety incident database',
+        'Iowa DOT 511 / KCSCOUT traffic feeds',
+        'KDOT KanDrive / NDOR 511',
+      ],
+      location: [-94.5, 40.5],
+    },
+    {
+      id: 8,
+      name: 'FEMA Region 8 — Mountain',
+      lead: 'RA — Denver, CO',
+      incidents: 0,
+      priority: 'Low',
+      population: '12.5M',
+      lastUpdate: '2026-05-09 08:20 EST',
+      evacuationStatus: 'None',
+      notes: 'CO, MT, ND, SD, UT, WY — steady-state DOT operations.',
+      sitrep:
+        'Steady-state DOT operations across CO, MT, ND, SD, UT, WY. CDOT chain laws stood down; mountain pass forecasts clear through next 48 hours.',
+      sitrepUpdatedBy: 'RA Denver, CO',
+      sitrepSources: [
+        'CDOT / WYDOT / MDT 511 mountain-pass APIs',
+        'NWS WFO Boulder / Salt Lake / Riverton',
+        'AASHTO Snow & Ice Pooled Fund reports',
+        'UDOT CommuterLink probe data',
+      ],
+      location: [-107.0, 44.5],
+    },
+    {
+      id: 9,
+      name: 'FEMA Region 9 — Pacific',
+      lead: 'RA — Oakland, CA',
+      incidents: 0,
+      priority: 'Medium',
+      population: '50.5M',
+      lastUpdate: '2026-05-09 08:18 EST',
+      evacuationStatus: 'None',
+      notes: 'AZ, CA, HI, NV, Pacific Territories — wildfire watch, otherwise steady-state.',
+      sitrep:
+        'CAL FIRE Red Flag Warning posted for inland CA; Caltrans staging detour resources along SR-1. Pacific territories nominal; HI DOT reports normal ops.',
+      sitrepUpdatedBy: 'RA Oakland, CA',
+      sitrepSources: [
+        'CAL FIRE Incident Information feed',
+        'NWS WFO Hanford / LA / San Diego Red Flag warnings',
+        'Caltrans QuickMap traffic API',
+        'HDOT GoAkamai feed',
+        'ADOT az511 / NDOT NVRoads',
+      ],
+      location: [-118.5, 37.0],
+    },
+    {
+      id: 10,
+      name: 'FEMA Region 10 — Northwest',
+      lead: 'RA — Bothell, WA',
+      incidents: 0,
+      priority: 'Low',
+      population: '14.4M',
+      lastUpdate: '2026-05-09 08:15 EST',
+      evacuationStatus: 'None',
+      notes: 'AK, ID, OR, WA — steady-state DOT operations.',
+      sitrep:
+        'Steady-state DOT operations across AK, ID, OR, WA. WSDOT mountain pass conditions clear; AK DOT&PF reports normal ferry schedule on the Marine Highway.',
+      sitrepUpdatedBy: 'RA Bothell, WA',
+      sitrepSources: [
+        'WSDOT Mountain Pass API',
+        'AK DOT&PF Marine Highway System feed',
+        'NWS WFO Anchorage / Seattle / Portland',
+        'ODOT TripCheck / ITD 511',
+      ],
+      location: [-120.0, 46.0],
+    },
+  ])
+  const SITREP_SCOPE_OPTIONS: SitrepScopeOption[] = [
+    ...femaAors.map((aor) => ({
+      id: `aor-fema-${aor.id}`,
+      kind: 'aor' as SitrepScopeKind,
+      label: aor.name,
+    })),
+    ...SITREP_INCIDENT_SCOPE_OPTIONS,
+  ]
+  const DEFAULT_SEERIST_ENDPOINT =
+    'https://app.seerist.com/hyperionapi/v1/wod?start=2026-05-20T00:00:00.000Z&end=2026-05-20T23:59:59.999Z&aoiId=us-004&sources=news'
+  const [seeristEndpoint, setSeeristEndpoint] = useState<string>(DEFAULT_SEERIST_ENDPOINT)
+  const [seeristApiKey, setSeeristApiKey] = useState<string>('')
+  const [seeristIsLoading, setSeeristIsLoading] = useState<boolean>(false)
+  const [seeristError, setSeeristError] = useState<string | null>(null)
+  const [seeristResponse, setSeeristResponse] = useState<{
+    status: number
+    statusText: string
+    ok: boolean
+    headers: Array<[string, string]>
+    body: string
+    contentType: string
+    requestUrl: string
+    proxyUrl: string
+    durationMs: number
+  } | null>(null)
+  useEffect(() => {
+    try {
+      const storedEndpoint = window.localStorage.getItem('seerist:endpoint')
+      const storedKey = window.localStorage.getItem('seerist:apiKey')
+      if (storedEndpoint) setSeeristEndpoint(storedEndpoint)
+      if (storedKey) setSeeristApiKey(storedKey)
+    } catch {
+      /* ignore inaccessible localStorage */
+    }
+  }, [])
+  const [seeristExpandedEvents, setSeeristExpandedEvents] = useState<Set<string>>(
+    () => new Set()
+  )
+  const toggleSeeristEvent = (id: string) => {
+    setSeeristExpandedEvents((previous) => {
+      const next = new Set(previous)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+  type SeeristParsedEvent = {
+    id: string
+    title: string
+    description: string
+    source: string
+    publishedAt: string | null
+    severity: number | null
+    latitude: number | null
+    longitude: number | null
+    url: string | null
+    topic: string | null
+    location: string | null
+    raw: Record<string, unknown>
+  }
+  type SeeristParseResult =
+    | { kind: 'events'; events: SeeristParsedEvent[]; sourceKey: string; topLevelKeys: string[] }
+    | { kind: 'no-array'; topLevelKeys: string[]; sample: string }
+    | { kind: 'non-json'; preview: string }
+  const seeristParseResult = useMemo<SeeristParseResult | null>(() => {
+    if (!seeristResponse || !seeristResponse.ok) return null
+    const body = seeristResponse.body
+    if (!body) return { kind: 'no-array', topLevelKeys: [], sample: '' }
+    let payload: unknown
+    try {
+      payload = JSON.parse(body)
+    } catch {
+      return { kind: 'non-json', preview: body.slice(0, 200) }
+    }
+    const asString = (value: unknown): string => {
+      if (value === undefined || value === null) return ''
+      if (typeof value === 'string') return value
+      if (typeof value === 'number' || typeof value === 'boolean') return String(value)
+      try {
+        return JSON.stringify(value)
+      } catch {
+        return ''
+      }
+    }
+    const asNumber = (value: unknown): number | null => {
+      if (typeof value === 'number' && Number.isFinite(value)) return value
+      if (typeof value === 'string' && value.trim().length > 0) {
+        const n = Number(value)
+        if (Number.isFinite(n)) return n
+      }
+      return null
+    }
+    const findEventsArray = (
+      input: unknown
+    ): { array: unknown[]; sourceKey: string } | null => {
+      if (Array.isArray(input)) return { array: input, sourceKey: '(root array)' }
+      if (!input || typeof input !== 'object') return null
+      const candidateKeys = [
+        'items',
+        'events',
+        'data',
+        'results',
+        'records',
+        'documents',
+        'articles',
+        'news',
+        'feed',
+        'hits',
+        'rows',
+        'wod',
+        'wodItems',
+        'value',
+      ]
+      const record = input as Record<string, unknown>
+      for (const key of candidateKeys) {
+        const value = record[key]
+        if (Array.isArray(value)) return { array: value, sourceKey: key }
+      }
+      for (const [key, value] of Object.entries(record)) {
+        if (Array.isArray(value) && value.length > 0 && typeof value[0] === 'object') {
+          return { array: value, sourceKey: key }
+        }
+      }
+      for (const [outerKey, value] of Object.entries(record)) {
+        if (value && typeof value === 'object' && !Array.isArray(value)) {
+          const nested = findEventsArray(value)
+          if (nested) {
+            return { array: nested.array, sourceKey: `${outerKey}.${nested.sourceKey}` }
+          }
+        }
+      }
+      return null
+    }
+    const topLevelKeys =
+      payload && typeof payload === 'object' && !Array.isArray(payload)
+        ? Object.keys(payload as Record<string, unknown>)
+        : Array.isArray(payload)
+          ? ['(root array)']
+          : []
+    const found = findEventsArray(payload)
+    if (!found) {
+      return {
+        kind: 'no-array',
+        topLevelKeys,
+        sample: JSON.stringify(payload, null, 2).slice(0, 800),
+      }
+    }
+    const events = found.array.map((entry, index): SeeristParsedEvent => {
+      const record =
+        typeof entry === 'object' && entry !== null
+          ? (entry as Record<string, unknown>)
+          : {}
+      const pick = (...keys: string[]): unknown => {
+        for (const key of keys) {
+          const value = record[key]
+          if (value !== undefined && value !== null && value !== '') return value
+        }
+        return undefined
+      }
+      const sourceRaw = pick('source', 'sourceName', 'publisher', 'feedName', 'provider')
+      const source =
+        typeof sourceRaw === 'object' && sourceRaw !== null
+          ? asString((sourceRaw as Record<string, unknown>).name ?? sourceRaw)
+          : asString(sourceRaw)
+      let latitude = asNumber(pick('latitude', 'lat'))
+      let longitude = asNumber(pick('longitude', 'lng', 'lon'))
+      const locationRaw = record.location ?? record.geometry
+      if ((latitude === null || longitude === null) && locationRaw && typeof locationRaw === 'object') {
+        const loc = locationRaw as Record<string, unknown>
+        latitude = latitude ?? asNumber(loc.latitude ?? loc.lat)
+        longitude = longitude ?? asNumber(loc.longitude ?? loc.lng ?? loc.lon)
+        const coords = loc.coordinates
+        if ((latitude === null || longitude === null) && Array.isArray(coords) && coords.length >= 2) {
+          longitude = longitude ?? asNumber(coords[0])
+          latitude = latitude ?? asNumber(coords[1])
+        }
+      }
+      const locationLabel = asString(
+        pick('locationName', 'place', 'placeName', 'city', 'country', 'region')
+      )
+      const fallbackTitle =
+        asString(
+          pick('title', 'headline', 'name', 'summary', 'eventTitle', 'subject', 'displayName')
+        ) || `Event ${index + 1}`
+      return {
+        id:
+          asString(pick('id', 'eventId', 'uuid', '_id', 'docId', 'wodId')) ||
+          `seerist-event-${index}`,
+        title: fallbackTitle,
+        description: asString(
+          pick('description', 'body', 'snippet', 'summary', 'text', 'content', 'abstract')
+        ),
+        source,
+        publishedAt:
+          asString(
+            pick(
+              'publishedAt',
+              'published',
+              'publishDate',
+              'publicationDate',
+              'timestamp',
+              'time',
+              'date',
+              'createdAt',
+              'created',
+              'eventDate',
+              'startDate',
+              'occurredAt'
+            )
+          ) || null,
+        severity: asNumber(pick('severity', 'severityScore', 'score', 'risk', 'riskScore')),
+        latitude,
+        longitude,
+        url: asString(pick('url', 'link', 'sourceUrl', 'href', 'permalink')) || null,
+        topic:
+          asString(pick('topic', 'category', 'type', 'eventType', 'classification')) || null,
+        location: locationLabel || null,
+        raw: record,
+      }
+    })
+    return { kind: 'events', events, sourceKey: found.sourceKey, topLevelKeys }
+  }, [seeristResponse])
+  const formatSeeristEventTimestamp = (input: string | null): string => {
+    if (!input) return '—'
+    const parsed = new Date(input)
+    if (Number.isNaN(parsed.getTime())) return input
+    return parsed.toLocaleString()
+  }
+  const buildSeeristProxyUrl = (input: string): string | null => {
+    const trimmed = input.trim()
+    if (trimmed.length === 0) return null
+    if (trimmed.startsWith('/seerist-proxy/')) return trimmed
+    const match = trimmed.match(/^https?:\/\/app\.seerist\.com\/hyperionapi(\/.+)$/i)
+    if (match) return `/seerist-proxy${match[1]}`
+    return null
+  }
+  const sendSeeristRequest = async () => {
+    const endpoint = seeristEndpoint.trim()
+    const key = seeristApiKey.trim()
+    if (!endpoint) {
+      setSeeristError('Endpoint URL is required.')
+      return
+    }
+    if (!key) {
+      setSeeristError('API key is required.')
+      return
+    }
+    const proxyUrl = buildSeeristProxyUrl(endpoint)
+    if (!proxyUrl) {
+      setSeeristError(
+        'Endpoint must be on app.seerist.com/hyperionapi/... so it can be routed through the local proxy (which avoids CORS).'
+      )
+      return
+    }
+    setSeeristIsLoading(true)
+    setSeeristError(null)
+    setSeeristResponse(null)
+    const startedAt = window.performance.now()
+    try {
+      const response = await fetch(proxyUrl, {
+        method: 'GET',
+        headers: {
+          'x-api-key': key,
+          Accept: 'application/json, text/plain;q=0.9, */*;q=0.5',
+        },
+      })
+      const body = await response.text().catch(() => '')
+      const responseHeaders: Array<[string, string]> = []
+      response.headers.forEach((value, name) => {
+        responseHeaders.push([name, value])
+      })
+      const durationMs = Math.round(window.performance.now() - startedAt)
+      setSeeristResponse({
+        status: response.status,
+        statusText: response.statusText,
+        ok: response.ok,
+        headers: responseHeaders,
+        body,
+        contentType: response.headers.get('content-type') ?? '',
+        requestUrl: endpoint,
+        proxyUrl,
+        durationMs,
+      })
+      try {
+        window.localStorage.setItem('seerist:endpoint', endpoint)
+        window.localStorage.setItem('seerist:apiKey', key)
+      } catch {
+        /* ignore */
+      }
+    } catch (err: unknown) {
+      setSeeristError(
+        err instanceof TypeError
+          ? 'Network error reaching /seerist-proxy. Make sure the Vite dev server is still running (the proxy lives there).'
+          : err instanceof Error
+            ? err.message
+            : 'Failed to send request.'
+      )
+    } finally {
+      setSeeristIsLoading(false)
+    }
+  }
+  const formatSeeristBody = (body: string, contentType: string): string => {
+    if (!body) return ''
+    const looksJson =
+      contentType.toLowerCase().includes('json') ||
+      body.trimStart().startsWith('{') ||
+      body.trimStart().startsWith('[')
+    if (!looksJson) return body
+    try {
+      return JSON.stringify(JSON.parse(body), null, 2)
+    } catch {
+      return body
+    }
+  }
+  const clearSeeristCredentials = () => {
+    setSeeristEndpoint(DEFAULT_SEERIST_ENDPOINT)
+    setSeeristApiKey('')
+    try {
+      window.localStorage.removeItem('seerist:endpoint')
+      window.localStorage.removeItem('seerist:apiKey')
+    } catch {
+      /* ignore */
+    }
+  }
   const [aors, setAors] = useState<AorItem[]>([
     {
       id: 1,
@@ -1512,38 +8197,6 @@ function App() {
       location: [-95.352, 29.747],
     },
   ])
-  const [reports] = useState<ReportItem[]>([
-    {
-      id: 1,
-      title: 'Morning Operational SitRep',
-      reportType: 'SitRep',
-      status: 'Submitted',
-      author: 'Planning Section',
-      dueBy: 'Completed 08:45',
-      summary: 'Consolidated overnight impacts, objective status, and immediate priorities.',
-      location: [-96.7894, 32.788],
-    },
-    {
-      id: 2,
-      title: 'Resource Assignment Snapshot',
-      reportType: 'Resource Status',
-      status: 'Draft',
-      author: 'Logistics Section',
-      dueBy: '10:00',
-      summary: 'Pending final staffing updates for overnight safety coverage and shelter ops.',
-      location: [-97.7515, 30.2639],
-    },
-    {
-      id: 3,
-      title: 'South Sector Damage Assessment',
-      reportType: 'Damage Assessment',
-      status: 'Approved',
-      author: 'Field Assessment Unit',
-      dueBy: 'Completed 08:20',
-      summary: 'Verified localized structural damage with no additional displacement required.',
-      location: [-95.3553, 29.7446],
-    },
-  ])
   const [incidentBriefings] = useState<IncidentBriefingItem[]>([
     {
       id: 1,
@@ -1620,7 +8273,73 @@ function App() {
     if (!drawLocationLayerRef.current) {
       drawLocationLayerRef.current = new GraphicsLayer()
     }
+    const analyticsCategoryLayers = initializeAnalyticsCategoryLayers(
+      analyticsCategoryLayersRef.current
+    )
+    const analyticsResolutionLayers = initializeAnalyticsResolutionLayers(
+      analyticsResolutionLayersRef.current
+    )
+    if (!femaRegionsLayerRef.current) {
+      const femaLayer = new GraphicsLayer({
+        id: 'fema-regions-layer',
+        title: 'FEMA Regions',
+        listMode: 'hide',
+      })
+      femaRegionGraphicsRef.current = new globalThis.Map<number, Graphic>()
+      femaAors.forEach((aor) => {
+        const femaGeometry = femaRegionGeometries.find((entry) => entry.id === aor.id)
+        let rings: number[][][]
+        if (femaGeometry) {
+          rings = femaGeometry.rings.map((ring) => ring.map((pt) => [pt[0], pt[1]]))
+        } else {
+          const [longitude, latitude] = aor.location
+          const lonOffset = 0.12
+          const latOffset = 0.09
+          rings = [
+            [
+              [longitude - lonOffset, latitude - latOffset],
+              [longitude + lonOffset, latitude - latOffset],
+              [longitude + lonOffset, latitude + latOffset],
+              [longitude - lonOffset, latitude + latOffset],
+              [longitude - lonOffset, latitude - latOffset],
+            ],
+          ]
+        }
+        const graphic = new Graphic({
+          geometry: {
+            type: 'polygon',
+            rings,
+          },
+          symbol: {
+            type: 'simple-fill',
+            color: [124, 58, 237, 0.05], // 95% transparency
+            outline: {
+              color: [255, 255, 255, 1],
+              width: 1.2,
+            },
+          },
+          attributes: buildFemaAorGraphicAttributes(aor),
+          popupTemplate: FEMA_AOR_POPUP_TEMPLATE,
+        })
+        femaLayer.add(graphic)
+        femaRegionGraphicsRef.current.set(aor.id, graphic)
+      })
+      femaRegionsLayerRef.current = femaLayer
+    }
     const graphicsLayer = mapGraphicsLayerRef.current
+    const notificationThreatPointGraphics = notifications.flatMap((notification) =>
+      (notification.regionalThreats?.threats ?? []).map((threat, threatIndex) => ({
+        mapKey: `notification-${notification.id}-threat-${threatIndex}`,
+        title: threat.resource,
+        kind: `Resource at Risk — ${notification.regionalThreats?.region ?? ''}`,
+        coordinates: threat.location,
+        color: [234, 88, 12, 0.95] as [number, number, number, number],
+        status: notification.severity,
+        owner: notification.owner,
+        timestamp: notification.timestamp,
+        impact: threat.risk,
+      }))
+    )
     const pointGraphics = [
       ...notifications.map((item) => ({
         mapKey: `notification-${item.id}`,
@@ -1633,6 +8352,7 @@ function App() {
         timestamp: item.timestamp,
         impact: item.impact,
       })),
+      ...notificationThreatPointGraphics,
       ...resources.map((item) => ({
         mapKey: `resource-${item.id}`,
         title: item.name,
@@ -1666,17 +8386,6 @@ function App() {
         timestamp: item.timeWindow,
         impact: `${item.eventType} • ${item.notes}`,
       })),
-      ...reports.map((item) => ({
-        mapKey: `report-${item.id}`,
-        title: item.title,
-        kind: 'Report',
-        coordinates: item.location,
-        color: [16, 185, 129, 0.9] as [number, number, number, number],
-        status: item.status,
-        owner: item.author,
-        timestamp: item.dueBy,
-        impact: `${item.reportType} • ${item.summary}`,
-      })),
       ...incidentBriefings.map((item) => ({
         mapKey: `briefing-${item.id}`,
         title: item.title,
@@ -1688,7 +8397,32 @@ function App() {
         timestamp: item.briefingTime,
         impact: item.summary,
       })),
+      ...SITREP_ONGOING_INCIDENTS.map((item) => ({
+        mapKey: `sitrep-ongoing-${item.id}`,
+        title: item.name,
+        kind: 'Ongoing Incident',
+        coordinates: item.location,
+        color: [234, 88, 12, 0.9] as [number, number, number, number],
+        status: item.status,
+        owner: item.lead,
+        timestamp: item.lastUpdate,
+        updatedByLine: `${item.lastUpdate} by You`,
+        executiveSummary:
+          ONGOING_INCIDENT_SITREP_CONTENT[item.id]?.executiveSummary ?? item.summary,
+      })),
+      ...eventList.map((item) => ({
+        mapKey: `event-list-${item.id}`,
+        title: item.name,
+        kind: 'Event',
+        coordinates: item.location,
+        color: [16, 185, 129, 0.9] as [number, number, number, number],
+        status: item.status,
+        owner: item.lead,
+        timestamp: item.lastUpdate,
+        impact: `${item.type} · ${item.severity} · ${item.region}`,
+      })),
     ].map((item) => {
+      const usesExecutiveSummary = 'executiveSummary' in item
       const graphic = new Graphic({
         geometry: {
           type: 'point',
@@ -1711,12 +8445,18 @@ function App() {
           status: item.status,
           owner: item.owner,
           timestamp: item.timestamp,
-          impact: item.impact,
+          ...(usesExecutiveSummary
+            ? {
+                executiveSummary: item.executiveSummary,
+                updatedByLine: item.updatedByLine,
+              }
+            : { impact: item.impact }),
         },
         popupTemplate: {
           title: '{title}',
-          content:
-            '<b>Type:</b> {kind}<br/><b>Status:</b> {status}<br/><b>Owner:</b> {owner}<br/><b>Updated:</b> {timestamp}<br/><b>Impact:</b> {impact}',
+          content: usesExecutiveSummary
+            ? '<b>Type:</b> {kind}<br/><b>Status:</b> {status}<br/><b>Owner:</b> {owner}<br/><b>Updated:</b> {updatedByLine}<br/><b>Executive Summary:</b> {executiveSummary}'
+            : '<b>Type:</b> {kind}<br/><b>Status:</b> {status}<br/><b>Owner:</b> {owner}<br/><b>Updated:</b> {timestamp}<br/><b>Impact:</b> {impact}',
         },
       })
       return { mapKey: item.mapKey, graphic }
@@ -1817,13 +8557,30 @@ function App() {
     mapGraphicsRef.current = new globalThis.Map(
       allGraphics.map((entry) => [entry.mapKey, entry.graphic])
     )
+    femaRegionGraphicsRef.current.forEach((graphic, regionNumber) => {
+      mapGraphicsRef.current.set(`fema-aor-${regionNumber}`, graphic)
+    })
     graphicsLayer.removeAll()
     graphicsLayer.addMany(allGraphics.map((entry) => entry.graphic))
 
     if (!mapViewRef.current) {
+      const femaLayer = femaRegionsLayerRef.current
       const map = new ArcGISMap({
         basemap: 'streets-navigation-vector',
-        layers: [graphicsLayer, drawLocationLayerRef.current],
+        layers: femaLayer
+          ? [
+              femaLayer,
+              graphicsLayer,
+              ...analyticsCategoryLayers,
+              ...analyticsResolutionLayers,
+              drawLocationLayerRef.current,
+            ]
+          : [
+              graphicsLayer,
+              ...analyticsCategoryLayers,
+              ...analyticsResolutionLayers,
+              drawLocationLayerRef.current,
+            ],
       })
 
       const view = new MapView({
@@ -1840,13 +8597,45 @@ function App() {
         },
       })
       mapViewRef.current = view
+      positionMapZoomControls(view)
+      view.on('click', (event) => {
+        void view.hitTest(event).then((response) => {
+          const target = resolveMapClickTarget(response.results)
+          if (!target) {
+            return
+          }
+
+          if (target.type === 'cluster') {
+            return
+          }
+
+          event.stopPropagation()
+
+          if (target.type === 'item') {
+            const location = getGraphicMapLocation(target.graphic)
+            if (!location) {
+              return
+            }
+
+            void openMapGraphicPopupRef.current(
+              target.graphic,
+              location,
+              target.mapKey
+            )
+            return
+          }
+
+          void openFemaAorMapPopupRef.current(target.femaAorId, event.mapPoint)
+        })
+      })
     }
   }, [
     aors,
+    eventList,
+    femaAors,
     incidentBriefings,
     calendarItems,
     notifications,
-    reports,
     resources,
     rosterPositions,
     safetyAnalyses,
@@ -1858,15 +8647,240 @@ function App() {
       mapViewRef.current = null
       mapGraphicsRef.current = new globalThis.Map()
       mapGraphicsLayerRef.current = null
+      femaRegionsLayerRef.current = null
+      femaRegionGraphicsRef.current = new globalThis.Map()
       drawLocationLayerRef.current = null
       drawLocationGraphicRef.current = null
+      analyticsCategoryLayersRef.current = new globalThis.Map()
+      analyticsResolutionLayersRef.current = new globalThis.Map()
+      analyticsLayerZoomTargetRef.current = null
+      analyticsResolutionLayerZoomTargetRef.current = null
+      analyticsResolutionBulkZoomRecordsRef.current = null
+    }
+  }, [])
+
+  useEffect(() => {
+    const shouldShowModalMap =
+      (isCreateIncidentOpen || isCreateExerciseOpen) &&
+      (isCreateIncidentOpen ? createIncidentStep : createExerciseStep) === 0
+    let isCancelled = false
+    let resizeTimeout: ReturnType<typeof setTimeout> | null = null
+    let attachRetryHandle = 0
+
+    if (!shouldShowModalMap) {
+      setIsCreateIncidentMapReady(false)
+      if (createIncidentMapViewRef.current) {
+        createIncidentMapViewRef.current.container = null as unknown as HTMLDivElement
+      }
+      return
+    }
+
+    const attachViewToContainer = async () => {
+      if (isCancelled) {
+        return
+      }
+
+      const mapContainer = createIncidentMapContainerRef.current
+      if (!mapContainer) {
+        attachRetryHandle = window.requestAnimationFrame(() => {
+          void attachViewToContainer()
+        })
+        return
+      }
+
+      if (!createIncidentMapViewRef.current) {
+        const sourceBasemap = mapViewRef.current?.map?.basemap ?? 'streets-navigation-vector'
+        const drawLayer = new GraphicsLayer()
+        const clonedMap = new ArcGISMap({
+          basemap: sourceBasemap,
+          layers: [drawLayer],
+        })
+
+        const view = new MapView({
+          container: createIncidentMapContainerRef.current,
+          map: clonedMap,
+          center: mapViewRef.current?.center ?? [-98.5795, 39.8283],
+          zoom: mapViewRef.current?.zoom ?? 4,
+          ui: {
+            components: ['zoom', 'compass'],
+          },
+        })
+
+        const sketchViewModel = new SketchViewModel({
+          view,
+          layer: drawLayer,
+          updateOnGraphicClick: true,
+        })
+        sketchViewModel.on('create', (event) => {
+          if (event.state !== 'complete' || !event.graphic?.geometry) {
+            return
+          }
+
+          drawLayer.removeAll()
+          drawLayer.add(event.graphic)
+
+          const geometry = event.graphic.geometry
+          if (geometry.type === 'point') {
+            const point = geometry as Point
+            const latitude = point.latitude
+            const longitude = point.longitude
+            if (latitude == null || longitude == null) {
+              setIncidentGeometrySummary('Point selected')
+              return
+            }
+
+            setIncidentGeometrySummary(
+              `Point selected at ${latitude.toFixed(5)}, ${longitude.toFixed(5)}`
+            )
+            return
+          }
+
+          if (geometry.type === 'polygon') {
+            const centroid = geometry.extent?.center
+            if (centroid) {
+              const latitude = centroid.latitude
+              const longitude = centroid.longitude
+              if (latitude == null || longitude == null) {
+                setIncidentGeometrySummary('Polygon selected')
+                return
+              }
+
+              setIncidentGeometrySummary(
+                `Polygon selected near ${latitude.toFixed(5)}, ${longitude.toFixed(5)}`
+              )
+            } else {
+              setIncidentGeometrySummary('Polygon selected')
+            }
+          }
+        })
+
+        createIncidentDrawLayerRef.current = drawLayer
+        createIncidentSketchViewModelRef.current = sketchViewModel
+        createIncidentMapViewRef.current = view
+        positionMapZoomControls(view)
+        await view.when()
+      } else {
+        createIncidentMapViewRef.current.container = mapContainer
+        await createIncidentMapViewRef.current.when()
+      }
+
+      const modalMapView = createIncidentMapViewRef.current
+      if (!modalMapView || isCancelled) {
+        return
+      }
+      setIsCreateIncidentMapReady(true)
+
+      requestAnimationFrame(() => {
+        if (isCancelled) {
+          return
+        }
+
+        window.dispatchEvent(new Event('resize'))
+        void modalMapView
+          .goTo(
+            {
+              center: modalMapView.center,
+              scale: modalMapView.scale,
+            },
+            { animate: false }
+          )
+          .catch(() => {
+            // Ignore interrupted goTo calls while the modal is mounting.
+          })
+      })
+
+      resizeTimeout = setTimeout(() => {
+        if (isCancelled) {
+          return
+        }
+
+        window.dispatchEvent(new Event('resize'))
+      }, 150)
+    }
+
+    void attachViewToContainer()
+
+    return () => {
+      isCancelled = true
+      setIsCreateIncidentMapReady(false)
+      if (attachRetryHandle) {
+        window.cancelAnimationFrame(attachRetryHandle)
+      }
+      if (resizeTimeout) {
+        clearTimeout(resizeTimeout)
+      }
+      if (createIncidentMapViewRef.current) {
+        createIncidentMapViewRef.current.container = null as unknown as HTMLDivElement
+      }
+    }
+  }, [isCreateIncidentOpen, isCreateExerciseOpen, createIncidentStep, createExerciseStep])
+
+  useEffect(() => {
+    const activationStep = isCreateExerciseOpen ? createExerciseStep : createIncidentStep
+    const shouldEnableDraw =
+      (isCreateIncidentOpen || isCreateExerciseOpen) &&
+      activationStep === 0 &&
+      (incidentLocation === 'draw-point' || incidentLocation === 'draw-polygon')
+    const sketchViewModel = createIncidentSketchViewModelRef.current
+    const drawLayer = createIncidentDrawLayerRef.current
+
+    if (!isCreateIncidentMapReady || !sketchViewModel || !drawLayer) {
+      return
+    }
+
+    if (!shouldEnableDraw) {
+      sketchViewModel.cancel()
+      if (preserveIncidentGeometryRef.current) {
+        return
+      }
+      if (incidentLocation !== 'enter-address') {
+        setIncidentGeometrySummary('')
+      }
+      return
+    }
+
+    if (preserveIncidentGeometryRef.current) {
+      preserveIncidentGeometryRef.current = false
+      return
+    }
+
+    sketchViewModel.cancel()
+    drawLayer.removeAll()
+    setIncidentGeometrySummary('')
+    void sketchViewModel.create(incidentLocation === 'draw-point' ? 'point' : 'polygon')
+  }, [
+    incidentLocation,
+    isCreateIncidentOpen,
+    isCreateExerciseOpen,
+    createIncidentStep,
+    createExerciseStep,
+    isCreateIncidentMapReady,
+  ])
+
+  useEffect(() => {
+    return () => {
+      if (createIncidentSketchViewModelRef.current) {
+        createIncidentSketchViewModelRef.current.destroy()
+        createIncidentSketchViewModelRef.current = null
+      }
+      createIncidentDrawLayerRef.current = null
+      if (createIncidentMapViewRef.current) {
+        createIncidentMapViewRef.current.destroy()
+        createIncidentMapViewRef.current = null
+      }
     }
   }, [])
 
   useEffect(() => {
     // Ensure ArcGIS view recalculates after horizontal layout changes.
     const frame = requestAnimationFrame(() => {
-      mapViewRef.current?.resize()
+      const view = mapViewRef.current as (MapView & { resize?: () => void }) | null
+      if (view && typeof view.resize === 'function') {
+        view.resize()
+      }
+      if (view) {
+        view.padding = getMapViewportPadding()
+      }
     })
     return () => cancelAnimationFrame(frame)
   }, [isPratusAiDrawerOpen, isObjectivesOpen, panelWidthMode, isMapVisible])
@@ -1999,17 +9013,36 @@ function App() {
     if (tab === 'notifications') return 'Notifications'
     if (tab === 'resources') return 'Resources'
     if (tab === 'aors') return 'Objectives & Actions'
-    if (tab === 'incidents') return 'Incident Roster'
-    if (tab === 'safety') return 'Safety Analysis'
-    if (tab === 'calendar') return 'Calendar'
-    if (tab === 'reports') return 'Reports'
+    if (tab === 'fema-regions') return 'Business Units'
+    if (tab === 'incident-list') return 'Incidents'
+    if (tab === 'exercises') return 'Exercises'
+    if (tab === 'events') return 'Events'
+    if (tab === 'analytics') return 'Analytics'
     if (tab === 'briefing') return 'Incident Briefing ICS-201'
+    if (tab === 'msel') return 'MSEL'
     if (tab === 'sitreps') return 'SITREPs'
+    if (tab === 'seerist') return 'Seerist'
     if (tab === 'form-ICS-204') return 'ICS-204 Assignment List'
     if (tab.startsWith('form-')) return tab.replace('form-', '')
     return 'Panel Content'
   }
   const isCompactPanelTabs = isMapVisible && panelWidthMode === 'one-third'
+  const activeResourcesFieldFilters = resourcesFieldFiltersByView[resourcesPanelView]
+  const activeResourcesFieldFilterCount = activeResourcesFieldFilters.filter(
+    (rule) => rule.field && rule.value.trim()
+  ).length
+  const resourcesFilterFieldOptions =
+    resourcesPanelView === 'resources'
+      ? RESOURCE_FILTER_FIELD_OPTIONS
+      : RESOURCE_REQUEST_FILTER_FIELD_OPTIONS
+  const isCreateActivationOpen = isCreateIncidentOpen || isCreateExerciseOpen
+  const isExerciseActivationWizard = isCreateExerciseOpen
+  const activationSteps = isExerciseActivationWizard ? createExerciseSteps : createIncidentSteps
+  const activationStep = isExerciseActivationWizard ? createExerciseStep : createIncidentStep
+  const setActivationStep = isExerciseActivationWizard
+    ? setCreateExerciseStep
+    : setCreateIncidentStep
+  const activationEntityLabel = isExerciseActivationWizard ? 'Exercise' : 'Incident'
   const actionAssigneeOptions: AssigneeOption[] = [
     {
       name: 'K. Simmons',
@@ -2083,47 +9116,123 @@ function App() {
     }
   }, [])
 
-  const focusMapItem = async (
-    mapKey: string,
-    location: [number, number],
-    scale = 50000
+  const getMapViewportPadding = () => {
+    const padding = 24
+    const leftBlockWidth = leftPanelRef.current?.getBoundingClientRect().width ?? 0
+    const mapWidth = mapContainerRef.current?.getBoundingClientRect().width ?? window.innerWidth
+    const drawerWidth = isPratusAiDrawerOpen ? mapWidth / 3 : 0
+    return {
+      left: Math.round(leftBlockWidth + padding),
+      right: Math.round(drawerWidth + padding),
+      top: padding,
+      bottom: padding,
+    }
+  }
+
+  const zoomAnalyticsMapToRecords = async (
+    view: MapView,
+    records: AnalyticsSeedRecord[]
   ) => {
-    if (!mapViewRef.current) {
+    if (records.length === 0) {
       return
     }
 
-    const view = mapViewRef.current
-    const targetGraphic = mapGraphicsRef.current.get(mapKey)
-    const [longitude, latitude] = location
+    try {
+      if (records.length === 1) {
+        await view.goTo(
+          {
+            center: records[0].location,
+            scale: 600000,
+          },
+          { animate: false }
+        )
+        return
+      }
+
+      await view.goTo(
+        {
+          target: records.map(
+            (record) =>
+              new Point({
+                longitude: record.location[0],
+                latitude: record.location[1],
+              })
+          ),
+          padding: getMapViewportPadding(),
+        },
+        { animate: false }
+      )
+    } catch {
+      // Ignore interrupted goTo calls.
+    }
+  }
+
+  const getMapVisibleBounds = (view: MapView) => {
+    const leftBlockWidth = leftPanelRef.current?.getBoundingClientRect().width ?? 0
+    const mapRect = mapContainerRef.current?.getBoundingClientRect()
+    const drawerWidth = isPratusAiDrawerOpen && mapRect ? mapRect.width / 3 : 0
+    const padding = 24
+    return {
+      safeLeft: leftBlockWidth + padding,
+      safeRight: view.width - drawerWidth - padding,
+      safeTop: padding,
+      safeBottom: view.height - padding,
+    }
+  }
+
+  const alignMapPointInVisibleArea = async (
+    view: MapView,
+    location: [number, number],
+    screenXRatio = 0.62
+  ) => {
+    const { safeLeft, safeRight } = getMapVisibleBounds(view)
+    const targetScreenX = safeLeft + (safeRight - safeLeft) * screenXRatio
+    const pointScreen = view.toScreen(
+      new Point({
+        longitude: location[0],
+        latitude: location[1],
+      })
+    )
+
+    if (!pointScreen) {
+      return
+    }
+
+    const shiftX = targetScreenX - pointScreen.x
+    if (Math.abs(shiftX) < 4) {
+      return
+    }
+
+    const adjustedCenter = view.toMap({
+      x: view.width / 2 - shiftX,
+      y: view.height / 2,
+    })
+
+    if (!adjustedCenter) {
+      return
+    }
 
     try {
       await view.goTo(
         {
-          center: location,
-          scale,
+          center: adjustedCenter,
+          scale: view.scale,
         },
-        {
-          animate: false,
-        }
+        { animate: false }
       )
     } catch {
       // Ignore interrupted goTo calls from rapid clicks.
-      return
     }
+  }
 
-    if (targetGraphic) {
-      const popupLocation = new Point({
-        longitude,
-        latitude,
-      })
-
-      view.openPopup({
-        features: [targetGraphic],
-        location: popupLocation,
-      })
-
+  const adjustMapViewForOpenPopup = async (
+    view: MapView,
+    targetGraphic: Graphic,
+    popupLocation: Point
+  ) => {
+    for (let attempt = 0; attempt < 5; attempt += 1) {
       await new Promise<void>((resolve) => {
-        requestAnimationFrame(() => resolve())
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
       })
 
       const popupElement = document.querySelector(
@@ -2141,12 +9250,7 @@ function App() {
       const popupRight = popupRect.right - mapRect.left
       const popupTop = popupRect.top - mapRect.top
       const popupBottom = popupRect.bottom - mapRect.top
-      const leftBlockWidth = leftPanelRef.current?.getBoundingClientRect().width ?? 0
-      const padding = 12
-      const safeLeft = leftBlockWidth + padding
-      const safeRight = view.width - padding
-      const safeTop = padding
-      const safeBottom = view.height - padding
+      const { safeLeft, safeRight, safeTop, safeBottom } = getMapVisibleBounds(view)
 
       let shiftX = 0
       let shiftY = 0
@@ -2162,34 +9266,157 @@ function App() {
         shiftY = safeBottom - popupBottom
       }
 
-      if (shiftX !== 0 || shiftY !== 0) {
-        const adjustedCenter = view.toMap({
-          x: view.width / 2 - shiftX,
-          y: view.height / 2 - shiftY,
-        })
-
-        if (adjustedCenter) {
-          try {
-            await view.goTo(
-              {
-                center: adjustedCenter,
-                scale: view.scale,
-              },
-              {
-                animate: false,
-              }
-            )
-          } catch {
-            return
-          }
-
-          view.openPopup({
-            features: [targetGraphic],
-            location: popupLocation,
-          })
-        }
+      if (shiftX === 0 && shiftY === 0) {
+        return
       }
+
+      const adjustedCenter = view.toMap({
+        x: view.width / 2 - shiftX,
+        y: view.height / 2 - shiftY,
+      })
+
+      if (!adjustedCenter) {
+        return
+      }
+
+      try {
+        await view.goTo(
+          {
+            center: adjustedCenter,
+            scale: view.scale,
+          },
+          {
+            animate: false,
+          }
+        )
+      } catch {
+        return
+      }
+
+      view.openPopup({
+        features: [targetGraphic],
+        location: popupLocation,
+      })
     }
+  }
+
+  const focusMapItem = async (
+    mapKey: string,
+    location: [number, number],
+    scale = 50000
+  ) => {
+    const targetGraphic = mapGraphicsRef.current.get(mapKey)
+    if (!targetGraphic) {
+      const view = mapViewRef.current
+      if (!view) {
+        return
+      }
+
+      setSelectedPanelItemId(mapKey)
+      setIsMapVisible(true)
+
+      try {
+        await view.goTo(
+          {
+            center: location,
+            scale,
+            padding: getMapViewportPadding(),
+          },
+          {
+            animate: false,
+          }
+        )
+      } catch {
+        return
+      }
+
+      await alignMapPointInVisibleArea(view, location, 0.68)
+      return
+    }
+
+    await openMapGraphicPopupRef.current(targetGraphic, location, mapKey, scale)
+  }
+
+  openMapGraphicPopupRef.current = async (graphic, location, mapKey, scale) => {
+    const view = mapViewRef.current
+    if (!view) {
+      return
+    }
+
+    setSelectedPanelItemId(mapKey)
+    setIsMapVisible(true)
+
+    const popupLocation = new Point({
+      longitude: location[0],
+      latitude: location[1],
+    })
+
+    try {
+      await view.goTo(
+        {
+          center: location,
+          scale: scale ?? view.scale,
+          padding: getMapViewportPadding(),
+        },
+        {
+          animate: false,
+        }
+      )
+    } catch {
+      return
+    }
+
+    await alignMapPointInVisibleArea(view, location, 0.68)
+
+    view.popup.alignment = 'top-right'
+    view.openPopup({
+      features: [graphic],
+      location: popupLocation,
+    })
+
+    await adjustMapViewForOpenPopup(view, graphic, popupLocation)
+    view.popup.alignment = 'auto'
+  }
+
+  openFemaAorMapPopupRef.current = async (aorId, mapPoint) => {
+    const view = mapViewRef.current
+    const aor = femaAors.find((entry) => entry.id === aorId)
+    const polygonGraphic = femaRegionGraphicsRef.current.get(aorId)
+    if (!view || !aor || !polygonGraphic) {
+      return
+    }
+
+    applyFemaAorPopupState(polygonGraphic, aor)
+
+    try {
+      await view.goTo(
+        {
+          target: polygonGraphic.geometry,
+          padding: getMapViewportPadding(),
+        },
+        { animate: false }
+      )
+    } catch {
+      return
+    }
+
+    const popupLocation =
+      mapPoint ??
+      new Point({
+        longitude: aor.location[0],
+        latitude: aor.location[1],
+      })
+
+    await alignMapPointInVisibleArea(view, [aor.location[0], aor.location[1]], 0.62)
+
+    view.popup.alignment = 'top-right'
+    view.openPopup({
+      features: [polygonGraphic],
+      location: popupLocation,
+    })
+
+    await adjustMapViewForOpenPopup(view, polygonGraphic, popupLocation)
+    view.popup.alignment = 'auto'
   }
 
   const normalizedQuery = searchQuery.trim().toLowerCase()
@@ -2240,10 +9467,20 @@ function App() {
       item.currentOpPeriodAssignment,
       item.nextOpPeriodAssignment,
       item.checkInStatus,
+      getResourceIncidentAssignmentLabel(item),
+      formatResourceCostUnitType(item.costUnitType),
+      formatResourceCostPerUnit(item.costPerUnit),
     ]
       .join(' ')
       .toLowerCase()
       .includes(normalizedQuery)
+  })
+  const searchFilteredResourceRequests = resourceRequests.filter((item) => {
+    if (!normalizedQuery) {
+      return true
+    }
+
+    return getResourceRequestSearchValues(item).toLowerCase().includes(normalizedQuery)
   })
   const searchFilteredAors = aors.filter((item) => {
     if (!normalizedQuery) {
@@ -2270,61 +9507,6 @@ function App() {
       .toLowerCase()
       .includes(normalizedQuery)
   })
-  const searchFilteredRosterPositions = rosterPositions.filter((item) => {
-    if (!normalizedQuery) {
-      return true
-    }
-
-    return [
-      item.position,
-      item.staffingStatus,
-      item.shift,
-      item.supervisor,
-      item.assignedUsers.join(' '),
-      item.notes,
-    ]
-      .join(' ')
-      .toLowerCase()
-      .includes(normalizedQuery)
-  })
-  const searchFilteredSafetyAnalyses = safetyAnalyses.filter((item) => {
-    if (!normalizedQuery) {
-      return true
-    }
-
-    return [
-      item.hazard,
-      item.riskLevel,
-      item.status,
-      item.owner,
-      item.controls,
-      item.notes,
-      item.reviewedAt,
-    ]
-      .join(' ')
-      .toLowerCase()
-      .includes(normalizedQuery)
-  })
-  const searchFilteredCalendarItems = calendarItems.filter((item) => {
-    if (!normalizedQuery) {
-      return true
-    }
-
-    return [item.title, item.eventType, item.status, item.timeWindow, item.owner, item.notes]
-      .join(' ')
-      .toLowerCase()
-      .includes(normalizedQuery)
-  })
-  const searchFilteredReports = reports.filter((item) => {
-    if (!normalizedQuery) {
-      return true
-    }
-
-    return [item.title, item.reportType, item.status, item.author, item.dueBy, item.summary]
-      .join(' ')
-      .toLowerCase()
-      .includes(normalizedQuery)
-  })
   const searchFilteredIncidentBriefings = incidentBriefings.filter((item) => {
     if (!normalizedQuery) {
       return true
@@ -2335,9 +9517,94 @@ function App() {
       .toLowerCase()
       .includes(normalizedQuery)
   })
+  const searchFilteredIncidents = incidentList.filter((item) => {
+    if (!normalizedQuery) {
+      return true
+    }
+
+    return [
+      item.name,
+      item.type,
+      item.status,
+      item.severity,
+      item.region,
+      item.lead,
+      item.summary,
+      item.resourcesCommitted,
+      getIncidentRelatedEventsLabel(item, eventList),
+    ]
+      .join(' ')
+      .toLowerCase()
+      .includes(normalizedQuery)
+  })
+  const searchFilteredExercises = exerciseList.filter((item) => {
+    if (!normalizedQuery) {
+      return true
+    }
+
+    return [
+      item.name,
+      item.type,
+      item.status,
+      item.severity,
+      item.region,
+      item.lead,
+      item.summary,
+      item.resourcesCommitted,
+    ]
+      .join(' ')
+      .toLowerCase()
+      .includes(normalizedQuery)
+  })
+  const searchFilteredEvents = eventList.filter((item) => {
+    if (!normalizedQuery) {
+      return true
+    }
+
+    return [
+      item.name,
+      item.type,
+      item.status,
+      item.severity,
+      item.region,
+      item.businessUnit,
+      item.lead,
+      item.summary,
+      item.resourcesCommitted,
+      getEventCreationLabel(item),
+      item.sendNotificationOnCreate ? 'send notification' : 'no notification',
+      item.notificationRecipients,
+    ]
+      .join(' ')
+      .toLowerCase()
+      .includes(normalizedQuery)
+  })
+  const searchFilteredBusinessUnits = femaAors.filter((item) => {
+    if (!normalizedQuery) {
+      return true
+    }
+
+    return [
+      item.name,
+      item.lead,
+      item.priority,
+      String(item.incidents),
+      item.population,
+      item.lastUpdate,
+      item.evacuationStatus,
+      item.notes,
+      item.sitrep,
+      item.sitrepUpdatedBy,
+      ...item.sitrepSources,
+    ]
+      .join(' ')
+      .toLowerCase()
+      .includes(normalizedQuery)
+  })
   const normalizedAppliedFilterQuery = appliedFilterQuery?.trim().toLowerCase() ?? ''
+  const activePanelSearchQuery = normalizedQuery || normalizedAppliedFilterQuery
   const cardFilteredNotifications = notifications.filter((item) => {
-    if (!normalizedAppliedFilterQuery) {
+    if (!activePanelSearchQuery) {
       return true
     }
 
@@ -2348,48 +9615,90 @@ function App() {
       item.status,
       item.severity,
       item.timestamp,
+      item.regionalThreats?.region ?? '',
+      ...(item.regionalThreats?.threats.map((threat) => `${threat.resource} ${threat.risk}`) ??
+        []),
     ]
       .join(' ')
       .toLowerCase()
-      .includes(normalizedAppliedFilterQuery)
+      .includes(activePanelSearchQuery)
   })
   const cardFilteredResources = resources.filter((item) => {
-    if (!normalizedAppliedFilterQuery) {
-      return true
+    if (activePanelSearchQuery) {
+      const matchesSearch = [
+        item.name,
+        item.owner,
+        item.status,
+        item.type,
+        item.location,
+        item.notes,
+        item.currentLocation,
+        item.datetimeOrdered,
+        item.opcon,
+        item.tacon,
+        item.pointOfContact,
+        item.owningOrganization,
+        String(item.quantity),
+        item.unit,
+        item.hullTailNumber,
+        item.symbology,
+        item.latitude,
+        item.longitude,
+        item.capabilities,
+        item.currentOpPeriod,
+        item.nextOpPeriod,
+        item.currentOpPeriodAssignment,
+        item.nextOpPeriodAssignment,
+        item.checkInStatus,
+        getResourceIncidentAssignmentLabel(item),
+        formatResourceCostUnitType(item.costUnitType),
+        formatResourceCostPerUnit(item.costPerUnit),
+      ]
+        .join(' ')
+        .toLowerCase()
+        .includes(activePanelSearchQuery)
+
+      if (!matchesSearch) {
+        return false
+      }
     }
 
-    return [
-      item.name,
-      item.owner,
-      item.status,
-      item.type,
-      item.location,
-      item.notes,
-      item.currentLocation,
-      item.datetimeOrdered,
-      item.opcon,
-      item.tacon,
-      item.pointOfContact,
-      item.owningOrganization,
-      String(item.quantity),
-      item.unit,
-      item.hullTailNumber,
-      item.symbology,
-      item.latitude,
-      item.longitude,
-      item.capabilities,
-      item.currentOpPeriod,
-      item.nextOpPeriod,
-      item.currentOpPeriodAssignment,
-      item.nextOpPeriodAssignment,
-      item.checkInStatus,
-    ]
-      .join(' ')
-      .toLowerCase()
-      .includes(normalizedAppliedFilterQuery)
+    return matchesResourcesFieldFilterRules(
+      resourcesFieldFiltersByView.resources,
+      (field) => getResourceItemFieldValue(item, field)
+    )
   })
+  const cardFilteredResourceRequests = resourceRequests.filter((item) => {
+    if (activePanelSearchQuery) {
+      const matchesSearch = getResourceRequestSearchValues(item)
+        .toLowerCase()
+        .includes(activePanelSearchQuery)
+
+      if (!matchesSearch) {
+        return false
+      }
+    }
+
+    return matchesResourcesFieldFilterRules(
+      resourcesFieldFiltersByView['resource-requests'],
+      (field) => getResourceRequestItemFieldValue(item, field)
+    )
+  })
+  const previewResourceRequest = useMemo(
+    () => resourceRequests.find((request) => request.id === openResourceRequestPreviewId) ?? null,
+    [resourceRequests, openResourceRequestPreviewId]
+  )
+  const exportResourceRequestWord = (request: ResourceRequestItem) => {
+    downloadDocx(
+      getResourceRequestDocFilename(request, 'docx'),
+      buildIcs213rrDocxBlocks(request)
+    )
+  }
+  const exportResourceRequestPdf = (request: ResourceRequestItem) => {
+    printResourceRequestPdf(request)
+  }
   const cardFilteredAors = aors.filter((item) => {
-    if (!normalizedAppliedFilterQuery) {
+    if (!activePanelSearchQuery) {
       return true
     }
 
@@ -2404,7 +9713,7 @@ function App() {
     ]
       .join(' ')
       .toLowerCase()
-      .includes(normalizedAppliedFilterQuery)
+      .includes(activePanelSearchQuery)
   })
   const normalizedAorSectionSearchQuery = aorSectionSearchQuery.trim().toLowerCase()
   const matchesAorSectionSearchQuery = (item: AorItem) => {
@@ -2491,61 +9800,1408 @@ function App() {
   }
   const getDerivedActionStatus = (item: AorItem) =>
     item.itemType === 'Action' ? (item.assignee ? 'Assigned' : 'Unassigned') : ''
-  const cardFilteredRosterPositions = rosterPositions.filter((item) => {
-    if (!normalizedAppliedFilterQuery) {
+  const cardFilteredIncidentList = incidentList.filter((item) => {
+    if (
+      incidentEventFilters.length > 0 &&
+      !incidentEventFilters.some((eventId) => item.relatedEventIds.includes(eventId))
+    ) {
+      return false
+    }
+
+    if (!activePanelSearchQuery) {
       return true
     }
 
     return [
-      item.position,
-      item.staffingStatus,
-      item.shift,
-      item.supervisor,
-      item.assignedUsers.join(' '),
-      item.notes,
-    ]
-      .join(' ')
-      .toLowerCase()
-      .includes(normalizedAppliedFilterQuery)
-  })
-  const cardFilteredSafetyAnalyses = safetyAnalyses.filter((item) => {
-    if (!normalizedAppliedFilterQuery) {
-      return true
-    }
-
-    return [
-      item.hazard,
-      item.riskLevel,
+      item.name,
+      item.type,
       item.status,
-      item.owner,
-      item.controls,
-      item.notes,
-      item.reviewedAt,
+      item.severity,
+      item.region,
+      item.lead,
+      item.summary,
+      item.resourcesCommitted,
+      getIncidentRelatedEventsLabel(item, eventList),
     ]
       .join(' ')
       .toLowerCase()
-      .includes(normalizedAppliedFilterQuery)
+      .includes(activePanelSearchQuery)
   })
-  const cardFilteredCalendarItems = calendarItems.filter((item) => {
-    if (!normalizedAppliedFilterQuery) {
+  const cardFilteredExerciseList = exerciseList.filter((item) => {
+    if (!activePanelSearchQuery) {
       return true
     }
 
-    return [item.title, item.eventType, item.status, item.timeWindow, item.owner, item.notes]
+    return [
+      item.name,
+      item.type,
+      item.status,
+      item.severity,
+      item.region,
+      item.lead,
+      item.summary,
+      item.resourcesCommitted,
+    ]
       .join(' ')
       .toLowerCase()
-      .includes(normalizedAppliedFilterQuery)
+      .includes(activePanelSearchQuery)
   })
-  const cardFilteredReports = reports.filter((item) => {
-    if (!normalizedAppliedFilterQuery) {
+  const cardFilteredFemaAors = femaAors.filter((item) => {
+    if (!activePanelSearchQuery) {
       return true
     }
 
-    return [item.title, item.reportType, item.status, item.author, item.dueBy, item.summary]
+    return [
+      item.name,
+      item.lead,
+      item.priority,
+      String(item.incidents),
+      item.population,
+      item.lastUpdate,
+      item.evacuationStatus,
+      item.notes,
+      item.sitrep,
+      item.sitrepUpdatedBy,
+      ...item.sitrepSources,
+    ]
       .join(' ')
       .toLowerCase()
-      .includes(normalizedAppliedFilterQuery)
+      .includes(activePanelSearchQuery)
   })
+  const activeExerciseWorkspace = useMemo(
+    () => exerciseList.find((exercise) => exercise.id === activeExerciseWorkspaceId) ?? null,
+    [exerciseList, activeExerciseWorkspaceId]
+  )
+  const activeIncidentWorkspace = useMemo(() => {
+    if (activeIncidentWorkspaceId === null) return null
+    return (
+      incidentList.find((incident) => incident.id === activeIncidentWorkspaceId) ??
+      SITREP_ONGOING_INCIDENTS.find((incident) => incident.id === activeIncidentWorkspaceId) ??
+      null
+    )
+  }, [incidentList, activeIncidentWorkspaceId])
+  const isInExerciseWorkspace = activeExerciseWorkspace !== null
+  const isInIncidentWorkspace = activeIncidentWorkspace !== null
+  const activeNavigationDestination = useMemo(() => {
+    if (isInExerciseWorkspace) return 'exercise-workspace' as const
+    if (isInIncidentWorkspace) return 'incident-workspace' as const
+    if (activeTab === 'files') return 'file-manager' as const
+    return 'hub' as const
+  }, [activeTab, isInExerciseWorkspace, isInIncidentWorkspace])
+  const allIncidentsForWorkspace = useMemo(() => {
+    const byId = new Map<number, IncidentListItem>()
+    for (const incident of incidentList) {
+      byId.set(incident.id, incident)
+    }
+    for (const incident of SITREP_ONGOING_INCIDENTS) {
+      byId.set(incident.id, incident)
+    }
+    return sortIncidentsBySeverity([...byId.values()])
+  }, [incidentList])
+  const filteredIncidentWorkspaceOptions = useMemo(
+    () =>
+      allIncidentsForWorkspace.filter((incident) =>
+        matchesWorkspaceNavSearch(incident, incidentWorkspaceNavQuery)
+      ),
+    [allIncidentsForWorkspace, incidentWorkspaceNavQuery]
+  )
+  const filteredExerciseWorkspaceOptions = useMemo(
+    () =>
+      sortIncidentsBySeverity(
+        exerciseList.filter((exercise) => matchesWorkspaceNavSearch(exercise, exerciseWorkspaceNavQuery))
+      ),
+    [exerciseList, exerciseWorkspaceNavQuery]
+  )
+  const enterIncidentWorkspace = (incident: IncidentListItem) => {
+    setActiveExerciseWorkspaceId(null)
+    setActiveIncidentWorkspaceId(incident.id)
+    setIsObjectivesOpen(true)
+    setIsMapVisible(true)
+    setActiveTab('sitreps')
+    setIcs201Form((previous) => ({
+      ...previous,
+      incidentName: incident.name,
+      currentSituationSummary: incident.summary,
+      preparedBy: incident.lead,
+      jurisdiction: incident.region,
+    }))
+    liveIcs201FormRef.current = null
+  }
+  const enterExerciseWorkspace = (exercise: ExerciseListItem) => {
+    setActiveIncidentWorkspaceId(null)
+    setActiveExerciseWorkspaceId(exercise.id)
+    setIsObjectivesOpen(true)
+    setIsMapVisible(true)
+    setActiveTab('briefing')
+    setIcs201Form((previous) => ({
+      ...previous,
+      incidentName: exercise.name,
+      currentSituationSummary: exercise.summary,
+      preparedBy: exercise.lead,
+      jurisdiction: exercise.region,
+    }))
+    liveIcs201FormRef.current = null
+  }
+  const navigateToHub = () => {
+    setActiveIncidentWorkspaceId(null)
+    setActiveExerciseWorkspaceId(null)
+    setActiveTab('notifications')
+    setIsLeftSidebarOpen(false)
+  }
+  const navigateToFileManager = () => {
+    setActiveIncidentWorkspaceId(null)
+    setActiveExerciseWorkspaceId(null)
+    setActiveTab('files')
+    setIsLeftSidebarOpen(false)
+  }
+  const navigateToIncidentWorkspace = () => {
+    const incident = activeIncidentWorkspace ?? allIncidentsForWorkspace[0]
+    if (!incident) return
+    enterIncidentWorkspace(incident)
+    setIsLeftSidebarOpen(false)
+  }
+  const navigateToExerciseWorkspace = () => {
+    const exercise = activeExerciseWorkspace ?? exerciseList[0]
+    if (!exercise) return
+    enterExerciseWorkspace(exercise)
+    setIsLeftSidebarOpen(false)
+  }
+  const selectIncidentWorkspace = (incident: IncidentListItem) => {
+    enterIncidentWorkspace(incident)
+    setIsLeftSidebarOpen(false)
+  }
+  const selectExerciseWorkspace = (exercise: ExerciseListItem) => {
+    enterExerciseWorkspace(exercise)
+    setIsLeftSidebarOpen(false)
+  }
+  const openPratusAiForEventRuleGeneration = () => {
+    setPratusAiIntent('event-rule-generation')
+    setPratusAiDraftMessage('')
+    setPratusAiSelectedFiles([])
+    setPratusAiSelectedContexts([{ id: 'events-settings', label: 'Events Settings' }])
+    setIsPratusAiSelectingContext(false)
+    setIsPratusAiDrawerOpen(true)
+  }
+  const openPratusAiForNotificationRuleGeneration = () => {
+    setPratusAiIntent('notification-rule-generation')
+    setPratusAiDraftMessage('')
+    setPratusAiSelectedFiles([])
+    setPratusAiSelectedContexts([{ id: 'notifications-settings', label: 'Notification Settings' }])
+    setIsPratusAiSelectingContext(false)
+    setIsPratusAiDrawerOpen(true)
+  }
+  const updateEventListItem = (
+    eventId: number,
+    updater: (event: EventListItem) => EventListItem
+  ) => {
+    setEventList((previous) =>
+      previous.map((event) => (event.id === eventId ? updater(event) : event))
+    )
+  }
+  const openCreateIncidentFromEvent = (event: EventListItem) => {
+    const seed = buildCreateIncidentFormFromEvent(
+      event,
+      femaAors.map((aor) => aor.name)
+    )
+    setCreateIncidentStep(0)
+    setCreateExerciseStep(0)
+    setIncidentName(seed.incidentName)
+    setIncidentCategory(seed.incidentCategory)
+    setIncidentWorkflow(seed.incidentWorkflow)
+    setIncidentTemplate(seed.incidentTemplate)
+    setPreviewTemplateId(null)
+    setIncidentSituationReport(seed.incidentSituationReport)
+    setIncidentAors(seed.incidentAors)
+    setIncidentRelatedEventIds(seed.incidentRelatedEventIds)
+    setIncidentStartTime(seed.incidentStartTime)
+    setIncidentLocation(seed.incidentLocation)
+    setIncidentGeometrySummary(seed.incidentGeometrySummary)
+    setInitialIncidentReport(seed.initialIncidentReport)
+    setIncidentTeamTemplate('')
+    createIncidentSketchViewModelRef.current?.cancel()
+    createIncidentDrawLayerRef.current?.removeAll()
+    preserveIncidentGeometryRef.current = Boolean(seed.incidentGeometrySummary)
+    setExpandedMeetingItemId(null)
+    setMeetingScheduleItems(defaultMeetingScheduleItems)
+    setViewingEventModalId(null)
+    setIsCreateExerciseOpen(false)
+    setIsCreateIncidentOpen(true)
+  }
+  const viewingEventModalEvent =
+    viewingEventModalId == null
+      ? null
+      : (eventList.find((event) => event.id === viewingEventModalId) ?? null)
+  const renderEventListItemDetails = (event: EventListItem) => (
+    <div className="border-t px-3 py-2 text-sm">
+      <p className="rounded-md border bg-muted/20 px-3 py-2 text-sm">
+        {getEventCreationLabel(event)}
+      </p>
+      <div className="mt-3 grid grid-cols-2 gap-2">
+        <p>
+          <span className="font-medium">Status:</span> {event.status}
+        </p>
+        <p>
+          <span className="font-medium">Severity:</span> {event.severity}
+        </p>
+        <p>
+          <span className="font-medium">Business Unit:</span> {event.businessUnit}
+        </p>
+      </div>
+      <p className="mt-2">
+        <span className="font-medium">Lead:</span> {event.lead}
+      </p>
+      <p className="mt-1">
+        <span className="font-medium">Started:</span> {event.startedAt}
+      </p>
+      <p className="mt-1">
+        <span className="font-medium">Last Update:</span> {event.lastUpdate}
+      </p>
+      <p className="mt-2">
+        <span className="font-medium">Summary:</span> {event.summary}
+      </p>
+      <p className="mt-2">
+        <span className="font-medium">Resources Committed:</span> {event.resourcesCommitted}
+      </p>
+      <div className="mt-4 space-y-3 rounded-md border bg-muted/10 p-3">
+        <div className="flex items-center justify-between gap-3">
+          <Label htmlFor={`event-send-notification-${event.id}`}>
+            Send Notification When Event is Created
+          </Label>
+          <Switch
+            id={`event-send-notification-${event.id}`}
+            checked={event.sendNotificationOnCreate}
+            onCheckedChange={(checked) =>
+              updateEventListItem(event.id, (current) => ({
+                ...current,
+                sendNotificationOnCreate: checked,
+              }))
+            }
+          />
+        </div>
+        <div className="grid gap-1.5">
+          <Label htmlFor={`event-notification-recipients-${event.id}`}>
+            Who should be notified
+          </Label>
+          <Textarea
+            id={`event-notification-recipients-${event.id}`}
+            value={event.notificationRecipients}
+            disabled={!event.sendNotificationOnCreate}
+            placeholder="e.g. Region 4 IMAT lead; FDOT District 5 TMC; on-call duty officer"
+            onChange={(changeEvent) =>
+              updateEventListItem(event.id, (current) => ({
+                ...current,
+                notificationRecipients: changeEvent.target.value,
+              }))
+            }
+            className="min-h-20 text-sm"
+          />
+          <p className="text-xs text-muted-foreground">
+            Separate recipients with semicolons or line breaks.
+          </p>
+        </div>
+      </div>
+      <div className="mt-3 flex justify-end">
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          onClick={() => openCreateIncidentFromEvent(event)}
+        >
+          Create Related Incident
+        </Button>
+      </div>
+    </div>
+  )
+  const renderEventListItem = (
+    event: EventListItem,
+    options: {
+      listKey: string
+      isOpen: boolean
+      isSelected: boolean
+      onToggle: () => void
+      onOpenChange: (open: boolean) => void
+      variant?: 'panel' | 'modal'
+    }
+  ) => {
+    const { listKey, isOpen, isSelected, onToggle, onOpenChange, variant = 'panel' } = options
+    const isModal = variant === 'modal'
+    const collapsibleOpen = isModal ? true : isOpen
+
+    return (
+      <Item
+        key={listKey}
+        variant="outline"
+        className={cn(
+          'flex-col items-stretch p-0',
+          glassItemBorderClasses,
+          isSelected &&
+            'relative z-10 ring-2 ring-primary/60 ring-offset-2 ring-offset-background bg-primary/5'
+        )}
+      >
+        <Collapsible
+          open={collapsibleOpen}
+          onOpenChange={isModal ? undefined : onOpenChange}
+        >
+          <div
+            className={cn(
+              'flex items-center gap-2 px-3 py-2.5',
+              !isModal && 'cursor-pointer'
+            )}
+            onClick={isModal ? undefined : onToggle}
+          >
+            <ItemContent>
+              <ItemTitle>{event.name}</ItemTitle>
+              <ItemDescription>
+                {event.type} · {event.region}
+              </ItemDescription>
+            </ItemContent>
+            <ItemActions>
+              <Badge variant="secondary">{event.severity}</Badge>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                aria-label={`Create related incident for ${event.name}`}
+                onClick={(eventClick) => {
+                  eventClick.stopPropagation()
+                  openCreateIncidentFromEvent(event)
+                }}
+              >
+                Create Related Incident
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="Zoom map to event"
+                onClick={(eventClick) => {
+                  eventClick.stopPropagation()
+                  void focusMapItem(`event-list-${event.id}`, event.location, 50000)
+                }}
+              >
+                <MapIcon className="h-4 w-4" />
+              </Button>
+              {!isModal && (
+                <CollapsibleTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    aria-label="Toggle event details"
+                    onClick={(eventClick) => eventClick.stopPropagation()}
+                  >
+                    <ChevronDown
+                      className={cn(
+                        'h-4 w-4 transition-transform',
+                        isOpen && 'rotate-180'
+                      )}
+                    />
+                  </Button>
+                </CollapsibleTrigger>
+              )}
+            </ItemActions>
+          </div>
+          <CollapsibleContent forceMount={isModal ? true : undefined}>
+            {renderEventListItemDetails(event)}
+          </CollapsibleContent>
+        </Collapsible>
+      </Item>
+    )
+  }
+  const getExerciseObjectiveDraftName = (objective: ExerciseObjectiveRow) =>
+    exerciseObjectiveDrafts[objective.id] ?? objective.name
+  const isExerciseObjectiveDraftDirty = (objective: ExerciseObjectiveRow) =>
+    getExerciseObjectiveDraftName(objective) !== objective.name
+  const updateExerciseObjectiveDraft = (objectiveId: number, name: string) => {
+    setExerciseObjectiveDrafts((previous) => ({
+      ...previous,
+      [objectiveId]: name,
+    }))
+  }
+  const saveExerciseObjectiveDraft = (objectiveId: number) => {
+    const draftName = getExerciseObjectiveDraftName(
+      exerciseObjectives.find((entry) => entry.id === objectiveId) ?? { id: objectiveId, name: '' }
+    )
+    setExerciseObjectives((previous) =>
+      previous.map((entry) =>
+        entry.id === objectiveId ? { ...entry, name: draftName } : entry
+      )
+    )
+    setExerciseObjectiveDrafts((previous) => ({
+      ...previous,
+      [objectiveId]: draftName,
+    }))
+  }
+  const cancelExerciseObjectiveDraft = (objectiveId: number) => {
+    const savedObjective = exerciseObjectives.find((entry) => entry.id === objectiveId)
+    if (!savedObjective) {
+      return
+    }
+
+    setExerciseObjectiveDrafts((previous) => ({
+      ...previous,
+      [objectiveId]: savedObjective.name,
+    }))
+  }
+  const removeExerciseObjectiveDraft = (objectiveId: number) => {
+    setExerciseObjectiveDrafts((previous) => {
+      const next = { ...previous }
+      delete next[objectiveId]
+      return next
+    })
+  }
+  const getExerciseObjectiveDisplayName = (objective: ExerciseObjectiveRow) =>
+    objective.name.trim() || 'Untitled objective'
+  const getExerciseObjectiveLabel = (objectiveId: number | null) => {
+    if (objectiveId == null) {
+      return 'No objective selected'
+    }
+
+    const objective = exerciseObjectives.find((entry) => entry.id === objectiveId)
+    if (!objective) {
+      return 'Unknown objective'
+    }
+
+    return getExerciseObjectiveDisplayName(objective)
+  }
+  const filteredExerciseObjectiveLibrarySets = useMemo(() => {
+    const query = exerciseObjectiveLibraryQuery.trim().toLowerCase()
+    if (!query) {
+      return EXERCISE_OBJECTIVE_LIBRARY_SETS
+    }
+
+    return EXERCISE_OBJECTIVE_LIBRARY_SETS.map((set) => ({
+      ...set,
+      objectives: set.objectives.filter(
+        (objective) =>
+          objective.name.toLowerCase().includes(query) ||
+          set.name.toLowerCase().includes(query) ||
+          set.description.toLowerCase().includes(query)
+      ),
+    })).filter(
+      (set) =>
+        set.objectives.length > 0 ||
+        set.name.toLowerCase().includes(query) ||
+        set.description.toLowerCase().includes(query)
+    )
+  }, [exerciseObjectiveLibraryQuery])
+  const getExerciseLibrarySetSelectionState = (set: ExerciseObjectiveLibrarySet) => {
+    const setObjectiveIds = set.objectives.map((objective) => objective.id)
+    const selectedCount = setObjectiveIds.filter((objectiveId) =>
+      selectedExerciseLibraryObjectiveIds.includes(objectiveId)
+    ).length
+
+    if (selectedCount === 0) {
+      return 'none' as const
+    }
+
+    if (selectedCount === setObjectiveIds.length) {
+      return 'all' as const
+    }
+
+    return 'some' as const
+  }
+  const toggleExerciseLibrarySetSelection = (set: ExerciseObjectiveLibrarySet) => {
+    const setObjectiveIds = set.objectives.map((objective) => objective.id)
+    const allSelected = setObjectiveIds.every((objectiveId) =>
+      selectedExerciseLibraryObjectiveIds.includes(objectiveId)
+    )
+
+    setSelectedExerciseLibraryObjectiveIds((previous) => {
+      if (allSelected) {
+        return previous.filter((objectiveId) => !setObjectiveIds.includes(objectiveId))
+      }
+
+      return [...new Set([...previous, ...setObjectiveIds])]
+    })
+  }
+  const toggleExerciseLibraryObjectiveSelection = (objectiveId: string) => {
+    setSelectedExerciseLibraryObjectiveIds((previous) =>
+      previous.includes(objectiveId)
+        ? previous.filter((entry) => entry !== objectiveId)
+        : [...previous, objectiveId]
+    )
+  }
+  const addExerciseObjectiveRow = () => {
+    const nextId =
+      exerciseObjectives.length > 0
+        ? Math.max(...exerciseObjectives.map((row) => row.id)) + 1
+        : 1
+    setExerciseObjectives((previous) => [
+      ...previous,
+      {
+        id: nextId,
+        name: '',
+      },
+    ])
+    setExerciseObjectiveDrafts((previous) => ({
+      ...previous,
+      [nextId]: '',
+    }))
+  }
+  const addExerciseObjectivesFromLibrary = () => {
+    if (selectedExerciseLibraryObjectiveIds.length === 0) {
+      toast.message('Select one or more objectives from the library.')
+      return
+    }
+
+    const selectedLibraryItems = EXERCISE_OBJECTIVE_LIBRARY_SETS.flatMap((set) => set.objectives).filter(
+      (item) => selectedExerciseLibraryObjectiveIds.includes(item.id)
+    )
+    if (selectedLibraryItems.length === 0) {
+      return
+    }
+
+    let nextId =
+      exerciseObjectives.length > 0
+        ? Math.max(...exerciseObjectives.map((row) => row.id)) + 1
+        : 1
+    const newRows = selectedLibraryItems.map((item) => ({
+      id: nextId++,
+      name: item.name,
+    }))
+
+    setExerciseObjectives((previous) => [...previous, ...newRows])
+    setExerciseObjectiveDrafts((previous) => ({
+      ...previous,
+      ...Object.fromEntries(newRows.map((row) => [row.id, row.name])),
+    }))
+    setIsExerciseObjectiveLibraryOpen(false)
+    setSelectedExerciseLibraryObjectiveIds([])
+    setExerciseObjectiveLibraryQuery('')
+    toast.success(
+      `${newRows.length} objective${newRows.length === 1 ? '' : 's'} added from library.`
+    )
+  }
+  const renderExerciseObjectivesEditor = () => (
+    <>
+      <div className="grid gap-3">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <p className="text-sm font-medium">Exercise Objectives</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Name each objective for this exercise. Multiple MSEL injects can be linked to the
+              same objective.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" size="sm" onClick={addExerciseObjectiveRow}>
+              <Plus className="mr-1 h-4 w-4" /> Add Objective
+            </Button>
+            <Popover
+              open={isExerciseObjectiveLibraryOpen}
+              onOpenChange={(open) => {
+                setIsExerciseObjectiveLibraryOpen(open)
+                if (!open) {
+                  setSelectedExerciseLibraryObjectiveIds([])
+                  setExerciseObjectiveLibraryQuery('')
+                }
+              }}
+            >
+              <PopoverTrigger asChild>
+                <Button type="button" size="sm" variant="outline">
+                  <Plus className="mr-1 h-4 w-4" /> Add From Library
+                  <ChevronDown className="ml-1 h-4 w-4" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent align="end" className="w-[min(92vw,28rem)] p-0">
+                <div className="space-y-2 border-b p-3">
+                  <p className="text-sm font-medium">Objective Library</p>
+                  <p className="text-xs text-muted-foreground">
+                    Select a whole objective set or individual objectives within a set.
+                  </p>
+                  <Input
+                    value={exerciseObjectiveLibraryQuery}
+                    onChange={(event) => setExerciseObjectiveLibraryQuery(event.target.value)}
+                    placeholder="Search objective sets"
+                    aria-label="Search objective library"
+                  />
+                </div>
+                <div className="max-h-72 space-y-2 overflow-y-auto p-2">
+                  {filteredExerciseObjectiveLibrarySets.length === 0 ? (
+                    <div className="rounded-md border border-dashed bg-muted/20 p-4 text-sm text-muted-foreground">
+                      No matching objective sets.
+                    </div>
+                  ) : (
+                    filteredExerciseObjectiveLibrarySets.map((set) => {
+                      const setSelectionState = getExerciseLibrarySetSelectionState(set)
+                      return (
+                        <div key={set.id} className="rounded-md border">
+                          <div className="flex items-start gap-2 p-2">
+                            <Checkbox
+                              checked={
+                                setSelectionState === 'all'
+                                  ? true
+                                  : setSelectionState === 'some'
+                                    ? 'indeterminate'
+                                    : false
+                              }
+                              onCheckedChange={() => toggleExerciseLibrarySetSelection(set)}
+                              aria-label={`Select all objectives in ${set.name}`}
+                            />
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium">{set.name}</p>
+                              <p className="text-xs text-muted-foreground">{set.description}</p>
+                            </div>
+                          </div>
+                          <div className="space-y-1 border-t px-2 py-2">
+                            {set.objectives.map((objective) => {
+                              const isSelected = selectedExerciseLibraryObjectiveIds.includes(
+                                objective.id
+                              )
+                              return (
+                                <label
+                                  key={objective.id}
+                                  className="flex cursor-pointer items-start gap-2 rounded-md px-2 py-1.5 hover:bg-muted/50"
+                                >
+                                  <Checkbox
+                                    checked={isSelected}
+                                    onCheckedChange={() =>
+                                      toggleExerciseLibraryObjectiveSelection(objective.id)
+                                    }
+                                    aria-label={`Select objective ${objective.name}`}
+                                  />
+                                  <span className="text-sm leading-snug">{objective.name}</span>
+                                </label>
+                              )
+                            })}
+                          </div>
+                        </div>
+                      )
+                    })
+                  )}
+                </div>
+                <div className="flex items-center justify-end gap-2 border-t p-3">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setSelectedExerciseLibraryObjectiveIds([])
+                      setExerciseObjectiveLibraryQuery('')
+                    }}
+                    disabled={selectedExerciseLibraryObjectiveIds.length === 0}
+                  >
+                    Clear
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={addExerciseObjectivesFromLibrary}
+                    disabled={selectedExerciseLibraryObjectiveIds.length === 0}
+                  >
+                    Add Selected
+                    {selectedExerciseLibraryObjectiveIds.length > 0
+                      ? ` (${selectedExerciseLibraryObjectiveIds.length})`
+                      : ''}
+                  </Button>
+                </div>
+              </PopoverContent>
+            </Popover>
+          </div>
+        </div>
+        {exerciseObjectives.length === 0 && (
+          <div className="rounded-md border border-dashed bg-muted/20 p-4 text-sm text-muted-foreground">
+            No exercise objectives defined.
+          </div>
+        )}
+        {exerciseObjectives.map((row) => {
+          const linkedInjectCount = exerciseMselInjects.filter(
+            (inject) => inject.objectiveId === row.id
+          ).length
+          const draftName = getExerciseObjectiveDraftName(row)
+          const isDraftDirty = isExerciseObjectiveDraftDirty(row)
+          return (
+            <Item key={row.id} variant="outline" className="flex-col items-stretch">
+              <div className="flex items-start gap-2 px-3 py-2.5">
+                <div className="min-w-0 flex-1 grid gap-1">
+                  <Input
+                    id={`exercise-objective-name-${row.id}`}
+                    value={draftName}
+                    onChange={(event) => {
+                      updateExerciseObjectiveDraft(row.id, event.target.value)
+                    }}
+                    placeholder="Enter objective name"
+                    aria-label="Objective name"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {linkedInjectCount} linked MSEL inject{linkedInjectCount === 1 ? '' : 's'}
+                  </p>
+                </div>
+                <div className="flex shrink-0 items-center gap-1 self-start">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => cancelExerciseObjectiveDraft(row.id)}
+                    disabled={!isDraftDirty}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => saveExerciseObjectiveDraft(row.id)}
+                    disabled={!isDraftDirty}
+                  >
+                    Save
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    aria-label={`Delete exercise objective ${getExerciseObjectiveDisplayName(row)}`}
+                    onClick={() => {
+                      setExerciseObjectives((previous) =>
+                        previous.filter((entry) => entry.id !== row.id)
+                      )
+                      setExerciseMselInjects((previous) =>
+                        previous.map((inject) =>
+                          inject.objectiveId === row.id ? { ...inject, objectiveId: null } : inject
+                        )
+                      )
+                      removeExerciseObjectiveDraft(row.id)
+                    }}
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            </Item>
+          )
+        })}
+      </div>
+    </>
+  )
+  const renderExerciseMselInjectsEditor = () => (
+    <div className="grid gap-3">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <p className="text-sm font-medium">Master Scenario Events List</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            MSEL injects delivered to exercise participants. Each inject links to one exercise
+            objective; an objective may have multiple injects.
+          </p>
+        </div>
+        <Button
+          type="button"
+          size="sm"
+          onClick={() => {
+            const nextId =
+              exerciseMselInjects.length > 0
+                ? Math.max(...exerciseMselInjects.map((row) => row.id)) + 1
+                : 1
+            setExerciseMselInjects((previous) => [
+              ...previous,
+              {
+                id: nextId,
+                objectiveId: exerciseObjectives[0]?.id ?? null,
+                scheduledTime: '',
+                category: 'Operations',
+                inject: '',
+                expectedAction: '',
+              },
+            ])
+            setExpandedExerciseMselInjectId(nextId)
+          }}
+        >
+          <Plus className="mr-1 h-4 w-4" /> Add Inject
+        </Button>
+      </div>
+      {exerciseMselInjects.length === 0 && (
+        <div className="rounded-md border border-dashed bg-muted/20 p-4 text-sm text-muted-foreground">
+          No MSEL injects defined.
+        </div>
+      )}
+      {exerciseMselInjects.map((row) => {
+        const isInjectOpen = expandedExerciseMselInjectId === row.id
+        return (
+          <Item key={row.id} variant="outline" className="flex-col items-stretch">
+            <Collapsible
+              open={isInjectOpen}
+              onOpenChange={(open) => setExpandedExerciseMselInjectId(open ? row.id : null)}
+            >
+              <div className="flex items-center gap-2 px-3 py-2.5">
+                <CollapsibleTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    aria-label={`Toggle MSEL inject ${row.id}`}
+                  >
+                    <ChevronDown
+                      className={cn('h-4 w-4 transition-transform', isInjectOpen && 'rotate-180')}
+                    />
+                  </Button>
+                </CollapsibleTrigger>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium">
+                    {row.inject.trim() || `Inject ${row.id}`}
+                  </p>
+                  <p className="truncate text-xs text-muted-foreground">
+                    {row.scheduledTime || 'No time set'} · {row.category} ·{' '}
+                    {getExerciseObjectiveLabel(row.objectiveId)}
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  aria-label={`Delete MSEL inject ${row.id}`}
+                  onClick={() => {
+                    setExerciseMselInjects((previous) =>
+                      previous.filter((entry) => entry.id !== row.id)
+                    )
+                    setExpandedExerciseMselInjectId((previous) =>
+                      previous === row.id ? null : previous
+                    )
+                  }}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+              <CollapsibleContent>
+                <div className="grid gap-3 border-t px-3 py-3 md:grid-cols-2">
+                  <div className="grid gap-2 md:col-span-2">
+                    <Label htmlFor={`exercise-msel-objective-${row.id}`}>Exercise Objective</Label>
+                    <Select
+                      value={row.objectiveId != null ? String(row.objectiveId) : ''}
+                      onValueChange={(value) => {
+                        const objectiveId = value ? Number.parseInt(value, 10) : null
+                        setExerciseMselInjects((previous) =>
+                          previous.map((entry) =>
+                            entry.id === row.id ? { ...entry, objectiveId } : entry
+                          )
+                        )
+                      }}
+                    >
+                      <SelectTrigger id={`exercise-msel-objective-${row.id}`}>
+                        <SelectValue placeholder="Select an exercise objective" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {exerciseObjectives.length === 0 ? (
+                          <SelectItem value="__none" disabled>
+                            Add exercise objectives first
+                          </SelectItem>
+                        ) : (
+                          exerciseObjectives.map((objective) => (
+                            <SelectItem key={objective.id} value={String(objective.id)}>
+                              {getExerciseObjectiveLabel(objective.id)}
+                            </SelectItem>
+                          ))
+                        )}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor={`exercise-msel-time-${row.id}`}>Scheduled Time</Label>
+                    <Input
+                      id={`exercise-msel-time-${row.id}`}
+                      type="datetime-local"
+                      value={row.scheduledTime}
+                      onChange={(event) => {
+                        const value = event.target.value
+                        setExerciseMselInjects((previous) =>
+                          previous.map((entry) =>
+                            entry.id === row.id ? { ...entry, scheduledTime: value } : entry
+                          )
+                        )
+                      }}
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor={`exercise-msel-category-${row.id}`}>Category</Label>
+                    <Input
+                      id={`exercise-msel-category-${row.id}`}
+                      value={row.category}
+                      onChange={(event) => {
+                        const value = event.target.value
+                        setExerciseMselInjects((previous) =>
+                          previous.map((entry) =>
+                            entry.id === row.id ? { ...entry, category: value } : entry
+                          )
+                        )
+                      }}
+                    />
+                  </div>
+                  <div className="grid gap-2 md:col-span-2">
+                    <Label htmlFor={`exercise-msel-inject-${row.id}`}>Inject</Label>
+                    <Textarea
+                      id={`exercise-msel-inject-${row.id}`}
+                      value={row.inject}
+                      onChange={(event) => {
+                        const value = event.target.value
+                        setExerciseMselInjects((previous) =>
+                          previous.map((entry) =>
+                            entry.id === row.id ? { ...entry, inject: value } : entry
+                          )
+                        )
+                      }}
+                      className="min-h-20"
+                      placeholder="Describe the scenario inject delivered to participants."
+                    />
+                  </div>
+                  <div className="grid gap-2 md:col-span-2">
+                    <Label htmlFor={`exercise-msel-expected-${row.id}`}>Expected Action</Label>
+                    <Textarea
+                      id={`exercise-msel-expected-${row.id}`}
+                      value={row.expectedAction}
+                      onChange={(event) => {
+                        const value = event.target.value
+                        setExerciseMselInjects((previous) =>
+                          previous.map((entry) =>
+                            entry.id === row.id ? { ...entry, expectedAction: value } : entry
+                          )
+                        )
+                      }}
+                      className="min-h-20"
+                      placeholder="Describe the expected participant or controller response."
+                    />
+                  </div>
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
+          </Item>
+        )
+      })}
+    </div>
+  )
+  const cardFilteredEventList = sortEventsBySeverity(
+    eventList.filter((item) => {
+      if (
+        eventSeverityFilters.length > 0 &&
+        !eventSeverityFilters.includes(item.severity)
+      ) {
+        return false
+      }
+
+      if (
+        eventBusinessUnitFilters.length > 0 &&
+        !eventBusinessUnitFilters.includes(item.businessUnit)
+      ) {
+        return false
+      }
+
+      if (!activePanelSearchQuery) {
+        return true
+      }
+
+      return [
+        item.name,
+        item.type,
+        item.status,
+        item.severity,
+        item.region,
+        item.businessUnit,
+        item.lead,
+        item.summary,
+        item.resourcesCommitted,
+        getEventCreationLabel(item),
+        item.sendNotificationOnCreate ? 'send notification' : 'no notification',
+        item.notificationRecipients,
+      ]
+        .join(' ')
+        .toLowerCase()
+        .includes(activePanelSearchQuery)
+    })
+  )
+  const analyticsFilteredRecords = useMemo(
+    () =>
+      filterAnalyticsSeedRecords(
+        ANALYTICS_SEED_RECORDS,
+        analyticsStartTime,
+        analyticsEndTime,
+        analyticsSelectedRegions
+      ),
+    [analyticsStartTime, analyticsEndTime, analyticsSelectedRegions]
+  )
+  const analyticsIncidentCategoryCounts = useMemo(
+    () => aggregateAnalyticsCategoryCounts(analyticsFilteredRecords, 'incident'),
+    [analyticsFilteredRecords]
+  )
+  const analyticsEventCategoryCounts = useMemo(
+    () => aggregateAnalyticsCategoryCounts(analyticsFilteredRecords, 'event'),
+    [analyticsFilteredRecords]
+  )
+  const analyticsFilteredRegions = useMemo(
+    () => ANALYTICS_REGIONS.filter((region) => analyticsSelectedRegions.includes(region)),
+    [analyticsSelectedRegions]
+  )
+  const analyticsResolutionTotals = useMemo(
+    () =>
+      aggregateAnalyticsResolutionByRegion(
+        analyticsFilteredRecords,
+        analyticsResolutionKindFilter
+      ),
+    [analyticsFilteredRecords, analyticsResolutionKindFilter]
+  )
+  const analyticsResolutionCategoryAllRegionsMean = useMemo(() => {
+    const totals = new Map<AnalyticsResolutionCategory, { sum: number; count: number }>()
+
+    ANALYTICS_INCIDENT_CATEGORIES.forEach((category) => {
+      let sum = 0
+      let count = 0
+      analyticsFilteredRegions.forEach((region) => {
+        const cell = analyticsResolutionTotals.get(`${region}::${category}`)
+        if (cell) {
+          sum += cell.sum
+          count += cell.count
+        }
+      })
+      if (count > 0) {
+        totals.set(category, { sum, count })
+      }
+    })
+
+    return totals
+  }, [analyticsResolutionTotals, analyticsFilteredRegions])
+  const analyticsResolutionRegionAllCategoriesMean = useMemo(() => {
+    const totals = new Map<AnalyticsRegion, { sum: number; count: number }>()
+
+    analyticsFilteredRegions.forEach((region) => {
+      let sum = 0
+      let count = 0
+      ANALYTICS_INCIDENT_CATEGORIES.forEach((category) => {
+        const cell = analyticsResolutionTotals.get(`${region}::${category}`)
+        if (cell) {
+          sum += cell.sum
+          count += cell.count
+        }
+      })
+      if (count > 0) {
+        totals.set(region, { sum, count })
+      }
+    })
+
+    return totals
+  }, [analyticsResolutionTotals, analyticsFilteredRegions])
+  const analyticsResolutionGrandMean = useMemo(() => {
+    let sum = 0
+    let count = 0
+    analyticsResolutionCategoryAllRegionsMean.forEach((entry) => {
+      sum += entry.sum
+      count += entry.count
+    })
+    if (count === 0) {
+      return null
+    }
+    return Math.round(sum / count)
+  }, [analyticsResolutionCategoryAllRegionsMean])
+  const analyticsSpendTotals = useMemo(
+    () =>
+      aggregateAnalyticsSpendByRegion(analyticsFilteredRecords, analyticsSpendKindFilter),
+    [analyticsFilteredRecords, analyticsSpendKindFilter]
+  )
+  const analyticsSpendCategoryAllRegionsMean = useMemo(() => {
+    const totals = new Map<AnalyticsResolutionCategory, { sum: number; count: number }>()
+
+    ANALYTICS_INCIDENT_CATEGORIES.forEach((category) => {
+      let sum = 0
+      let count = 0
+      analyticsFilteredRegions.forEach((region) => {
+        const cell = analyticsSpendTotals.get(`${region}::${category}`)
+        if (cell) {
+          sum += cell.sum
+          count += cell.count
+        }
+      })
+      if (count > 0) {
+        totals.set(category, { sum, count })
+      }
+    })
+
+    return totals
+  }, [analyticsSpendTotals, analyticsFilteredRegions])
+  const analyticsSpendRegionAllCategoriesMean = useMemo(() => {
+    const totals = new Map<AnalyticsRegion, { sum: number; count: number }>()
+
+    analyticsFilteredRegions.forEach((region) => {
+      let sum = 0
+      let count = 0
+      ANALYTICS_INCIDENT_CATEGORIES.forEach((category) => {
+        const cell = analyticsSpendTotals.get(`${region}::${category}`)
+        if (cell) {
+          sum += cell.sum
+          count += cell.count
+        }
+      })
+      if (count > 0) {
+        totals.set(region, { sum, count })
+      }
+    })
+
+    return totals
+  }, [analyticsSpendTotals, analyticsFilteredRegions])
+  const analyticsSpendGrandMean = useMemo(() => {
+    let sum = 0
+    let count = 0
+    analyticsSpendCategoryAllRegionsMean.forEach((entry) => {
+      sum += entry.sum
+      count += entry.count
+    })
+    if (count === 0) {
+      return null
+    }
+    return Math.round(sum / count)
+  }, [analyticsSpendCategoryAllRegionsMean])
+  const analyticsMeanResolutionByIncidentCategory = useMemo(
+    () => aggregateAnalyticsMeanResolutionByChartCategory(analyticsFilteredRecords, 'incident'),
+    [analyticsFilteredRecords]
+  )
+  const analyticsMeanResolutionByEventCategory = useMemo(
+    () => aggregateAnalyticsMeanResolutionByChartCategory(analyticsFilteredRecords, 'event'),
+    [analyticsFilteredRecords]
+  )
+  const analyticsMeanResolutionHours = useMemo(
+    () => computeAnalyticsMeanResolutionHours(analyticsFilteredRecords, 'both'),
+    [analyticsFilteredRecords]
+  )
+  const analyticsMaxIncidentCount = useMemo(
+    () => Math.max(1, ...analyticsIncidentCategoryCounts.map((entry) => entry.count)),
+    [analyticsIncidentCategoryCounts]
+  )
+  const analyticsMaxEventCount = useMemo(
+    () => Math.max(1, ...analyticsEventCategoryCounts.map((entry) => entry.count)),
+    [analyticsEventCategoryCounts]
+  )
+  const analyticsVisibleLayerCount = useMemo(() => {
+    let count = 0
+    analyticsVisibleLayerKeys.forEach((key) => {
+      const hasRecords = analyticsFilteredRecords.some(
+        (record) => getAnalyticsLayerKey(record.kind, record.category) === key
+      )
+      if (hasRecords) {
+        count += 1
+      }
+    })
+    analyticsVisibleResolutionLayerKeys.forEach((key) => {
+      const { region, category } = parseAnalyticsResolutionLayerKey(key)
+      const hasRecords =
+        getAnalyticsResolutionRecords(
+          analyticsFilteredRecords,
+          region,
+          category,
+          analyticsResolutionKindFilter
+        ).length > 0
+      if (hasRecords) {
+        count += 1
+      }
+    })
+    return count
+  }, [
+    analyticsVisibleLayerKeys,
+    analyticsVisibleResolutionLayerKeys,
+    analyticsFilteredRecords,
+    analyticsResolutionKindFilter,
+  ])
+  const resetAnalyticsFilters = () => {
+    setAnalyticsStartTime('2026-01-01T00:00')
+    setAnalyticsEndTime('2026-05-31T23:59')
+    setAnalyticsSelectedRegions([...ANALYTICS_REGIONS])
+    setAnalyticsVisibleLayerKeys(new Set())
+    setAnalyticsVisibleResolutionLayerKeys(new Set())
+    setAnalyticsResolutionKindFilter('incidents')
+    setAnalyticsSpendKindFilter('incidents')
+  }
+  const toggleAnalyticsCategoryLayer = (
+    kind: AnalyticsSeedRecord['kind'],
+    category: string
+  ) => {
+    const key = getAnalyticsLayerKey(kind, category)
+    setAnalyticsVisibleLayerKeys((previous) => {
+      const next = new Set(previous)
+      if (next.has(key)) {
+        next.delete(key)
+      } else {
+        next.add(key)
+        analyticsLayerZoomTargetRef.current = key
+      }
+      return next
+    })
+    setIsMapVisible(true)
+  }
+  const toggleAnalyticsResolutionLayer = (
+    region: AnalyticsRegion,
+    category: AnalyticsResolutionCategory
+  ) => {
+    const key = getAnalyticsResolutionLayerKey(region, category)
+    setAnalyticsVisibleResolutionLayerKeys((previous) => {
+      const next = new Set(previous)
+      if (next.has(key)) {
+        next.delete(key)
+      } else {
+        next.add(key)
+        analyticsResolutionLayerZoomTargetRef.current = key
+      }
+      return next
+    })
+    setIsMapVisible(true)
+  }
+  const toggleAnalyticsResolutionRegionLayers = (region: AnalyticsRegion) => {
+    const entries = getAnalyticsResolutionLayerEntriesForRegion(
+      analyticsFilteredRecords,
+      region,
+      analyticsFilteredRegions,
+      analyticsResolutionKindFilter
+    )
+    if (entries.length === 0) {
+      return
+    }
+
+    setAnalyticsVisibleResolutionLayerKeys((previous) => {
+      const next = new Set(previous)
+      const allVisible = entries.every((entry) => next.has(entry.key))
+      if (allVisible) {
+        entries.forEach((entry) => next.delete(entry.key))
+      } else {
+        entries.forEach((entry) => next.add(entry.key))
+        analyticsResolutionBulkZoomRecordsRef.current = entries.flatMap((entry) =>
+          getAnalyticsResolutionRecords(
+            analyticsFilteredRecords,
+            entry.region,
+            entry.category,
+            analyticsResolutionKindFilter
+          )
+        )
+      }
+      return next
+    })
+    setIsMapVisible(true)
+  }
+  const toggleAnalyticsResolutionCategoryLayers = (category: AnalyticsResolutionCategory) => {
+    const entries = getAnalyticsResolutionLayerEntriesForCategory(
+      analyticsFilteredRecords,
+      category,
+      analyticsFilteredRegions,
+      analyticsResolutionKindFilter
+    )
+    if (entries.length === 0) {
+      return
+    }
+
+    setAnalyticsVisibleResolutionLayerKeys((previous) => {
+      const next = new Set(previous)
+      const allVisible = entries.every((entry) => next.has(entry.key))
+      if (allVisible) {
+        entries.forEach((entry) => next.delete(entry.key))
+      } else {
+        entries.forEach((entry) => next.add(entry.key))
+        analyticsResolutionBulkZoomRecordsRef.current = entries.flatMap((entry) =>
+          getAnalyticsResolutionRecords(
+            analyticsFilteredRecords,
+            entry.region,
+            entry.category,
+            analyticsResolutionKindFilter
+          )
+        )
+      }
+      return next
+    })
+    setIsMapVisible(true)
+  }
+
+  useEffect(() => {
+    if (activeTab !== 'analytics') {
+      setAnalyticsVisibleLayerKeys(new Set())
+      setAnalyticsVisibleResolutionLayerKeys(new Set())
+    }
+  }, [activeTab])
+
+  useEffect(() => {
+    const layerMap = analyticsCategoryLayersRef.current
+    if (layerMap.size === 0) {
+      return
+    }
+
+    const recordsByKey = new Map<string, AnalyticsSeedRecord[]>()
+    analyticsFilteredRecords.forEach((record) => {
+      const key = getAnalyticsLayerKey(record.kind, record.category)
+      const bucket = recordsByKey.get(key) ?? []
+      bucket.push(record)
+      recordsByKey.set(key, bucket)
+    })
+
+    const showOnMap = activeTab === 'analytics'
+
+    layerMap.forEach((layer, key) => {
+      const records = recordsByKey.get(key) ?? []
+
+      replaceAnalyticsFeatureLayerSource(
+        layer,
+        records.map((record) => createAnalyticsRecordGraphic(record))
+      )
+
+      layer.visible =
+        showOnMap && analyticsVisibleLayerKeys.has(key) && records.length > 0
+    })
+
+    const view = mapViewRef.current
+    const zoomKey = analyticsLayerZoomTargetRef.current
+    if (view && zoomKey && showOnMap) {
+      analyticsLayerZoomTargetRef.current = null
+      const records = recordsByKey.get(zoomKey) ?? []
+      if (records.length > 0 && analyticsVisibleLayerKeys.has(zoomKey)) {
+        void zoomAnalyticsMapToRecords(view, records)
+      }
+    }
+  }, [activeTab, analyticsFilteredRecords, analyticsVisibleLayerKeys])
+
+  useEffect(() => {
+    const layerMap = analyticsResolutionLayersRef.current
+    if (layerMap.size === 0) {
+      return
+    }
+
+    const recordsByKey = new Map<string, AnalyticsSeedRecord[]>()
+    layerMap.forEach((_layer, key) => {
+      const { region, category } = parseAnalyticsResolutionLayerKey(key)
+      recordsByKey.set(
+        key,
+        getAnalyticsResolutionRecords(
+          analyticsFilteredRecords,
+          region,
+          category,
+          analyticsResolutionKindFilter
+        )
+      )
+    })
+
+    const showOnMap = activeTab === 'analytics'
+
+    layerMap.forEach((layer, key) => {
+      const records = recordsByKey.get(key) ?? []
+
+      replaceAnalyticsFeatureLayerSource(
+        layer,
+        records.length > 0
+          ? records.map((record) => createAnalyticsResolutionRecordGraphic(record))
+          : []
+      )
+
+      layer.visible =
+        showOnMap && analyticsVisibleResolutionLayerKeys.has(key) && records.length > 0
+    })
+
+    const view = mapViewRef.current
+    const zoomKey = analyticsResolutionLayerZoomTargetRef.current
+    const bulkZoomRecords = analyticsResolutionBulkZoomRecordsRef.current
+    if (view && showOnMap) {
+      if (bulkZoomRecords && bulkZoomRecords.length > 0) {
+        analyticsResolutionBulkZoomRecordsRef.current = null
+        void zoomAnalyticsMapToRecords(view, bulkZoomRecords)
+      } else if (zoomKey) {
+        analyticsResolutionLayerZoomTargetRef.current = null
+        const records = recordsByKey.get(zoomKey) ?? []
+        if (records.length > 0 && analyticsVisibleResolutionLayerKeys.has(zoomKey)) {
+          void zoomAnalyticsMapToRecords(view, records)
+        }
+      }
+    }
+  }, [
+    activeTab,
+    analyticsFilteredRecords,
+    analyticsVisibleResolutionLayerKeys,
+    analyticsResolutionKindFilter,
+  ])
+
   const searchResults: SearchResult[] = normalizedQuery
     ? [
         ...searchFilteredNotifications.map((item) => ({
@@ -2564,6 +11220,14 @@ function App() {
           location: item.mapLocation,
           scale: 30000,
         })),
+        ...searchFilteredResourceRequests.map((item) => ({
+          id: `resource-request-${item.id}`,
+          kind: 'resource-request' as const,
+          title: item.requestNumber,
+          subtitle: `${item.status} • ${item.orderPriority}`,
+          location: item.mapLocation,
+          scale: 30000,
+        })),
         ...searchFilteredAors.map((item) => ({
           id: `aor-${item.id}`,
           kind: 'aor' as const,
@@ -2571,38 +11235,6 @@ function App() {
           subtitle: `${item.itemType} • ${item.priority} • ${item.lead}`,
           location: item.location,
           scale: 120000,
-        })),
-        ...searchFilteredRosterPositions.map((item) => ({
-          id: `incident-${item.id}`,
-          kind: 'roster' as const,
-          title: item.position,
-          subtitle: `${item.staffingStatus} • ${item.shift}`,
-          location: item.location,
-          scale: 60000,
-        })),
-        ...searchFilteredSafetyAnalyses.map((item) => ({
-          id: `safety-${item.id}`,
-          kind: 'safety' as const,
-          title: item.hazard,
-          subtitle: `${item.riskLevel} Risk • ${item.status}`,
-          location: item.location,
-          scale: 50000,
-        })),
-        ...searchFilteredCalendarItems.map((item) => ({
-          id: `calendar-${item.id}`,
-          kind: 'calendar' as const,
-          title: item.title,
-          subtitle: `${item.eventType} • ${item.timeWindow}`,
-          location: item.location,
-          scale: 50000,
-        })),
-        ...searchFilteredReports.map((item) => ({
-          id: `report-${item.id}`,
-          kind: 'report' as const,
-          title: item.title,
-          subtitle: `${item.reportType} • ${item.status}`,
-          location: item.location,
-          scale: 50000,
         })),
         ...searchFilteredIncidentBriefings.map((item) => ({
           id: `briefing-${item.id}`,
@@ -2612,28 +11244,78 @@ function App() {
           location: item.location,
           scale: 50000,
         })),
+        ...searchFilteredIncidents.map((item) => ({
+          id: `incident-${item.id}`,
+          kind: 'incident' as const,
+          title: item.name,
+          subtitle: `${item.severity} • ${item.status}`,
+          location: item.location,
+          scale: 80000,
+        })),
+        ...searchFilteredExercises.map((item) => ({
+          id: `exercise-${item.id}`,
+          kind: 'exercise' as const,
+          title: item.name,
+          subtitle: `${item.severity} • ${item.status}`,
+          location: item.location,
+          scale: 80000,
+        })),
+        ...searchFilteredEvents.map((item) => ({
+          id: `event-${item.id}`,
+          kind: 'event' as const,
+          title: item.name,
+          subtitle: `${item.severity} • ${item.businessUnit}`,
+          location: item.location,
+          scale: 80000,
+        })),
+        ...searchFilteredBusinessUnits.map((item) => ({
+          id: `business-unit-${item.id}`,
+          kind: 'business-unit' as const,
+          title: item.name,
+          subtitle: `${item.priority} • ${item.lead}`,
+          location: item.location,
+          scale: 10000000,
+        })),
       ]
     : []
 
   const handleFilterByResult = (result: SearchResult) => {
+    if (result.kind === 'notification') {
+      setActiveTab('notifications')
+    }
+
+    if (result.kind === 'resource') {
+      setActiveTab('resources')
+      setResourcesPanelView('resources')
+    }
+
+    if (result.kind === 'resource-request') {
+      setActiveTab('resources')
+      setResourcesPanelView('resource-requests')
+    }
+
     if (result.kind === 'aor') {
       setActiveTab('aors')
     }
 
-    if (result.kind === 'roster') {
-      setActiveTab('incidents')
-    }
-    if (result.kind === 'safety') {
-      setActiveTab('safety')
-    }
-    if (result.kind === 'calendar') {
-      setActiveTab('calendar')
-    }
-    if (result.kind === 'report') {
-      setActiveTab('reports')
-    }
     if (result.kind === 'briefing') {
       setActiveTab('briefing')
+    }
+
+    if (result.kind === 'incident') {
+      setActiveTab('incident-list')
+    }
+
+    if (result.kind === 'exercise') {
+      setActiveTab('exercises')
+    }
+
+    if (result.kind === 'event') {
+      setActiveTab('events')
+    }
+
+    if (result.kind === 'business-unit') {
+      setActiveTab('fema-regions')
     }
 
     setSearchQuery(result.title)
@@ -2644,6 +11326,225 @@ function App() {
 
   const toggleExpandedItem = (key: string) => {
     setExpandedItemId((previous) => (previous === key ? null : key))
+  }
+
+  const toggleExpandedThreat = (key: string) => {
+    setExpandedThreats((previous) => {
+      const next = new Set(previous)
+      if (next.has(key)) {
+        next.delete(key)
+      } else {
+        next.add(key)
+      }
+      return next
+    })
+  }
+
+  const getNotificationSeverityBadgeClasses = (severity: NotificationItem['severity']) => {
+    switch (severity) {
+      case 'Critical':
+        return 'bg-red-600 text-white border-red-700/40'
+      case 'High':
+        return 'bg-orange-500 text-white border-orange-600/40'
+      case 'Medium':
+        return 'bg-amber-400 text-amber-950 border-amber-500/40'
+      case 'Low':
+        return 'bg-emerald-600 text-white border-emerald-700/40'
+      default:
+        return ''
+    }
+  }
+
+  const getOperationalStatusBadgeClasses = (status: OperationalStatus) => {
+    switch (status) {
+      case 'Operational':
+        return 'bg-emerald-600 text-white border-emerald-700/40'
+      case 'Partially Operational':
+        return 'bg-amber-500 text-white border-amber-600/40'
+      case 'Not Operational':
+        return 'bg-red-600 text-white border-red-700/40'
+      default:
+        return ''
+    }
+  }
+
+  const renderSitrepOngoingIncidentsList = () =>
+    sortIncidentsBySeverity(SITREP_ONGOING_INCIDENTS).map((incident) => {
+      const key = `sitrep-ongoing-${incident.id}`
+      const isOpen = expandedItemId === key
+      return (
+        <Item
+          key={incident.id}
+          variant="outline"
+          className={cn(
+            'flex-col items-stretch p-0',
+            glassItemBorderClasses,
+            selectedPanelItemId === key && 'ring-2 ring-primary/60 bg-primary/5'
+          )}
+        >
+          <Collapsible
+            open={isOpen}
+            onOpenChange={(open) => setExpandedItemId(open ? key : null)}
+          >
+            <div
+              className="flex cursor-pointer items-center gap-2 px-3 py-2.5"
+              onClick={() => toggleExpandedItem(key)}
+            >
+              <ItemContent>
+                <ItemTitle>{incident.name}</ItemTitle>
+                <ItemDescription>
+                  {incident.type} · {incident.region}
+                </ItemDescription>
+              </ItemContent>
+              <ItemActions>
+                <Badge
+                  variant="outline"
+                  className={cn(
+                    'text-[10px] font-semibold uppercase',
+                    getIncidentSeverityBadgeClasses(incident.severity)
+                  )}
+                >
+                  {incident.severity}
+                </Badge>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  aria-label={`Enter workspace for ${incident.name}`}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    enterIncidentWorkspace(incident)
+                  }}
+                >
+                  Enter Workspace
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label="Zoom map to incident"
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    openSitrepOngoingIncidentOnMap(incident)
+                  }}
+                >
+                  <MapIcon className="h-4 w-4" />
+                </Button>
+                <CollapsibleTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    aria-label="Toggle incident details"
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    <ChevronDown
+                      className={cn('h-4 w-4 transition-transform', isOpen && 'rotate-180')}
+                    />
+                  </Button>
+                </CollapsibleTrigger>
+              </ItemActions>
+            </div>
+            <CollapsibleContent>
+              <div className="border-t px-3 py-2 text-sm">
+                <div className="grid grid-cols-2 gap-2">
+                  <p>
+                    <span className="font-medium">Status:</span> {incident.status}
+                  </p>
+                  <p>
+                    <span className="font-medium">Severity:</span> {incident.severity}
+                  </p>
+                </div>
+                <p className="mt-2">
+                  <span className="font-medium">Lead:</span> {incident.lead}
+                </p>
+                <p className="mt-1">
+                  <span className="font-medium">Started:</span> {incident.startedAt}
+                </p>
+                <p className="mt-1">
+                  <span className="font-medium">Last Update:</span> {incident.lastUpdate}
+                </p>
+                <p className="mt-2">
+                  <span className="font-medium">Summary:</span> {incident.summary}
+                </p>
+                <p className="mt-2">
+                  <span className="font-medium">Resources Committed:</span>{' '}
+                  {incident.resourcesCommitted}
+                </p>
+              </div>
+            </CollapsibleContent>
+          </Collapsible>
+        </Item>
+      )
+    })
+
+  const openSitrepOngoingIncidentOnMap = (incident: IncidentListItem) => {
+    const key = `sitrep-ongoing-${incident.id}`
+    setSelectedPanelItemId(key)
+    setIsMapVisible(true)
+
+    const matchingAor = femaAors.find((aor) => aor.name === incident.region)
+    const view = mapViewRef.current
+    const polygonGraphic =
+      matchingAor !== undefined
+        ? femaRegionGraphicsRef.current.get(matchingAor.id)
+        : undefined
+
+    if (!view || !matchingAor || !polygonGraphic) {
+      void focusMapItem(key, incident.location, 500_000)
+      return
+    }
+
+    const executiveSummary =
+      ONGOING_INCIDENT_SITREP_CONTENT[incident.id]?.executiveSummary ?? incident.summary
+    const activeDraft = activeSitrepDraftId
+      ? sitrepVersions.find((entry) => entry.id === activeSitrepDraftId)
+      : sitrepVersions[sitrepVersions.length - 1]
+    const updatedByLine = `${incident.lastUpdate} by ${getHumanSitrepAuthorName(activeDraft)}`
+
+    polygonGraphic.attributes = {
+      ...polygonGraphic.attributes,
+      title: incident.name,
+      kind: incident.type,
+      status: incident.status,
+      owner: incident.lead,
+      timestamp: incident.lastUpdate,
+      updatedByLine,
+      executiveSummary,
+    }
+    polygonGraphic.popupTemplate = {
+      title: '{title}',
+      content:
+        '<b>Type:</b> {kind}<br/><b>Status:</b> {status}<br/><b>Owner:</b> {owner}<br/><b>Updated:</b> {updatedByLine}<br/><b>Executive Summary:</b> {executiveSummary}',
+    }
+
+    void (async () => {
+      try {
+        await view.goTo(
+          {
+            target: polygonGraphic.geometry,
+            padding: getMapViewportPadding(),
+          },
+          { animate: false }
+        )
+      } catch {
+        return
+      }
+
+      await alignMapPointInVisibleArea(view, incident.location)
+
+      const popupLocation = new Point({
+        longitude: incident.location[0],
+        latitude: incident.location[1],
+      })
+
+      view.popup.alignment = 'top-right'
+      view.openPopup({
+        features: [polygonGraphic],
+        location: popupLocation,
+      })
+
+      await adjustMapViewForOpenPopup(view, polygonGraphic, popupLocation)
+      view.popup.alignment = 'auto'
+    })()
   }
 
   const updateAorActionTiming = (
@@ -3012,7 +11913,10 @@ function App() {
     setInlineChildActionDraft((previous) => (previous && previous.objectiveId === aorId ? null : previous))
     setEditingActionDraft(null)
   }
-  const togglePratusAiSource = (source: 'web' | 'incidentData' | 'files', checked: boolean) => {
+  const togglePratusAiSource = (
+    source: 'web' | 'organizationData' | 'incidentData' | 'files',
+    checked: boolean
+  ) => {
     setPratusAiDataSources((previous) => ({
       ...previous,
       [source]: checked,
@@ -3029,10 +11933,127 @@ function App() {
     }
     setPratusAiSelectedFiles(Array.from(selectedFiles).map((file) => file.name))
   }
+  const executeSitrepGeneration = (scopeId: string) => {
+    const selectedScope = SITREP_SCOPE_OPTIONS.find((option) => option.id === scopeId)
+    const scopeLabel = selectedScope?.label ?? 'Selected scope'
+    const scopeKindLabel = selectedScope?.kind === 'incident' ? 'Incident' : 'AOR'
+    setPratusAiIntent('default')
+    setPratusAiDraftMessage('')
+    setPratusAiSelectedFiles([])
+    setSitrepGeneratingFromScope(scopeLabel)
+    window.setTimeout(() => {
+      const now = Date.now()
+      const newId = `${now}-sitrep-ai-draft-${Math.random().toString(36).slice(2, 8)}`
+      const generatedSnapshot: SitrepFormState = {
+        ...INITIAL_SITREP_FORM,
+        incidentName: scopeLabel,
+        incidentLocation: scopeLabel,
+        agency: 'Massachusetts Department of Transportation (MassDOT) · FEMA Region 1 DOT Liaison',
+        executiveSummary: scopeLabel.includes('Region 1')
+          ? buildRegion1DotExecutiveSummary(scopeLabel)
+          :
+          `PRATUS AI generated SITREP for ${scopeKindLabel} ${scopeLabel}. Operations remain in steady state; ` +
+          'critical objectives aligned with the current operational period. Reporting compiled from incident data, organizational data, and uploaded files.',
+        readinessAssessment:
+          `Readiness across ${scopeLabel} assessed as GREEN with localized YELLOW for logistics throughput. ` +
+          'Crew rest and resource availability tracked against next operational period.',
+        riskToMission:
+          'Weather window and crew-rest constraints remain the primary risks. Mitigations: pre-staged relief crews, adjusted op tempo, ' +
+          'and contingency comms with mutual-aid partners.',
+        outstandingRfiRfr:
+          `RFI-201: Updated METOC outlook for ${scopeLabel}.\nRFR-118: Additional logistics support for forward staging area.`,
+        previousCriticalIncidentComms:
+          'Hourly coordination calls with sector partners; mutual-aid sync at the top of the hour. Next scheduled comms with IC at the next op-period brief.',
+        generalComments:
+          `Personnel rotation on track. SITREP distributed to ${scopeLabel} command and partner agencies. ` +
+          'Next operational period briefing scheduled.',
+        imageryNotes:
+          'Latest overhead imagery reviewed; no significant change in footprint. Updated annotations attached for distribution.',
+        preparedBy: `PRATUS AI (autogenerated for ${scopeLabel})`,
+      }
+      const newDraft: SitrepVersion = {
+        id: newId,
+        createdAt: now,
+        creatorCreatedAt: now,
+        creatorName: 'PRATUS AI',
+        creatorColor: '#7c3aed',
+        creatorRole: 'AI Assistant',
+        authorName: 'PRATUS AI',
+        authorColor: '#7c3aed',
+        authorRole: 'AI Assistant',
+        snapshot: generatedSnapshot,
+        signatures: [],
+        aiGeneratedSections: [...SITREP_AI_COMPATIBLE_SECTIONS],
+      }
+      if (liveSitrepFormRef.current === null) {
+        liveSitrepFormRef.current = sitrepForm
+      }
+      setSitrepVersions((previous) => [...previous, newDraft].slice(-100))
+      setSitrepForm(generatedSnapshot)
+        setSitrepSectionEdits({
+          'executive-summary': null,
+          'ongoing-incidents': null,
+          'readiness-assessment': null,
+          'risk-to-mission': null,
+          'outstanding-rfi-rfr': null,
+          'previous-critical-incident-comms': null,
+          'general-comments': null,
+          'imagery': null,
+        })
+        setViewingSitrepVersion(null)
+        setSitrepViewMode('current')
+        setActiveSitrepDraftId(newId)
+      setSitrepGeneratingFromScope(null)
+    }, 2500)
+  }
   const handlePratusPlanDecision = (messageId: number, decision: 'accepted' | 'cancelled') => {
     if (isPratusAiLoading) {
       return
     }
+
+    const targetMessage = pratusAiMessages.find((message) => message.id === messageId)
+    const isSitrepPlan =
+      targetMessage?.plan?.action === 'draft-sitrep' &&
+      targetMessage.plan.status === 'pending'
+
+    if (isSitrepPlan) {
+      if (decision === 'accepted') {
+        const sitrepScopeId = targetMessage.plan?.sitrepScopeId ?? selectedSitrepScopeId
+        setPratusAiMessages((previous) => [
+          ...previous.map((message) => {
+            if (message.id !== messageId || !message.plan) {
+              return message
+            }
+            return {
+              ...message,
+              plan: {
+                ...message.plan,
+                status: 'accepted',
+              },
+            }
+          }),
+          { id: Date.now(), role: 'user', content: 'You accepted the plan.' },
+        ])
+        executeSitrepGeneration(sitrepScopeId)
+      } else {
+        setPratusAiMessages((previous) =>
+          previous.map((message) => {
+            if (message.id !== messageId || !message.plan) {
+              return message
+            }
+            return {
+              ...message,
+              plan: {
+                ...message.plan,
+                status: 'cancelled',
+              },
+            }
+          })
+        )
+      }
+      return
+    }
+
     setIsPratusAiLoading(true)
     if (pratusAiLoadingTimerRef.current) {
       window.clearTimeout(pratusAiLoadingTimerRef.current)
@@ -3041,6 +12062,7 @@ function App() {
     pratusAiLoadingTimerRef.current = window.setTimeout(() => {
       let shouldApplyPlan = false
       let planAction: PratusMessagePlan['action'] | null = null
+      let sitrepScopeIdForGeneration: string | null = null
       setPratusAiMessages((previous) =>
         previous.map((message) => {
           if (message.id !== messageId || !message.plan || message.plan.status !== 'pending') {
@@ -3048,6 +12070,9 @@ function App() {
           }
           shouldApplyPlan = decision === 'accepted'
           planAction = message.plan.action
+          if (message.plan.action === 'draft-sitrep' && message.plan.sitrepScopeId) {
+            sitrepScopeIdForGeneration = message.plan.sitrepScopeId
+          }
           return {
             ...message,
             plan: {
@@ -3337,6 +12362,10 @@ function App() {
         }
       }
 
+      if (shouldApplyPlan && planAction === 'draft-sitrep') {
+        executeSitrepGeneration(sitrepScopeIdForGeneration ?? selectedSitrepScopeId)
+      }
+
       setIsPratusAiLoading(false)
       pratusAiLoadingTimerRef.current = null
     }, 1400)
@@ -3347,6 +12376,162 @@ function App() {
     }
     const trimmedMessage = pratusAiDraftMessage.trim()
     if (!trimmedMessage) {
+      return
+    }
+    if (pratusAiIntent === 'ics201-generation') {
+      const selected = pratusAiSelectedFiles
+        .map((key) => {
+          const [folderId, fileName] = key.split('::')
+          const folder = INCIDENT_FILE_FOLDERS.find((entry) => entry.id === folderId)
+          const file = folder?.files.find((entry) => entry.name === fileName)
+          if (!folder || !file) return null
+          return { folder, file }
+        })
+        .filter(
+          (entry): entry is { folder: IncidentFileFolder; file: IncidentFile } =>
+            entry !== null
+        )
+      const hasFiles = selected.length > 0
+      const displayLabel = !hasFiles
+        ? 'baseline draft'
+        : selected.length === 1
+          ? selected[0].file.name
+          : `${selected.length} files`
+      const sourceFileNames = hasFiles
+        ? selected.map(({ file }) => file.name).join(', ')
+        : ''
+      setIsPratusAiDrawerOpen(false)
+      setPratusAiIntent('default')
+      setPratusAiDraftMessage('')
+      setPratusAiSelectedFiles([])
+      setIcs201GeneratingFromFile(displayLabel)
+      const merged: Ics201FormStateForGenerator = hasFiles
+        ? selected.reduce(
+            (accumulator, { folder, file }, index) => {
+              const generated = buildIcs201BaseFromFile(folder.id, file)
+              if (index === 0) {
+                return generated
+              }
+              return {
+                ...accumulator,
+                objectives: Array.from(
+                  new Set([...accumulator.objectives, ...generated.objectives])
+                ),
+                actions: [
+                  ...accumulator.actions,
+                  ...generated.actions.map((action, actionIndex) => ({
+                    ...action,
+                    id: accumulator.actions.length + actionIndex + 1,
+                  })),
+                ],
+                resources: [
+                  ...accumulator.resources,
+                  ...generated.resources.map((resource, resourceIndex) => ({
+                    ...resource,
+                    id: accumulator.resources.length + resourceIndex + 1,
+                  })),
+                ],
+                safetyAnalysis: [
+                  ...accumulator.safetyAnalysis,
+                  ...generated.safetyAnalysis.map((row, rowIndex) => ({
+                    ...row,
+                    id: accumulator.safetyAnalysis.length + rowIndex + 1,
+                  })),
+                ],
+                currentSituationSummary: [
+                  accumulator.currentSituationSummary,
+                  generated.currentSituationSummary,
+                ]
+                  .filter((entry) => entry && entry.length > 0)
+                  .join(' '),
+              }
+            },
+            {} as Ics201FormStateForGenerator
+          )
+        : buildIcs201Baseline()
+      if (hasFiles) {
+        merged.preparedBy = `Planning Section Chief You (autogenerated from ${sourceFileNames})`
+      }
+      const snapshotBase: Ics201FormState = liveIcs201FormRef.current ?? ics201Form
+      const nextSnapshot: Ics201FormState = {
+        ...snapshotBase,
+        ...merged,
+      }
+      window.setTimeout(() => {
+        setIcs201Form(nextSnapshot)
+        const newVersion: Ics201Version = {
+          id: `${Date.now()}-ai-draft-${Math.random()
+            .toString(36)
+            .slice(2, 8)}`,
+          createdAt: Date.now(),
+          authorName: 'PRATUS AI',
+          authorColor: '#7c3aed',
+          snapshot: nextSnapshot,
+          signatures: [],
+        }
+        setIcs201Versions((previous) => [...previous, newVersion].slice(-100))
+        setIcs201GeneratingFromFile(null)
+        toast.success(
+          hasFiles
+            ? `New ICS-201 draft version generated from ${displayLabel}. Review and edit before saving.`
+            : 'New ICS-201 baseline draft version generated. Review and edit before saving.'
+        )
+      }, 2500)
+      return
+    }
+    if (pratusAiIntent === 'sitrep-generation') {
+      const selectedScope = SITREP_SCOPE_OPTIONS.find(
+        (option) => option.id === selectedSitrepScopeId
+      )
+      const scopeLabel = selectedScope?.label ?? 'Selected scope'
+      const scopeKindLabel = selectedScope?.kind === 'incident' ? 'Incident' : 'AOR'
+      const dataSourceLabels = [
+        pratusAiDataSources.web && 'Web',
+        pratusAiDataSources.incidentData && 'Incident Workspaces',
+        pratusAiDataSources.organizationData && 'Organization Data',
+        pratusAiDataSources.files && 'Files',
+      ]
+        .filter(Boolean)
+        .join(', ')
+      const timestampSeed = Date.now()
+      setPratusAiMessages((previous) => [
+        ...previous,
+        { id: timestampSeed, role: 'user', content: trimmedMessage },
+      ])
+      setPratusAiDraftMessage('')
+      setPratusAiIntent('default')
+      setIsPratusAiLoading(true)
+      if (pratusAiLoadingTimerRef.current) {
+        window.clearTimeout(pratusAiLoadingTimerRef.current)
+        pratusAiLoadingTimerRef.current = null
+      }
+      pratusAiLoadingTimerRef.current = window.setTimeout(() => {
+        setPratusAiMessages((previous) => [
+          ...previous,
+          {
+            id: timestampSeed + 1,
+            role: 'assistant',
+            content:
+              `I'll draft a SITREP for ${scopeKindLabel} ${scopeLabel}` +
+              (dataSourceLabels ? ` using ${dataSourceLabels}` : ' using the selected sources') +
+              '. Review the execution plan below and accept to proceed, or cancel to stop.',
+            plan: {
+              action: 'draft-sitrep',
+              status: 'pending',
+              sitrepScopeId: selectedSitrepScopeId,
+              steps: [
+                `Gather current situational data for ${scopeLabel} from enabled sources${
+                  dataSourceLabels ? ` (${dataSourceLabels})` : ''
+                }`,
+                'Draft every compatible SITREP section (Executive Summary, Readiness Assessment, Risk to Mission, Outstanding RFI/RFR, Previous Critical Incident Communications, and General Comments — excluding Ongoing Incidents and Imagery)',
+                'Create a new draft SITREP version in the editor for your review and editing',
+              ],
+            },
+          },
+        ])
+        setIsPratusAiLoading(false)
+        pratusAiLoadingTimerRef.current = null
+      }, 1200)
       return
     }
     const timestampSeed = Date.now()
@@ -3911,6 +13096,11 @@ function App() {
       currentOpPeriodAssignment: 'Division A perimeter hold',
       nextOpPeriodAssignment: 'Division B handoff perimeter sweep',
       checkInStatus: 'Onsite',
+      costUnitType: 'per day',
+      costPerUnit: 2800,
+      deploymentKind: 'incident',
+      assignedIncidentName: 'Hurricane Edgar — Florida Landfall',
+      assignedExerciseName: null,
     } as ResourceItem,
     {
       id: 902,
@@ -3941,6 +13131,11 @@ function App() {
       currentOpPeriodAssignment: 'Situation board updates',
       nextOpPeriodAssignment: '---',
       checkInStatus: 'Onsite',
+      costUnitType: 'per hour',
+      costPerUnit: 95,
+      deploymentKind: 'available',
+      assignedIncidentName: null,
+      assignedExerciseName: null,
     } as ResourceItem,
   ].slice(0, 5)
   const normalizedIcs204ResourceQuery = ics204ResourceNameFilter.trim().toLowerCase()
@@ -3979,6 +13174,7 @@ function App() {
 
   return (
     <main className="relative h-screen w-screen overflow-hidden">
+      <Toaster position="top-right" />
       <div
         className={cn(
           'absolute inset-x-0 top-0 z-50 h-14 border-b px-4 shadow-lg backdrop-blur transition-colors duration-200',
@@ -3995,21 +13191,17 @@ function App() {
               size="icon"
               aria-label="Open menu"
               className={glassIconButtonClasses}
+              onClick={() => setIsLeftSidebarOpen(true)}
             >
               <Menu className="h-4 w-4" />
             </Button>
-            <span className="font-semibold">Incident Alpha</span>
-            <span className="text-muted-foreground">My Position: Incident Commander</span>
-            <Button
-              type="button"
-              variant="outline"
-              size="icon"
-              aria-label="Open Planning-P status modal"
-              className={glassIconButtonClasses}
-              onClick={() => setIsPlanningPDialogOpen(true)}
-            >
-              <span className="text-xs font-semibold">P</span>
-            </Button>
+            <span className="font-semibold">
+              {isInExerciseWorkspace && activeExerciseWorkspace
+                ? `Exercise ${activeExerciseWorkspace.name}`
+                : isInIncidentWorkspace && activeIncidentWorkspace
+                  ? activeIncidentWorkspace.name
+                  : 'British Petroleum'}
+            </span>
           </div>
           <div className="flex items-start gap-2">
             {appliedFilterLabel && (
@@ -4139,12 +13331,15 @@ function App() {
                               </p>
                             </div>
                             {(
+                              result.kind === 'notification' ||
+                              result.kind === 'resource' ||
+                              result.kind === 'resource-request' ||
                               result.kind === 'aor' ||
-                              result.kind === 'roster' ||
-                              result.kind === 'safety' ||
-                              result.kind === 'calendar' ||
-                              result.kind === 'report' ||
-                              result.kind === 'briefing'
+                              result.kind === 'briefing' ||
+                              result.kind === 'incident' ||
+                              result.kind === 'exercise' ||
+                              result.kind === 'event' ||
+                              result.kind === 'business-unit'
                             ) && (
                               <div className="flex items-center gap-1">
                                 <Button
@@ -4201,7 +13396,11 @@ function App() {
         </div>
       </div>
       <div className="absolute inset-0 flex overflow-hidden">
-      <div className="relative min-w-0 flex-1 overflow-hidden">
+      <div
+        className={cn(
+          'relative min-w-0 flex-1 overflow-hidden transition-[width] duration-300'
+        )}
+      >
       <div
         ref={mapContainerRef}
         className={cn(
@@ -4268,114 +13467,175 @@ function App() {
                       </TooltipTrigger>
                       <TooltipContent side="bottom" sideOffset={6}>Resources</TooltipContent>
                     </Tooltip>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          type="button"
-                          size="icon"
-                          variant={isGlassMode ? 'outline' : activeTab === 'aors' ? 'default' : 'outline'}
-                          className={selectedGlassTabClasses(activeTab === 'aors')}
-                          onClick={() => setActiveTab('aors')}
-                          aria-label="Open Objectives & Actions tab"
-                          data-pratus-context-id="tab:aors"
-                          data-pratus-context-label="Objectives & Actions"
-                        >
-                          <Target className="h-4 w-4" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent side="bottom" sideOffset={6}>Objectives &amp; Actions</TooltipContent>
-                    </Tooltip>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          type="button"
-                          size="icon"
-                          variant={isGlassMode ? 'outline' : activeTab === 'incidents' ? 'default' : 'outline'}
-                          className={selectedGlassTabClasses(activeTab === 'incidents')}
-                          onClick={() => setActiveTab('incidents')}
-                          aria-label="Open Incident Roster tab"
-                        >
-                          <Users className="h-4 w-4" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent side="bottom" sideOffset={6}>Incident Roster</TooltipContent>
-                    </Tooltip>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          type="button"
-                          size="icon"
-                          variant={isGlassMode ? 'outline' : activeTab === 'safety' ? 'default' : 'outline'}
-                          className={selectedGlassTabClasses(activeTab === 'safety')}
-                          onClick={() => setActiveTab('safety')}
-                          aria-label="Open Safety Analysis tab"
-                        >
-                          <Shield className="h-4 w-4" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent side="bottom" sideOffset={6}>Safety Analysis</TooltipContent>
-                    </Tooltip>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          type="button"
-                          size="icon"
-                          variant={isGlassMode ? 'outline' : activeTab === 'calendar' ? 'default' : 'outline'}
-                          className={selectedGlassTabClasses(activeTab === 'calendar')}
-                          onClick={() => setActiveTab('calendar')}
-                          aria-label="Open Calendar tab"
-                        >
-                          <CalendarDays className="h-4 w-4" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent side="bottom" sideOffset={6}>Calendar</TooltipContent>
-                    </Tooltip>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          type="button"
-                          size="icon"
-                          variant={isGlassMode ? 'outline' : activeTab === 'reports' ? 'default' : 'outline'}
-                          className={selectedGlassTabClasses(activeTab === 'reports')}
-                          onClick={() => setActiveTab('reports')}
-                          aria-label="Open Reports tab"
-                        >
-                          <FileText className="h-4 w-4" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent side="bottom" sideOffset={6}>Reports</TooltipContent>
-                    </Tooltip>
-                    {!isCompactPanelTabs && (
+                    {isInIncidentWorkspace && (
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <Button
                             type="button"
                             size="icon"
-                            variant={isGlassMode ? 'outline' : activeTab === 'briefing' ? 'default' : 'outline'}
-                            className={selectedGlassTabClasses(activeTab === 'briefing')}
-                            onClick={() => setActiveTab('briefing')}
-                            aria-label="Open Incident Briefing ICS-201 tab"
-                            data-has-form-badge="true"
-                            data-pratus-context-id="tab:briefing"
-                            data-pratus-context-label="Incident Briefing ICS-201"
+                            variant={isGlassMode ? 'outline' : activeTab === 'aors' ? 'default' : 'outline'}
+                            className={selectedGlassTabClasses(activeTab === 'aors')}
+                            onClick={() => setActiveTab('aors')}
+                            aria-label="Open Objectives & Actions tab"
+                            data-pratus-context-id="tab:aors"
+                            data-pratus-context-label="Objectives & Actions"
                           >
-                            <span className="relative inline-flex h-4 w-4 items-center justify-center">
-                              <FileText className="h-4 w-4" />
-                              <span
-                                className={cn(
-                                  'absolute -right-2 -bottom-2 rounded bg-foreground px-0.5 py-px text-[7px] leading-none text-background',
-                                  isGlassMode && 'z-20'
-                                )}
-                              >
-                                201
-                              </span>
-                            </span>
+                            <Target className="h-4 w-4" />
                           </Button>
                         </TooltipTrigger>
-                        <TooltipContent side="bottom" sideOffset={6}>
-                          Incident Briefing ICS-201
-                        </TooltipContent>
+                        <TooltipContent side="bottom" sideOffset={6}>Objectives &amp; Actions</TooltipContent>
                       </Tooltip>
+                    )}
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant={isGlassMode ? 'outline' : activeTab === 'fema-regions' ? 'default' : 'outline'}
+                          className={selectedGlassTabClasses(activeTab === 'fema-regions')}
+                          onClick={() => setActiveTab('fema-regions')}
+                          aria-label="Open Business Units tab"
+                          data-pratus-context-id="tab:fema-regions"
+                          data-pratus-context-label="Business Units"
+                        >
+                          <MapPin className="h-4 w-4" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent side="bottom" sideOffset={6}>Business Units</TooltipContent>
+                    </Tooltip>
+                    {!isInExerciseWorkspace && (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            type="button"
+                            size="icon"
+                            variant={isGlassMode ? 'outline' : activeTab === 'incident-list' ? 'default' : 'outline'}
+                            className={selectedGlassTabClasses(activeTab === 'incident-list')}
+                            onClick={() => setActiveTab('incident-list')}
+                            aria-label="Open Incidents tab"
+                            data-pratus-context-id="tab:incident-list"
+                            data-pratus-context-label="Incidents"
+                          >
+                            <AlertTriangle className="h-4 w-4" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom" sideOffset={6}>Incidents</TooltipContent>
+                      </Tooltip>
+                    )}
+                    {!isInIncidentWorkspace && !isInExerciseWorkspace && (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            type="button"
+                            size="icon"
+                            variant={isGlassMode ? 'outline' : activeTab === 'exercises' ? 'default' : 'outline'}
+                            className={selectedGlassTabClasses(activeTab === 'exercises')}
+                            onClick={() => setActiveTab('exercises')}
+                            aria-label="Open Exercises tab"
+                            data-pratus-context-id="tab:exercises"
+                            data-pratus-context-label="Exercises"
+                          >
+                            <Shield className="h-4 w-4" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom" sideOffset={6}>Exercises</TooltipContent>
+                      </Tooltip>
+                    )}
+                    {!isInExerciseWorkspace && (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            type="button"
+                            size="icon"
+                            variant={isGlassMode ? 'outline' : activeTab === 'events' ? 'default' : 'outline'}
+                            className={selectedGlassTabClasses(activeTab === 'events')}
+                            onClick={() => setActiveTab('events')}
+                            aria-label="Open Events tab"
+                            data-pratus-context-id="tab:events"
+                            data-pratus-context-label="Events"
+                          >
+                            <Radio className="h-4 w-4" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom" sideOffset={6}>Events</TooltipContent>
+                      </Tooltip>
+                    )}
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant={isGlassMode ? 'outline' : activeTab === 'analytics' ? 'default' : 'outline'}
+                          className={selectedGlassTabClasses(activeTab === 'analytics')}
+                          onClick={() => setActiveTab('analytics')}
+                          aria-label="Open Analytics tab"
+                          data-pratus-context-id="tab:analytics"
+                          data-pratus-context-label="Analytics"
+                        >
+                          <BarChart3 className="h-4 w-4" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent side="bottom" sideOffset={6}>Analytics</TooltipContent>
+                    </Tooltip>
+                    {isInExerciseWorkspace && (
+                      <>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant={
+                                isGlassMode ? 'outline' : activeTab === 'briefing' ? 'default' : 'outline'
+                              }
+                              className={cn(
+                                'h-8 gap-1',
+                                glassIconButtonClasses,
+                                selectedGlassTabClasses(activeTab === 'briefing')
+                              )}
+                              aria-label="Open forms menu"
+                              data-pratus-context-id="tab:forms"
+                              data-pratus-context-label="Forms"
+                            >
+                              Forms
+                              <ChevronDown className="h-3.5 w-3.5" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="start" className="w-52">
+                            <DropdownMenuLabel>Forms</DropdownMenuLabel>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              onSelect={() => setActiveTab('briefing')}
+                              className={cn('gap-2', activeTab === 'briefing' && 'bg-accent')}
+                            >
+                              <FileText className="h-4 w-4" />
+                              ICS-201 Incident Briefing
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant={
+                                isGlassMode ? 'outline' : activeTab === 'msel' ? 'default' : 'outline'
+                              }
+                              className={cn(
+                                'h-8',
+                                glassIconButtonClasses,
+                                selectedGlassTabClasses(activeTab === 'msel')
+                              )}
+                              onClick={() => setActiveTab('msel')}
+                              aria-label="Open MSEL tab"
+                              data-pratus-context-id="tab:msel"
+                              data-pratus-context-label="MSEL"
+                            >
+                              MSEL
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent side="bottom" sideOffset={6}>MSEL</TooltipContent>
+                        </Tooltip>
+                      </>
                     )}
                     {!isCompactPanelTabs && (
                       <Tooltip>
@@ -4406,6 +13666,27 @@ function App() {
                         </TooltipTrigger>
                         <TooltipContent side="bottom" sideOffset={6}>
                           SITREPs
+                        </TooltipContent>
+                      </Tooltip>
+                    )}
+                    {!isCompactPanelTabs && (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            type="button"
+                            size="icon"
+                            variant={isGlassMode ? 'outline' : activeTab === 'seerist' ? 'default' : 'outline'}
+                            className={selectedGlassTabClasses(activeTab === 'seerist')}
+                            onClick={() => setActiveTab('seerist')}
+                            aria-label="Open Seerist tab"
+                            data-pratus-context-id="tab:seerist"
+                            data-pratus-context-label="Seerist"
+                          >
+                            <Radar className="h-4 w-4" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom" sideOffset={6}>
+                          Seerist
                         </TooltipContent>
                       </Tooltip>
                     )}
@@ -4477,14 +13758,6 @@ function App() {
                         )}
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="start" className="w-48">
-                        {isCompactPanelTabs && (
-                          <>
-                            <DropdownMenuItem onClick={() => setActiveTab('briefing')}>
-                              Incident Briefing ICS-201
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                          </>
-                        )}
                         <DropdownMenuLabel>Add ICS Forms</DropdownMenuLabel>
                         <DropdownMenuSeparator />
                         <div className="px-1 pb-1">
@@ -4633,32 +13906,287 @@ function App() {
           <CollapsibleContent className="flex-1 overflow-hidden p-4">
             <Card
               className={cn(
-                'h-full min-h-0',
+                'h-full min-h-0 transition-shadow',
                 glassCardClasses,
-                isPratusAiSelectingContext && 'cursor-crosshair ring-2 ring-dashed ring-primary/40'
+                isPratusAiSelectingContext &&
+                  'cursor-pointer hover:bg-primary/5 hover:ring-2 hover:ring-primary/50 active:ring-2 active:ring-primary'
               )}
               data-pratus-context-id={`tab:${activeTab}`}
               data-pratus-context-label={getPratusContextLabelForTab(activeTab)}
             >
               <CardHeader
                 className={cn(
-                  (activeTab === 'aors' || activeTab === 'form-ICS-233') &&
+                  (activeTab === 'aors' ||
+                    activeTab === 'form-ICS-233' ||
+                    activeTab === 'incident-list' ||
+                    activeTab === 'exercises' ||
+                    activeTab === 'events' ||
+                    isEventsSettingsOpen ||
+                    activeTab === 'notifications' ||
+                    isNotificationSettingsOpen ||
+                    activeTab === 'resources' ||
+                    activeTab === 'briefing' ||
+                    activeTab === 'msel') &&
                     'flex flex-row items-center justify-between gap-3 space-y-0'
                 )}
               >
                 <CardTitle className="text-base">
-                  {activeTab === 'notifications' && 'Notifications'}
-                  {activeTab === 'resources' && 'Resources'}
+                  {activeTab === 'notifications' &&
+                    (isNotificationSettingsOpen ? (
+                      <div className="flex items-center gap-2">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setIsNotificationSettingsOpen(false)}
+                        >
+                          Back to Notifications
+                        </Button>
+                        <span>Notification Settings</span>
+                      </div>
+                    ) : (
+                      'Notifications'
+                    ))}
+                  {activeTab === 'resources' &&
+                    (resourcesPanelView === 'resource-requests' ? 'Resource Requests' : 'Resources')}
                   {activeTab === 'aors' && 'Objectives & Actions'}
-                  {activeTab === 'incidents' && 'Incident Roster'}
-                  {activeTab === 'safety' && 'Safety Analysis'}
-                  {activeTab === 'calendar' && 'Calendar'}
-                  {activeTab === 'reports' && 'Reports'}
+                  {activeTab === 'fema-regions' && 'Business Units'}
+                  {activeTab === 'incident-list' && 'Incidents'}
+                  {activeTab === 'exercises' && 'Exercises'}
+                  {activeTab === 'events' &&
+                    (isEventsSettingsOpen ? (
+                      <div className="flex items-center gap-2">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setIsEventsSettingsOpen(false)}
+                        >
+                          Back to Events
+                        </Button>
+                        <span>Events Settings</span>
+                      </div>
+                    ) : (
+                      'Events'
+                    ))}
+                  {activeTab === 'analytics' && 'Analytics'}
                   {activeTab === 'briefing' && 'Incident Briefing ICS-201'}
+                  {activeTab === 'msel' && 'MSEL'}
                   {activeTab === 'sitreps' && null}
+                  {activeTab === 'seerist' && 'Seerist'}
+                  {activeTab === 'files' && 'Incident Files'}
                   {activeTab === 'form-ICS-204' && 'ICS-204 Assignment List'}
                   {activeTab !== 'form-ICS-204' && activeFormTabLabel}
                 </CardTitle>
+                {activeTab === 'resources' && (
+                  <div className="flex items-center gap-1">
+                    <ToggleGroup
+                      type="single"
+                      value={resourcesPanelView}
+                      onValueChange={(value) => {
+                        if (value === 'resources' || value === 'resource-requests') {
+                          setResourcesPanelView(value)
+                        }
+                      }}
+                      variant="outline"
+                      size="sm"
+                      aria-label="Resources panel view"
+                    >
+                      <ToggleGroupItem value="resources" className="px-2.5 text-xs">
+                        Resources
+                      </ToggleGroupItem>
+                      <ToggleGroupItem value="resource-requests" className="px-2.5 text-xs">
+                        Resource Requests
+                      </ToggleGroupItem>
+                    </ToggleGroup>
+                    <Popover
+                      open={isResourcesFilterOpen}
+                      onOpenChange={(open) => {
+                        setIsResourcesFilterOpen(open)
+                        if (open) {
+                          setResourcesFieldFilterDraft(
+                            activeResourcesFieldFilters.length > 0
+                              ? activeResourcesFieldFilters.map((rule) => ({ ...rule }))
+                              : [createResourcesFieldFilterRule(resourcesFilterFieldOptions)]
+                          )
+                        }
+                      }}
+                    >
+                      <PopoverTrigger asChild>
+                        <Button
+                          type="button"
+                          variant={activeResourcesFieldFilterCount > 0 ? 'default' : 'outline'}
+                          size="icon"
+                          className="relative h-8 w-8"
+                          aria-label="Filter resources"
+                        >
+                          <SlidersHorizontal className="h-4 w-4" />
+                          {activeResourcesFieldFilterCount > 0 && (
+                            <span className="absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold text-primary-foreground">
+                              {activeResourcesFieldFilterCount}
+                            </span>
+                          )}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent align="end" className="w-[22rem] gap-3 p-3">
+                        <div className="space-y-1">
+                          <p className="text-sm font-medium">Field filters</p>
+                          <p className="text-xs text-muted-foreground">
+                            Match all selected field/value pairs. Leave value empty to ignore a row.
+                          </p>
+                        </div>
+                        <div className="max-h-64 space-y-2 overflow-y-auto">
+                          {resourcesFieldFilterDraft.map((rule) => (
+                            <div key={rule.id} className="flex items-start gap-2">
+                              <Select
+                                value={rule.field}
+                                onValueChange={(value) => {
+                                  setResourcesFieldFilterDraft((previous) =>
+                                    previous.map((entry) =>
+                                      entry.id === rule.id ? { ...entry, field: value } : entry
+                                    )
+                                  )
+                                }}
+                              >
+                                <SelectTrigger className="h-8 w-[9.5rem] text-xs">
+                                  <SelectValue placeholder="Field" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectGroup>
+                                    <SelectLabel>Fields</SelectLabel>
+                                    {resourcesFilterFieldOptions.map((option) => (
+                                      <SelectItem key={option.id} value={option.id}>
+                                        {option.label}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectGroup>
+                                </SelectContent>
+                              </Select>
+                              <Input
+                                value={rule.value}
+                                onChange={(event) => {
+                                  const value = event.target.value
+                                  setResourcesFieldFilterDraft((previous) =>
+                                    previous.map((entry) =>
+                                      entry.id === rule.id ? { ...entry, value } : entry
+                                    )
+                                  )
+                                }}
+                                placeholder="Contains..."
+                                className="h-8 flex-1 text-xs"
+                              />
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 shrink-0"
+                                aria-label="Remove filter row"
+                                disabled={resourcesFieldFilterDraft.length === 1}
+                                onClick={() => {
+                                  setResourcesFieldFilterDraft((previous) =>
+                                    previous.filter((entry) => entry.id !== rule.id)
+                                  )
+                                }}
+                              >
+                                <X className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="w-full"
+                          onClick={() => {
+                            setResourcesFieldFilterDraft((previous) => [
+                              ...previous,
+                              createResourcesFieldFilterRule(resourcesFilterFieldOptions),
+                            ])
+                          }}
+                        >
+                          <Plus className="mr-1 h-3.5 w-3.5" />
+                          Add filter
+                        </Button>
+                        <div className="flex items-center justify-end gap-2 border-t pt-2">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => {
+                              setResourcesFieldFilterDraft([
+                                createResourcesFieldFilterRule(resourcesFilterFieldOptions),
+                              ])
+                              setResourcesFieldFiltersByView((previous) => ({
+                                ...previous,
+                                [resourcesPanelView]: [],
+                              }))
+                              setIsResourcesFilterOpen(false)
+                            }}
+                          >
+                            Clear
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            onClick={() => {
+                              setResourcesFieldFiltersByView((previous) => ({
+                                ...previous,
+                                [resourcesPanelView]: resourcesFieldFilterDraft.filter(
+                                  (rule) => rule.field && rule.value.trim()
+                                ),
+                              }))
+                              setIsResourcesFilterOpen(false)
+                            }}
+                          >
+                            Apply filters
+                          </Button>
+                        </div>
+                      </PopoverContent>
+                    </Popover>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon"
+                          className="h-8 w-8"
+                          aria-label="Resources display options"
+                        >
+                          <MoreVertical className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-44">
+                        <DropdownMenuLabel>Display</DropdownMenuLabel>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          onSelect={(event) => {
+                            event.preventDefault()
+                            setResourcesDisplayMode('list')
+                          }}
+                          className="gap-2"
+                        >
+                          List view
+                          {resourcesDisplayMode === 'list' && (
+                            <Check className="ml-auto h-4 w-4" />
+                          )}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onSelect={(event) => {
+                            event.preventDefault()
+                            setResourcesDisplayMode('table')
+                          }}
+                          className="gap-2"
+                        >
+                          Table view
+                          {resourcesDisplayMode === 'table' && (
+                            <Check className="ml-auto h-4 w-4" />
+                          )}
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                )}
                 {activeTab === 'aors' && (
                   <div className="flex w-80 items-center gap-2 rounded-md border px-2 py-1.5">
                     <Search className="h-3.5 w-3.5 text-muted-foreground" />
@@ -4691,9 +14219,248 @@ function App() {
                     </Button>
                   </div>
                 )}
+                {activeTab === 'incident-list' && (
+                  <div className="flex flex-wrap items-center justify-end gap-2">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button type="button" size="sm" variant="outline">
+                          <span className="max-w-[12rem] truncate">
+                            {incidentEventFilters.length > 0
+                              ? `Event: ${incidentEventFilters.length} selected`
+                              : 'Event: All'}
+                          </span>
+                          <ChevronDown className="ml-1 h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="max-h-72 overflow-y-auto">
+                        {eventList.length === 0 ? (
+                          <DropdownMenuItem disabled>No events available</DropdownMenuItem>
+                        ) : (
+                          eventList.map((event) => (
+                            <DropdownMenuItem
+                              key={event.id}
+                              className="pr-2"
+                              onSelect={(selectEvent) => {
+                                selectEvent.preventDefault()
+                                setIncidentEventFilters((previous) =>
+                                  previous.includes(event.id)
+                                    ? previous.filter((entry) => entry !== event.id)
+                                    : [...previous, event.id]
+                                )
+                              }}
+                            >
+                              <div className="flex min-w-0 items-start gap-2">
+                                <Checkbox
+                                  checked={incidentEventFilters.includes(event.id)}
+                                  className="pointer-events-none mt-0.5"
+                                  aria-hidden="true"
+                                />
+                                <div className="min-w-0">
+                                  <p className="truncate text-sm">{event.name}</p>
+                                  <p className="truncate text-xs text-muted-foreground">
+                                    {event.type} · {event.businessUnit}
+                                  </p>
+                                </div>
+                              </div>
+                            </DropdownMenuItem>
+                          ))
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={() => {
+                        resetCreateIncidentForm()
+                        setIsCreateIncidentOpen(true)
+                      }}
+                    >
+                      + Create Incident
+                    </Button>
+                  </div>
+                )}
+                {activeTab === 'exercises' && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => {
+                      resetCreateIncidentForm()
+                      setIsCreateExerciseOpen(true)
+                    }}
+                  >
+                    + Create Exercise
+                  </Button>
+                )}
+                {activeTab === 'notifications' && !isNotificationSettingsOpen && (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        className="h-8 w-8"
+                        aria-label="Notifications options"
+                      >
+                        <MoreVertical className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-52">
+                      <DropdownMenuItem
+                        onSelect={(event) => {
+                          event.preventDefault()
+                          setIsNotificationSettingsOpen(true)
+                        }}
+                      >
+                        Notification Settings
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                )}
+                {activeTab === 'events' && !isEventsSettingsOpen && (
+                  <div className="flex flex-wrap items-center justify-end gap-2">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button type="button" size="sm" variant="outline">
+                          <span className="truncate">
+                            {eventSeverityFilters.length > 0
+                              ? `Severity: ${eventSeverityFilters.join(', ')}`
+                              : 'Severity: All'}
+                          </span>
+                          <ChevronDown className="ml-1 h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        {EVENT_SEVERITY_FILTER_OPTIONS.map((severity) => (
+                          <DropdownMenuItem
+                            key={severity}
+                            className="pr-2"
+                            onSelect={(selectEvent) => {
+                              selectEvent.preventDefault()
+                              setEventSeverityFilters((previous) =>
+                                previous.includes(severity)
+                                  ? previous.filter((entry) => entry !== severity)
+                                  : [...previous, severity]
+                              )
+                            }}
+                          >
+                            <div className="flex items-center gap-2">
+                              <Checkbox
+                                checked={eventSeverityFilters.includes(severity)}
+                                className="pointer-events-none"
+                                aria-hidden="true"
+                              />
+                              <span>{severity}</span>
+                            </div>
+                          </DropdownMenuItem>
+                        ))}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button type="button" size="sm" variant="outline">
+                          <span className="max-w-[12rem] truncate">
+                            {eventBusinessUnitFilters.length > 0
+                              ? `Business Units: ${eventBusinessUnitFilters.length} selected`
+                              : 'Business Unit: All'}
+                          </span>
+                          <ChevronDown className="ml-1 h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="max-h-72 overflow-y-auto">
+                        {eventBusinessUnitOptions.map((businessUnit) => (
+                          <DropdownMenuItem
+                            key={businessUnit}
+                            className="pr-2"
+                            onSelect={(selectEvent) => {
+                              selectEvent.preventDefault()
+                              setEventBusinessUnitFilters((previous) =>
+                                previous.includes(businessUnit)
+                                  ? previous.filter((entry) => entry !== businessUnit)
+                                  : [...previous, businessUnit]
+                              )
+                            }}
+                          >
+                            <div className="flex items-center gap-2">
+                              <Checkbox
+                                checked={eventBusinessUnitFilters.includes(businessUnit)}
+                                className="pointer-events-none"
+                                aria-hidden="true"
+                              />
+                              <span>{businessUnit}</span>
+                            </div>
+                          </DropdownMenuItem>
+                        ))}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={() => setIsCreateEventOpen(true)}
+                    >
+                      + Create Event
+                    </Button>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon"
+                          className="h-8 w-8"
+                          aria-label="Events options"
+                        >
+                          <MoreVertical className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-44">
+                        <DropdownMenuItem
+                          onSelect={(event) => {
+                            event.preventDefault()
+                            setIsEventsSettingsOpen(true)
+                          }}
+                        >
+                          Events Settings
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                )}
+                {activeTab === 'briefing' && isInExerciseWorkspace && (
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="ghost"
+                    className="h-8 w-8"
+                    aria-label="Export ICS-201 as Word document"
+                    title="Export ICS-201 as Word document"
+                    onClick={() => {
+                      const safeIncident =
+                        ics201Form.incidentName.trim().replace(/[^a-zA-Z0-9-_]+/g, '_') ||
+                        'Exercise'
+                      const stamp = new Date()
+                        .toISOString()
+                        .slice(0, 16)
+                        .replace(/[:T]/g, '-')
+                      downloadDocx(
+                        `ICS-201_${safeIncident}_${stamp}.docx`,
+                        buildIcs201DocxBlocks(ics201Form)
+                      )
+                    }}
+                  >
+                    <DownloadIcon className="h-4 w-4" />
+                  </Button>
+                )}
               </CardHeader>
               <CardContent className="min-h-0 flex-1 space-y-2 overflow-y-auto [scrollbar-gutter:stable]">
-                {activeTab === 'notifications' && (
+                {activeTab === 'notifications' && isNotificationSettingsOpen && (
+                  <NotificationSettingsPage
+                    rules={notificationCreationRules}
+                    onRulesChange={setNotificationCreationRules}
+                    categoryOptions={notificationCategoryOptions}
+                    onGenerateRule={openPratusAiForNotificationRuleGeneration}
+                  />
+                )}
+
+                {activeTab === 'notifications' && !isNotificationSettingsOpen && (
                   cardFilteredNotifications.length === 0 ? (
                     <Item variant="outline" className={glassItemBorderClasses}>
                       <ItemContent>
@@ -4705,6 +14472,10 @@ function App() {
                     cardFilteredNotifications.map((item) => {
                     const key = `notification-${item.id}`
                     const isOpen = expandedItemId === key
+                    const relatedEvent =
+                      item.relatedEventId != null
+                        ? eventList.find((event) => event.id === item.relatedEventId)
+                        : null
                     return (
                       <Item
                         key={item.id}
@@ -4725,10 +14496,22 @@ function App() {
                           >
                             <ItemContent>
                               <ItemTitle>{item.title}</ItemTitle>
-                              <ItemDescription>{item.summary}</ItemDescription>
+                              <ItemDescription>
+                                {item.regionalThreats ? (
+                                  <>
+                                    <span className="font-medium">Source:</span> {item.owner}
+                                    <span className="mx-1.5 opacity-50">·</span>
+                                    {item.timestamp}
+                                  </>
+                                ) : (
+                                  item.summary
+                                )}
+                              </ItemDescription>
                             </ItemContent>
                             <ItemActions>
-                              <Badge variant="secondary">{item.severity}</Badge>
+                              <Badge className={getNotificationSeverityBadgeClasses(item.severity)}>
+                                {item.severity}
+                              </Badge>
                               <Button
                                 variant="ghost"
                                 size="icon"
@@ -4736,8 +14519,25 @@ function App() {
                                 onClick={(event) => {
                                   event.stopPropagation()
                                   setSelectedPanelItemId(key)
-                                  void
-                                  focusMapItem(`notification-${item.id}`, item.location, 45000)
+                                  setSelectedNestedItemId(null)
+                                  const linkedAor = item.regionalThreats
+                                    ? femaAors.find((aor) =>
+                                        aor.name.startsWith(item.regionalThreats!.region)
+                                      )
+                                    : null
+                                  if (linkedAor) {
+                                    void focusMapItem(
+                                      `fema-aor-${linkedAor.id}`,
+                                      linkedAor.location,
+                                      10_000_000
+                                    )
+                                  } else {
+                                    void focusMapItem(
+                                      `notification-${item.id}`,
+                                      item.location,
+                                      45000
+                                    )
+                                  }
                                 }}
                               >
                                 <MapIcon className="h-4 w-4" />
@@ -4758,20 +14558,217 @@ function App() {
                           </div>
                           <CollapsibleContent>
                             <div className="border-t px-3 py-2 text-sm">
-                              <div className="grid grid-cols-2 gap-2">
-                                <p>
-                                  <span className="font-medium">Status:</span> {item.status}
-                                </p>
-                                <p>
-                                  <span className="font-medium">Owner:</span> {item.owner}
-                                </p>
-                              </div>
-                              <p className="mt-2">
-                                <span className="font-medium">Time:</span> {item.timestamp}
-                              </p>
-                              <p className="mt-1">
-                                <span className="font-medium">Impact:</span> {item.impact}
-                              </p>
+                              {!item.regionalThreats && (
+                                <>
+                                  <div className="grid grid-cols-2 gap-2">
+                                    <p>
+                                      <span className="font-medium">Status:</span> {item.status}
+                                    </p>
+                                    <p>
+                                      <span className="font-medium">Owner:</span> {item.owner}
+                                    </p>
+                                  </div>
+                                  <p className="mt-2">
+                                    <span className="font-medium">Time:</span> {item.timestamp}
+                                  </p>
+                                  <p className="mt-1">
+                                    <span className="font-medium">Impact:</span> {item.impact}
+                                  </p>
+                                </>
+                              )}
+                              {item.regionalThreats && (
+                                <div>
+                                  {relatedEvent && (
+                                    <p className="mb-3 text-sm">
+                                      <span className="font-medium">Event created:</span>{' '}
+                                      <button
+                                        type="button"
+                                        className="font-medium text-primary underline-offset-4 hover:underline"
+                                        onClick={(eventClick) => {
+                                          eventClick.stopPropagation()
+                                          setViewingEventModalId(relatedEvent.id)
+                                        }}
+                                      >
+                                        {relatedEvent.name}
+                                      </button>
+                                    </p>
+                                  )}
+                                  <p className="font-medium">
+                                    Resources at Risk in {item.regionalThreats.region}
+                                  </p>
+                                  <div className="mt-2 space-y-1.5">
+                                    {item.regionalThreats.threats.map((threat, threatIndex) => {
+                                      const threatKey = `${key}-threat-${threatIndex}`
+                                      const threatMapKey = `notification-${item.id}-threat-${threatIndex}`
+                                      const threatOpen = expandedThreats.has(threatKey)
+                                      return (
+                                        <Item
+                                          key={threatKey}
+                                          variant="outline"
+                                          className={cn(
+                                            'flex-col items-stretch p-0',
+                                            glassItemBorderClasses,
+                                            selectedNestedItemId === threatKey &&
+                                              'relative z-10 ring-2 ring-primary/60 ring-offset-2 ring-offset-background bg-primary/5'
+                                          )}
+                                        >
+                                          <Collapsible
+                                            open={threatOpen}
+                                            onOpenChange={() => toggleExpandedThreat(threatKey)}
+                                          >
+                                            <div
+                                              className="flex cursor-pointer items-center gap-2 px-2.5 py-2"
+                                              onClick={() => toggleExpandedThreat(threatKey)}
+                                            >
+                                              <ItemContent>
+                                                <ItemTitle className="text-sm">
+                                                  {threat.resource}
+                                                </ItemTitle>
+                                              </ItemContent>
+                                              <ItemActions>
+                                                <Badge
+                                                  className={getOperationalStatusBadgeClasses(
+                                                    threat.operationalStatus
+                                                  )}
+                                                >
+                                                  {threat.operationalStatus}
+                                                </Badge>
+                                                <Button
+                                                  variant="ghost"
+                                                  size="icon"
+                                                  aria-label={`Zoom map to ${threat.resource}`}
+                                                  onClick={(event) => {
+                                                    event.stopPropagation()
+                                                    setSelectedPanelItemId(key)
+                                                    setSelectedNestedItemId(threatKey)
+                                                    void focusMapItem(
+                                                      threatMapKey,
+                                                      threat.location,
+                                                      300000
+                                                    )
+                                                  }}
+                                                >
+                                                  <MapIcon className="h-4 w-4" />
+                                                </Button>
+                                                <CollapsibleTrigger asChild>
+                                                  <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    aria-label="Toggle resource threat details"
+                                                    onClick={(event) => event.stopPropagation()}
+                                                  >
+                                                    <ChevronDown
+                                                      className={cn(
+                                                        'h-4 w-4 transition-transform',
+                                                        threatOpen && 'rotate-180'
+                                                      )}
+                                                    />
+                                                  </Button>
+                                                </CollapsibleTrigger>
+                                              </ItemActions>
+                                            </div>
+                                            <CollapsibleContent>
+                                              <div className="border-t px-2.5 py-2 text-sm text-muted-foreground">
+                                                {threat.risk}
+                                              </div>
+                                            </CollapsibleContent>
+                                          </Collapsible>
+                                        </Item>
+                                      )
+                                    })}
+                                  </div>
+                                  <p className="mt-4 font-medium">Response Checklist</p>
+                                  <div className="mt-2 space-y-1.5">
+                                    {item.regionalThreats.responseChecklist.map((action, actionIndex) => {
+                                      const actionId = `${key}-action-${actionIndex}`
+                                      const checked = completedResponseActions.has(actionId)
+                                      const assignment = taskAssignments[actionId]
+                                      return (
+                                        <Item
+                                          key={actionId}
+                                          variant="outline"
+                                          className={cn(
+                                            'flex cursor-pointer items-start gap-2 px-2.5 py-2 hover:bg-muted/40',
+                                            glassItemBorderClasses
+                                          )}
+                                          onClick={(event) => {
+                                            event.stopPropagation()
+                                            setActiveTaskAction({
+                                              id: actionId,
+                                              label: action.label,
+                                            })
+                                            setTaskAssignmentResource(
+                                              assignment?.resource ?? ''
+                                            )
+                                            setIsCreateTaskOpen(true)
+                                          }}
+                                        >
+                                          <Checkbox
+                                            id={actionId}
+                                            checked={checked}
+                                            onClick={(event) => event.stopPropagation()}
+                                            onCheckedChange={(value) => {
+                                              setCompletedResponseActions((previous) => {
+                                                const next = new Set(previous)
+                                                if (value) {
+                                                  next.add(actionId)
+                                                } else {
+                                                  next.delete(actionId)
+                                                }
+                                                return next
+                                              })
+                                            }}
+                                            className="mt-0.5"
+                                          />
+                                          <div className="flex flex-1 flex-col gap-0.5">
+                                            <div className="flex items-start justify-between gap-2">
+                                              <Label
+                                                htmlFor={actionId}
+                                                onClick={(event) => event.preventDefault()}
+                                                className={cn(
+                                                  'cursor-pointer text-sm font-normal',
+                                                  checked &&
+                                                    'text-muted-foreground line-through'
+                                                )}
+                                              >
+                                                {action.label}
+                                              </Label>
+                                              {assignment && (
+                                                <Badge className="shrink-0 border-transparent bg-yellow-400/25 text-yellow-800 dark:text-yellow-200">
+                                                  Assigned
+                                                </Badge>
+                                              )}
+                                            </div>
+                                            {assignment && (
+                                              <p className="text-xs italic text-muted-foreground">
+                                                assigned to {assignment.resource} at{' '}
+                                                {assignment.timestamp}
+                                              </p>
+                                            )}
+                                          </div>
+                                        </Item>
+                                      )
+                                    })}
+                                  </div>
+                                  <div className="mt-3 flex justify-start">
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      onClick={(eventClick) => {
+                                        eventClick.stopPropagation()
+                                        if (relatedEvent) {
+                                          openCreateIncidentFromEvent(relatedEvent)
+                                          return
+                                        }
+                                        resetCreateIncidentForm()
+                                        setIsCreateIncidentOpen(true)
+                                      }}
+                                    >
+                                      + Create Incident
+                                    </Button>
+                                  </div>
+                                </div>
+                              )}
                             </div>
                           </CollapsibleContent>
                         </Collapsible>
@@ -4781,16 +14778,129 @@ function App() {
                   )
                 )}
 
-                {activeTab === 'resources' && (
-                  cardFilteredResources.length === 0 ? (
+                {activeTab === 'resources' &&
+                  resourcesPanelView === 'resources' &&
+                  cardFilteredResources.length === 0 && (
                     <Item variant="outline" className={glassItemBorderClasses}>
                       <ItemContent>
                         <ItemTitle>No matching resources</ItemTitle>
                         <ItemDescription>Try a broader search term.</ItemDescription>
                       </ItemContent>
                     </Item>
-                  ) : (
-                    cardFilteredResources.map((resource) => {
+                  )}
+
+                {activeTab === 'resources' &&
+                  resourcesPanelView === 'resources' &&
+                  cardFilteredResources.length > 0 &&
+                  resourcesDisplayMode === 'table' && (
+                    <div className={cn('overflow-x-auto rounded-md border', glassItemBorderClasses)}>
+                      <table className="w-full min-w-[2600px] border-collapse text-xs">
+                        <thead>
+                          <tr className="border-b bg-muted/30 text-left text-muted-foreground">
+                            <th className="whitespace-nowrap px-2 py-2 font-semibold">Name</th>
+                            <th className="whitespace-nowrap px-2 py-2 font-semibold">Owner</th>
+                            <th className="whitespace-nowrap px-2 py-2 font-semibold">Incident Assignment</th>
+                            <th className="whitespace-nowrap px-2 py-2 font-semibold">Type</th>
+                            <th className="whitespace-nowrap px-2 py-2 font-semibold">Team Lead</th>
+                            <th className="whitespace-nowrap px-2 py-2 font-semibold">ETA</th>
+                            <th className="whitespace-nowrap px-2 py-2 font-semibold">Location</th>
+                            <th className="whitespace-nowrap px-2 py-2 font-semibold">Notes</th>
+                            <th className="whitespace-nowrap px-2 py-2 font-semibold">Current Location</th>
+                            <th className="whitespace-nowrap px-2 py-2 font-semibold">Datetime Ordered</th>
+                            <th className="whitespace-nowrap px-2 py-2 font-semibold">OPCON</th>
+                            <th className="whitespace-nowrap px-2 py-2 font-semibold">TACON</th>
+                            <th className="whitespace-nowrap px-2 py-2 font-semibold">Point of Contact</th>
+                            <th className="whitespace-nowrap px-2 py-2 font-semibold">Owning Organization</th>
+                            <th className="whitespace-nowrap px-2 py-2 font-semibold">Quantity</th>
+                            <th className="whitespace-nowrap px-2 py-2 font-semibold">Unit</th>
+                            <th className="whitespace-nowrap px-2 py-2 font-semibold">Cost Unit Type</th>
+                            <th className="whitespace-nowrap px-2 py-2 font-semibold">Cost per Unit</th>
+                            <th className="whitespace-nowrap px-2 py-2 font-semibold">Hull/Tail Number</th>
+                            <th className="whitespace-nowrap px-2 py-2 font-semibold">Symbology</th>
+                            <th className="whitespace-nowrap px-2 py-2 font-semibold">Lat</th>
+                            <th className="whitespace-nowrap px-2 py-2 font-semibold">Long</th>
+                            <th className="whitespace-nowrap px-2 py-2 font-semibold">Capabilities</th>
+                            <th className="whitespace-nowrap px-2 py-2 font-semibold">Current Op Period</th>
+                            <th className="whitespace-nowrap px-2 py-2 font-semibold">Next Op Period</th>
+                            <th className="whitespace-nowrap px-2 py-2 font-semibold">Current Op Period Assignment</th>
+                            <th className="whitespace-nowrap px-2 py-2 font-semibold">Next Op Period Assignment</th>
+                            <th className="whitespace-nowrap px-2 py-2 font-semibold">Check-in Status</th>
+                            <th className="whitespace-nowrap px-2 py-2 font-semibold" />
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {cardFilteredResources.map((resource) => {
+                            const key = `resource-${resource.id}`
+                            return (
+                              <tr
+                                key={resource.id}
+                                className={cn(
+                                  'border-b',
+                                  selectedPanelItemId === key && 'bg-primary/5'
+                                )}
+                              >
+                                <td className="px-2 py-2 font-medium">{resource.name}</td>
+                                <td className="px-2 py-2">{resource.owner}</td>
+                                <td className="px-2 py-2">{getResourceIncidentAssignmentLabel(resource)}</td>
+                                <td className="px-2 py-2">{resource.type}</td>
+                                <td className="px-2 py-2">{resource.teamLead}</td>
+                                <td className="px-2 py-2">{resource.eta}</td>
+                                <td className="px-2 py-2">{resource.location}</td>
+                                <td className="max-w-[16rem] px-2 py-2">{resource.notes}</td>
+                                <td className="px-2 py-2">{resource.currentLocation}</td>
+                                <td className="px-2 py-2">{resource.datetimeOrdered}</td>
+                                <td className="px-2 py-2">{resource.opcon}</td>
+                                <td className="px-2 py-2">{resource.tacon}</td>
+                                <td className="px-2 py-2">{resource.pointOfContact}</td>
+                                <td className="px-2 py-2">{resource.owningOrganization}</td>
+                                <td className="px-2 py-2">{resource.quantity}</td>
+                                <td className="px-2 py-2">{resource.unit}</td>
+                                <td className="px-2 py-2">
+                                  {formatResourceCostUnitType(resource.costUnitType)}
+                                </td>
+                                <td className="px-2 py-2">
+                                  {formatResourceCostPerUnit(resource.costPerUnit)}
+                                </td>
+                                <td className="px-2 py-2">{resource.hullTailNumber}</td>
+                                <td className="px-2 py-2">{resource.symbology}</td>
+                                <td className="px-2 py-2">{resource.latitude}</td>
+                                <td className="px-2 py-2">{resource.longitude}</td>
+                                <td className="max-w-[16rem] px-2 py-2">{resource.capabilities}</td>
+                                <td className="px-2 py-2">{resource.currentOpPeriod}</td>
+                                <td className="px-2 py-2">{resource.nextOpPeriod}</td>
+                                <td className="px-2 py-2">{resource.currentOpPeriodAssignment}</td>
+                                <td className="px-2 py-2">{resource.nextOpPeriodAssignment}</td>
+                                <td className="px-2 py-2">{resource.checkInStatus}</td>
+                                <td className="px-2 py-2">
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    aria-label="Zoom map to resource"
+                                    onClick={() => {
+                                      setSelectedPanelItemId(key)
+                                      void focusMapItem(
+                                        `resource-${resource.id}`,
+                                        resource.mapLocation,
+                                        30000
+                                      )
+                                    }}
+                                  >
+                                    <MapIcon className="h-4 w-4" />
+                                  </Button>
+                                </td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+
+                {activeTab === 'resources' &&
+                  resourcesPanelView === 'resources' &&
+                  cardFilteredResources.length > 0 &&
+                  resourcesDisplayMode === 'list' &&
+                  cardFilteredResources.map((resource) => {
                     const key = `resource-${resource.id}`
                     const isOpen = expandedItemId === key
                     return (
@@ -4813,10 +14923,13 @@ function App() {
                           >
                             <ItemContent>
                               <ItemTitle>{resource.name}</ItemTitle>
-                              <ItemDescription>{resource.notes}</ItemDescription>
+                              {getResourceIncidentAssignmentLabel(resource) ? (
+                                <ItemDescription>
+                                  {getResourceIncidentAssignmentLabel(resource)}
+                                </ItemDescription>
+                              ) : null}
                             </ItemContent>
                             <ItemActions>
-                              <Badge variant="secondary">{resource.status}</Badge>
                               <Button
                                 variant="ghost"
                                 size="icon"
@@ -4876,6 +14989,14 @@ function App() {
                                   <span className="font-medium">Unit:</span> {resource.unit}
                                 </p>
                                 <p>
+                                  <span className="font-medium">Cost Unit Type:</span>{' '}
+                                  {formatResourceCostUnitType(resource.costUnitType)}
+                                </p>
+                                <p>
+                                  <span className="font-medium">Cost per Unit:</span>{' '}
+                                  {formatResourceCostPerUnit(resource.costPerUnit)}
+                                </p>
+                                <p>
                                   <span className="font-medium">Hull/Tail Number:</span>{' '}
                                   {resource.hullTailNumber}
                                 </p>
@@ -4918,9 +15039,310 @@ function App() {
                         </Collapsible>
                       </Item>
                     )
-                    })
-                  )
-                )}
+                  })}
+
+                {activeTab === 'resources' &&
+                  resourcesPanelView === 'resource-requests' &&
+                  cardFilteredResourceRequests.length === 0 && (
+                    <Item variant="outline" className={glassItemBorderClasses}>
+                      <ItemContent>
+                        <ItemTitle>No matching resource requests</ItemTitle>
+                        <ItemDescription>Try a broader search term.</ItemDescription>
+                      </ItemContent>
+                    </Item>
+                  )}
+
+                {activeTab === 'resources' &&
+                  resourcesPanelView === 'resource-requests' &&
+                  cardFilteredResourceRequests.length > 0 &&
+                  resourcesDisplayMode === 'table' && (
+                    <div
+                      className={cn(
+                        'rounded-md border',
+                        glassItemBorderClasses,
+                        isMapVisible && 'overflow-x-auto'
+                      )}
+                    >
+                      <table className="w-full min-w-[1800px] border-collapse text-xs">
+                        <thead>
+                          <tr className="border-b bg-muted/30 text-left text-muted-foreground">
+                            <th className="px-2 py-2 font-semibold">Request #</th>
+                            <th className="px-2 py-2 font-semibold">Incident</th>
+                            <th className="px-2 py-2 font-semibold">Kind / Type</th>
+                            <th className="px-2 py-2 font-semibold">Qty</th>
+                            <th className="px-2 py-2 font-semibold">Priority</th>
+                            <th className="px-2 py-2 font-semibold">Status</th>
+                            <th className="px-2 py-2 font-semibold">Requested By</th>
+                            <th className="px-2 py-2 font-semibold">Reporting Location</th>
+                            <th className="px-2 py-2 font-semibold">ETA (LSC)</th>
+                            <th className="px-2 py-2 font-semibold">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {cardFilteredResourceRequests.map((request) => {
+                            const key = `resource-request-${request.id}`
+                            return (
+                              <tr
+                                key={request.id}
+                                className={cn(
+                                  'border-b',
+                                  selectedPanelItemId === key && 'bg-primary/5'
+                                )}
+                              >
+                                <td className="px-2 py-2">{request.requestNumber}</td>
+                                <td className="max-w-[12rem] px-2 py-2">{request.incidentName}</td>
+                                <td className="max-w-[12rem] px-2 py-2">
+                                  {request.orderKind} · {request.orderType}
+                                </td>
+                                <td className="px-2 py-2">{request.orderQuantity}</td>
+                                <td className="px-2 py-2">
+                                  {getIcs213rrPriorityLabel(request.orderPriority)}
+                                </td>
+                                <td className="px-2 py-2">{request.status}</td>
+                                <td className="max-w-[10rem] px-2 py-2">{request.requestedByName}</td>
+                                <td className="max-w-[12rem] px-2 py-2">
+                                  {request.orderRequestedReportingLocation}
+                                </td>
+                                <td className="px-2 py-2">{request.orderEtaLsc || request.orderLocationDateTime}</td>
+                                <td className="px-2 py-2">
+                                  <div className="flex items-center gap-1">
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      aria-label={`Preview ICS 213RR for ${request.requestNumber}`}
+                                      onClick={() => setOpenResourceRequestPreviewId(request.id)}
+                                    >
+                                      <Eye className="h-4 w-4" />
+                                    </Button>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      aria-label={`Export ${request.requestNumber} as Word`}
+                                      onClick={() => exportResourceRequestWord(request)}
+                                    >
+                                      <FileText className="h-4 w-4" />
+                                    </Button>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      aria-label={`Export ${request.requestNumber} as PDF`}
+                                      onClick={() => exportResourceRequestPdf(request)}
+                                    >
+                                      <DownloadIcon className="h-4 w-4" />
+                                    </Button>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      aria-label="Zoom map to resource request"
+                                      onClick={() => {
+                                        setSelectedPanelItemId(key)
+                                        void focusMapItem(
+                                          `resource-request-${request.id}`,
+                                          request.mapLocation,
+                                          30000
+                                        )
+                                      }}
+                                    >
+                                      <MapIcon className="h-4 w-4" />
+                                    </Button>
+                                  </div>
+                                </td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+
+                {activeTab === 'resources' &&
+                  resourcesPanelView === 'resource-requests' &&
+                  cardFilteredResourceRequests.length > 0 &&
+                  resourcesDisplayMode === 'list' &&
+                  cardFilteredResourceRequests.map((request) => {
+                    const key = `resource-request-${request.id}`
+                    const isOpen = expandedItemId === key
+                    return (
+                      <Item
+                        key={request.id}
+                        variant="outline"
+                        className={cn(
+                          'flex-col items-stretch p-0',
+                          glassItemBorderClasses,
+                          selectedPanelItemId === key && 'ring-2 ring-primary/60 bg-primary/5'
+                        )}
+                      >
+                        <Collapsible
+                          open={isOpen}
+                          onOpenChange={(open) => setExpandedItemId(open ? key : null)}
+                        >
+                          <div
+                            className="flex cursor-pointer items-center gap-2 px-3 py-2.5"
+                            onClick={() => toggleExpandedItem(key)}
+                          >
+                            <ItemContent>
+                              <ItemTitle>{request.orderDetailedDescription || request.orderType}</ItemTitle>
+                              <ItemDescription>
+                                {request.requestNumber} · {request.incidentName}
+                              </ItemDescription>
+                            </ItemContent>
+                            <ItemActions>
+                              <Badge
+                                variant="outline"
+                                className={cn(
+                                  'text-[10px] font-semibold uppercase',
+                                  getIncidentSeverityBadgeClasses(
+                                    request.orderPriority === 'U' ? 'High' : 'Medium'
+                                  )
+                                )}
+                              >
+                                {getIcs213rrPriorityLabel(request.orderPriority)}
+                              </Badge>
+                              <Badge variant="secondary">{request.status}</Badge>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                aria-label={`Preview ICS 213RR for ${request.requestNumber}`}
+                                onClick={(event) => {
+                                  event.stopPropagation()
+                                  setOpenResourceRequestPreviewId(request.id)
+                                }}
+                              >
+                                <Eye className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                aria-label={`Export ${request.requestNumber} as Word`}
+                                onClick={(event) => {
+                                  event.stopPropagation()
+                                  exportResourceRequestWord(request)
+                                }}
+                              >
+                                <FileText className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                aria-label={`Export ${request.requestNumber} as PDF`}
+                                onClick={(event) => {
+                                  event.stopPropagation()
+                                  exportResourceRequestPdf(request)
+                                }}
+                              >
+                                <DownloadIcon className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                aria-label="Zoom map to resource request"
+                                onClick={(event) => {
+                                  event.stopPropagation()
+                                  setSelectedPanelItemId(key)
+                                  void focusMapItem(
+                                    `resource-request-${request.id}`,
+                                    request.mapLocation,
+                                    30000
+                                  )
+                                }}
+                              >
+                                <MapIcon className="h-4 w-4" />
+                              </Button>
+                              <CollapsibleTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  aria-label="Toggle resource request details"
+                                  onClick={(event) => event.stopPropagation()}
+                                >
+                                  <ChevronDown
+                                    className={cn(
+                                      'h-4 w-4 transition-transform',
+                                      isOpen && 'rotate-180'
+                                    )}
+                                  />
+                                </Button>
+                              </CollapsibleTrigger>
+                            </ItemActions>
+                          </div>
+                          <CollapsibleContent>
+                            <div className="space-y-3 border-t px-3 py-3 text-sm">
+                              <div className="flex flex-wrap gap-2">
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => setOpenResourceRequestPreviewId(request.id)}
+                                >
+                                  <Eye className="mr-1 h-3.5 w-3.5" />
+                                  Preview 213RR
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => exportResourceRequestWord(request)}
+                                >
+                                  <FileText className="mr-1 h-3.5 w-3.5" />
+                                  Export Word
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => exportResourceRequestPdf(request)}
+                                >
+                                  <DownloadIcon className="mr-1 h-3.5 w-3.5" />
+                                  Export PDF
+                                </Button>
+                              </div>
+                              <div className="grid grid-cols-2 gap-2">
+                                <p>
+                                  <span className="font-medium">1. Incident Name:</span>{' '}
+                                  {request.incidentName}
+                                </p>
+                                <p>
+                                  <span className="font-medium">2. Date/Time:</span>{' '}
+                                  {request.dateTimeInitiated}
+                                </p>
+                                <p>
+                                  <span className="font-medium">3. Request Number:</span>{' '}
+                                  {request.requestNumber}
+                                </p>
+                                <p>
+                                  <span className="font-medium">4. Order Qty/Kind/Type:</span>{' '}
+                                  {request.orderQuantity} {request.orderKind} · {request.orderType}
+                                </p>
+                                <p className="col-span-2">
+                                  <span className="font-medium">4e. Description:</span>{' '}
+                                  {request.orderDetailedDescription}
+                                </p>
+                                <p className="col-span-2">
+                                  <span className="font-medium">4f. Reporting Location:</span>{' '}
+                                  {request.orderRequestedReportingLocation}
+                                </p>
+                                <p>
+                                  <span className="font-medium">6. Requested By:</span>{' '}
+                                  {request.requestedByName} · {request.requestedByPosition}
+                                </p>
+                                <p>
+                                  <span className="font-medium">6. Date/Time:</span>{' '}
+                                  {request.requestedByDateTime}
+                                </p>
+                                <p className="col-span-2">
+                                  <span className="font-medium">5. Suggested Sources:</span>{' '}
+                                  {request.suggestedSourcesAndSubstitutes}
+                                </p>
+                                <p className="col-span-2">
+                                  <span className="font-medium">12. Notes:</span> {request.notes}
+                                </p>
+                              </div>
+                            </div>
+                          </CollapsibleContent>
+                        </Collapsible>
+                      </Item>
+                    )
+                  })}
 
                 {activeTab === 'aors' && (
                   <>
@@ -6263,21 +16685,22 @@ function App() {
                   </>
                 )}
 
-                {activeTab === 'incidents' && (
-                  cardFilteredRosterPositions.length === 0 ? (
+                {activeTab === 'fema-regions' && (
+                  cardFilteredFemaAors.length === 0 ? (
                     <Item variant="outline" className={glassItemBorderClasses}>
                       <ItemContent>
-                        <ItemTitle>No matching roster positions</ItemTitle>
+                        <ItemTitle>No matching Business Units</ItemTitle>
                         <ItemDescription>Try a broader search term.</ItemDescription>
                       </ItemContent>
                     </Item>
                   ) : (
-                    cardFilteredRosterPositions.map((position) => {
-                      const key = `incident-${position.id}`
+                    <>
+                    {cardFilteredFemaAors.map((aor) => {
+                      const key = `aor-${aor.id}`
                       const isOpen = expandedItemId === key
                       return (
                         <Item
-                          key={position.id}
+                          key={aor.id}
                           variant="outline"
                           className={cn(
                             'flex-col items-stretch p-0',
@@ -6294,22 +16717,148 @@ function App() {
                               onClick={() => toggleExpandedItem(key)}
                             >
                               <ItemContent>
-                                <ItemTitle>{position.position}</ItemTitle>
+                                <ItemTitle>{aor.name}</ItemTitle>
+                              </ItemContent>
+                              <ItemActions>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  aria-label="Zoom map to area of responsibility"
+                                  onClick={(event) => {
+                                    event.stopPropagation()
+                                    setSelectedPanelItemId(key)
+                                    void focusMapItem(
+                                      `fema-aor-${aor.id}`,
+                                      aor.location,
+                                      10_000_000
+                                    )
+                                  }}
+                                >
+                                  <MapIcon className="h-4 w-4" />
+                                </Button>
+                                <CollapsibleTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    aria-label="Toggle AOR details"
+                                    onClick={(event) => event.stopPropagation()}
+                                  >
+                                    <ChevronDown
+                                      className={cn(
+                                        'h-4 w-4 transition-transform',
+                                        isOpen && 'rotate-180'
+                                      )}
+                                    />
+                                  </Button>
+                                </CollapsibleTrigger>
+                              </ItemActions>
+                            </div>
+                            <CollapsibleContent>
+                              <div className="border-t px-3 py-2 text-sm">
+                                <div className="grid grid-cols-2 gap-2">
+                                  <p>
+                                    <span className="font-medium">Lead:</span> {aor.lead}
+                                  </p>
+                                  <p>
+                                    <span className="font-medium">Incidents:</span> {aor.incidents}
+                                  </p>
+                                </div>
+                                <p className="mt-2">
+                                  <span className="font-medium">Last Update:</span>{' '}
+                                  {aor.lastUpdate}
+                                </p>
+                                <p className="mt-1">
+                                  <span className="font-medium">Population / Evac:</span>{' '}
+                                  {aor.population} / {aor.evacuationStatus}
+                                </p>
+                                <p className="mt-2">
+                                  <span className="font-medium">Latest SITREP:</span>{' '}
+                                  {aor.sitrep}{' '}
+                                  <span className="italic text-muted-foreground">
+                                    (last updated by {aor.sitrepUpdatedBy})
+                                  </span>
+                                </p>
+                                <div className="mt-2">
+                                  <span className="font-medium">Data Sources:</span>
+                                  <ul className="mt-1 ml-5 list-disc text-xs text-muted-foreground">
+                                    {aor.sitrepSources.map((source) => (
+                                      <li key={source}>{source}</li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              </div>
+                            </CollapsibleContent>
+                          </Collapsible>
+                        </Item>
+                      )
+                    })}
+                    </>
+                  )
+                )}
+
+                {activeTab === 'incident-list' && (
+                  cardFilteredIncidentList.length === 0 ? (
+                    <Item variant="outline" className={glassItemBorderClasses}>
+                      <ItemContent>
+                        <ItemTitle>No matching incidents</ItemTitle>
+                        <ItemDescription>Try a broader search term.</ItemDescription>
+                      </ItemContent>
+                    </Item>
+                  ) : (
+                    <div className="space-y-2 pt-px">
+                    {cardFilteredIncidentList.map((incident) => {
+                      const key = `incident-list-${incident.id}`
+                      const isOpen = expandedItemId === key
+                      return (
+                        <Item
+                          key={incident.id}
+                          variant="outline"
+                          className={cn(
+                            'flex-col items-stretch p-0',
+                            glassItemBorderClasses,
+                            selectedPanelItemId === key && 'ring-2 ring-primary/60 bg-primary/5'
+                          )}
+                        >
+                          <Collapsible
+                            open={isOpen}
+                            onOpenChange={(open) => setExpandedItemId(open ? key : null)}
+                          >
+                            <div
+                              className="flex cursor-pointer items-center gap-2 px-3 py-2.5"
+                              onClick={() => toggleExpandedItem(key)}
+                            >
+                              <ItemContent>
+                                <ItemTitle>{incident.name}</ItemTitle>
                                 <ItemDescription>
-                                  Assigned: {position.assignedUsers.join(', ')}
+                                  {incident.type} · {incident.region}
                                 </ItemDescription>
                               </ItemContent>
                               <ItemActions>
-                                <Badge variant="secondary">{position.staffingStatus}</Badge>
+                                <Badge variant="secondary">{incident.severity}</Badge>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  aria-label={`Enter workspace for ${incident.name}`}
+                                  onClick={(event) => {
+                                    event.stopPropagation()
+                                    enterIncidentWorkspace(incident)
+                                  }}
+                                >
+                                  Enter Workspace
+                                </Button>
                                 <Button
                                   variant="ghost"
                                   size="icon"
-                                  aria-label="Zoom map to roster position"
+                                  aria-label="Zoom map to incident"
                                   onClick={(event) => {
                                     event.stopPropagation()
                                     setSelectedPanelItemId(key)
-                                    void
-                                    focusMapItem(`incident-${position.id}`, position.location, 60000)
+                                    void focusMapItem(
+                                      `incident-list-${incident.id}`,
+                                      incident.location,
+                                      500_000
+                                    )
                                   }}
                                 >
                                   <MapIcon className="h-4 w-4" />
@@ -6318,11 +16867,14 @@ function App() {
                                   <Button
                                     variant="ghost"
                                     size="icon"
-                                    aria-label="Toggle roster position details"
+                                    aria-label="Toggle incident details"
                                     onClick={(event) => event.stopPropagation()}
                                   >
                                     <ChevronDown
-                                      className={cn('h-4 w-4 transition-transform', isOpen && 'rotate-180')}
+                                      className={cn(
+                                        'h-4 w-4 transition-transform',
+                                        isOpen && 'rotate-180'
+                                      )}
                                     />
                                   </Button>
                                 </CollapsibleTrigger>
@@ -6330,132 +16882,62 @@ function App() {
                             </div>
                             <CollapsibleContent>
                               <div className="border-t px-3 py-2 text-sm">
-                                <div className="grid grid-cols-2 gap-2">
+                                <p className="rounded-md border bg-muted/20 px-3 py-2 text-sm">
+                                  {getIncidentRelatedEventsLabel(incident, eventList)}
+                                </p>
+                                <div className="mt-3 grid grid-cols-2 gap-2">
                                   <p>
-                                    <span className="font-medium">Shift:</span> {position.shift}
+                                    <span className="font-medium">Status:</span> {incident.status}
                                   </p>
                                   <p>
-                                    <span className="font-medium">Supervisor:</span> {position.supervisor}
+                                    <span className="font-medium">Severity:</span>{' '}
+                                    {incident.severity}
                                   </p>
                                 </div>
                                 <p className="mt-2">
-                                  <span className="font-medium">Staffing:</span>{' '}
-                                  {position.assignedUsers.length} assigned
+                                  <span className="font-medium">Lead:</span> {incident.lead}
                                 </p>
                                 <p className="mt-1">
-                                  <span className="font-medium">Notes:</span> {position.notes}
-                                </p>
-                              </div>
-                            </CollapsibleContent>
-                          </Collapsible>
-                        </Item>
-                      )
-                    })
-                  )
-                )}
-
-                {activeTab === 'safety' && (
-                  cardFilteredSafetyAnalyses.length === 0 ? (
-                    <Item variant="outline" className={glassItemBorderClasses}>
-                      <ItemContent>
-                        <ItemTitle>No matching safety analyses</ItemTitle>
-                        <ItemDescription>Try a broader search term.</ItemDescription>
-                      </ItemContent>
-                    </Item>
-                  ) : (
-                    cardFilteredSafetyAnalyses.map((analysis) => {
-                      const key = `safety-${analysis.id}`
-                      const isOpen = expandedItemId === key
-                      return (
-                        <Item
-                          key={analysis.id}
-                          variant="outline"
-                          className={cn(
-                            'flex-col items-stretch p-0',
-                            glassItemBorderClasses,
-                            selectedPanelItemId === key && 'ring-2 ring-primary/60 bg-primary/5'
-                          )}
-                        >
-                          <Collapsible
-                            open={isOpen}
-                            onOpenChange={(open) => setExpandedItemId(open ? key : null)}
-                          >
-                            <div
-                              className="flex cursor-pointer items-center gap-2 px-3 py-2.5"
-                              onClick={() => toggleExpandedItem(key)}
-                            >
-                              <ItemContent>
-                                <ItemTitle>{analysis.hazard}</ItemTitle>
-                                <ItemDescription>{analysis.controls}</ItemDescription>
-                              </ItemContent>
-                              <ItemActions>
-                                <Badge variant="secondary">{analysis.riskLevel}</Badge>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  aria-label="Zoom map to safety analysis"
-                                  onClick={(event) => {
-                                    event.stopPropagation()
-                                    setSelectedPanelItemId(key)
-                                    void focusMapItem(`safety-${analysis.id}`, analysis.location, 50000)
-                                  }}
-                                >
-                                  <MapIcon className="h-4 w-4" />
-                                </Button>
-                                <CollapsibleTrigger asChild>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    aria-label="Toggle safety analysis details"
-                                    onClick={(event) => event.stopPropagation()}
-                                  >
-                                    <ChevronDown
-                                      className={cn('h-4 w-4 transition-transform', isOpen && 'rotate-180')}
-                                    />
-                                  </Button>
-                                </CollapsibleTrigger>
-                              </ItemActions>
-                            </div>
-                            <CollapsibleContent>
-                              <div className="border-t px-3 py-2 text-sm">
-                                <div className="grid grid-cols-2 gap-2">
-                                  <p>
-                                    <span className="font-medium">Status:</span> {analysis.status}
-                                  </p>
-                                  <p>
-                                    <span className="font-medium">Owner:</span> {analysis.owner}
-                                  </p>
-                                </div>
-                                <p className="mt-2">
-                                  <span className="font-medium">Reviewed:</span> {analysis.reviewedAt}
+                                  <span className="font-medium">Started:</span>{' '}
+                                  {incident.startedAt}
                                 </p>
                                 <p className="mt-1">
-                                  <span className="font-medium">Notes:</span> {analysis.notes}
+                                  <span className="font-medium">Last Update:</span>{' '}
+                                  {incident.lastUpdate}
+                                </p>
+                                <p className="mt-2">
+                                  <span className="font-medium">Summary:</span> {incident.summary}
+                                </p>
+                                <p className="mt-2">
+                                  <span className="font-medium">Resources Committed:</span>{' '}
+                                  {incident.resourcesCommitted}
                                 </p>
                               </div>
                             </CollapsibleContent>
                           </Collapsible>
                         </Item>
                       )
-                    })
+                    })}
+                    </div>
                   )
                 )}
 
-                {activeTab === 'calendar' && (
-                  cardFilteredCalendarItems.length === 0 ? (
+                {activeTab === 'exercises' && (
+                  cardFilteredExerciseList.length === 0 ? (
                     <Item variant="outline" className={glassItemBorderClasses}>
                       <ItemContent>
-                        <ItemTitle>No matching calendar events</ItemTitle>
+                        <ItemTitle>No matching exercises</ItemTitle>
                         <ItemDescription>Try a broader search term.</ItemDescription>
                       </ItemContent>
                     </Item>
                   ) : (
-                    cardFilteredCalendarItems.map((event) => {
-                      const key = `calendar-${event.id}`
+                    <div className="space-y-2 pt-px">
+                    {cardFilteredExerciseList.map((exercise) => {
+                      const key = `exercise-list-${exercise.id}`
                       const isOpen = expandedItemId === key
                       return (
                         <Item
-                          key={event.id}
+                          key={exercise.id}
                           variant="outline"
                           className={cn(
                             'flex-col items-stretch p-0',
@@ -6472,103 +16954,37 @@ function App() {
                               onClick={() => toggleExpandedItem(key)}
                             >
                               <ItemContent>
-                                <ItemTitle>{event.title}</ItemTitle>
-                                <ItemDescription>{event.notes}</ItemDescription>
+                                <ItemTitle>{exercise.name}</ItemTitle>
+                                <ItemDescription>
+                                  {exercise.type} · {exercise.region}
+                                </ItemDescription>
                               </ItemContent>
                               <ItemActions>
-                                <Badge variant="secondary">{event.status}</Badge>
+                                <Badge variant="secondary">{exercise.severity}</Badge>
                                 <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  aria-label="Zoom map to calendar event"
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    setSelectedPanelItemId(key)
-                                    void focusMapItem(`calendar-${event.id}`, event.location, 50000)
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  aria-label={`Enter workspace for ${exercise.name}`}
+                                  onClick={(event) => {
+                                    event.stopPropagation()
+                                    enterExerciseWorkspace(exercise)
                                   }}
                                 >
-                                  <MapIcon className="h-4 w-4" />
+                                  Enter Workspace
                                 </Button>
-                                <CollapsibleTrigger asChild>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    aria-label="Toggle calendar event details"
-                                    onClick={(e) => e.stopPropagation()}
-                                  >
-                                    <ChevronDown
-                                      className={cn('h-4 w-4 transition-transform', isOpen && 'rotate-180')}
-                                    />
-                                  </Button>
-                                </CollapsibleTrigger>
-                              </ItemActions>
-                            </div>
-                            <CollapsibleContent>
-                              <div className="border-t px-3 py-2 text-sm">
-                                <div className="grid grid-cols-2 gap-2">
-                                  <p>
-                                    <span className="font-medium">Type:</span> {event.eventType}
-                                  </p>
-                                  <p>
-                                    <span className="font-medium">Window:</span> {event.timeWindow}
-                                  </p>
-                                </div>
-                                <p className="mt-2">
-                                  <span className="font-medium">Owner:</span> {event.owner}
-                                </p>
-                              </div>
-                            </CollapsibleContent>
-                          </Collapsible>
-                        </Item>
-                      )
-                    })
-                  )
-                )}
-
-                {activeTab === 'reports' && (
-                  cardFilteredReports.length === 0 ? (
-                    <Item variant="outline" className={glassItemBorderClasses}>
-                      <ItemContent>
-                        <ItemTitle>No matching reports</ItemTitle>
-                        <ItemDescription>Try a broader search term.</ItemDescription>
-                      </ItemContent>
-                    </Item>
-                  ) : (
-                    cardFilteredReports.map((report) => {
-                      const key = `report-${report.id}`
-                      const isOpen = expandedItemId === key
-                      return (
-                        <Item
-                          key={report.id}
-                          variant="outline"
-                          className={cn(
-                            'flex-col items-stretch p-0',
-                            glassItemBorderClasses,
-                            selectedPanelItemId === key && 'ring-2 ring-primary/60 bg-primary/5'
-                          )}
-                        >
-                          <Collapsible
-                            open={isOpen}
-                            onOpenChange={(open) => setExpandedItemId(open ? key : null)}
-                          >
-                            <div
-                              className="flex cursor-pointer items-center gap-2 px-3 py-2.5"
-                              onClick={() => toggleExpandedItem(key)}
-                            >
-                              <ItemContent>
-                                <ItemTitle>{report.title}</ItemTitle>
-                                <ItemDescription>{report.summary}</ItemDescription>
-                              </ItemContent>
-                              <ItemActions>
-                                <Badge variant="secondary">{report.status}</Badge>
                                 <Button
                                   variant="ghost"
                                   size="icon"
-                                  aria-label="Zoom map to report context"
+                                  aria-label="Zoom map to exercise"
                                   onClick={(event) => {
                                     event.stopPropagation()
                                     setSelectedPanelItemId(key)
-                                    void focusMapItem(`report-${report.id}`, report.location, 50000)
+                                    void focusMapItem(
+                                      `exercise-list-${exercise.id}`,
+                                      exercise.location,
+                                      500_000
+                                    )
                                   }}
                                 >
                                   <MapIcon className="h-4 w-4" />
@@ -6577,11 +16993,14 @@ function App() {
                                   <Button
                                     variant="ghost"
                                     size="icon"
-                                    aria-label="Toggle report details"
+                                    aria-label="Toggle exercise details"
                                     onClick={(event) => event.stopPropagation()}
                                   >
                                     <ChevronDown
-                                      className={cn('h-4 w-4 transition-transform', isOpen && 'rotate-180')}
+                                      className={cn(
+                                        'h-4 w-4 transition-transform',
+                                        isOpen && 'rotate-180'
+                                      )}
                                     />
                                   </Button>
                                 </CollapsibleTrigger>
@@ -6591,830 +17010,1368 @@ function App() {
                               <div className="border-t px-3 py-2 text-sm">
                                 <div className="grid grid-cols-2 gap-2">
                                   <p>
-                                    <span className="font-medium">Type:</span> {report.reportType}
+                                    <span className="font-medium">Status:</span> {exercise.status}
                                   </p>
                                   <p>
-                                    <span className="font-medium">Author:</span> {report.author}
+                                    <span className="font-medium">Severity:</span>{' '}
+                                    {exercise.severity}
                                   </p>
                                 </div>
                                 <p className="mt-2">
-                                  <span className="font-medium">Due:</span> {report.dueBy}
+                                  <span className="font-medium">Lead:</span> {exercise.lead}
+                                </p>
+                                <p className="mt-1">
+                                  <span className="font-medium">Started:</span>{' '}
+                                  {exercise.startedAt}
+                                </p>
+                                <p className="mt-1">
+                                  <span className="font-medium">Last Update:</span>{' '}
+                                  {exercise.lastUpdate}
+                                </p>
+                                <p className="mt-2">
+                                  <span className="font-medium">Summary:</span> {exercise.summary}
+                                </p>
+                                <p className="mt-2">
+                                  <span className="font-medium">Resources Committed:</span>{' '}
+                                  {exercise.resourcesCommitted}
                                 </p>
                               </div>
                             </CollapsibleContent>
                           </Collapsible>
                         </Item>
                       )
-                    })
+                    })}
+                    </div>
                   )
                 )}
 
-                {activeTab === 'briefing' && (
-                  <div className="space-y-3">
-                    <div className="sticky top-0 z-10 -mx-2 space-y-3 bg-card px-2 pb-2 pt-1">
-                    {viewingIcs201Version && (
-                      <div className="flex items-center justify-between rounded-md border border-amber-400 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-500 dark:bg-amber-500/10 dark:text-amber-200">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <History className="h-3.5 w-3.5" />
-                          <span>
-                            You are viewing a past version from{' '}
-                            <span className="font-semibold">
-                              {new Date(viewingIcs201Version.createdAt).toLocaleTimeString([], {
-                                hour: '2-digit',
-                                minute: '2-digit',
-                                second: '2-digit',
-                              })}
-                            </span>{' '}
-                            last edited by{' '}
-                            <span
-                              className="rounded px-1.5 py-0.5 text-[10px] font-semibold text-white"
-                              style={{ backgroundColor: viewingIcs201Version.authorColor }}
-                            >
-                              {viewingIcs201Version.authorName}
-                            </span>
-                            .
-                          </span>
-                          {(() => {
-                            const liveSignatures =
-                              ics201Versions.find((entry) => entry.id === viewingIcs201Version.id)
-                                ?.signatures ?? viewingIcs201Version.signatures
-                            if (liveSignatures.length === 0) {
-                              return null
-                            }
-                            return (
-                              <span
-                                className="flex items-center gap-1 rounded-full border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-800 dark:border-emerald-500/50 dark:bg-emerald-500/10 dark:text-emerald-300"
-                                title={liveSignatures
-                                  .map(
-                                    (signature) =>
-                                      `${signature.name} (${signature.role}) at ${new Date(
-                                        signature.signedAt
-                                      ).toLocaleTimeString([], {
-                                        hour: '2-digit',
-                                        minute: '2-digit',
-                                      })}`
-                                  )
-                                  .join(', ')}
-                              >
-                                <Check className="h-3 w-3" />
-                                Signed by{' '}
-                                {liveSignatures
-                                  .map((signature) => `${signature.name} (${signature.role})`)
-                                  .join(', ')}
-                              </span>
-                            )
-                          })()}
-                        </div>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          className="h-7 gap-1 text-xs"
-                          onClick={() => {
-                            if (liveIcs201FormRef.current) {
-                              setIcs201Form(liveIcs201FormRef.current)
-                              liveIcs201FormRef.current = null
-                            }
-                            setViewingIcs201Version(null)
-                          }}
-                        >
-                          <X className="h-3.5 w-3.5" />
-                          View latest
-                        </Button>
-                      </div>
-                    )}
-                    {!viewingIcs201Version && !isCreatingSignedIcs201Version && (
-                      <div className="flex flex-wrap items-center gap-2 rounded-md border border-emerald-400 bg-emerald-50 px-3 py-2 text-xs text-emerald-900 dark:border-emerald-500 dark:bg-emerald-500/10 dark:text-emerald-200">
-                        {(() => {
-                          const latest = ics201Versions[ics201Versions.length - 1]
-                          if (!latest) {
-                            return <span>You are viewing the latest <span className="font-semibold">draft</span> version.</span>
-                          }
-                          const versionType = latest.signatures.length > 0 ? 'signed' : 'draft'
-                          return (
-                            <span>
-                              You are viewing the latest <span className="font-semibold">{versionType}</span> version from{' '}
-                              <span className="font-semibold">
-                                {new Date(latest.createdAt).toLocaleTimeString([], {
-                                  hour: '2-digit',
-                                  minute: '2-digit',
-                                  second: '2-digit',
-                                })}
-                              </span>{' '}
-                              last edited by{' '}
-                              <span
-                                className="rounded px-1.5 py-0.5 text-[10px] font-semibold text-white"
-                                style={{ backgroundColor: latest.authorColor }}
-                              >
-                                {latest.authorName}
-                              </span>
-                              .
-                            </span>
-                          )
-                        })()}
-                      </div>
-                    )}
-                    {!isCreatingSignedIcs201Version && (() => {
-                      const latestVersion = ics201Versions[ics201Versions.length - 1]
-                      const isLatestSigned =
-                        !!latestVersion && latestVersion.signatures.length > 0
-                      return (
-                    <div className="flex items-center justify-between rounded-md border bg-background/70 px-3 py-2 text-xs">
-                      {isLatestSigned ? (
-                        <div className="flex items-center gap-2 text-muted-foreground">
-                          <Lock className="h-3.5 w-3.5" />
-                          <span>Signed versions cannot be edited.</span>
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-2">
-                          <span className="flex h-2 w-2 rounded-full bg-emerald-500 shadow-[0_0_0_3px_rgba(16,185,129,0.2)]" />
-                          <div className="flex -space-x-2">
-                            <div
-                              className="flex h-6 w-6 items-center justify-center rounded-full border-2 border-background text-[10px] font-semibold text-white"
-                              style={{ backgroundColor: '#16a34a' }}
-                              title="You"
-                            >
-                              You
-                            </div>
-                            {ics201Collaborators.map((collaborator) => (
-                              <div
-                                key={collaborator.id}
-                                className="flex h-6 w-6 items-center justify-center rounded-full border-2 border-background text-[10px] font-semibold text-white"
-                                style={{ backgroundColor: collaborator.color }}
-                                title={`${collaborator.name} is editing`}
-                              >
-                                {collaborator.initials}
-                              </div>
-                            ))}
-                          </div>
-                          <span className="text-muted-foreground">
-                            You, {ics201Collaborators[0].name}, and {ics201Collaborators[1].name} are editing now
-                          </span>
-                        </div>
-                      )}
-                      <div className="flex items-center gap-2">
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          className="h-7 gap-1 text-xs"
-                          onClick={() => setIsIcs201VersionDialogOpen(true)}
-                        >
-                          <History className="h-3.5 w-3.5" />
-                          Version history
-                          <Badge variant="secondary" className="ml-1 h-4 px-1.5 text-[10px]">
-                            {ics201Versions.length}
-                          </Badge>
-                        </Button>
-                        {(() => {
-                          const signedVersionsCount = ics201Versions.filter(
-                            (version) => version.signatures.length > 0
-                          ).length
-                          return (
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="outline"
-                              disabled={signedVersionsCount === 0}
-                              className="h-7 gap-1 text-xs"
-                              onClick={() => setIsIcs201SignedVersionsDialogOpen(true)}
-                            >
-                              <Check className="h-3.5 w-3.5" />
-                              Signed Versions
-                              <Badge variant="secondary" className="ml-1 h-4 px-1.5 text-[10px]">
-                                {signedVersionsCount}
-                              </Badge>
-                            </Button>
-                          )
-                        })()}
-                      </div>
+                {activeTab === 'events' && isEventsSettingsOpen && (
+                  <EventsSettingsPage
+                    rules={eventCreationRules}
+                    onRulesChange={setEventCreationRules}
+                    businessUnitOptions={eventBusinessUnitOptions}
+                    onGenerateRule={openPratusAiForEventRuleGeneration}
+                  />
+                )}
+
+                {activeTab === 'events' && !isEventsSettingsOpen && (
+                  cardFilteredEventList.length === 0 ? (
+                    <Item variant="outline" className={glassItemBorderClasses}>
+                      <ItemContent>
+                        <ItemTitle>No matching events</ItemTitle>
+                        <ItemDescription>Try a broader search term.</ItemDescription>
+                      </ItemContent>
+                    </Item>
+                  ) : (
+                    <div className="space-y-2 p-1.5">
+                      {cardFilteredEventList.map((event) => {
+                        const key = `event-list-${event.id}`
+                        return renderEventListItem(event, {
+                          listKey: key,
+                          isOpen: expandedItemId === key,
+                          isSelected: selectedPanelItemId === key,
+                          onToggle: () => toggleExpandedItem(key),
+                          onOpenChange: (open) => setExpandedItemId(open ? key : null),
+                        })
+                      })}
                     </div>
-                      )
-                    })()}
-                    <div className="flex items-center justify-start gap-2">
-                      {(() => {
-                        const latest = ics201Versions[ics201Versions.length - 1]
-                        const isLatestSigned = !!latest && latest.signatures.length > 0
-                        return (
-                          <>
-                            {!isLatestSigned && (
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="outline"
-                                className="h-7 gap-1 text-xs"
-                                disabled={
-                                  viewingIcs201Version !== null ||
-                                  isCreatingSignedIcs201Version ||
-                                  !latest
-                                }
-                                onClick={() => {
-                                  if (!latest) {
-                                    return
-                                  }
-                                  setIcs201Versions((previous) => {
-                                    const next = [...previous]
-                                    next[next.length - 1] = {
-                                      ...latest,
-                                      createdAt: Date.now(),
-                                      authorName: 'You',
-                                      authorColor: '#16a34a',
-                                      snapshot: ics201Form,
-                                    }
-                                    return next
-                                  })
-                                }}
-                              >
-                                Save
-                              </Button>
-                            )}
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="outline"
-                              className="h-7 gap-1 text-xs"
-                              disabled={
-                                viewingIcs201Version !== null || isCreatingSignedIcs201Version
-                              }
-                              onClick={() => {
-                                if (isLatestSigned) {
-                                  const newVersion: Ics201Version = {
-                                    id: `${Date.now()}-draft-${Math.random()
-                                      .toString(36)
-                                      .slice(2, 8)}`,
-                                    createdAt: Date.now(),
-                                    authorName: 'You',
-                                    authorColor: '#16a34a',
-                                    snapshot: ics201Form,
-                                    signatures: [],
-                                  }
-                                  setIcs201Versions((previous) =>
-                                    [...previous, newVersion].slice(-100)
-                                  )
-                                  return
-                                }
-                                setIsCreatingSignedIcs201Version(true)
-                              }}
-                            >
-                              <Plus className="h-3.5 w-3.5" />
-                              {isLatestSigned ? 'Create New Version' : 'Create New Signed Version'}
-                            </Button>
-                          </>
-                        )
-                      })()}
-                    </div>
-                    {isCreatingSignedIcs201Version && !viewingIcs201Version && (
-                      <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-sky-400 bg-sky-50 px-3 py-2 text-xs text-sky-900 dark:border-sky-500 dark:bg-sky-500/10 dark:text-sky-200">
-                        <div className="flex items-center gap-2">
-                          <FileText className="h-3.5 w-3.5" />
-                          <span>
-                            Only you can view and edit this version. Read through it and sign at
-                            the bottom. If you sign this version, everyone with permission to view
-                            the ICS-201 will see it.
-                          </span>
-                        </div>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          className="h-7 gap-1 text-xs"
-                          onClick={() => setIsCreatingSignedIcs201Version(false)}
-                        >
-                          <X className="h-3.5 w-3.5" />
-                          Cancel
-                        </Button>
-                      </div>
-                    )}
-                    </div>
-                    <div
+                  )
+                )}
+
+                {activeTab === 'analytics' && (
+                  <div className="flex min-w-0 flex-col gap-4 pb-2">
+                    <section
                       className={cn(
-                        'space-y-3',
-                        (viewingIcs201Version ||
-                          (!isCreatingSignedIcs201Version &&
-                            (ics201Versions[ics201Versions.length - 1]?.signatures.length ?? 0) >
-                              0)) &&
-                          'pointer-events-none opacity-70 select-none'
+                        'w-full min-w-0 rounded-lg border bg-muted/10 p-3',
+                        glassItemBorderClasses
                       )}
                     >
-                    <Item variant="outline" className={cn('flex-col items-stretch p-0', glassItemBorderClasses)}>
-                      <div className="px-3 py-2.5">
-                        <ItemContent className="space-y-3">
-                          <ItemTitle>ICS-201 Incident Briefing</ItemTitle>
-                          <div className="grid grid-cols-2 gap-2">
-                            <input
-                              value={ics201Form.incidentName}
-                              onChange={(event) =>
-                                updateIcs201Field('incidentName', event.target.value)
-                              }
-                              placeholder="Incident Name"
-                              className="h-8 rounded-md border bg-transparent px-2 text-xs outline-none"
-                            />
-                            <input
-                              value={ics201Form.incidentNumber}
-                              onChange={(event) =>
-                                updateIcs201Field('incidentNumber', event.target.value)
-                              }
-                              placeholder="Incident Number"
-                              className="h-8 rounded-md border bg-transparent px-2 text-xs outline-none"
-                            />
-                            <input
-                              value={ics201Form.preparedDateTime}
-                              onChange={(event) =>
-                                updateIcs201Field('preparedDateTime', event.target.value)
-                              }
-                              placeholder="Date / Time Prepared"
-                              className="h-8 rounded-md border bg-transparent px-2 text-xs outline-none"
-                            />
-                            <input
-                              value={ics201Form.preparedBy}
-                              onChange={(event) => updateIcs201Field('preparedBy', event.target.value)}
-                              placeholder="Prepared By"
-                              className="h-8 rounded-md border bg-transparent px-2 text-xs outline-none"
-                            />
-                            <input
-                              value={ics201Form.operationalPeriodStart}
-                              onChange={(event) =>
-                                updateIcs201Field('operationalPeriodStart', event.target.value)
-                              }
-                              placeholder="Operational Period Start"
-                              className="h-8 rounded-md border bg-transparent px-2 text-xs outline-none"
-                            />
-                            <input
-                              value={ics201Form.operationalPeriodEnd}
-                              onChange={(event) =>
-                                updateIcs201Field('operationalPeriodEnd', event.target.value)
-                              }
-                              placeholder="Operational Period End"
-                              className="h-8 rounded-md border bg-transparent px-2 text-xs outline-none"
-                            />
-                            <input
-                              value={ics201Form.jurisdiction}
-                              onChange={(event) => updateIcs201Field('jurisdiction', event.target.value)}
-                              placeholder="Jurisdiction / Agency"
-                              className="col-span-2 h-8 rounded-md border bg-transparent px-2 text-xs outline-none"
-                            />
-                          </div>
-                        </ItemContent>
-                      </div>
-                    </Item>
-                    <Item variant="outline" className={cn('flex-col items-stretch p-0', glassItemBorderClasses)}>
-                      <div className="px-3 py-2.5">
-                        <ItemContent className="space-y-2">
-                          <ItemTitle>Map Sketch</ItemTitle>
-                          <ItemDescription>
-                            Capture perimeter, divisions, access routes, shelters, and critical control points.
-                          </ItemDescription>
-                          <Textarea
-                            value={ics201Form.mapSketchDescription}
-                            onChange={(event) =>
-                              updateIcs201Field('mapSketchDescription', event.target.value)
-                            }
-                            className="min-h-24 text-xs"
-                          />
-                          <Textarea
-                            value={ics201Form.mapSketchLegend}
-                            onChange={(event) => updateIcs201Field('mapSketchLegend', event.target.value)}
-                            className="min-h-20 text-xs"
-                            placeholder="Map legend and symbols"
-                          />
-                        </ItemContent>
-                      </div>
-                    </Item>
-                    <Item variant="outline" className={cn('flex-col items-stretch p-0', glassItemBorderClasses)}>
-                      <div className="px-3 py-2.5">
-                        <ItemContent className="space-y-2">
-                          <ItemTitle>Current Situation</ItemTitle>
-                          <Textarea
-                            value={
-                              currentSituationEdit !== null
-                                ? currentSituationEdit
-                                : ics201Form.currentSituationSummary
-                            }
-                            onChange={(event) => {
-                              if (currentSituationEdit !== null) {
-                                setCurrentSituationEdit(event.target.value)
-                              }
-                            }}
-                            onFocus={() => {
-                              if (currentSituationEdit === null) {
-                                setCurrentSituationEdit(ics201Form.currentSituationSummary)
-                              }
-                            }}
-                            onClick={() => {
-                              if (currentSituationEdit === null) {
-                                setCurrentSituationEdit(ics201Form.currentSituationSummary)
-                              }
-                            }}
-                            readOnly={currentSituationEdit === null}
-                            className="min-h-24 cursor-text text-xs"
-                            placeholder="Current situation summary"
-                          />
-                          {currentSituationEdit !== null && (
-                            <div className="flex items-center justify-start gap-2">
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="outline"
-                                className="h-7 gap-1 text-xs"
-                                onClick={() => {
-                                  const yourDraft = currentSituationEdit
-                                  updateIcs201Field(
-                                    'currentSituationSummary',
-                                    SIMULATED_REMOTE_SITUATION_EDIT
-                                  )
-                                  setCurrentSituationConflict({
-                                    yourDraft,
-                                    currentContent: SIMULATED_REMOTE_SITUATION_EDIT,
-                                    remoteAuthor: SIMULATED_REMOTE_AUTHOR.name,
-                                    remoteAuthorRole: SIMULATED_REMOTE_AUTHOR.role,
-                                    remoteColor: SIMULATED_REMOTE_AUTHOR.color,
-                                    remoteAt: Date.now(),
-                                  })
-                                }}
-                              >
-                                Save
-                              </Button>
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="ghost"
-                                className="h-7 gap-1 text-xs"
-                                onClick={() => setCurrentSituationEdit(null)}
-                              >
-                                Cancel
-                              </Button>
-                            </div>
-                          )}
-                        </ItemContent>
-                      </div>
-                    </Item>
-                    <Item variant="outline" className={cn('flex-col items-stretch p-0', glassItemBorderClasses)}>
-                      <div className="px-3 py-2.5">
-                        <ItemContent className="space-y-3">
-                          <div className="flex items-center justify-between">
-                            <ItemTitle>Objectives</ItemTitle>
-                            <Button type="button" size="sm" variant="outline" onClick={addIcs201Objective}>
-                              + Add Objective
-                            </Button>
-                          </div>
-                          {ics201Form.objectives.map((objective, index) => (
-                            <input
-                              key={`ics-objective-${index}`}
-                              value={objective}
-                              onChange={(event) => updateIcs201Objective(index, event.target.value)}
-                              placeholder={`Objective ${index + 1}`}
-                              className="h-8 w-full rounded-md border bg-transparent px-2 text-xs outline-none"
-                            />
-                          ))}
-                        </ItemContent>
-                      </div>
-                    </Item>
-                    <Item variant="outline" className={cn('flex-col items-stretch p-0', glassItemBorderClasses)}>
-                      <div className="px-3 py-2.5">
-                        <ItemContent className="space-y-3">
-                          <div className="flex items-center justify-between">
-                            <ItemTitle>Actions</ItemTitle>
-                            <Button type="button" size="sm" variant="outline" onClick={addIcs201Action}>
-                              + Add Action
-                            </Button>
-                          </div>
-                          {ics201Form.actions.map((action) => (
-                            <div key={action.id} className="grid grid-cols-5 gap-2">
-                              <input
-                                value={action.task}
-                                onChange={(event) => updateIcs201Action(action.id, 'task', event.target.value)}
-                                placeholder="Action"
-                                className="col-span-2 h-8 rounded-md border bg-transparent px-2 text-xs outline-none"
-                              />
-                              <input
-                                value={action.owner}
-                                onChange={(event) => updateIcs201Action(action.id, 'owner', event.target.value)}
-                                placeholder="Owner"
-                                className="h-8 rounded-md border bg-transparent px-2 text-xs outline-none"
-                              />
-                              <input
-                                value={action.startTime}
-                                onChange={(event) =>
-                                  updateIcs201Action(action.id, 'startTime', event.target.value)
-                                }
-                                placeholder="Start"
-                                className="h-8 rounded-md border bg-transparent px-2 text-xs outline-none"
-                              />
-                              <input
-                                value={action.endTime}
-                                onChange={(event) =>
-                                  updateIcs201Action(action.id, 'endTime', event.target.value)
-                                }
-                                placeholder="End"
-                                className="h-8 rounded-md border bg-transparent px-2 text-xs outline-none"
-                              />
-                            </div>
-                          ))}
-                        </ItemContent>
-                      </div>
-                    </Item>
-                    <Item variant="outline" className={cn('flex-col items-stretch p-0', glassItemBorderClasses)}>
-                      <div className="px-3 py-2.5">
-                        <ItemContent className="space-y-2">
-                          <ItemTitle>Organization Chart</ItemTitle>
-                          <div className="grid grid-cols-2 gap-2">
-                            <input
-                              value={ics201Form.orgChart.incidentCommander}
-                              onChange={(event) =>
-                                updateIcs201OrgChartField('incidentCommander', event.target.value)
-                              }
-                              placeholder="Incident Commander"
-                              className="h-8 rounded-md border bg-transparent px-2 text-xs outline-none"
-                            />
-                            <input
-                              value={ics201Form.orgChart.operationsSectionChief}
-                              onChange={(event) =>
-                                updateIcs201OrgChartField('operationsSectionChief', event.target.value)
-                              }
-                              placeholder="Operations Section Chief"
-                              className="h-8 rounded-md border bg-transparent px-2 text-xs outline-none"
-                            />
-                            <input
-                              value={ics201Form.orgChart.planningSectionChief}
-                              onChange={(event) =>
-                                updateIcs201OrgChartField('planningSectionChief', event.target.value)
-                              }
-                              placeholder="Planning Section Chief"
-                              className="h-8 rounded-md border bg-transparent px-2 text-xs outline-none"
-                            />
-                            <input
-                              value={ics201Form.orgChart.logisticsSectionChief}
-                              onChange={(event) =>
-                                updateIcs201OrgChartField('logisticsSectionChief', event.target.value)
-                              }
-                              placeholder="Logistics Section Chief"
-                              className="h-8 rounded-md border bg-transparent px-2 text-xs outline-none"
-                            />
-                            <input
-                              value={ics201Form.orgChart.financeSectionChief}
-                              onChange={(event) =>
-                                updateIcs201OrgChartField('financeSectionChief', event.target.value)
-                              }
-                              placeholder="Finance/Admin Section Chief"
-                              className="h-8 rounded-md border bg-transparent px-2 text-xs outline-none"
-                            />
-                            <input
-                              value={ics201Form.orgChart.publicInformationOfficer}
-                              onChange={(event) =>
-                                updateIcs201OrgChartField('publicInformationOfficer', event.target.value)
-                              }
-                              placeholder="Public Information Officer"
-                              className="h-8 rounded-md border bg-transparent px-2 text-xs outline-none"
-                            />
-                            <input
-                              value={ics201Form.orgChart.safetyOfficer}
-                              onChange={(event) =>
-                                updateIcs201OrgChartField('safetyOfficer', event.target.value)
-                              }
-                              placeholder="Safety Officer"
-                              className="h-8 rounded-md border bg-transparent px-2 text-xs outline-none"
-                            />
-                            <input
-                              value={ics201Form.orgChart.liaisonOfficer}
-                              onChange={(event) =>
-                                updateIcs201OrgChartField('liaisonOfficer', event.target.value)
-                              }
-                              placeholder="Liaison Officer"
-                              className="h-8 rounded-md border bg-transparent px-2 text-xs outline-none"
-                            />
-                          </div>
-                        </ItemContent>
-                      </div>
-                    </Item>
-                    <Item variant="outline" className={cn('flex-col items-stretch p-0', glassItemBorderClasses)}>
-                      <div className="px-3 py-2.5">
-                        <ItemContent className="space-y-3">
-                          <div className="flex items-center justify-between">
-                            <ItemTitle>Resources Summary</ItemTitle>
-                            <Button type="button" size="sm" variant="outline" onClick={addIcs201Resource}>
-                              + Add Resource
-                            </Button>
-                          </div>
-                          {ics201Form.resources.map((resource) => (
-                            <div key={resource.id} className="grid grid-cols-5 gap-2">
-                              <input
-                                value={resource.category}
-                                onChange={(event) =>
-                                  updateIcs201Resource(resource.id, 'category', event.target.value)
-                                }
-                                placeholder="Category"
-                                className="h-8 rounded-md border bg-transparent px-2 text-xs outline-none"
-                              />
-                              <input
-                                value={resource.identifier}
-                                onChange={(event) =>
-                                  updateIcs201Resource(resource.id, 'identifier', event.target.value)
-                                }
-                                placeholder="Identifier"
-                                className="h-8 rounded-md border bg-transparent px-2 text-xs outline-none"
-                              />
-                              <input
-                                value={resource.quantity}
-                                onChange={(event) =>
-                                  updateIcs201Resource(resource.id, 'quantity', event.target.value)
-                                }
-                                placeholder="Qty"
-                                className="h-8 rounded-md border bg-transparent px-2 text-xs outline-none"
-                              />
-                              <input
-                                value={resource.status}
-                                onChange={(event) =>
-                                  updateIcs201Resource(resource.id, 'status', event.target.value)
-                                }
-                                placeholder="Status"
-                                className="h-8 rounded-md border bg-transparent px-2 text-xs outline-none"
-                              />
-                              <input
-                                value={resource.assignment}
-                                onChange={(event) =>
-                                  updateIcs201Resource(resource.id, 'assignment', event.target.value)
-                                }
-                                placeholder="Assignment"
-                                className="h-8 rounded-md border bg-transparent px-2 text-xs outline-none"
-                              />
-                            </div>
-                          ))}
-                        </ItemContent>
-                      </div>
-                    </Item>
-                    <Item variant="outline" className={cn('flex-col items-stretch p-0', glassItemBorderClasses)}>
-                      <div className="px-3 py-2.5">
-                        <ItemContent className="space-y-3">
-                          <div className="flex items-center justify-between">
-                            <ItemTitle>Safety Analysis</ItemTitle>
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="outline"
-                              onClick={addIcs201SafetyAnalysis}
-                            >
-                              + Add Safety Item
-                            </Button>
-                          </div>
-                          {ics201Form.safetyAnalysis.map((safetyRow) => (
-                            <div key={safetyRow.id} className="grid grid-cols-2 gap-2">
-                              <Textarea
-                                value={safetyRow.hazard}
-                                onChange={(event) =>
-                                  updateIcs201SafetyAnalysis(
-                                    safetyRow.id,
-                                    'hazard',
-                                    event.target.value
-                                  )
-                                }
-                                className="min-h-16 text-xs"
-                                placeholder="Hazard"
-                              />
-                              <Textarea
-                                value={safetyRow.mitigation}
-                                onChange={(event) =>
-                                  updateIcs201SafetyAnalysis(
-                                    safetyRow.id,
-                                    'mitigation',
-                                    event.target.value
-                                  )
-                                }
-                                className="min-h-16 text-xs"
-                                placeholder="Mitigation"
-                              />
-                              <input
-                                value={safetyRow.ppe}
-                                onChange={(event) =>
-                                  updateIcs201SafetyAnalysis(safetyRow.id, 'ppe', event.target.value)
-                                }
-                                className="h-8 rounded-md border bg-transparent px-2 text-xs outline-none"
-                                placeholder="PPE"
-                              />
-                              <input
-                                value={safetyRow.medicalPlan}
-                                onChange={(event) =>
-                                  updateIcs201SafetyAnalysis(
-                                    safetyRow.id,
-                                    'medicalPlan',
-                                    event.target.value
-                                  )
-                                }
-                                className="h-8 rounded-md border bg-transparent px-2 text-xs outline-none"
-                                placeholder="Medical Plan"
-                              />
-                            </div>
-                          ))}
-                        </ItemContent>
-                      </div>
-                    </Item>
-                    {!viewingIcs201Version &&
-                      !isCreatingSignedIcs201Version &&
-                      (() => {
-                        const latest = ics201Versions[ics201Versions.length - 1]
-                        const signature = latest?.signatures[0]
-                        if (!signature) {
-                          return null
-                        }
-                        const signedAt = new Date(signature.signedAt)
-                        return (
-                          <Item
-                            variant="outline"
-                            className={cn('flex-col items-stretch p-0', glassItemBorderClasses)}
-                          >
-                            <div className="px-3 py-2.5">
-                              <ItemContent className="space-y-2">
-                                <ItemTitle>Approval</ItemTitle>
-                                <div className="grid grid-cols-4 gap-3 text-xs">
-                                  <div className="flex flex-col gap-0.5">
-                                    <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                                      Name
-                                    </span>
-                                    <span>{signature.name}</span>
-                                  </div>
-                                  <div className="flex flex-col gap-0.5">
-                                    <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                                      Position Title
-                                    </span>
-                                    <span>{signature.role}</span>
-                                  </div>
-                                  <div className="flex flex-col gap-0.5">
-                                    <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                                      Signature
-                                    </span>
-                                    <span className="font-serif text-base italic">
-                                      {signature.name}
-                                    </span>
-                                  </div>
-                                  <div className="flex flex-col gap-0.5">
-                                    <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                                      Date/Time
-                                    </span>
-                                    <span>
-                                      {signedAt.toLocaleString([], {
-                                        year: 'numeric',
-                                        month: '2-digit',
-                                        day: '2-digit',
-                                        hour: '2-digit',
-                                        minute: '2-digit',
-                                      })}
-                                    </span>
-                                  </div>
-                                </div>
-                              </ItemContent>
-                            </div>
-                          </Item>
-                        )
-                      })()}
-                    </div>
-                    {isCreatingSignedIcs201Version && !viewingIcs201Version && (
-                      <div className="flex items-center justify-end rounded-md border border-sky-400 bg-sky-50/60 px-3 py-2 dark:border-sky-500 dark:bg-sky-500/10">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-sm font-medium">Filters</p>
                         <Button
                           type="button"
                           size="sm"
-                          className="h-8 gap-1 bg-emerald-600 text-xs text-white hover:bg-emerald-700"
+                          variant="outline"
+                          onClick={resetAnalyticsFilters}
+                        >
+                          Reset
+                        </Button>
+                      </div>
+                      <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                        <div className="grid gap-2">
+                          <Label htmlFor="analytics-start-time">Start Time</Label>
+                          <Input
+                            id="analytics-start-time"
+                            type="datetime-local"
+                            value={analyticsStartTime}
+                            onChange={(event) => setAnalyticsStartTime(event.target.value)}
+                          />
+                        </div>
+                        <div className="grid gap-2">
+                          <Label htmlFor="analytics-end-time">Stop Time</Label>
+                          <Input
+                            id="analytics-end-time"
+                            type="datetime-local"
+                            value={analyticsEndTime}
+                            onChange={(event) => setAnalyticsEndTime(event.target.value)}
+                          />
+                        </div>
+                      </div>
+                      <div className="mt-3 grid gap-2">
+                        <Label>Regions to Include</Label>
+                        <div className="grid gap-2 sm:grid-cols-2">
+                          {ANALYTICS_REGIONS.map((region) => (
+                            <div key={region} className="flex items-center gap-2">
+                              <Checkbox
+                                id={`analytics-region-${region}`}
+                                checked={analyticsSelectedRegions.includes(region)}
+                                onCheckedChange={() =>
+                                  setAnalyticsSelectedRegions((previous) =>
+                                    previous.includes(region)
+                                      ? previous.filter((entry) => entry !== region)
+                                      : [...previous, region]
+                                  )
+                                }
+                              />
+                              <Label
+                                htmlFor={`analytics-region-${region}`}
+                                className="cursor-pointer font-normal leading-snug"
+                              >
+                                {region}
+                              </Label>
+                            </div>
+                          ))}
+                        </div>
+                        {analyticsSelectedRegions.length === 0 && (
+                          <p className="text-xs text-amber-700 dark:text-amber-300">
+                            Select at least one region to view analytics.
+                          </p>
+                        )}
+                      </div>
+                    </section>
+
+                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                      <div className="min-w-0 rounded-md border bg-muted/20 px-3 py-2.5">
+                        <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                          Incidents in Range
+                        </p>
+                        <p className="mt-1 text-xl font-semibold">
+                          {
+                            analyticsFilteredRecords.filter((record) => record.kind === 'incident')
+                              .length
+                          }
+                        </p>
+                      </div>
+                      <div className="min-w-0 rounded-md border bg-muted/20 px-3 py-2.5">
+                        <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                          Events in Range
+                        </p>
+                        <p className="mt-1 text-xl font-semibold">
+                          {
+                            analyticsFilteredRecords.filter((record) => record.kind === 'event')
+                              .length
+                          }
+                        </p>
+                      </div>
+                      <div className="min-w-0 rounded-md border bg-muted/20 px-3 py-2.5">
+                        <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                          Mean Resolution
+                        </p>
+                        <p className="mt-1 text-xl font-semibold">
+                          {analyticsMeanResolutionHours > 0
+                            ? formatAnalyticsResolutionHours(analyticsMeanResolutionHours)
+                            : '—'}
+                        </p>
+                      </div>
+                      <div className="min-w-0 rounded-md border bg-muted/20 px-3 py-2.5">
+                        <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                          Regions Included
+                        </p>
+                        <p className="mt-1 text-xl font-semibold">
+                          {analyticsFilteredRegions.length}
+                        </p>
+                      </div>
+                    </div>
+
+                    {analyticsVisibleLayerCount > 0 && (
+                      <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2.5">
+                        <div className="flex min-w-0 items-center gap-2">
+                          <MapPin className="h-4 w-4 shrink-0 text-primary" />
+                          <p className="text-xs">
+                            {analyticsVisibleLayerCount} map{' '}
+                            {analyticsVisibleLayerCount === 1 ? 'layer' : 'layers'} visible
+                          </p>
+                        </div>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
                           onClick={() => {
-                            setIcs201SignNameInput('You')
-                            setIsIcs201SignNameDialogOpen(true)
+                            setAnalyticsVisibleLayerKeys(new Set())
+                            setAnalyticsVisibleResolutionLayerKeys(new Set())
                           }}
                         >
-                          <Check className="h-3.5 w-3.5" />
-                          Sign this version
+                          Hide all
                         </Button>
                       </div>
                     )}
+
+                    <section
+                      className={cn(
+                        'w-full min-w-0 overflow-hidden rounded-lg border',
+                        glassItemBorderClasses
+                      )}
+                    >
+                      <div className="border-b px-3 py-2.5">
+                        <p className="text-sm font-medium">Incidents by Category</p>
+                        <p className="text-xs text-muted-foreground">
+                          Toggle map layers; mean time to resolution (MTTR) shown per category
+                        </p>
+                      </div>
+                      <div className="px-3 py-3">
+                        {analyticsIncidentCategoryCounts.length === 0 ? (
+                          <p className="py-6 text-center text-xs text-muted-foreground">
+                            No incident records match the current filters.
+                          </p>
+                        ) : (
+                          <div className="flex flex-col gap-2">
+                            <div className="flex items-center gap-2 px-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+                              <span className="w-4 shrink-0" aria-hidden="true" />
+                              <span className="w-28 shrink-0">Category</span>
+                              <span className="min-w-0 flex-1">Volume</span>
+                              <span className="w-6 shrink-0 text-right">Count</span>
+                              <span className="w-12 shrink-0 text-right">Mean MTTR</span>
+                            </div>
+                            {analyticsIncidentCategoryCounts.map((entry) => {
+                              const layerKey = getAnalyticsLayerKey('incident', entry.category)
+                              const color = getAnalyticsCategoryColor('incident', entry.category)
+                              const colorCss = `rgb(${color[0]}, ${color[1]}, ${color[2]})`
+                              const isVisible = analyticsVisibleLayerKeys.has(layerKey)
+                              const meanHours = getAnalyticsMeanResolutionFromTotals(
+                                analyticsMeanResolutionByIncidentCategory,
+                                entry.category
+                              )
+
+                              return (
+                                <div key={layerKey} className="flex items-center gap-2">
+                                  <Checkbox
+                                    id={`analytics-layer-${layerKey}`}
+                                    checked={isVisible && entry.count > 0}
+                                    disabled={entry.count === 0}
+                                    onCheckedChange={() =>
+                                      toggleAnalyticsCategoryLayer('incident', entry.category)
+                                    }
+                                  />
+                                  <Label
+                                    htmlFor={`analytics-layer-${layerKey}`}
+                                    className={cn(
+                                      'flex min-w-0 flex-1 cursor-pointer items-center gap-2 font-normal',
+                                      entry.count === 0 && 'cursor-not-allowed opacity-50'
+                                    )}
+                                  >
+                                    <span className="w-28 shrink-0 truncate text-xs">
+                                      {entry.category}
+                                    </span>
+                                    <div className="h-2 min-w-0 flex-1 overflow-hidden rounded-full bg-muted/40">
+                                      <div
+                                        className="h-full rounded-full transition-[width,opacity]"
+                                        style={{
+                                          width: `${(entry.count / analyticsMaxIncidentCount) * 100}%`,
+                                          backgroundColor: colorCss,
+                                          opacity: isVisible ? 1 : 0.45,
+                                        }}
+                                      />
+                                    </div>
+                                    <span className="w-6 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
+                                      {entry.count}
+                                    </span>
+                                    {meanHours === null ? (
+                                      <span className="w-12 shrink-0 text-right text-[10px] text-muted-foreground">
+                                        —
+                                      </span>
+                                    ) : (
+                                      <span
+                                        title={`Mean time to resolution: ${formatAnalyticsResolutionHours(meanHours)}`}
+                                        className={cn(
+                                          'w-12 shrink-0 rounded px-1 py-0.5 text-right text-[10px] font-medium tabular-nums',
+                                          getAnalyticsResolutionCellClasses(meanHours)
+                                        )}
+                                      >
+                                        {formatAnalyticsResolutionHours(meanHours)}
+                                      </span>
+                                    )}
+                                  </Label>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    </section>
+
+                    <section
+                      className={cn(
+                        'w-full min-w-0 overflow-hidden rounded-lg border',
+                        glassItemBorderClasses
+                      )}
+                    >
+                      <div className="border-b px-3 py-2.5">
+                        <p className="text-sm font-medium">Events by Category</p>
+                        <p className="text-xs text-muted-foreground">
+                          Toggle map layers; mean time to resolution (MTTR) shown per category
+                        </p>
+                      </div>
+                      <div className="px-3 py-3">
+                        {analyticsEventCategoryCounts.length === 0 ? (
+                          <p className="py-6 text-center text-xs text-muted-foreground">
+                            No event records match the current filters.
+                          </p>
+                        ) : (
+                          <div className="flex flex-col gap-2">
+                            <div className="flex items-center gap-2 px-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+                              <span className="w-4 shrink-0" aria-hidden="true" />
+                              <span className="w-28 shrink-0">Category</span>
+                              <span className="min-w-0 flex-1">Volume</span>
+                              <span className="w-6 shrink-0 text-right">Count</span>
+                              <span className="w-12 shrink-0 text-right">Mean MTTR</span>
+                            </div>
+                            {analyticsEventCategoryCounts.map((entry) => {
+                              const layerKey = getAnalyticsLayerKey('event', entry.category)
+                              const color = getAnalyticsCategoryColor('event', entry.category)
+                              const colorCss = `rgb(${color[0]}, ${color[1]}, ${color[2]})`
+                              const isVisible = analyticsVisibleLayerKeys.has(layerKey)
+                              const meanHours = getAnalyticsMeanResolutionFromTotals(
+                                analyticsMeanResolutionByEventCategory,
+                                entry.category
+                              )
+
+                              return (
+                                <div key={layerKey} className="flex items-center gap-2">
+                                  <Checkbox
+                                    id={`analytics-layer-${layerKey}`}
+                                    checked={isVisible && entry.count > 0}
+                                    disabled={entry.count === 0}
+                                    onCheckedChange={() =>
+                                      toggleAnalyticsCategoryLayer('event', entry.category)
+                                    }
+                                  />
+                                  <Label
+                                    htmlFor={`analytics-layer-${layerKey}`}
+                                    className={cn(
+                                      'flex min-w-0 flex-1 cursor-pointer items-center gap-2 font-normal',
+                                      entry.count === 0 && 'cursor-not-allowed opacity-50'
+                                    )}
+                                  >
+                                    <span className="w-28 shrink-0 truncate text-xs">
+                                      {entry.category}
+                                    </span>
+                                    <div className="h-2 min-w-0 flex-1 overflow-hidden rounded-full bg-muted/40">
+                                      <div
+                                        className="h-full rounded-full transition-[width,opacity]"
+                                        style={{
+                                          width: `${(entry.count / analyticsMaxEventCount) * 100}%`,
+                                          backgroundColor: colorCss,
+                                          opacity: isVisible ? 1 : 0.45,
+                                        }}
+                                      />
+                                    </div>
+                                    <span className="w-6 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
+                                      {entry.count}
+                                    </span>
+                                    {meanHours === null ? (
+                                      <span className="w-12 shrink-0 text-right text-[10px] text-muted-foreground">
+                                        —
+                                      </span>
+                                    ) : (
+                                      <span
+                                        title={`Mean time to resolution: ${formatAnalyticsResolutionHours(meanHours)}`}
+                                        className={cn(
+                                          'w-12 shrink-0 rounded px-1 py-0.5 text-right text-[10px] font-medium tabular-nums',
+                                          getAnalyticsResolutionCellClasses(meanHours)
+                                        )}
+                                      >
+                                        {formatAnalyticsResolutionHours(meanHours)}
+                                      </span>
+                                    )}
+                                  </Label>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    </section>
+
+                    <section
+                      className={cn(
+                        'w-full min-w-0 overflow-hidden rounded-lg border',
+                        glassItemBorderClasses
+                      )}
+                    >
+                      <div className="border-b px-3 py-2.5">
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-medium">
+                              Mean Time to Resolution by Category &amp; Region
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              Mean hours per cell for the selected record type; use checkboxes to
+                              toggle map layers
+                            </p>
+                          </div>
+                          <ToggleGroup
+                            type="single"
+                            value={analyticsResolutionKindFilter}
+                            onValueChange={(value) => {
+                              if (
+                                value === 'incidents' ||
+                                value === 'events' ||
+                                value === 'both'
+                              ) {
+                                setAnalyticsResolutionKindFilter(value)
+                                setAnalyticsVisibleResolutionLayerKeys(new Set())
+                              }
+                            }}
+                            variant="outline"
+                            size="sm"
+                            spacing={0}
+                            aria-label="Resolution record type"
+                            className="shrink-0"
+                          >
+                            <ToggleGroupItem value="incidents" className="px-2.5 text-xs">
+                              Incidents
+                            </ToggleGroupItem>
+                            <ToggleGroupItem value="events" className="px-2.5 text-xs">
+                              Events
+                            </ToggleGroupItem>
+                            <ToggleGroupItem value="both" className="px-2.5 text-xs">
+                              Both
+                            </ToggleGroupItem>
+                          </ToggleGroup>
+                        </div>
+                      </div>
+                      <div className="overflow-x-auto px-3 py-3">
+                        {analyticsFilteredRegions.length === 0 ? (
+                          <p className="py-6 text-center text-xs text-muted-foreground">
+                            Select at least one region to view mean time to resolution.
+                          </p>
+                        ) : (
+                          <table className="w-full min-w-[640px] border-collapse text-[11px]">
+                            <thead>
+                              <tr className="border-b">
+                                <th className="sticky left-0 z-10 bg-background px-2 py-2 text-left font-medium text-muted-foreground">
+                                  Region
+                                </th>
+                                {ANALYTICS_INCIDENT_CATEGORIES.map((category) => {
+                                  const columnEntries = getAnalyticsResolutionLayerEntriesForCategory(
+                                    analyticsFilteredRecords,
+                                    category,
+                                    analyticsFilteredRegions,
+                                    analyticsResolutionKindFilter
+                                  )
+                                  const columnBulkState = getAnalyticsResolutionBulkState(
+                                    columnEntries,
+                                    analyticsVisibleResolutionLayerKeys
+                                  )
+
+                                  return (
+                                    <th
+                                      key={category}
+                                      title={category}
+                                      className="px-1.5 py-2 text-center font-medium text-muted-foreground"
+                                    >
+                                      <div className="flex flex-col items-center gap-1">
+                                        <Checkbox
+                                          id={`analytics-resolution-column-${category}`}
+                                          checked={
+                                            columnBulkState === 'all'
+                                              ? true
+                                              : columnBulkState === 'some'
+                                                ? 'indeterminate'
+                                                : false
+                                          }
+                                          disabled={columnEntries.length === 0}
+                                          onCheckedChange={() =>
+                                            toggleAnalyticsResolutionCategoryLayers(category)
+                                          }
+                                          className="shrink-0"
+                                          aria-label={`Toggle all ${category} resolution layers`}
+                                        />
+                                        <Label
+                                          htmlFor={`analytics-resolution-column-${category}`}
+                                          className={cn(
+                                            'cursor-pointer text-[10px] font-medium',
+                                            columnEntries.length === 0 &&
+                                              'cursor-not-allowed opacity-50'
+                                          )}
+                                        >
+                                          {ANALYTICS_RESOLUTION_CATEGORY_LABELS[category]}
+                                        </Label>
+                                      </div>
+                                    </th>
+                                  )
+                                })}
+                                <th
+                                  title="Mean across all categories"
+                                  className="border-l bg-muted/20 px-1.5 py-2 text-center font-semibold text-muted-foreground"
+                                >
+                                  All Categories
+                                </th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {analyticsFilteredRegions.map((region) => {
+                                const rowEntries = getAnalyticsResolutionLayerEntriesForRegion(
+                                  analyticsFilteredRecords,
+                                  region,
+                                  analyticsFilteredRegions,
+                                  analyticsResolutionKindFilter
+                                )
+                                const rowBulkState = getAnalyticsResolutionBulkState(
+                                  rowEntries,
+                                  analyticsVisibleResolutionLayerKeys
+                                )
+                                const regionAllCategoriesTotals =
+                                  analyticsResolutionRegionAllCategoriesMean.get(region)
+                                const regionAllCategoriesHours =
+                                  regionAllCategoriesTotals && regionAllCategoriesTotals.count > 0
+                                    ? Math.round(
+                                        regionAllCategoriesTotals.sum /
+                                          regionAllCategoriesTotals.count
+                                      )
+                                    : null
+
+                                return (
+                                <tr key={region} className="border-b">
+                                  <td className="sticky left-0 z-10 bg-background px-2 py-2 font-medium whitespace-nowrap">
+                                    <div className="flex items-center gap-2">
+                                      <Checkbox
+                                        id={`analytics-resolution-row-${region}`}
+                                        checked={
+                                          rowBulkState === 'all'
+                                            ? true
+                                            : rowBulkState === 'some'
+                                              ? 'indeterminate'
+                                              : false
+                                        }
+                                        disabled={rowEntries.length === 0}
+                                        onCheckedChange={() =>
+                                          toggleAnalyticsResolutionRegionLayers(region)
+                                        }
+                                        className="shrink-0"
+                                        aria-label={`Toggle all resolution layers in ${region}`}
+                                      />
+                                      <Label
+                                        htmlFor={`analytics-resolution-row-${region}`}
+                                        className={cn(
+                                          'cursor-pointer font-medium',
+                                          rowEntries.length === 0 && 'cursor-not-allowed opacity-50'
+                                        )}
+                                      >
+                                        {region}
+                                      </Label>
+                                    </div>
+                                  </td>
+                                  {ANALYTICS_INCIDENT_CATEGORIES.map((category) => {
+                                    const totals = analyticsResolutionTotals.get(
+                                      `${region}::${category}`
+                                    )
+                                    const hours =
+                                      totals && totals.count > 0
+                                        ? Math.round(totals.sum / totals.count)
+                                        : null
+                                    const layerKey = getAnalyticsResolutionLayerKey(
+                                      region,
+                                      category
+                                    )
+                                    const hasRecords =
+                                      getAnalyticsResolutionRecords(
+                                        analyticsFilteredRecords,
+                                        region,
+                                        category,
+                                        analyticsResolutionKindFilter
+                                      ).length > 0
+                                    const isLayerVisible =
+                                      analyticsVisibleResolutionLayerKeys.has(layerKey)
+
+                                    return (
+                                      <td key={`${region}-${category}`} className="px-1 py-1">
+                                        <div className="flex items-center gap-1">
+                                          <Checkbox
+                                            id={`analytics-resolution-layer-${layerKey}`}
+                                            checked={isLayerVisible && hasRecords}
+                                            disabled={!hasRecords}
+                                            onCheckedChange={() =>
+                                              toggleAnalyticsResolutionLayer(region, category)
+                                            }
+                                            className="shrink-0"
+                                          />
+                                          {hours === null ? (
+                                            <div className="min-w-[2.75rem] flex-1 rounded px-1.5 py-1 text-center text-muted-foreground">
+                                              —
+                                            </div>
+                                          ) : (
+                                            <Label
+                                              htmlFor={`analytics-resolution-layer-${layerKey}`}
+                                              className={cn(
+                                                'min-w-[2.75rem] flex-1 cursor-pointer rounded px-1.5 py-1 text-center font-medium whitespace-nowrap',
+                                                getAnalyticsResolutionCellClasses(hours),
+                                                !hasRecords && 'cursor-not-allowed opacity-50'
+                                              )}
+                                              title={`Mean time to resolution — ${category}: ${formatAnalyticsResolutionHours(hours)}`}
+                                            >
+                                              {formatAnalyticsResolutionHours(hours)}
+                                            </Label>
+                                          )}
+                                        </div>
+                                      </td>
+                                    )
+                                  })}
+                                  <td className="border-l bg-muted/10 px-1 py-1">
+                                    {regionAllCategoriesHours === null ? (
+                                      <div className="min-w-[2.75rem] rounded px-1.5 py-1 text-center font-semibold text-muted-foreground">
+                                        —
+                                      </div>
+                                    ) : (
+                                      <div
+                                        title={`Mean time to resolution — all categories in ${region}: ${formatAnalyticsResolutionHours(regionAllCategoriesHours)}`}
+                                        className={cn(
+                                          'min-w-[2.75rem] rounded px-1.5 py-1 text-center font-semibold whitespace-nowrap',
+                                          getAnalyticsResolutionCellClasses(regionAllCategoriesHours)
+                                        )}
+                                      >
+                                        {formatAnalyticsResolutionHours(regionAllCategoriesHours)}
+                                      </div>
+                                    )}
+                                  </td>
+                                </tr>
+                                )
+                              })}
+                              <tr className="border-t-2 bg-muted/20">
+                                <td className="sticky left-0 z-10 bg-muted/20 px-2 py-2 font-semibold whitespace-nowrap">
+                                  All Regions
+                                </td>
+                                {ANALYTICS_INCIDENT_CATEGORIES.map((category) => {
+                                  const categoryAllRegionsTotals =
+                                    analyticsResolutionCategoryAllRegionsMean.get(category)
+                                  const categoryAllRegionsHours =
+                                    categoryAllRegionsTotals && categoryAllRegionsTotals.count > 0
+                                      ? Math.round(
+                                          categoryAllRegionsTotals.sum /
+                                            categoryAllRegionsTotals.count
+                                        )
+                                      : null
+
+                                  return (
+                                    <td key={`all-regions-${category}`} className="px-1 py-1">
+                                      {categoryAllRegionsHours === null ? (
+                                        <div className="min-w-[2.75rem] rounded px-1.5 py-1 text-center font-semibold text-muted-foreground">
+                                          —
+                                        </div>
+                                      ) : (
+                                        <div
+                                          title={`Mean time to resolution — ${category} across all regions: ${formatAnalyticsResolutionHours(categoryAllRegionsHours)}`}
+                                          className={cn(
+                                            'min-w-[2.75rem] rounded px-1.5 py-1 text-center font-semibold whitespace-nowrap',
+                                            getAnalyticsResolutionCellClasses(categoryAllRegionsHours)
+                                          )}
+                                        >
+                                          {formatAnalyticsResolutionHours(categoryAllRegionsHours)}
+                                        </div>
+                                      )}
+                                    </td>
+                                  )
+                                })}
+                                <td className="border-l bg-muted/30 px-1 py-1">
+                                  {analyticsResolutionGrandMean === null ? (
+                                    <div className="min-w-[2.75rem] rounded px-1.5 py-1 text-center font-semibold text-muted-foreground">
+                                      —
+                                    </div>
+                                  ) : (
+                                    <div
+                                      title={`Mean time to resolution — all regions and categories: ${formatAnalyticsResolutionHours(analyticsResolutionGrandMean)}`}
+                                      className={cn(
+                                        'min-w-[2.75rem] rounded px-1.5 py-1 text-center font-semibold whitespace-nowrap',
+                                        getAnalyticsResolutionCellClasses(analyticsResolutionGrandMean)
+                                      )}
+                                    >
+                                      {formatAnalyticsResolutionHours(analyticsResolutionGrandMean)}
+                                    </div>
+                                  )}
+                                </td>
+                              </tr>
+                            </tbody>
+                          </table>
+                        )}
+                        <div className="mt-3 flex flex-wrap items-center gap-3 text-[10px] text-muted-foreground">
+                          <span className="inline-flex items-center gap-1">
+                            <span className="h-2.5 w-2.5 rounded bg-green-50 ring-1 ring-green-200 dark:bg-green-500/10" />
+                            ≤ 24h
+                          </span>
+                          <span className="inline-flex items-center gap-1">
+                            <span className="h-2.5 w-2.5 rounded bg-amber-50 ring-1 ring-amber-200 dark:bg-amber-500/10" />
+                            25–48h
+                          </span>
+                          <span className="inline-flex items-center gap-1">
+                            <span className="h-2.5 w-2.5 rounded bg-red-50 ring-1 ring-red-200 dark:bg-red-500/10" />
+                            &gt; 48h
+                          </span>
+                          <span className="text-[10px]">
+                            Mean MTTR color scale · Map symbols from{' '}
+                            <a
+                              href="https://github.com/NAPSG/DHS-Symbol-Server"
+                              target="_blank"
+                              rel="noreferrer"
+                              className="underline underline-offset-2"
+                            >
+                              NAPSG DHS Symbol Server
+                            </a>
+                          </span>
+                        </div>
+                      </div>
+                    </section>
+
+                    <section
+                      className={cn(
+                        'w-full min-w-0 overflow-hidden rounded-lg border',
+                        glassItemBorderClasses
+                      )}
+                    >
+                      <div className="border-b px-3 py-2.5">
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-medium">
+                              Mean Spend by Category &amp; Region
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              Mean dollars spent per cell for the selected record type
+                            </p>
+                          </div>
+                          <ToggleGroup
+                            type="single"
+                            value={analyticsSpendKindFilter}
+                            onValueChange={(value) => {
+                              if (
+                                value === 'incidents' ||
+                                value === 'events' ||
+                                value === 'both'
+                              ) {
+                                setAnalyticsSpendKindFilter(value)
+                              }
+                            }}
+                            variant="outline"
+                            size="sm"
+                            spacing={0}
+                            aria-label="Spend record type"
+                            className="shrink-0"
+                          >
+                            <ToggleGroupItem value="incidents" className="px-2.5 text-xs">
+                              Incidents
+                            </ToggleGroupItem>
+                            <ToggleGroupItem value="events" className="px-2.5 text-xs">
+                              Events
+                            </ToggleGroupItem>
+                            <ToggleGroupItem value="both" className="px-2.5 text-xs">
+                              Both
+                            </ToggleGroupItem>
+                          </ToggleGroup>
+                        </div>
+                      </div>
+                      <div className="overflow-x-auto px-3 py-3">
+                        {analyticsFilteredRegions.length === 0 ? (
+                          <p className="py-6 text-center text-xs text-muted-foreground">
+                            Select at least one region to view mean spend.
+                          </p>
+                        ) : (
+                          <table className="w-full min-w-[640px] border-collapse text-[11px]">
+                            <thead>
+                              <tr className="border-b">
+                                <th className="sticky left-0 z-10 bg-background px-2 py-2 text-left font-medium text-muted-foreground">
+                                  Region
+                                </th>
+                                {ANALYTICS_INCIDENT_CATEGORIES.map((category) => (
+                                  <th
+                                    key={category}
+                                    title={category}
+                                    className="px-1.5 py-2 text-center font-medium text-muted-foreground"
+                                  >
+                                    {ANALYTICS_RESOLUTION_CATEGORY_LABELS[category]}
+                                  </th>
+                                ))}
+                                <th
+                                  title="Mean across all categories"
+                                  className="border-l bg-muted/20 px-1.5 py-2 text-center font-semibold text-muted-foreground"
+                                >
+                                  All Categories
+                                </th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {analyticsFilteredRegions.map((region) => {
+                                const regionAllCategoriesTotals =
+                                  analyticsSpendRegionAllCategoriesMean.get(region)
+                                const regionAllCategoriesSpend =
+                                  regionAllCategoriesTotals && regionAllCategoriesTotals.count > 0
+                                    ? Math.round(
+                                        regionAllCategoriesTotals.sum /
+                                          regionAllCategoriesTotals.count
+                                      )
+                                    : null
+
+                                return (
+                                  <tr key={region} className="border-b">
+                                    <td className="sticky left-0 z-10 bg-background px-2 py-2 font-medium whitespace-nowrap">
+                                      {region}
+                                    </td>
+                                    {ANALYTICS_INCIDENT_CATEGORIES.map((category) => {
+                                      const totals = analyticsSpendTotals.get(
+                                        `${region}::${category}`
+                                      )
+                                      const spend =
+                                        totals && totals.count > 0
+                                          ? Math.round(totals.sum / totals.count)
+                                          : null
+
+                                      return (
+                                        <td key={`${region}-${category}-spend`} className="px-1 py-1">
+                                          {spend === null ? (
+                                            <div className="min-w-[2.75rem] rounded px-1.5 py-1 text-center text-muted-foreground">
+                                              —
+                                            </div>
+                                          ) : (
+                                            <div
+                                              title={`Mean spend — ${category}: ${formatAnalyticsSpendDollars(spend)}`}
+                                              className={cn(
+                                                'min-w-[2.75rem] rounded px-1.5 py-1 text-center font-medium whitespace-nowrap',
+                                                getAnalyticsSpendCellClasses(spend)
+                                              )}
+                                            >
+                                              {formatAnalyticsSpendDollars(spend)}
+                                            </div>
+                                          )}
+                                        </td>
+                                      )
+                                    })}
+                                    <td className="border-l bg-muted/10 px-1 py-1">
+                                      {regionAllCategoriesSpend === null ? (
+                                        <div className="min-w-[2.75rem] rounded px-1.5 py-1 text-center font-semibold text-muted-foreground">
+                                          —
+                                        </div>
+                                      ) : (
+                                        <div
+                                          title={`Mean spend — all categories in ${region}: ${formatAnalyticsSpendDollars(regionAllCategoriesSpend)}`}
+                                          className={cn(
+                                            'min-w-[2.75rem] rounded px-1.5 py-1 text-center font-semibold whitespace-nowrap',
+                                            getAnalyticsSpendCellClasses(regionAllCategoriesSpend)
+                                          )}
+                                        >
+                                          {formatAnalyticsSpendDollars(regionAllCategoriesSpend)}
+                                        </div>
+                                      )}
+                                    </td>
+                                  </tr>
+                                )
+                              })}
+                              <tr className="border-t-2 bg-muted/20">
+                                <td className="sticky left-0 z-10 bg-muted/20 px-2 py-2 font-semibold whitespace-nowrap">
+                                  All Regions
+                                </td>
+                                {ANALYTICS_INCIDENT_CATEGORIES.map((category) => {
+                                  const categoryAllRegionsTotals =
+                                    analyticsSpendCategoryAllRegionsMean.get(category)
+                                  const categoryAllRegionsSpend =
+                                    categoryAllRegionsTotals && categoryAllRegionsTotals.count > 0
+                                      ? Math.round(
+                                          categoryAllRegionsTotals.sum /
+                                            categoryAllRegionsTotals.count
+                                        )
+                                      : null
+
+                                  return (
+                                    <td key={`all-regions-${category}-spend`} className="px-1 py-1">
+                                      {categoryAllRegionsSpend === null ? (
+                                        <div className="min-w-[2.75rem] rounded px-1.5 py-1 text-center font-semibold text-muted-foreground">
+                                          —
+                                        </div>
+                                      ) : (
+                                        <div
+                                          title={`Mean spend — ${category} across all regions: ${formatAnalyticsSpendDollars(categoryAllRegionsSpend)}`}
+                                          className={cn(
+                                            'min-w-[2.75rem] rounded px-1.5 py-1 text-center font-semibold whitespace-nowrap',
+                                            getAnalyticsSpendCellClasses(categoryAllRegionsSpend)
+                                          )}
+                                        >
+                                          {formatAnalyticsSpendDollars(categoryAllRegionsSpend)}
+                                        </div>
+                                      )}
+                                    </td>
+                                  )
+                                })}
+                                <td className="border-l bg-muted/30 px-1 py-1">
+                                  {analyticsSpendGrandMean === null ? (
+                                    <div className="min-w-[2.75rem] rounded px-1.5 py-1 text-center font-semibold text-muted-foreground">
+                                      —
+                                    </div>
+                                  ) : (
+                                    <div
+                                      title={`Mean spend — all regions and categories: ${formatAnalyticsSpendDollars(analyticsSpendGrandMean)}`}
+                                      className={cn(
+                                        'min-w-[2.75rem] rounded px-1.5 py-1 text-center font-semibold whitespace-nowrap',
+                                        getAnalyticsSpendCellClasses(analyticsSpendGrandMean)
+                                      )}
+                                    >
+                                      {formatAnalyticsSpendDollars(analyticsSpendGrandMean)}
+                                    </div>
+                                  )}
+                                </td>
+                              </tr>
+                            </tbody>
+                          </table>
+                        )}
+                        <div className="mt-3 flex flex-wrap items-center gap-3 text-[10px] text-muted-foreground">
+                          <span className="inline-flex items-center gap-1">
+                            <span className="h-2.5 w-2.5 rounded bg-green-50 ring-1 ring-green-200 dark:bg-green-500/10" />
+                            ≤ $300K
+                          </span>
+                          <span className="inline-flex items-center gap-1">
+                            <span className="h-2.5 w-2.5 rounded bg-amber-50 ring-1 ring-amber-200 dark:bg-amber-500/10" />
+                            $300K–$600K
+                          </span>
+                          <span className="inline-flex items-center gap-1">
+                            <span className="h-2.5 w-2.5 rounded bg-red-50 ring-1 ring-red-200 dark:bg-red-500/10" />
+                            &gt; $600K
+                          </span>
+                          <span className="text-[10px]">Mean spend color scale</span>
+                        </div>
+                      </div>
+                    </section>
+                  </div>
+                )}
+
+                {activeTab === 'briefing' && isInExerciseWorkspace && (
+                  <div className="space-y-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border px-3 py-2">
+                      <div>
+                        <p className="text-sm font-medium">ICS-201 Incident Briefing</p>
+                        <p className="text-xs text-muted-foreground">
+                          Exercise workspace for {activeExerciseWorkspace?.name}
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setIsIcs201VersionDialogOpen(true)}
+                        >
+                          <History className="mr-1 h-3.5 w-3.5" />
+                          Version history
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setIsIcs201SignedVersionsDialogOpen(true)}
+                        >
+                          <Check className="mr-1 h-3.5 w-3.5" />
+                          Signed versions
+                        </Button>
+                      </div>
+                    </div>
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <div className="grid gap-2">
+                        <Label htmlFor="ics201-incident-name">Exercise / Incident Name</Label>
+                        <Input
+                          id="ics201-incident-name"
+                          value={ics201Form.incidentName}
+                          onChange={(event) =>
+                            updateIcs201Field('incidentName', event.target.value)
+                          }
+                        />
+                      </div>
+                      <div className="grid gap-2">
+                        <Label htmlFor="ics201-incident-number">Incident Number</Label>
+                        <Input
+                          id="ics201-incident-number"
+                          value={ics201Form.incidentNumber}
+                          onChange={(event) =>
+                            updateIcs201Field('incidentNumber', event.target.value)
+                          }
+                        />
+                      </div>
+                      <div className="grid gap-2">
+                        <Label htmlFor="ics201-prepared-by">Prepared By</Label>
+                        <Input
+                          id="ics201-prepared-by"
+                          value={ics201Form.preparedBy}
+                          onChange={(event) =>
+                            updateIcs201Field('preparedBy', event.target.value)
+                          }
+                        />
+                      </div>
+                      <div className="grid gap-2">
+                        <Label htmlFor="ics201-jurisdiction">Jurisdiction / Region</Label>
+                        <Input
+                          id="ics201-jurisdiction"
+                          value={ics201Form.jurisdiction}
+                          onChange={(event) =>
+                            updateIcs201Field('jurisdiction', event.target.value)
+                          }
+                        />
+                      </div>
+                      <div className="grid gap-2">
+                        <Label htmlFor="ics201-op-start">Operational Period Start</Label>
+                        <Input
+                          id="ics201-op-start"
+                          value={ics201Form.operationalPeriodStart}
+                          onChange={(event) =>
+                            updateIcs201Field('operationalPeriodStart', event.target.value)
+                          }
+                        />
+                      </div>
+                      <div className="grid gap-2">
+                        <Label htmlFor="ics201-op-end">Operational Period End</Label>
+                        <Input
+                          id="ics201-op-end"
+                          value={ics201Form.operationalPeriodEnd}
+                          onChange={(event) =>
+                            updateIcs201Field('operationalPeriodEnd', event.target.value)
+                          }
+                        />
+                      </div>
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="ics201-current-situation">Current Situation Summary</Label>
+                      <Textarea
+                        id="ics201-current-situation"
+                        value={ics201Form.currentSituationSummary}
+                        onChange={(event) =>
+                          updateIcs201Field('currentSituationSummary', event.target.value)
+                        }
+                        className="min-h-28"
+                      />
+                    </div>
+                    <div className="grid gap-2 md:grid-cols-2">
+                      <div className="grid gap-2">
+                        <Label htmlFor="ics201-weather">Weather / Forecast</Label>
+                        <Textarea
+                          id="ics201-weather"
+                          value={ics201Form.weatherForecast}
+                          onChange={(event) =>
+                            updateIcs201Field('weatherForecast', event.target.value)
+                          }
+                          className="min-h-24"
+                        />
+                      </div>
+                      <div className="grid gap-2">
+                        <Label htmlFor="ics201-projected-course">Projected Incident Course</Label>
+                        <Textarea
+                          id="ics201-projected-course"
+                          value={ics201Form.projectedIncidentCourse}
+                          onChange={(event) =>
+                            updateIcs201Field('projectedIncidentCourse', event.target.value)
+                          }
+                          className="min-h-24"
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <Label>Objectives</Label>
+                        <Button type="button" size="sm" variant="outline" onClick={addIcs201Objective}>
+                          <Plus className="mr-1 h-3.5 w-3.5" />
+                          Add objective
+                        </Button>
+                      </div>
+                      {ics201Form.objectives.map((objective, index) => (
+                        <Input
+                          key={`ics201-objective-${index}`}
+                          value={objective}
+                          onChange={(event) => updateIcs201Objective(index, event.target.value)}
+                          placeholder={`Objective ${index + 1}`}
+                        />
+                      ))}
+                    </div>
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <Label>Current Actions</Label>
+                        <Button type="button" size="sm" variant="outline" onClick={addIcs201Action}>
+                          <Plus className="mr-1 h-3.5 w-3.5" />
+                          Add action
+                        </Button>
+                      </div>
+                      {ics201Form.actions.map((action) => (
+                        <Item key={action.id} variant="outline" className="flex-col items-stretch p-3">
+                          <div className="grid gap-2 md:grid-cols-2">
+                            <Input
+                              value={action.task}
+                              onChange={(event) =>
+                                updateIcs201Action(action.id, 'task', event.target.value)
+                              }
+                              placeholder="Task"
+                            />
+                            <Input
+                              value={action.owner}
+                              onChange={(event) =>
+                                updateIcs201Action(action.id, 'owner', event.target.value)
+                              }
+                              placeholder="Owner"
+                            />
+                            <Input
+                              value={action.startTime}
+                              onChange={(event) =>
+                                updateIcs201Action(action.id, 'startTime', event.target.value)
+                              }
+                              placeholder="Start time"
+                            />
+                            <Input
+                              value={action.status}
+                              onChange={(event) =>
+                                updateIcs201Action(action.id, 'status', event.target.value)
+                              }
+                              placeholder="Status"
+                            />
+                          </div>
+                        </Item>
+                      ))}
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Organization Chart</Label>
+                      <div className="grid gap-2 md:grid-cols-2">
+                        {(
+                          Object.keys(ics201Form.orgChart) as Array<keyof Ics201FormState['orgChart']>
+                        ).map((field) => (
+                          <div key={field} className="grid gap-1">
+                            <Label htmlFor={`ics201-org-${field}`} className="text-xs capitalize">
+                              {field.replace(/([A-Z])/g, ' $1')}
+                            </Label>
+                            <Input
+                              id={`ics201-org-${field}`}
+                              value={ics201Form.orgChart[field]}
+                              onChange={(event) =>
+                                updateIcs201OrgChartField(field, event.target.value)
+                              }
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <Label>Resources</Label>
+                        <Button type="button" size="sm" variant="outline" onClick={addIcs201Resource}>
+                          <Plus className="mr-1 h-3.5 w-3.5" />
+                          Add resource
+                        </Button>
+                      </div>
+                      {ics201Form.resources.map((resource) => (
+                        <Item key={resource.id} variant="muted" size="sm" className="flex-col items-stretch p-3">
+                          <div className="grid gap-2 md:grid-cols-2">
+                            <Input
+                              value={resource.category}
+                              onChange={(event) =>
+                                updateIcs201Resource(resource.id, 'category', event.target.value)
+                              }
+                              placeholder="Category"
+                            />
+                            <Input
+                              value={resource.identifier}
+                              onChange={(event) =>
+                                updateIcs201Resource(resource.id, 'identifier', event.target.value)
+                              }
+                              placeholder="Identifier"
+                            />
+                            <Input
+                              value={resource.quantity}
+                              onChange={(event) =>
+                                updateIcs201Resource(resource.id, 'quantity', event.target.value)
+                              }
+                              placeholder="Quantity"
+                            />
+                            <Input
+                              value={resource.status}
+                              onChange={(event) =>
+                                updateIcs201Resource(resource.id, 'status', event.target.value)
+                              }
+                              placeholder="Status"
+                            />
+                          </div>
+                        </Item>
+                      ))}
+                    </div>
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <Label>Safety Analysis</Label>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={addIcs201SafetyAnalysis}
+                        >
+                          <Plus className="mr-1 h-3.5 w-3.5" />
+                          Add safety row
+                        </Button>
+                      </div>
+                      {ics201Form.safetyAnalysis.map((row) => (
+                        <Item key={row.id} variant="muted" size="sm" className="flex-col items-stretch p-3">
+                          <div className="grid gap-2 md:grid-cols-2">
+                            <Input
+                              value={row.hazard}
+                              onChange={(event) =>
+                                updateIcs201SafetyAnalysis(row.id, 'hazard', event.target.value)
+                              }
+                              placeholder="Hazard"
+                            />
+                            <Input
+                              value={row.mitigation}
+                              onChange={(event) =>
+                                updateIcs201SafetyAnalysis(row.id, 'mitigation', event.target.value)
+                              }
+                              placeholder="Mitigation"
+                            />
+                          </div>
+                        </Item>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {activeTab === 'msel' && isInExerciseWorkspace && (
+                  <div className="space-y-3">
+                    <div className="rounded-md border px-3 py-2">
+                      <p className="text-sm font-medium">MSEL</p>
+                      <p className="text-xs text-muted-foreground">
+                        Exercise workspace for {activeExerciseWorkspace?.name}
+                      </p>
+                    </div>
+                    {renderExerciseMselInjectsEditor()}
                   </div>
                 )}
 
                 {activeTab === 'sitreps' && (
                   <div className="space-y-3">
+                    {sitrepGeneratingFromScope && (
+                      <div className="flex items-center gap-2 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-800 dark:border-blue-800/60 dark:bg-blue-500/10 dark:text-blue-200">
+                        <img
+                          src={pratusLogo}
+                          alt="Pratus logo"
+                          className="h-[1em] w-auto animate-pulse object-contain"
+                        />
+                        <span>
+                          Pratus AI is generating a SITREP draft for{' '}
+                          <span className="font-semibold">{sitrepGeneratingFromScope}</span>…
+                        </span>
+                        <div className="ml-2 flex flex-1 flex-col gap-1.5">
+                          {[12, 10, 8].map((width, index) => (
+                            <div
+                              key={index}
+                              className={cn(
+                                'h-1.5 rounded bg-blue-200/80 dark:bg-blue-700/60 animate-pulse',
+                                width === 12 ? 'w-full' : width === 10 ? 'w-10/12' : 'w-8/12'
+                              )}
+                              style={{ animationDelay: `${index * 120}ms` }}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    )}
                     <div className="sticky top-0 z-10 -mx-2 space-y-3 bg-card px-2 pb-2 pt-1">
-                      {viewingSitrepVersion && (
-                        <div className="flex items-center justify-between rounded-md border border-amber-400 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-500 dark:bg-amber-500/10 dark:text-amber-200">
+                      {viewingSitrepVersion && (() => {
+                        const liveViewedVersion = sitrepVersions.find(
+                          (entry) => entry.id === viewingSitrepVersion.id
+                        )
+                        const liveSignaturesForBanner =
+                          liveViewedVersion?.signatures ?? viewingSitrepVersion.signatures
+                        const isViewingSubmittedDraft =
+                          liveSignaturesForBanner.length === 0 &&
+                          ((liveViewedVersion?.submittedForReviewTo?.length ?? 0) > 0 ||
+                            (viewingSitrepVersion.submittedForReviewTo?.length ?? 0) > 0)
+                        const isViewingUnsignedDraft = liveSignaturesForBanner.length === 0
+                        const backLabelByMode: Record<SitrepViewMode, string> = {
+                          current: 'View latest',
+                          historical: 'Back to Historical',
+                          drafts: 'Back to Drafts',
+                          'review-queue': 'Back to Review Queue',
+                        }
+                        const originMode = viewingSitrepVersionOrigin
+                        const backLabel = originMode
+                          ? backLabelByMode[originMode]
+                          : isViewingUnsignedDraft
+                            ? 'Back to Drafts'
+                            : backLabelByMode[sitrepViewMode]
+                        const handleBack = () => {
+                          if (liveSitrepFormRef.current) {
+                            setSitrepForm(liveSitrepFormRef.current)
+                            liveSitrepFormRef.current = null
+                          }
+                          setViewingSitrepVersion(null)
+                          setViewingSitrepVersionOrigin(null)
+                          if (originMode) {
+                            setSitrepViewMode(originMode)
+                          } else if (isViewingUnsignedDraft) {
+                            setSitrepViewMode('drafts')
+                          }
+                        }
+                        return (
+                        <>
+                        <div className="flex items-center justify-start gap-2">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="h-7 gap-1 text-xs"
+                            onClick={handleBack}
+                          >
+                            <ChevronLeft className="h-3.5 w-3.5" />
+                            {backLabel}
+                          </Button>
+                        </div>
+                        <div className="flex flex-col gap-2 rounded-md border border-amber-400 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-500 dark:bg-amber-500/10 dark:text-amber-200">
                           <div className="flex flex-wrap items-center gap-2">
-                            <History className="h-3.5 w-3.5" />
+                            {!isViewingSubmittedDraft && <History className="h-3.5 w-3.5" />}
                             <span>
-                              You are viewing a past version from{' '}
-                              <span className="font-semibold">
-                                {new Date(viewingSitrepVersion.createdAt).toLocaleTimeString([], {
-                                  hour: '2-digit',
-                                  minute: '2-digit',
-                                  second: '2-digit',
-                                })}
-                              </span>{' '}
-                              last edited by{' '}
-                              <span className="font-semibold">
-                                {viewingSitrepVersion.authorRole}{' '}
-                                {viewingSitrepVersion.authorName}
-                              </span>
-                              .
+                              {isViewingSubmittedDraft ? (
+                                <>
+                                  You are viewing a draft last edited by{' '}
+                                  <span className="font-semibold">
+                                    {viewingSitrepVersion.authorRole}{' '}
+                                    {viewingSitrepVersion.authorName}
+                                  </span>{' '}
+                                  submitted for review. Drafts submitted for review can only be
+                                  edited by their reviewers.
+                                </>
+                              ) : (
+                                <>
+                                  You are viewing a past version from{' '}
+                                  <span className="font-semibold">
+                                    {new Date(viewingSitrepVersion.createdAt).toLocaleTimeString(
+                                      [],
+                                      {
+                                        hour: '2-digit',
+                                        minute: '2-digit',
+                                        second: '2-digit',
+                                      }
+                                    )}
+                                  </span>{' '}
+                                  last edited by{' '}
+                                  <span className="font-semibold">
+                                    {viewingSitrepVersion.authorRole}{' '}
+                                    {viewingSitrepVersion.authorName}
+                                  </span>
+                                  .
+                                </>
+                              )}
                             </span>
                             {(() => {
                               const liveVersion = sitrepVersions.find(
                                 (entry) => entry.id === viewingSitrepVersion.id
                               )
-                              const submittedRecipients =
+                              const allSubmittedRecipients =
                                 liveVersion?.submittedForReviewTo ??
                                 viewingSitrepVersion.submittedForReviewTo
+                              const submittedRecipients = allSubmittedRecipients?.filter(
+                                (recipient) => recipient.role !== 'Incident Commander'
+                              )
                               const submittedAt =
                                 liveVersion?.submittedForReviewAt ??
                                 viewingSitrepVersion.submittedForReviewAt
@@ -7478,34 +18435,10 @@ function App() {
                               )
                             })()}
                           </div>
-                          {(() => {
-                            const backLabelByMode: Record<SitrepViewMode, string> = {
-                              current: 'View latest',
-                              historical: 'Back to Historical',
-                              drafts: 'Back to Drafts',
-                              'review-queue': 'Back to Review Queue',
-                            }
-                            return (
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="outline"
-                                className="h-7 gap-1 text-xs"
-                                onClick={() => {
-                                  if (liveSitrepFormRef.current) {
-                                    setSitrepForm(liveSitrepFormRef.current)
-                                    liveSitrepFormRef.current = null
-                                  }
-                                  setViewingSitrepVersion(null)
-                                }}
-                              >
-                                <X className="h-3.5 w-3.5" />
-                                {backLabelByMode[sitrepViewMode]}
-                              </Button>
-                            )
-                          })()}
                         </div>
-                      )}
+                        </>
+                        )
+                      })()}
                       {activeSitrepDraftId !== null &&
                         !viewingSitrepVersion &&
                         (() => {
@@ -7525,103 +18458,148 @@ function App() {
                           const hasRequestedApproval = requestedApprovalSitrepDraftIds.has(
                             activeDraft.id
                           )
+                          const reviewingFromQueue =
+                            viewingSitrepVersionOrigin === 'review-queue'
+                          const selectedScopeForBanner = SITREP_SCOPE_OPTIONS.find(
+                            (option) => option.id === selectedSitrepScopeId
+                          )
+                          const bannerScopeLabel =
+                            selectedScopeForBanner?.label ??
+                            activeDraft.snapshot.incidentName?.trim() ??
+                            ''
+                          const bannerScopeKindLabel = selectedScopeForBanner
+                            ? selectedScopeForBanner.kind === 'incident'
+                              ? 'Incident'
+                              : 'AOR'
+                            : 'Incident'
                           return (
                             <>
-                              <div className="flex items-center justify-end">
+                              {bannerScopeLabel.length > 0 && (
+                                <div className="flex flex-wrap items-center gap-2 rounded-md border bg-muted/40 px-3 py-2 text-xs">
+                                  <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                    SITREP for
+                                  </span>
+                                  <Badge
+                                    variant="outline"
+                                    className={cn(
+                                      'gap-1 border-transparent px-1.5 py-0 font-mono text-[10px] uppercase tracking-wide',
+                                      bannerScopeKindLabel === 'AOR'
+                                        ? 'bg-sky-500/15 text-sky-700 dark:text-sky-300'
+                                        : 'bg-amber-500/15 text-amber-700 dark:text-amber-300'
+                                    )}
+                                  >
+                                    {bannerScopeKindLabel === 'AOR' ? (
+                                      <MapPin className="h-3 w-3" />
+                                    ) : (
+                                      <AlertTriangle className="h-3 w-3" />
+                                    )}
+                                    {bannerScopeKindLabel}
+                                  </Badge>
+                                  <span className="font-medium text-foreground">
+                                    {bannerScopeLabel}
+                                  </span>
+                                </div>
+                              )}
+                              <div className="flex items-center justify-between gap-2">
                                 <Button
                                   type="button"
                                   size="sm"
-                                  variant={hasRequestedApproval ? 'outline' : 'default'}
-                                  disabled={hasRequestedApproval}
-                                  className={cn(
-                                    'h-7 gap-1 text-xs',
-                                    !hasRequestedApproval &&
-                                      'bg-emerald-600 text-white hover:bg-emerald-700'
-                                  )}
+                                  variant="outline"
+                                  className="h-7 gap-1 text-xs"
                                   onClick={() => {
-                                    openSitrepApprovalRecipientPicker({
-                                      draftId: activeDraft.id,
-                                      versionLabel,
-                                      authorName: activeDraft.authorName,
+                                    if (liveSitrepFormRef.current) {
+                                      setSitrepForm(liveSitrepFormRef.current)
+                                      liveSitrepFormRef.current = null
+                                    }
+                                    setActiveSitrepDraftId(null)
+                                    setSitrepViewMode(
+                                      reviewingFromQueue ? 'review-queue' : 'drafts'
+                                    )
+                                    setViewingSitrepVersionOrigin(null)
+                                    setSitrepSectionEdits({
+                                      'executive-summary': null,
+                                      'ongoing-incidents': null,
+                                      'readiness-assessment': null,
+                                      'risk-to-mission': null,
+                                      'outstanding-rfi-rfr': null,
+                                      'previous-critical-incident-comms': null,
+                                      'general-comments': null,
+                                      'imagery': null,
                                     })
                                   }}
                                 >
-                                  {hasRequestedApproval ? (
-                                    <>
-                                      <Check className="h-3.5 w-3.5" />
-                                      Approval Requested
-                                    </>
-                                  ) : (
-                                    'Request Approval'
-                                  )}
+                                  <ChevronLeft className="h-3.5 w-3.5" />
+                                  {reviewingFromQueue ? 'Back to Review Queue' : 'Back to Drafts'}
                                 </Button>
+                                {!reviewingFromQueue && (
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant={hasRequestedApproval ? 'outline' : 'default'}
+                                    disabled={hasRequestedApproval}
+                                    className={cn(
+                                      'h-7 gap-1 text-xs',
+                                      !hasRequestedApproval &&
+                                        'bg-emerald-600 text-white hover:bg-emerald-700'
+                                    )}
+                                    onClick={() => {
+                                      openSitrepApprovalRecipientPicker({
+                                        draftId: activeDraft.id,
+                                        versionLabel,
+                                        authorName: activeDraft.authorName,
+                                      })
+                                    }}
+                                  >
+                                    {hasRequestedApproval ? (
+                                      <>
+                                        <Check className="h-3.5 w-3.5" />
+                                        Approval Requested
+                                      </>
+                                    ) : (
+                                      'Request Approval'
+                                    )}
+                                  </Button>
+                                )}
                               </div>
-                              <div className="flex items-center justify-between rounded-md border border-sky-400 bg-sky-50 px-3 py-2 text-xs text-sky-900 dark:border-sky-500 dark:bg-sky-500/10 dark:text-sky-200">
-                              <div className="flex flex-wrap items-center gap-2">
-                                <div className="flex flex-col gap-0.5">
-                                  <span>
-                                    Created by{' '}
-                                    <span className="font-semibold">
-                                      {activeDraft.creatorRole} {activeDraft.creatorName}
-                                    </span>{' '}
-                                    at{' '}
-                                    <span className="font-semibold">
-                                      {new Date(activeDraft.creatorCreatedAt).toLocaleTimeString(
-                                        [],
-                                        {
+                              <div className="rounded-md border border-sky-400 bg-sky-50 px-3 py-2 text-xs text-sky-900 dark:border-sky-500 dark:bg-sky-500/10 dark:text-sky-200">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <div className="flex flex-col gap-0.5">
+                                    <span>
+                                      Created by{' '}
+                                      <span className="font-semibold">
+                                        {activeDraft.creatorRole} {activeDraft.creatorName}
+                                      </span>{' '}
+                                      at{' '}
+                                      <span className="font-semibold">
+                                        {new Date(activeDraft.creatorCreatedAt).toLocaleTimeString(
+                                          [],
+                                          {
+                                            hour: '2-digit',
+                                            minute: '2-digit',
+                                            second: '2-digit',
+                                          }
+                                        )}
+                                      </span>
+                                      .
+                                    </span>
+                                    <span>
+                                      {getSitrepLastEditorLabel(activeDraft)}{' '}
+                                      <span className="font-semibold">
+                                        {formatSitrepLastEditor(activeDraft)}
+                                      </span>{' '}
+                                      at{' '}
+                                      <span className="font-semibold">
+                                        {new Date(activeDraft.createdAt).toLocaleTimeString([], {
                                           hour: '2-digit',
                                           minute: '2-digit',
                                           second: '2-digit',
-                                        }
-                                      )}
+                                        })}
+                                      </span>
+                                      .
                                     </span>
-                                    .
-                                  </span>
-                                  <span>
-                                    Last edited by{' '}
-                                    <span className="font-semibold">
-                                      {activeDraft.authorRole} {activeDraft.authorName}
-                                    </span>{' '}
-                                    at{' '}
-                                    <span className="font-semibold">
-                                      {new Date(activeDraft.createdAt).toLocaleTimeString([], {
-                                        hour: '2-digit',
-                                        minute: '2-digit',
-                                        second: '2-digit',
-                                      })}
-                                    </span>
-                                    .
-                                  </span>
+                                  </div>
                                 </div>
                               </div>
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="outline"
-                                className="h-7 gap-1 text-xs"
-                                onClick={() => {
-                                  if (liveSitrepFormRef.current) {
-                                    setSitrepForm(liveSitrepFormRef.current)
-                                    liveSitrepFormRef.current = null
-                                  }
-                                  setActiveSitrepDraftId(null)
-                                  setSitrepViewMode('drafts')
-                                  setSitrepSectionEdits({
-                                    'reporting-unit': null,
-                                    'executive-summary': null,
-                                    'readiness-assessment': null,
-                                    'risk-to-mission': null,
-                                    'outstanding-rfi-rfr': null,
-                                    'previous-critical-incident-comms': null,
-                                    'general-comments': null,
-                                    'imagery': null,
-                                  })
-                                }}
-                              >
-                                <X className="h-3.5 w-3.5" />
-                                Back to Drafts
-                              </Button>
-                            </div>
                             </>
                           )
                         })()}
@@ -7718,15 +18696,67 @@ function App() {
                             </ToggleGroup>
                             {(sitrepViewMode === 'current' ||
                               sitrepViewMode === 'drafts') && (
-                              <Button
-                                type="button"
-                                size="sm"
-                                className="h-8 gap-1 bg-emerald-600 text-xs text-white hover:bg-emerald-700"
-                                onClick={createNewSitrepDraft}
-                              >
-                                <Plus className="h-3.5 w-3.5" />
-                                Create Draft SITREP
-                              </Button>
+                              <div className="flex items-center gap-2">
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  className="h-8 gap-1 bg-blue-600 text-xs text-white hover:bg-blue-700"
+                                  disabled={
+                                    viewingSitrepVersion !== null ||
+                                    isCreatingSignedSitrepVersion ||
+                                    sitrepGeneratingFromScope !== null
+                                  }
+                                  onClick={() => {
+                                    const selectedScope = SITREP_SCOPE_OPTIONS.find(
+                                      (option) => option.id === selectedSitrepScopeId
+                                    )
+                                    const scopeLabel = selectedScope?.label ?? 'the selected scope'
+                                    const scopeKindLabel =
+                                      selectedScope?.kind === 'incident' ? 'Incident' : 'AOR'
+                                    const scopeContextId = selectedScope
+                                      ? `sitrep-scope:${selectedScope.id}`
+                                      : 'sitrep-scope:none'
+                                    const scopeContextLabel = selectedScope?.label ?? 'SITREPs'
+                                    setPratusAiIntent('sitrep-generation')
+                                    setPratusAiDraftMessage(
+                                      `Generate a SITREP draft for ${scopeKindLabel} ${scopeLabel} using the selected sources. ` +
+                                        'A draft will be generated for every compatible section of the SITREP — every section except Ongoing Incidents and Imagery.'
+                                    )
+                                    setPratusAiDataSources((previous) => ({
+                                      ...previous,
+                                      files: true,
+                                      organizationData: true,
+                                      incidentData: true,
+                                    }))
+                                    setPratusAiSelectedFiles([])
+                                    setPratusAiSelectedContexts((previous) => {
+                                      const withoutSitrepScopes = previous.filter(
+                                        (entry) =>
+                                          entry.id !== 'tab:sitreps' &&
+                                          !entry.id.startsWith('sitrep-scope:')
+                                      )
+                                      return [
+                                        ...withoutSitrepScopes,
+                                        { id: scopeContextId, label: scopeContextLabel },
+                                      ]
+                                    })
+                                    setIsPratusAiSelectingContext(false)
+                                    setIsPratusAiDrawerOpen(true)
+                                  }}
+                                >
+                                  <Sparkles className="h-3.5 w-3.5" />
+                                  Generate Draft
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  className="h-8 gap-1 bg-emerald-600 text-xs text-white hover:bg-emerald-700"
+                                  onClick={createNewSitrepDraft}
+                                >
+                                  <Plus className="h-3.5 w-3.5" />
+                                  Create Draft SITREP
+                                </Button>
+                              </div>
                             )}
                           </div>
                         )}
@@ -7738,38 +18768,24 @@ function App() {
                           ? reversed
                           : sitrepViewMode === 'drafts'
                             ? reversed.filter((version) => version.signatures.length === 0)
-                            : reversed.filter((version) => version.signatures.length > 0)
-                      const titleByMode: Record<Exclude<SitrepViewMode, 'current'>, string> = {
-                        historical: 'Historical versions',
-                        drafts: 'Drafts',
-                        'review-queue': 'Review queue',
-                      }
-                      const subtitleByMode: Record<Exclude<SitrepViewMode, 'current'>, string> = {
-                        historical: 'All revisions captured as the team collaborates',
-                        drafts: ' ',
-                        'review-queue': 'Signed versions ready for review',
-                      }
+                            : reversed
+                                .filter(
+                                  (version) =>
+                                    version.signatures.length === 0 &&
+                                    (version.submittedForReviewTo?.filter(
+                                      (recipient) =>
+                                        recipient.role === 'Situation Unit Leader'
+                                    ).length ?? 0) > 0
+                                )
+                                .slice(0, 1)
                       const emptyByMode: Record<Exclude<SitrepViewMode, 'current'>, string> = {
                         historical: 'No versions yet.',
                         drafts: 'No draft versions yet.',
-                        'review-queue': 'No signed versions awaiting review.',
+                        'review-queue': 'No drafts awaiting your review.',
                       }
                       const mode = sitrepViewMode
                       return (
                         <div className="space-y-2">
-                          <div className="flex items-center gap-2 px-1 text-xs font-semibold">
-                            {mode === 'review-queue' ? (
-                              <Check className="h-3.5 w-3.5 text-emerald-600" />
-                            ) : mode === 'drafts' ? (
-                              <FileText className="h-3.5 w-3.5" />
-                            ) : (
-                              <History className="h-3.5 w-3.5" />
-                            )}
-                            {titleByMode[mode]}
-                            <span className="ml-auto text-[11px] font-normal text-muted-foreground">
-                              {subtitleByMode[mode]}
-                            </span>
-                          </div>
                           <div className="overflow-hidden rounded-md border">
                             {filtered.length === 0 ? (
                               <div className="px-4 py-8 text-center text-xs text-muted-foreground">
@@ -7824,30 +18840,88 @@ function App() {
                                             </span>
                                           </span>
                                         ) : version.submittedForReviewTo &&
-                                          version.submittedForReviewTo.length > 0 ? (
-                                          <button
-                                            type="button"
-                                            onClick={() =>
-                                              setExpandedSitrepReviewStatusDraftId((previous) =>
-                                                previous === version.id ? null : version.id
+                                          version.submittedForReviewTo.filter(
+                                            (recipient) =>
+                                              recipient.role === 'Situation Unit Leader'
+                                          ).length > 0 ? (
+                                          (() => {
+                                            const sulRecipients =
+                                              version.submittedForReviewTo!.filter(
+                                                (recipient) =>
+                                                  recipient.role === 'Situation Unit Leader'
+                                              )
+                                            const storedApproval =
+                                              sitrepDraftSulApprovals[version.id]
+                                            const firstSulRecipient = sulRecipients[0]
+                                            const inferredReviewQueueApproval =
+                                              mode === 'review-queue' && firstSulRecipient
+                                                ? {
+                                                    name: firstSulRecipient.name,
+                                                    role: firstSulRecipient.role,
+                                                    approvedAt:
+                                                      (version.submittedForReviewAt ??
+                                                        version.createdAt) +
+                                                      5 * 60 * 1000,
+                                                  }
+                                                : null
+                                            const approval =
+                                              storedApproval ?? inferredReviewQueueApproval
+                                            if (approval) {
+                                              const approvedAtLabel = new Date(
+                                                approval.approvedAt
+                                              ).toLocaleTimeString([], {
+                                                hour: '2-digit',
+                                                minute: '2-digit',
+                                                second: '2-digit',
+                                              })
+                                              return (
+                                                <div className="flex flex-col items-start gap-1">
+                                                  <span className="flex max-w-full items-start gap-1 rounded-md border border-emerald-300 bg-emerald-50 px-2 py-1 text-left text-[10px] font-medium text-emerald-800 dark:border-emerald-500/50 dark:bg-emerald-500/10 dark:text-emerald-300">
+                                                    <Check className="mt-[2px] h-3 w-3 shrink-0" />
+                                                    <span className="whitespace-normal break-words">
+                                                      Approved by{' '}
+                                                      <span className="font-semibold">
+                                                        {approval.role} {approval.name}
+                                                      </span>{' '}
+                                                      at{' '}
+                                                      <span className="font-semibold">
+                                                        {approvedAtLabel}
+                                                      </span>
+                                                    </span>
+                                                  </span>
+                                                  <span className="flex max-w-full items-start gap-1 rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-left text-[10px] font-medium text-amber-800 dark:border-amber-500/50 dark:bg-amber-500/10 dark:text-amber-300">
+                                                    <Clock className="mt-[2px] h-3 w-3 shrink-0" />
+                                                    <span className="whitespace-normal break-words">
+                                                      Pending Review by Planning Section Chief
+                                                    </span>
+                                                  </span>
+                                                </div>
                                               )
                                             }
-                                            aria-expanded={
-                                              expandedSitrepReviewStatusDraftId === version.id
-                                            }
-                                            className="flex max-w-full cursor-pointer items-start gap-1 rounded-md border border-emerald-300 bg-emerald-50 px-2 py-1 text-left text-[10px] font-medium text-emerald-800 hover:bg-emerald-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 dark:border-emerald-500/50 dark:bg-emerald-500/10 dark:text-emerald-300 dark:hover:bg-emerald-500/20"
-                                          >
-                                            <Check className="mt-[2px] h-3 w-3 shrink-0" />
-                                            <span className="whitespace-normal break-words">
-                                              Submitted for Review to{' '}
-                                              {version.submittedForReviewTo
-                                                .map(
-                                                  (recipient) =>
-                                                    `${recipient.role} ${recipient.name}`
-                                                )
-                                                .join(', ')}
-                                            </span>
-                                          </button>
+                                            const sulNames = sulRecipients.map(
+                                              (recipient) => recipient.name
+                                            )
+                                            const firstSul = sulRecipients[0]
+                                            return (
+                                              <button
+                                                type="button"
+                                                onClick={() =>
+                                                  markSitrepDraftSulApproved(version.id, {
+                                                    name: firstSul.name,
+                                                    role: firstSul.role,
+                                                  })
+                                                }
+                                                className="flex max-w-full cursor-pointer items-start gap-1 rounded-md border border-emerald-300 bg-emerald-50 px-2 py-1 text-left text-[10px] font-medium text-emerald-800 hover:bg-emerald-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 dark:border-emerald-500/50 dark:bg-emerald-500/10 dark:text-emerald-300 dark:hover:bg-emerald-500/20"
+                                              >
+                                                <Check className="mt-[2px] h-3 w-3 shrink-0" />
+                                                <span className="whitespace-normal break-words">
+                                                  Submitted for Review to Situation Unit
+                                                  Leader{sulNames.length > 1 ? '(s)' : ''}:{' '}
+                                                  {sulNames.join(', ')}
+                                                </span>
+                                              </button>
+                                            )
+                                          })()
                                         ) : (
                                           <span className="flex items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-800 dark:border-amber-500/50 dark:bg-amber-500/10 dark:text-amber-300">
                                             Not Submitted for Review
@@ -7872,8 +18946,8 @@ function App() {
                                         }
                                         setSitrepForm(version.snapshot)
                                         setSitrepSectionEdits({
-                                          'reporting-unit': null,
                                           'executive-summary': null,
+                                          'ongoing-incidents': null,
                                           'readiness-assessment': null,
                                           'risk-to-mission': null,
                                           'outstanding-rfi-rfr': null,
@@ -7881,12 +18955,20 @@ function App() {
                                           'general-comments': null,
                                           'imagery': null,
                                         })
+                                        const fromReviewQueue =
+                                          sitrepViewMode === 'review-queue'
                                         if (isEditableDraft) {
                                           setActiveSitrepDraftId(version.id)
                                           setViewingSitrepVersion(null)
+                                          setViewingSitrepVersionOrigin(null)
+                                        } else if (fromReviewQueue) {
+                                          setActiveSitrepDraftId(version.id)
+                                          setViewingSitrepVersion(null)
+                                          setViewingSitrepVersionOrigin('review-queue')
                                         } else {
                                           setActiveSitrepDraftId(null)
                                           setViewingSitrepVersion(version)
+                                          setViewingSitrepVersionOrigin(sitrepViewMode)
                                         }
                                         setSitrepViewMode('current')
                                       }}
@@ -7894,7 +18976,7 @@ function App() {
                                       View
                                     </Button>
                                   )
-                                  if (mode === 'drafts') {
+                                  if (mode === 'drafts' || mode === 'review-queue') {
                                     return (
                                       <li
                                         key={version.id}
@@ -7908,79 +18990,36 @@ function App() {
                                                 {version.creatorRole} {version.creatorName}
                                               </span>
                                             </div>
-                                            <div className="text-muted-foreground">
-                                              Last updated by{' '}
-                                              <span className="font-medium text-foreground">
-                                                {version.authorRole} {version.authorName}
-                                              </span>{' '}
-                                              at {createdAtLabel}
-                                            </div>
-                                            {expandedSitrepReviewStatusDraftId === version.id &&
-                                              version.submittedForReviewTo &&
-                                              version.submittedForReviewTo.length > 0 &&
-                                              version.signatures.length === 0 &&
-                                              (() => {
-                                                const sulRecipient =
-                                                  version.submittedForReviewTo.find(
-                                                    (recipient) =>
-                                                      recipient.role === 'Situation Unit Leader'
-                                                  )
-                                                const pscRecipient =
-                                                  version.submittedForReviewTo.find(
-                                                    (recipient) =>
-                                                      recipient.role === 'Planning Section Chief'
-                                                  )
-                                                const sulApprovedAt = version.submittedForReviewAt
-                                                  ? version.submittedForReviewAt + 5 * 60 * 1000
-                                                  : null
-                                                return (
-                                                  <>
-                                                    {sulRecipient && (
-                                                      <div className="flex items-center gap-1 text-emerald-700 dark:text-emerald-300">
-                                                        <Check className="h-3 w-3 shrink-0" />
-                                                        <span>
-                                                          Approved by{' '}
-                                                          <span className="font-medium">
-                                                            {sulRecipient.role}{' '}
-                                                            {sulRecipient.name}
-                                                          </span>
-                                                          {sulApprovedAt && (
-                                                            <>
-                                                              {' '}
-                                                              at{' '}
-                                                              <span className="font-medium">
-                                                                {new Date(
-                                                                  sulApprovedAt
-                                                                ).toLocaleTimeString([], {
-                                                                  hour: '2-digit',
-                                                                  minute: '2-digit',
-                                                                  second: '2-digit',
-                                                                })}
-                                                              </span>
-                                                            </>
-                                                          )}
-                                                        </span>
-                                                      </div>
-                                                    )}
-                                                    {pscRecipient && (
-                                                      <div className="flex items-center gap-1 text-amber-700 dark:text-amber-300">
-                                                        <Clock className="h-3 w-3 shrink-0" />
-                                                        <span>
-                                                          Pending Review by{' '}
-                                                          <span className="font-medium">
-                                                            {pscRecipient.role}
-                                                          </span>
-                                                        </span>
-                                                      </div>
-                                                    )}
-                                                  </>
-                                                )
-                                              })()}
+                                            {(() => {
+                                              const isSubmittedDraft =
+                                                version.signatures.length === 0 &&
+                                                !!version.submittedForReviewTo &&
+                                                version.submittedForReviewTo.length > 0
+                                              const submittedAtTimestamp =
+                                                version.submittedForReviewAt ?? version.createdAt
+                                              const submittedAtLabel = new Date(
+                                                submittedAtTimestamp
+                                              ).toLocaleTimeString([], {
+                                                hour: '2-digit',
+                                                minute: '2-digit',
+                                                second: '2-digit',
+                                              })
+                                              return (
+                                                <div className="text-muted-foreground">
+                                                  {isSubmittedDraft ? 'Submitted for Review by ' : 'Last updated by '}
+                                                  <span className="font-medium text-foreground">
+                                                    {version.authorRole} {version.authorName}
+                                                  </span>{' '}
+                                                  at{' '}
+                                                  {isSubmittedDraft ? submittedAtLabel : createdAtLabel}
+                                                </div>
+                                              )
+                                            })()}
                                           </div>
                                           {viewButton}
                                         </div>
                                         {statusBadge && (
-                                          <div className="flex justify-end">{statusBadge}</div>
+                                          <div className="flex justify-start">{statusBadge}</div>
                                         )}
                                       </li>
                                     )
@@ -8018,26 +19057,74 @@ function App() {
                     })()}
                     {(sitrepViewMode === 'current' || viewingSitrepVersion !== null) && (
                       <div className="space-y-3">
+                        {sitrepViewMode === 'current' &&
+                          viewingSitrepVersion === null &&
+                          activeSitrepDraftId === null &&
+                          (() => {
+                            const latestSignedSitrep = [...sitrepVersions]
+                              .reverse()
+                              .find((version) => version.signatures.length > 0)
+                            const approvalSignature = latestSignedSitrep?.signatures[0]
+                            if (!approvalSignature) return null
+                            const approvedAt = new Date(approvalSignature.signedAt)
+                            return (
+                              <div className="flex items-center gap-2 text-xs text-emerald-700 dark:text-emerald-300">
+                                <Check className="h-3.5 w-3.5 shrink-0" />
+                                <span>
+                                  Approved by{' '}
+                                  <span className="font-semibold">
+                                    {approvalSignature.role} {approvalSignature.name}
+                                  </span>{' '}
+                                  at{' '}
+                                  <span className="font-semibold">
+                                    {approvedAt.toLocaleTimeString([], {
+                                      hour: '2-digit',
+                                      minute: '2-digit',
+                                      second: '2-digit',
+                                    })}
+                                  </span>
+                                  .
+                                </span>
+                              </div>
+                            )
+                          })()}
                         <div className="-mx-1 overflow-x-auto px-1">
                           <div className="flex min-w-max items-center gap-1 border-b">
-                            {SITREP_SECTIONS.map((section) => {
-                              const isActive = sitrepActiveSection === section.id
-                              return (
-                                <button
-                                  key={section.id}
-                                  type="button"
-                                  onClick={() => setSitrepActiveSection(section.id)}
-                                  className={cn(
-                                    'shrink-0 whitespace-nowrap rounded-t-md border-b-2 px-3 py-1.5 text-xs font-medium transition-colors',
-                                    isActive
-                                      ? 'border-foreground text-foreground'
-                                      : 'border-transparent text-muted-foreground hover:text-foreground'
-                                  )}
-                                >
-                                  {section.label}
-                                </button>
-                              )
-                            })}
+                            {(() => {
+                              const tabSitrepDraft =
+                                activeSitrepDraftId !== null
+                                  ? sitrepVersions.find(
+                                      (entry) => entry.id === activeSitrepDraftId
+                                    )
+                                  : null
+                              const aiGeneratedSections = tabSitrepDraft?.aiGeneratedSections
+                              return SITREP_SECTIONS.map((section) => {
+                                const isActive = sitrepActiveSection === section.id
+                                const showAiSparkle =
+                                  aiGeneratedSections?.includes(section.id) ?? false
+                                return (
+                                  <button
+                                    key={section.id}
+                                    type="button"
+                                    onClick={() => setSitrepActiveSection(section.id)}
+                                    className={cn(
+                                      'inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-t-md border-b-2 px-3 py-1.5 text-xs font-medium transition-colors',
+                                      isActive
+                                        ? 'border-foreground text-foreground'
+                                        : 'border-transparent text-muted-foreground hover:text-foreground'
+                                    )}
+                                  >
+                                    {showAiSparkle && (
+                                      <Sparkles
+                                        className="h-3 w-3 shrink-0 text-primary"
+                                        aria-hidden
+                                      />
+                                    )}
+                                    {section.label}
+                                  </button>
+                                )
+                              })
+                            })()}
                           </div>
                         </div>
                         {(() => {
@@ -8049,10 +19136,187 @@ function App() {
                             !!activeSitrepDraft &&
                             ((activeSitrepDraft.submittedForReviewTo?.length ?? 0) > 0 ||
                               requestedApprovalSitrepDraftIds.has(activeSitrepDraft.id))
+                          const isReviewingFromQueue =
+                            viewingSitrepVersionOrigin === 'review-queue' &&
+                            activeSitrepDraftId !== null
                           const formLocked =
                             !!viewingSitrepVersion ||
                             (activeSitrepDraftId === null && !isCreatingSignedSitrepVersion) ||
-                            activeDraftSubmitted
+                            (activeDraftSubmitted && !isReviewingFromQueue)
+                          const isEditingActiveDraft =
+                            activeSitrepDraftId !== null &&
+                            (!activeDraftSubmitted || isReviewingFromQueue) &&
+                            !viewingSitrepVersion
+                          const sitrepSectionIsGenerating =
+                            sitrepSectionGenerating === sitrepActiveSection
+                          const sitrepActivePrimaryField =
+                            SITREP_SECTION_PRIMARY[sitrepActiveSection].field
+                          const sitrepActiveSectionValue =
+                            sitrepSectionEdits[sitrepActiveSection] !== null
+                              ? (sitrepSectionEdits[sitrepActiveSection] as string)
+                              : ((sitrepForm[sitrepActivePrimaryField] as string) ?? '')
+                          const sitrepActiveCitations = sitrepSectionIsGenerating
+                            ? []
+                            : parseSitrepCitations(sitrepActiveSectionValue)
+                          const sitrepCitationsByMarker = new Map(
+                            sitrepActiveCitations.map((entry) => [entry.marker, entry])
+                          )
+                          const renderSitrepReadView = (
+                            section: SitrepSection,
+                            value: string,
+                            placeholder: string,
+                            heightClass: string
+                          ) => {
+                            const parts: React.ReactNode[] = []
+                            const regex = /\[(\d+)\]/g
+                            let lastIndex = 0
+                            let key = 0
+                            let match: RegExpExecArray | null
+                            while ((match = regex.exec(value)) !== null) {
+                              if (match.index > lastIndex) {
+                                parts.push(value.slice(lastIndex, match.index))
+                              }
+                              const marker = match[0]
+                              const entry = sitrepCitationsByMarker.get(marker)
+                              if (entry) {
+                                parts.push(
+                                  <span
+                                    key={`${section}-cite-${key++}`}
+                                    role="button"
+                                    tabIndex={0}
+                                    aria-label={`Open source ${marker}: ${entry.label}`}
+                                    onClick={(event) => {
+                                      event.stopPropagation()
+                                      setSitrepCitationDoc(entry)
+                                    }}
+                                    onKeyDown={(event) => {
+                                      if (event.key === 'Enter' || event.key === ' ') {
+                                        event.preventDefault()
+                                        event.stopPropagation()
+                                        setSitrepCitationDoc(entry)
+                                      }
+                                    }}
+                                    className="mx-0.5 inline-block cursor-pointer rounded bg-primary/15 px-1 font-mono text-[10px] font-semibold text-primary align-middle hover:bg-primary/30"
+                                  >
+                                    {marker}
+                                  </span>
+                                )
+                              } else {
+                                parts.push(marker)
+                              }
+                              lastIndex = match.index + marker.length
+                            }
+                            if (lastIndex < value.length) {
+                              parts.push(value.slice(lastIndex))
+                            }
+                            return (
+                              <div
+                                role="textbox"
+                                tabIndex={0}
+                                onClick={() => beginSitrepSectionEdit(section)}
+                                onKeyDown={(event) => {
+                                  if (event.key === 'Enter') {
+                                    event.preventDefault()
+                                    beginSitrepSectionEdit(section)
+                                  }
+                                }}
+                                className={cn(
+                                  'cursor-text whitespace-pre-wrap rounded-md border border-input bg-transparent px-3 py-2 text-xs leading-relaxed shadow-sm transition-colors hover:border-ring/40',
+                                  heightClass
+                                )}
+                              >
+                                {value.length === 0 ? (
+                                  <span className="text-muted-foreground">{placeholder}</span>
+                                ) : (
+                                  parts
+                                )}
+                              </div>
+                            )
+                          }
+                          const sitrepCitationsStrip =
+                            sitrepActiveCitations.length > 0 ? (
+                              <div className="flex flex-wrap items-center gap-1.5 pt-1 text-[11px]">
+                                <span className="text-muted-foreground">Sources:</span>
+                                {sitrepActiveCitations.map((entry) => (
+                                  <Button
+                                    key={entry.marker}
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-6 gap-1 px-2 text-[10px]"
+                                    onClick={(event) => {
+                                      event.stopPropagation()
+                                      setSitrepCitationDoc(entry)
+                                    }}
+                                  >
+                                    <span className="font-semibold">{entry.marker}</span>
+                                    <span className="max-w-[28ch] truncate text-muted-foreground">
+                                      {entry.label}
+                                    </span>
+                                  </Button>
+                                ))}
+                              </div>
+                            ) : null
+                          const sitrepSectionLoadingOverlay = sitrepSectionIsGenerating ? (
+                            <div className="pointer-events-auto absolute inset-0 z-10 flex flex-col gap-3 rounded-md border border-blue-200/60 bg-card/95 p-3 backdrop-blur-sm dark:border-blue-800/60 dark:bg-card/95">
+                              <div className="flex items-center gap-2">
+                                <img
+                                  src={pratusLogo}
+                                  alt="Pratus logo"
+                                  className="h-[1em] w-auto animate-pulse object-contain"
+                                />
+                                <span className="text-xs font-medium text-blue-600 dark:text-blue-300">
+                                  AI generating content for{' '}
+                                  {SITREP_SECTION_PRIMARY[sitrepActiveSection].label}…
+                                </span>
+                              </div>
+                              <div className="flex flex-1 flex-col gap-2">
+                                {[
+                                  'w-[92%]',
+                                  'w-[78%]',
+                                  'w-[88%]',
+                                  'w-[60%]',
+                                  'w-[83%]',
+                                  'w-[45%]',
+                                ].map((width, index) => (
+                                  <div
+                                    key={index}
+                                    className={cn(
+                                      'h-2.5 animate-pulse rounded-full bg-gradient-to-r from-blue-200 via-blue-300 to-blue-200 dark:from-blue-800/60 dark:via-blue-700/70 dark:to-blue-800/60',
+                                      width
+                                    )}
+                                    style={{ animationDelay: `${index * 120}ms` }}
+                                  />
+                                ))}
+                              </div>
+                            </div>
+                          ) : null
+                          const sitrepSectionHeader = isEditingActiveDraft ? (
+                            SITREP_AI_COMPATIBLE_SECTIONS.includes(sitrepActiveSection) ? (
+                            <div className="flex items-center justify-start gap-2">
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                className="h-7 gap-1 text-xs"
+                                onClick={() => {}}
+                              >
+                                <Sparkles className="h-3.5 w-3.5" />
+                                Update Draft
+                              </Button>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                className="h-7 gap-1 text-xs"
+                                onClick={() => openSitrepSectionSettings(sitrepActiveSection)}
+                              >
+                                <Settings className="h-3.5 w-3.5" />
+                                Section Generation Settings
+                              </Button>
+                            </div>
+                            ) : null
+                          ) : null
                           return (
                         <div
                           className={cn(
@@ -8060,94 +19324,41 @@ function App() {
                             formLocked && 'pointer-events-none opacity-70 select-none'
                           )}
                         >
-                          {sitrepActiveSection === 'reporting-unit' && (
-                            <Item
-                              variant="outline"
-                              className={cn(
-                                'flex-col items-stretch p-0',
-                                glassItemBorderClasses
-                              )}
-                            >
-                              <div className="px-3 py-2.5">
-                                <ItemContent className="space-y-3">
-                                  <ItemTitle>Reporting Unit (Sector/LNO)</ItemTitle>
-                                  <Textarea
-                                    value={
-                                      sitrepSectionEdits['reporting-unit'] !== null
-                                        ? sitrepSectionEdits['reporting-unit']!
-                                        : sitrepForm.sectorLno
-                                    }
-                                    onChange={(event) => {
-                                      if (sitrepSectionEdits['reporting-unit'] !== null) {
-                                        setSitrepSectionEditValue(
-                                          'reporting-unit',
-                                          event.target.value
-                                        )
-                                      }
-                                    }}
-                                    onFocus={() => beginSitrepSectionEdit('reporting-unit')}
-                                    onClick={() => beginSitrepSectionEdit('reporting-unit')}
-                                    readOnly={sitrepSectionEdits['reporting-unit'] === null}
-                                    className="min-h-16 cursor-text text-xs"
-                                    placeholder="Sector / LNO assignment"
-                                  />
-                                  {sitrepSectionEdits['reporting-unit'] !== null && (
-                                    <div className="flex items-center justify-start gap-2">
-                                      <Button
-                                        type="button"
-                                        size="sm"
-                                        variant="outline"
-                                        className="h-7 gap-1 text-xs"
-                                        onClick={() => saveSitrepSectionEdit('reporting-unit')}
-                                      >
-                                        Save
-                                      </Button>
-                                      <Button
-                                        type="button"
-                                        size="sm"
-                                        variant="ghost"
-                                        className="h-7 gap-1 text-xs"
-                                        onClick={() => cancelSitrepSectionEdit('reporting-unit')}
-                                      >
-                                        Cancel
-                                      </Button>
-                                    </div>
-                                  )}
-                                </ItemContent>
-                              </div>
-                            </Item>
-                          )}
                           {sitrepActiveSection === 'executive-summary' && (
                             <Item
-                              variant="outline"
-                              className={cn(
-                                'flex-col items-stretch p-0',
-                                glassItemBorderClasses
-                              )}
+                              className="flex-col items-stretch p-0"
                             >
                               <div className="px-3 py-2.5">
                                 <ItemContent className="space-y-2">
-                                  <ItemTitle>Executive Summary</ItemTitle>
-                                  <Textarea
-                                    value={
-                                      sitrepSectionEdits['executive-summary'] !== null
-                                        ? sitrepSectionEdits['executive-summary']!
-                                        : sitrepForm.executiveSummary
-                                    }
-                                    onChange={(event) => {
-                                      if (sitrepSectionEdits['executive-summary'] !== null) {
+                                  {sitrepSectionHeader}
+                                  <div className="relative">
+                                  {sitrepSectionEdits['executive-summary'] !== null ? (
+                                    <Textarea
+                                      value={sitrepSectionEdits['executive-summary']!}
+                                      onChange={(event) =>
                                         setSitrepSectionEditValue(
                                           'executive-summary',
                                           event.target.value
                                         )
                                       }
-                                    }}
-                                    onFocus={() => beginSitrepSectionEdit('executive-summary')}
-                                    onClick={() => beginSitrepSectionEdit('executive-summary')}
-                                    readOnly={sitrepSectionEdits['executive-summary'] === null}
-                                    className="min-h-24 cursor-text text-xs"
-                                    placeholder="Executive summary of operational period"
-                                  />
+                                      autoFocus
+                                      className={cn(
+                                        'cursor-text text-xs',
+                                        sitrepSectionIsGenerating ? 'min-h-44' : 'min-h-24'
+                                      )}
+                                      placeholder="Executive summary of operational period"
+                                    />
+                                  ) : (
+                                    renderSitrepReadView(
+                                      'executive-summary',
+                                      sitrepForm.executiveSummary,
+                                      'Executive summary of operational period',
+                                      sitrepSectionIsGenerating ? 'min-h-44' : 'min-h-24'
+                                    )
+                                  )}
+                                  {sitrepSectionLoadingOverlay}
+                                  </div>
+                                  {sitrepCitationsStrip}
                                   {sitrepSectionEdits['executive-summary'] !== null && (
                                     <div className="flex items-center justify-start gap-2">
                                       <Button
@@ -8176,41 +19387,47 @@ function App() {
                               </div>
                             </Item>
                           )}
+                          {sitrepActiveSection === 'ongoing-incidents' && (
+                            <div className="space-y-2">
+                              {sitrepSectionHeader}
+                              {renderSitrepOngoingIncidentsList()}
+                            </div>
+                          )}
                           {sitrepActiveSection === 'readiness-assessment' && (
                             <Item
-                              variant="outline"
-                              className={cn(
-                                'flex-col items-stretch p-0',
-                                glassItemBorderClasses
-                              )}
+                              className="flex-col items-stretch p-0"
                             >
                               <div className="px-3 py-2.5">
                                 <ItemContent className="space-y-2">
-                                  <ItemTitle>Readiness Assessment</ItemTitle>
-                                  <Textarea
-                                    value={
-                                      sitrepSectionEdits['readiness-assessment'] !== null
-                                        ? sitrepSectionEdits['readiness-assessment']!
-                                        : sitrepForm.readinessAssessment
-                                    }
-                                    onChange={(event) => {
-                                      if (sitrepSectionEdits['readiness-assessment'] !== null) {
+                                  {sitrepSectionHeader}
+                                  <div className="relative">
+                                  {sitrepSectionEdits['readiness-assessment'] !== null ? (
+                                    <Textarea
+                                      value={sitrepSectionEdits['readiness-assessment']!}
+                                      onChange={(event) =>
                                         setSitrepSectionEditValue(
                                           'readiness-assessment',
                                           event.target.value
                                         )
                                       }
-                                    }}
-                                    onFocus={() =>
-                                      beginSitrepSectionEdit('readiness-assessment')
-                                    }
-                                    onClick={() =>
-                                      beginSitrepSectionEdit('readiness-assessment')
-                                    }
-                                    readOnly={sitrepSectionEdits['readiness-assessment'] === null}
-                                    className="min-h-32 cursor-text text-xs"
-                                    placeholder="Readiness across personnel, equipment, logistics, and comms"
-                                  />
+                                      autoFocus
+                                      className={cn(
+                                        'cursor-text text-xs',
+                                        sitrepSectionIsGenerating ? 'min-h-44' : 'min-h-32'
+                                      )}
+                                      placeholder="Readiness across personnel, equipment, logistics, and comms"
+                                    />
+                                  ) : (
+                                    renderSitrepReadView(
+                                      'readiness-assessment',
+                                      sitrepForm.readinessAssessment,
+                                      'Readiness across personnel, equipment, logistics, and comms',
+                                      sitrepSectionIsGenerating ? 'min-h-44' : 'min-h-32'
+                                    )
+                                  )}
+                                  {sitrepSectionLoadingOverlay}
+                                  </div>
+                                  {sitrepCitationsStrip}
                                   {sitrepSectionEdits['readiness-assessment'] !== null && (
                                     <div className="flex items-center justify-start gap-2">
                                       <Button
@@ -8243,35 +19460,39 @@ function App() {
                           )}
                           {sitrepActiveSection === 'risk-to-mission' && (
                             <Item
-                              variant="outline"
-                              className={cn(
-                                'flex-col items-stretch p-0',
-                                glassItemBorderClasses
-                              )}
+                              className="flex-col items-stretch p-0"
                             >
                               <div className="px-3 py-2.5">
                                 <ItemContent className="space-y-2">
-                                  <ItemTitle>Risk to Mission</ItemTitle>
-                                  <Textarea
-                                    value={
-                                      sitrepSectionEdits['risk-to-mission'] !== null
-                                        ? sitrepSectionEdits['risk-to-mission']!
-                                        : sitrepForm.riskToMission
-                                    }
-                                    onChange={(event) => {
-                                      if (sitrepSectionEdits['risk-to-mission'] !== null) {
+                                  {sitrepSectionHeader}
+                                  <div className="relative">
+                                  {sitrepSectionEdits['risk-to-mission'] !== null ? (
+                                    <Textarea
+                                      value={sitrepSectionEdits['risk-to-mission']!}
+                                      onChange={(event) =>
                                         setSitrepSectionEditValue(
                                           'risk-to-mission',
                                           event.target.value
                                         )
                                       }
-                                    }}
-                                    onFocus={() => beginSitrepSectionEdit('risk-to-mission')}
-                                    onClick={() => beginSitrepSectionEdit('risk-to-mission')}
-                                    readOnly={sitrepSectionEdits['risk-to-mission'] === null}
-                                    className="min-h-32 cursor-text text-xs"
-                                    placeholder="Risks to mission success and mitigations"
-                                  />
+                                      autoFocus
+                                      className={cn(
+                                        'cursor-text text-xs',
+                                        sitrepSectionIsGenerating ? 'min-h-44' : 'min-h-32'
+                                      )}
+                                      placeholder="Risks to mission success and mitigations"
+                                    />
+                                  ) : (
+                                    renderSitrepReadView(
+                                      'risk-to-mission',
+                                      sitrepForm.riskToMission,
+                                      'Risks to mission success and mitigations',
+                                      sitrepSectionIsGenerating ? 'min-h-44' : 'min-h-32'
+                                    )
+                                  )}
+                                  {sitrepSectionLoadingOverlay}
+                                  </div>
+                                  {sitrepCitationsStrip}
                                   {sitrepSectionEdits['risk-to-mission'] !== null && (
                                     <div className="flex items-center justify-start gap-2">
                                       <Button
@@ -8300,35 +19521,39 @@ function App() {
                           )}
                           {sitrepActiveSection === 'outstanding-rfi-rfr' && (
                             <Item
-                              variant="outline"
-                              className={cn(
-                                'flex-col items-stretch p-0',
-                                glassItemBorderClasses
-                              )}
+                              className="flex-col items-stretch p-0"
                             >
                               <div className="px-3 py-2.5">
                                 <ItemContent className="space-y-2">
-                                  <ItemTitle>Outstanding RFI / RFR</ItemTitle>
-                                  <Textarea
-                                    value={
-                                      sitrepSectionEdits['outstanding-rfi-rfr'] !== null
-                                        ? sitrepSectionEdits['outstanding-rfi-rfr']!
-                                        : sitrepForm.outstandingRfiRfr
-                                    }
-                                    onChange={(event) => {
-                                      if (sitrepSectionEdits['outstanding-rfi-rfr'] !== null) {
+                                  {sitrepSectionHeader}
+                                  <div className="relative">
+                                  {sitrepSectionEdits['outstanding-rfi-rfr'] !== null ? (
+                                    <Textarea
+                                      value={sitrepSectionEdits['outstanding-rfi-rfr']!}
+                                      onChange={(event) =>
                                         setSitrepSectionEditValue(
                                           'outstanding-rfi-rfr',
                                           event.target.value
                                         )
                                       }
-                                    }}
-                                    onFocus={() => beginSitrepSectionEdit('outstanding-rfi-rfr')}
-                                    onClick={() => beginSitrepSectionEdit('outstanding-rfi-rfr')}
-                                    readOnly={sitrepSectionEdits['outstanding-rfi-rfr'] === null}
-                                    className="min-h-32 cursor-text text-xs"
-                                    placeholder="Open RFIs and RFRs"
-                                  />
+                                      autoFocus
+                                      className={cn(
+                                        'cursor-text text-xs',
+                                        sitrepSectionIsGenerating ? 'min-h-44' : 'min-h-32'
+                                      )}
+                                      placeholder="Open RFIs and RFRs"
+                                    />
+                                  ) : (
+                                    renderSitrepReadView(
+                                      'outstanding-rfi-rfr',
+                                      sitrepForm.outstandingRfiRfr,
+                                      'Open RFIs and RFRs',
+                                      sitrepSectionIsGenerating ? 'min-h-44' : 'min-h-32'
+                                    )
+                                  )}
+                                  {sitrepSectionLoadingOverlay}
+                                  </div>
+                                  {sitrepCitationsStrip}
                                   {sitrepSectionEdits['outstanding-rfi-rfr'] !== null && (
                                     <div className="flex items-center justify-start gap-2">
                                       <Button
@@ -8361,46 +19586,42 @@ function App() {
                           )}
                           {sitrepActiveSection === 'previous-critical-incident-comms' && (
                             <Item
-                              variant="outline"
-                              className={cn(
-                                'flex-col items-stretch p-0',
-                                glassItemBorderClasses
-                              )}
+                              className="flex-col items-stretch p-0"
                             >
                               <div className="px-3 py-2.5">
                                 <ItemContent className="space-y-2">
-                                  <ItemTitle>Previous Critical Incident Communications</ItemTitle>
-                                  <Textarea
-                                    value={
-                                      sitrepSectionEdits['previous-critical-incident-comms'] !==
-                                      null
-                                        ? sitrepSectionEdits['previous-critical-incident-comms']!
-                                        : sitrepForm.previousCriticalIncidentComms
-                                    }
-                                    onChange={(event) => {
-                                      if (
-                                        sitrepSectionEdits['previous-critical-incident-comms'] !==
-                                        null
-                                      ) {
+                                  {sitrepSectionHeader}
+                                  <div className="relative">
+                                  {sitrepSectionEdits['previous-critical-incident-comms'] !==
+                                  null ? (
+                                    <Textarea
+                                      value={
+                                        sitrepSectionEdits['previous-critical-incident-comms']!
+                                      }
+                                      onChange={(event) =>
                                         setSitrepSectionEditValue(
                                           'previous-critical-incident-comms',
                                           event.target.value
                                         )
                                       }
-                                    }}
-                                    onFocus={() =>
-                                      beginSitrepSectionEdit('previous-critical-incident-comms')
-                                    }
-                                    onClick={() =>
-                                      beginSitrepSectionEdit('previous-critical-incident-comms')
-                                    }
-                                    readOnly={
-                                      sitrepSectionEdits['previous-critical-incident-comms'] ===
-                                      null
-                                    }
-                                    className="min-h-32 cursor-text text-xs"
-                                    placeholder="Critical communications log (time — message)"
-                                  />
+                                      autoFocus
+                                      className={cn(
+                                        'cursor-text text-xs',
+                                        sitrepSectionIsGenerating ? 'min-h-44' : 'min-h-32'
+                                      )}
+                                      placeholder="Critical communications log (time — message)"
+                                    />
+                                  ) : (
+                                    renderSitrepReadView(
+                                      'previous-critical-incident-comms',
+                                      sitrepForm.previousCriticalIncidentComms,
+                                      'Critical communications log (time — message)',
+                                      sitrepSectionIsGenerating ? 'min-h-44' : 'min-h-32'
+                                    )
+                                  )}
+                                  {sitrepSectionLoadingOverlay}
+                                  </div>
+                                  {sitrepCitationsStrip}
                                   {sitrepSectionEdits['previous-critical-incident-comms'] !==
                                     null && (
                                     <div className="flex items-center justify-start gap-2">
@@ -8438,35 +19659,39 @@ function App() {
                           )}
                           {sitrepActiveSection === 'general-comments' && (
                             <Item
-                              variant="outline"
-                              className={cn(
-                                'flex-col items-stretch p-0',
-                                glassItemBorderClasses
-                              )}
+                              className="flex-col items-stretch p-0"
                             >
                               <div className="px-3 py-2.5">
                                 <ItemContent className="space-y-2">
-                                  <ItemTitle>General Comments</ItemTitle>
-                                  <Textarea
-                                    value={
-                                      sitrepSectionEdits['general-comments'] !== null
-                                        ? sitrepSectionEdits['general-comments']!
-                                        : sitrepForm.generalComments
-                                    }
-                                    onChange={(event) => {
-                                      if (sitrepSectionEdits['general-comments'] !== null) {
+                                  {sitrepSectionHeader}
+                                  <div className="relative">
+                                  {sitrepSectionEdits['general-comments'] !== null ? (
+                                    <Textarea
+                                      value={sitrepSectionEdits['general-comments']!}
+                                      onChange={(event) =>
                                         setSitrepSectionEditValue(
                                           'general-comments',
                                           event.target.value
                                         )
                                       }
-                                    }}
-                                    onFocus={() => beginSitrepSectionEdit('general-comments')}
-                                    onClick={() => beginSitrepSectionEdit('general-comments')}
-                                    readOnly={sitrepSectionEdits['general-comments'] === null}
-                                    className="min-h-32 cursor-text text-xs"
-                                    placeholder="General comments, observations, recommendations"
-                                  />
+                                      autoFocus
+                                      className={cn(
+                                        'cursor-text text-xs',
+                                        sitrepSectionIsGenerating ? 'min-h-44' : 'min-h-32'
+                                      )}
+                                      placeholder="General comments, observations, recommendations"
+                                    />
+                                  ) : (
+                                    renderSitrepReadView(
+                                      'general-comments',
+                                      sitrepForm.generalComments,
+                                      'General comments, observations, recommendations',
+                                      sitrepSectionIsGenerating ? 'min-h-44' : 'min-h-32'
+                                    )
+                                  )}
+                                  {sitrepSectionLoadingOverlay}
+                                  </div>
+                                  {sitrepCitationsStrip}
                                   {sitrepSectionEdits['general-comments'] !== null && (
                                     <div className="flex items-center justify-start gap-2">
                                       <Button
@@ -8497,15 +19722,11 @@ function App() {
                           )}
                           {sitrepActiveSection === 'imagery' && (
                             <Item
-                              variant="outline"
-                              className={cn(
-                                'flex-col items-stretch p-0',
-                                glassItemBorderClasses
-                              )}
+                              className="flex-col items-stretch p-0"
                             >
                               <div className="px-3 py-2.5">
                                 <ItemContent className="space-y-3">
-                                  <ItemTitle>Imagery</ItemTitle>
+                                  {sitrepSectionHeader}
                                   <div className="grid grid-cols-3 gap-2">
                                     {[
                                       {
@@ -8550,23 +19771,31 @@ function App() {
                                       </div>
                                     ))}
                                   </div>
-                                  <Textarea
-                                    value={
-                                      sitrepSectionEdits['imagery'] !== null
-                                        ? sitrepSectionEdits['imagery']!
-                                        : sitrepForm.imageryNotes
-                                    }
-                                    onChange={(event) => {
-                                      if (sitrepSectionEdits['imagery'] !== null) {
+                                  <div className="relative">
+                                  {sitrepSectionEdits['imagery'] !== null ? (
+                                    <Textarea
+                                      value={sitrepSectionEdits['imagery']!}
+                                      onChange={(event) =>
                                         setSitrepSectionEditValue('imagery', event.target.value)
                                       }
-                                    }}
-                                    onFocus={() => beginSitrepSectionEdit('imagery')}
-                                    onClick={() => beginSitrepSectionEdit('imagery')}
-                                    readOnly={sitrepSectionEdits['imagery'] === null}
-                                    className="min-h-20 cursor-text text-xs"
-                                    placeholder="Imagery notes, attribution, archive location"
-                                  />
+                                      autoFocus
+                                      className={cn(
+                                        'cursor-text text-xs',
+                                        sitrepSectionIsGenerating ? 'min-h-44' : 'min-h-20'
+                                      )}
+                                      placeholder="Imagery notes, attribution, archive location"
+                                    />
+                                  ) : (
+                                    renderSitrepReadView(
+                                      'imagery',
+                                      sitrepForm.imageryNotes,
+                                      'Imagery notes, attribution, archive location',
+                                      sitrepSectionIsGenerating ? 'min-h-44' : 'min-h-20'
+                                    )
+                                  )}
+                                  {sitrepSectionLoadingOverlay}
+                                  </div>
+                                  {sitrepCitationsStrip}
                                   {sitrepSectionEdits['imagery'] !== null && (
                                     <div className="flex items-center justify-start gap-2">
                                       <Button
@@ -8592,6 +19821,118 @@ function App() {
                                 </ItemContent>
                               </div>
                             </Item>
+                          )}
+                          {isReviewingFromQueue && activeSitrepDraft && (
+                            <div className="flex items-center justify-end gap-2 pt-1">
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                className="h-8 gap-1 border-red-400 text-xs text-red-700 hover:bg-red-50 dark:border-red-500/60 dark:text-red-300 dark:hover:bg-red-500/10"
+                                onClick={() => {
+                                  const draftId = activeSitrepDraft.id
+                                  const authorRole = activeSitrepDraft.authorRole
+                                  const authorName = activeSitrepDraft.authorName
+                                  setSitrepVersions((previous) =>
+                                    previous.map((entry) =>
+                                      entry.id === draftId
+                                        ? {
+                                            ...entry,
+                                            submittedForReviewTo: [],
+                                            submittedForReviewAt: undefined,
+                                          }
+                                        : entry
+                                    )
+                                  )
+                                  setSitrepDraftSulApprovals((previous) => {
+                                    if (!previous[draftId]) return previous
+                                    const next = { ...previous }
+                                    delete next[draftId]
+                                    return next
+                                  })
+                                  setRequestedApprovalSitrepDraftIds((previous) => {
+                                    if (!previous.has(draftId)) return previous
+                                    const next = new Set(previous)
+                                    next.delete(draftId)
+                                    return next
+                                  })
+                                  if (liveSitrepFormRef.current) {
+                                    setSitrepForm(liveSitrepFormRef.current)
+                                    liveSitrepFormRef.current = null
+                                  }
+                                  setActiveSitrepDraftId(null)
+                                  setViewingSitrepVersionOrigin(null)
+                                  setSitrepViewMode('review-queue')
+                                  setSitrepSectionEdits({
+                                    'executive-summary': null,
+                                    'ongoing-incidents': null,
+                                    'readiness-assessment': null,
+                                    'risk-to-mission': null,
+                                    'outstanding-rfi-rfr': null,
+                                    'previous-critical-incident-comms': null,
+                                    'general-comments': null,
+                                    'imagery': null,
+                                  })
+                                  toast.error(
+                                    `Rejected draft last edited by ${authorRole} ${authorName}. Returned to the originator.`
+                                  )
+                                }}
+                              >
+                                <X className="h-3.5 w-3.5" />
+                                Reject
+                              </Button>
+                              <Button
+                                type="button"
+                                size="sm"
+                                className="h-8 gap-1 bg-emerald-600 text-xs text-white hover:bg-emerald-700"
+                                onClick={() => {
+                                  const draftId = activeSitrepDraft.id
+                                  const authorRole = activeSitrepDraft.authorRole
+                                  const authorName = activeSitrepDraft.authorName
+                                  setSitrepVersions((previous) =>
+                                    previous.map((entry) =>
+                                      entry.id === draftId
+                                        ? {
+                                            ...entry,
+                                            snapshot: sitrepForm,
+                                            signatures: [
+                                              ...entry.signatures,
+                                              {
+                                                name: 'You',
+                                                role: 'Planning Section Chief',
+                                                signedAt: Date.now(),
+                                              },
+                                            ],
+                                          }
+                                        : entry
+                                    )
+                                  )
+                                  if (liveSitrepFormRef.current) {
+                                    setSitrepForm(liveSitrepFormRef.current)
+                                    liveSitrepFormRef.current = null
+                                  }
+                                  setActiveSitrepDraftId(null)
+                                  setViewingSitrepVersionOrigin(null)
+                                  setSitrepViewMode('review-queue')
+                                  setSitrepSectionEdits({
+                                    'executive-summary': null,
+                                    'ongoing-incidents': null,
+                                    'readiness-assessment': null,
+                                    'risk-to-mission': null,
+                                    'outstanding-rfi-rfr': null,
+                                    'previous-critical-incident-comms': null,
+                                    'general-comments': null,
+                                    'imagery': null,
+                                  })
+                                  toast.success(
+                                    `Approved draft last edited by ${authorRole} ${authorName}.`
+                                  )
+                                }}
+                              >
+                                <Check className="h-3.5 w-3.5" />
+                                Approve
+                              </Button>
+                            </div>
                           )}
                         </div>
                           )
@@ -9600,6 +20941,690 @@ function App() {
                   </div>
                 )}
 
+                {activeTab === 'seerist' && (
+                  <div className="space-y-3">
+                    <Item variant="outline" className="flex-col items-stretch p-0">
+                      <div className="space-y-3 px-3 py-2.5">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <Radar className="h-4 w-4 text-primary" />
+                            <span className="text-sm font-semibold">Seerist HTTP request</span>
+                            <Badge
+                              variant="outline"
+                              className="border-emerald-300 bg-emerald-50 text-[10px] text-emerald-700 dark:border-emerald-500/60 dark:bg-emerald-500/10 dark:text-emerald-200"
+                            >
+                              GET
+                            </Badge>
+                          </div>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 text-xs"
+                            onClick={clearSeeristCredentials}
+                          >
+                            Reset
+                          </Button>
+                        </div>
+                        <p className="text-[11px] text-muted-foreground">
+                          Paste any{' '}
+                          <code className="rounded bg-muted px-1 py-0.5 text-[10px]">
+                            https://app.seerist.com/hyperionapi/&hellip;
+                          </code>{' '}
+                          URL. The request is sent through the local dev proxy at{' '}
+                          <code className="rounded bg-muted px-1 py-0.5 text-[10px]">
+                            /seerist-proxy/&hellip;
+                          </code>{' '}
+                          with{' '}
+                          <code className="rounded bg-muted px-1 py-0.5 text-[10px]">
+                            x-api-key
+                          </code>
+                          set to your key. Endpoint and key are persisted to this browser only.
+                        </p>
+                        <div className="space-y-1">
+                          <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                            Endpoint URL
+                          </Label>
+                          <Textarea
+                            value={seeristEndpoint}
+                            onChange={(event) => setSeeristEndpoint(event.target.value)}
+                            placeholder="https://app.seerist.com/hyperionapi/v1/wod?…"
+                            className="min-h-[72px] resize-y break-all font-mono text-[11px]"
+                            spellCheck={false}
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                            x-api-key
+                          </Label>
+                          <Input
+                            type="password"
+                            value={seeristApiKey}
+                            onChange={(event) => setSeeristApiKey(event.target.value)}
+                            placeholder="••••••••••••"
+                            autoComplete="off"
+                            className="h-8 font-mono text-[11px]"
+                            spellCheck={false}
+                          />
+                        </div>
+                        <div className="flex items-center justify-end gap-2">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            className="h-8 text-xs"
+                            onClick={() => {
+                              setSeeristResponse(null)
+                              setSeeristError(null)
+                            }}
+                            disabled={seeristIsLoading}
+                          >
+                            Clear response
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            className="h-8 gap-1 text-xs"
+                            onClick={() => {
+                              void sendSeeristRequest()
+                            }}
+                            disabled={seeristIsLoading}
+                          >
+                            {seeristIsLoading ? 'Sending…' : 'Send'}
+                            <Search className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      </div>
+                    </Item>
+                    {seeristError && (
+                      <div className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-800 dark:border-red-500/60 dark:bg-red-500/10 dark:text-red-200">
+                        <div className="flex items-start gap-2">
+                          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                          <div className="space-y-1">
+                            <p className="font-semibold">Request failed</p>
+                            <p className="leading-snug">{seeristError}</p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    {seeristResponse && (
+                      <Item variant="outline" className="flex-col items-stretch p-0">
+                        <div className="space-y-3 px-3 py-2.5">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Badge
+                              variant="outline"
+                              className={cn(
+                                'border-transparent px-2 py-0.5 font-mono text-[11px]',
+                                seeristResponse.ok
+                                  ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
+                                  : seeristResponse.status >= 500
+                                    ? 'bg-red-500/15 text-red-700 dark:text-red-300'
+                                    : 'bg-amber-500/15 text-amber-700 dark:text-amber-300'
+                              )}
+                            >
+                              {seeristResponse.status} {seeristResponse.statusText}
+                            </Badge>
+                            <span className="text-[11px] text-muted-foreground">
+                              {seeristResponse.durationMs} ms
+                            </span>
+                            {seeristResponse.contentType && (
+                              <span className="text-[11px] text-muted-foreground">
+                                {seeristResponse.contentType}
+                              </span>
+                            )}
+                          </div>
+                          <div className="space-y-1 text-[11px]">
+                            <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                              Request URL
+                            </p>
+                            <p className="break-all font-mono text-[11px]">
+                              {seeristResponse.requestUrl}
+                            </p>
+                            <p className="text-[10px] text-muted-foreground">
+                              via proxy{' '}
+                              <span className="font-mono">{seeristResponse.proxyUrl}</span>
+                            </p>
+                          </div>
+                          {seeristResponse.headers.length > 0 && (
+                            <details className="rounded-md border bg-muted/30 px-3 py-2">
+                              <summary className="cursor-pointer text-[11px] font-semibold">
+                                Response headers ({seeristResponse.headers.length})
+                              </summary>
+                              <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap break-words font-mono text-[10px] leading-snug">
+{seeristResponse.headers
+  .map(([name, value]) => `${name}: ${value}`)
+  .join('\n')}
+                              </pre>
+                            </details>
+                          )}
+                          <div className="space-y-1">
+                            <div className="flex items-center justify-between">
+                              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                                Response body
+                                {seeristResponse.body && (
+                                  <span className="ml-1 normal-case text-muted-foreground/70">
+                                    ({seeristResponse.body.length.toLocaleString()} chars)
+                                  </span>
+                                )}
+                              </p>
+                              {seeristResponse.body && (
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-6 px-2 text-[10px]"
+                                  onClick={() => {
+                                    void navigator.clipboard
+                                      .writeText(seeristResponse.body)
+                                      .catch(() => undefined)
+                                  }}
+                                >
+                                  Copy
+                                </Button>
+                              )}
+                            </div>
+                            {seeristResponse.body ? (
+                              <pre className="max-h-[420px] overflow-auto whitespace-pre-wrap break-words rounded-md border bg-background p-3 font-mono text-[11px] leading-snug">
+{formatSeeristBody(seeristResponse.body, seeristResponse.contentType)}
+                              </pre>
+                            ) : (
+                              <p className="rounded-md border bg-background px-3 py-2 text-[11px] italic text-muted-foreground">
+                                Empty response body.
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      </Item>
+                    )}
+                    {seeristResponse && seeristResponse.ok && seeristParseResult && (
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between gap-2 px-1">
+                          <div className="flex items-center gap-2">
+                            <h3 className="text-sm font-semibold">Events</h3>
+                            <Badge variant="secondary" className="px-1.5 py-0 text-[10px]">
+                              {seeristParseResult.kind === 'events'
+                                ? seeristParseResult.events.length
+                                : 0}
+                            </Badge>
+                            {seeristParseResult.kind === 'events' && (
+                              <span className="text-[10px] text-muted-foreground">
+                                from <code className="rounded bg-muted px-1 py-0.5 font-mono text-[10px]">{seeristParseResult.sourceKey}</code>
+                              </span>
+                            )}
+                          </div>
+                          {seeristParseResult.kind === 'events' &&
+                            seeristParseResult.events.length > 0 && (
+                              <div className="flex items-center gap-1">
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-7 px-2 text-[11px]"
+                                  onClick={() =>
+                                    setSeeristExpandedEvents(
+                                      new Set(
+                                        seeristParseResult.events.map((event) => event.id)
+                                      )
+                                    )
+                                  }
+                                >
+                                  Expand all
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-7 px-2 text-[11px]"
+                                  onClick={() => setSeeristExpandedEvents(new Set())}
+                                >
+                                  Collapse all
+                                </Button>
+                              </div>
+                            )}
+                        </div>
+                        {seeristParseResult.kind === 'non-json' ? (
+                          <Item variant="outline">
+                            <ItemContent>
+                              <ItemTitle>Response is not JSON</ItemTitle>
+                              <ItemDescription>
+                                The body couldn't be parsed as JSON, so no events were
+                                extracted. See the raw response above for the full payload.
+                              </ItemDescription>
+                            </ItemContent>
+                          </Item>
+                        ) : seeristParseResult.kind === 'no-array' ? (
+                          <Item variant="outline" className="flex-col items-stretch p-0">
+                            <div className="space-y-2 px-3 py-2.5 text-xs">
+                              <p className="font-semibold">No events array detected</p>
+                              <p className="text-muted-foreground leading-snug">
+                                The response parsed as JSON, but no recognizable list of events
+                                was found at the root or under common keys (
+                                <code className="rounded bg-muted px-1 py-0 font-mono text-[10px]">
+                                  items / events / data / results / records
+                                </code>
+                                ).
+                              </p>
+                              {seeristParseResult.topLevelKeys.length > 0 && (
+                                <div className="space-y-1">
+                                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                                    Top-level keys
+                                  </p>
+                                  <div className="flex flex-wrap gap-1">
+                                    {seeristParseResult.topLevelKeys.map((key) => (
+                                      <Badge
+                                        key={key}
+                                        variant="outline"
+                                        className="border-transparent bg-muted px-1.5 py-0 font-mono text-[10px]"
+                                      >
+                                        {key}
+                                      </Badge>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                              {seeristParseResult.sample && (
+                                <details className="rounded-md border bg-muted/30 px-2 py-1.5">
+                                  <summary className="cursor-pointer text-[11px] font-semibold">
+                                    Payload preview
+                                  </summary>
+                                  <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-words font-mono text-[10px] leading-snug">
+{seeristParseResult.sample}
+                                  </pre>
+                                </details>
+                              )}
+                            </div>
+                          </Item>
+                        ) : seeristParseResult.events.length === 0 ? (
+                          <Item variant="outline">
+                            <ItemContent>
+                              <ItemTitle>No events in response</ItemTitle>
+                              <ItemDescription>
+                                The response parsed successfully but{' '}
+                                <code className="rounded bg-muted px-1 py-0.5 text-[10px]">
+                                  {seeristParseResult.sourceKey}
+                                </code>{' '}
+                                was empty. Try adjusting the query parameters.
+                              </ItemDescription>
+                            </ItemContent>
+                          </Item>
+                        ) : (
+                          seeristParseResult.events.map((event) => {
+                            const isOpen = seeristExpandedEvents.has(event.id)
+                            const hasCoords =
+                              event.latitude !== null && event.longitude !== null
+                            const publishedLabel = formatSeeristEventTimestamp(event.publishedAt)
+                            const severityTone =
+                              event.severity === null
+                                ? null
+                                : event.severity >= 7
+                                  ? 'bg-red-500/15 text-red-700 dark:text-red-300'
+                                  : event.severity >= 4
+                                    ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300'
+                                    : 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
+                            const rawFields = Object.entries(event.raw).filter(
+                              ([, value]) =>
+                                value !== null &&
+                                value !== undefined &&
+                                value !== ''
+                            )
+                            return (
+                              <Item
+                                key={event.id}
+                                variant="outline"
+                                className="flex-col items-stretch p-0"
+                              >
+                                <Collapsible
+                                  open={isOpen}
+                                  onOpenChange={() => toggleSeeristEvent(event.id)}
+                                >
+                                  <div
+                                    className="flex cursor-pointer items-start gap-2 px-3 py-2.5"
+                                    onClick={() => toggleSeeristEvent(event.id)}
+                                  >
+                                    <ItemContent className="min-w-0 space-y-1">
+                                      <ItemTitle className="text-sm leading-snug">
+                                        {event.title}
+                                      </ItemTitle>
+                                      <p className="text-[11px] text-muted-foreground">
+                                        {event.source || 'Unknown source'}
+                                        <span className="mx-1">·</span>
+                                        {publishedLabel}
+                                        {event.location && (
+                                          <>
+                                            <span className="mx-1">·</span>
+                                            {event.location}
+                                          </>
+                                        )}
+                                      </p>
+                                      {event.description && !isOpen && (
+                                        <ItemDescription className="line-clamp-3 text-xs leading-relaxed">
+                                          {event.description}
+                                        </ItemDescription>
+                                      )}
+                                      <div className="flex flex-wrap items-center gap-1 pt-0.5">
+                                        {event.severity !== null && severityTone && (
+                                          <Badge
+                                            variant="outline"
+                                            className={cn(
+                                              'border-transparent px-1.5 py-0 text-[10px]',
+                                              severityTone
+                                            )}
+                                          >
+                                            Sev {event.severity}
+                                          </Badge>
+                                        )}
+                                        {event.topic && (
+                                          <Badge
+                                            variant="outline"
+                                            className="border-transparent bg-primary/10 px-1.5 py-0 text-[10px] text-primary"
+                                          >
+                                            {event.topic}
+                                          </Badge>
+                                        )}
+                                        {hasCoords && (
+                                          <Badge
+                                            variant="outline"
+                                            className="border-transparent bg-muted px-1.5 py-0 font-mono text-[10px]"
+                                          >
+                                            {event.latitude?.toFixed(3)},{' '}
+                                            {event.longitude?.toFixed(3)}
+                                          </Badge>
+                                        )}
+                                      </div>
+                                    </ItemContent>
+                                    <ItemActions>
+                                      {event.url && (
+                                        <Button
+                                          asChild
+                                          variant="ghost"
+                                          size="icon"
+                                          aria-label="Open source link"
+                                          className="h-7 w-7"
+                                          onClick={(clickEvent) => clickEvent.stopPropagation()}
+                                        >
+                                          <a href={event.url} target="_blank" rel="noreferrer">
+                                            <ExternalLink className="h-3.5 w-3.5" />
+                                          </a>
+                                        </Button>
+                                      )}
+                                      <CollapsibleTrigger asChild>
+                                        <Button
+                                          variant="ghost"
+                                          size="icon"
+                                          aria-label="Toggle event details"
+                                          className="h-7 w-7"
+                                          onClick={(clickEvent) => clickEvent.stopPropagation()}
+                                        >
+                                          <ChevronDown
+                                            className={cn(
+                                              'h-4 w-4 transition-transform',
+                                              isOpen && 'rotate-180'
+                                            )}
+                                          />
+                                        </Button>
+                                      </CollapsibleTrigger>
+                                    </ItemActions>
+                                  </div>
+                                  <CollapsibleContent>
+                                    <div className="space-y-3 border-t px-3 py-2.5 text-xs">
+                                      {event.description && (
+                                        <p className="leading-relaxed">{event.description}</p>
+                                      )}
+                                      <dl className="grid grid-cols-1 gap-x-3 gap-y-1.5 sm:grid-cols-2">
+                                        {event.publishedAt && (
+                                          <div>
+                                            <dt className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                                              Published
+                                            </dt>
+                                            <dd className="text-[12px]">{publishedLabel}</dd>
+                                          </div>
+                                        )}
+                                        {event.source && (
+                                          <div>
+                                            <dt className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                                              Source
+                                            </dt>
+                                            <dd className="text-[12px]">{event.source}</dd>
+                                          </div>
+                                        )}
+                                        {event.topic && (
+                                          <div>
+                                            <dt className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                                              Topic
+                                            </dt>
+                                            <dd className="text-[12px]">{event.topic}</dd>
+                                          </div>
+                                        )}
+                                        {event.severity !== null && (
+                                          <div>
+                                            <dt className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                                              Severity
+                                            </dt>
+                                            <dd className="text-[12px]">{event.severity}</dd>
+                                          </div>
+                                        )}
+                                        {event.location && (
+                                          <div>
+                                            <dt className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                                              Location
+                                            </dt>
+                                            <dd className="text-[12px]">{event.location}</dd>
+                                          </div>
+                                        )}
+                                        {hasCoords && (
+                                          <div>
+                                            <dt className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                                              Coordinates
+                                            </dt>
+                                            <dd className="font-mono text-[12px]">
+                                              {event.latitude?.toFixed(4)},{' '}
+                                              {event.longitude?.toFixed(4)}
+                                            </dd>
+                                          </div>
+                                        )}
+                                        {event.url && (
+                                          <div className="sm:col-span-2">
+                                            <dt className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                                              Link
+                                            </dt>
+                                            <dd className="text-[12px]">
+                                              <a
+                                                href={event.url}
+                                                target="_blank"
+                                                rel="noreferrer"
+                                                className="break-all text-primary hover:underline"
+                                              >
+                                                {event.url}
+                                              </a>
+                                            </dd>
+                                          </div>
+                                        )}
+                                        <div className="sm:col-span-2">
+                                          <dt className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                                            Event ID
+                                          </dt>
+                                          <dd className="font-mono text-[11px] break-all">
+                                            {event.id}
+                                          </dd>
+                                        </div>
+                                      </dl>
+                                      {rawFields.length > 0 && (
+                                        <details className="rounded-md border bg-muted/30 px-2 py-1.5">
+                                          <summary className="cursor-pointer text-[11px] font-semibold">
+                                            Raw record ({rawFields.length} fields)
+                                          </summary>
+                                          <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-words font-mono text-[10px] leading-snug">
+{JSON.stringify(event.raw, null, 2)}
+                                          </pre>
+                                        </details>
+                                      )}
+                                    </div>
+                                  </CollapsibleContent>
+                                </Collapsible>
+                              </Item>
+                            )
+                          })
+                        )}
+                      </div>
+                    )}
+                    {!seeristResponse && !seeristError && !seeristIsLoading && (
+                      <Item variant="outline">
+                        <ItemContent>
+                          <ItemTitle>Awaiting request</ItemTitle>
+                          <ItemDescription>
+                            Paste a Seerist endpoint, enter your{' '}
+                            <code className="rounded bg-muted px-1 py-0.5 text-[10px]">
+                              x-api-key
+                            </code>{' '}
+                            value, and choose
+                            <span className="mx-1 font-semibold">Send</span>
+                            to see the raw response below.
+                          </ItemDescription>
+                        </ItemContent>
+                      </Item>
+                    )}
+                  </div>
+                )}
+
+                {activeTab === 'files' && (
+                  <div className="space-y-3">
+                    <div className="flex flex-wrap items-center justify-end gap-2">
+                      <div
+                        className={cn(
+                          'flex h-8 items-center gap-2 rounded-md border px-2 text-xs',
+                          glassSearchClasses
+                        )}
+                      >
+                        <Search className="h-3.5 w-3.5 text-muted-foreground" />
+                        <input
+                          placeholder="Search files"
+                          className="w-40 bg-transparent text-xs outline-none"
+                        />
+                      </div>
+                    </div>
+                    {(() => {
+                      return (
+                        <div className="space-y-2">
+                          {INCIDENT_FILE_FOLDERS.map((folder) => {
+                            const isOpen = expandedFilesFolderId === folder.id
+                            return (
+                              <Item
+                                key={folder.id}
+                                className="flex-col items-stretch p-0"
+                              >
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setExpandedFilesFolderId(isOpen ? null : folder.id)
+                                  }
+                                  className="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left transition-colors hover:bg-accent/40"
+                                >
+                                  <div className="flex items-center gap-2">
+                                    {isOpen ? (
+                                      <FolderOpen className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                                    ) : (
+                                      <Folder className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                                    )}
+                                    <div className="flex flex-col">
+                                      <span className="text-sm font-medium">
+                                        {folder.name}
+                                      </span>
+                                      <span className="text-[11px] text-muted-foreground">
+                                        {folder.description} • {folder.files.length}{' '}
+                                        {folder.files.length === 1 ? 'item' : 'items'}
+                                      </span>
+                                    </div>
+                                  </div>
+                                  <ChevronDown
+                                    className={cn(
+                                      'h-4 w-4 text-muted-foreground transition-transform',
+                                      isOpen && 'rotate-180'
+                                    )}
+                                  />
+                                </button>
+                                {isOpen && (
+                                  <div className="border-t">
+                                    {folder.files.map((file) => {
+                                      const sitrepDocxEntry =
+                                        folder.id === 'situation-reports'
+                                          ? SITUATION_REPORT_DOCX_FILES.find(
+                                              (entry) => entry.name === file.name
+                                            )
+                                          : undefined
+                                      return (
+                                        <div
+                                          key={file.name}
+                                          className="flex items-center justify-between gap-2 border-b px-3 py-2 last:border-b-0 hover:bg-accent/30"
+                                        >
+                                          <div className="flex min-w-0 items-center gap-2">
+                                            <FileText className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                                            <div className="flex min-w-0 flex-col">
+                                              <span className="truncate text-xs font-medium">
+                                                {file.name}
+                                              </span>
+                                              <span className="truncate text-[11px] text-muted-foreground">
+                                                {file.meta} • {file.author}
+                                              </span>
+                                            </div>
+                                          </div>
+                                          <div className="flex items-center gap-1">
+                                            {sitrepDocxEntry && (
+                                              <Button
+                                                type="button"
+                                                size="sm"
+                                                variant="outline"
+                                                className="h-7 gap-1 text-xs"
+                                                onClick={() => {
+                                                  downloadDocx(
+                                                    sitrepDocxEntry.name,
+                                                    getDocBlocks(sitrepDocxEntry.name)
+                                                  )
+                                                }}
+                                              >
+                                                <FileText className="h-3.5 w-3.5" />
+                                                Download as docx
+                                                {hasDocEdits(sitrepDocxEntry.name) && (
+                                                  <Badge
+                                                    variant="outline"
+                                                    className="ml-1 border-amber-300 bg-amber-50 px-1.5 py-0 text-[10px] text-amber-700 dark:border-amber-500/60 dark:bg-amber-500/10 dark:text-amber-200"
+                                                  >
+                                                    Edited
+                                                  </Badge>
+                                                )}
+                                              </Button>
+                                            )}
+                                            <Button
+                                              type="button"
+                                              size="sm"
+                                              variant={sitrepDocxEntry ? 'default' : 'ghost'}
+                                              className={cn(
+                                                'h-7 gap-1 text-xs',
+                                                sitrepDocxEntry &&
+                                                  'bg-blue-600 text-white hover:bg-blue-700'
+                                              )}
+                                              onClick={() => {
+                                                if (sitrepDocxEntry) {
+                                                  setOpenWordDocFileName(sitrepDocxEntry.name)
+                                                }
+                                              }}
+                                            >
+                                              Open
+                                            </Button>
+                                          </div>
+                                        </div>
+                                      )
+                                    })}
+                                  </div>
+                                )}
+                              </Item>
+                            )
+                          })}
+                        </div>
+                      )
+                    })()}
+                  </div>
+                )}
+
                 {activeTab === 'form-ICS-233' && (
                   <Item
                     variant="outline"
@@ -10246,8 +22271,17 @@ function App() {
         </div>
       </Collapsible>
       </div>
+      </div>
       {isPratusAiDrawerOpen && (
-        <aside className="absolute top-14 right-0 z-20 h-[calc(100%-3.5rem)] w-[33.333vw] min-w-[33.333vw] shrink-0 border-l">
+        <aside
+          className={cn(
+            'z-30 shrink-0 border-l transition-[width] duration-300',
+            glassPanelClasses,
+            isMapVisible
+              ? 'absolute top-14 right-0 h-[calc(100%-3.5rem)] w-[33.333vw] min-w-[33.333vw]'
+              : 'mt-14 h-[calc(100%-3.5rem)] w-[33.333vw] min-w-[33.333vw]'
+          )}
+        >
           <div
             className={cn(
               'flex h-full flex-col shadow-lg backdrop-blur',
@@ -10267,7 +22301,18 @@ function App() {
                 size="icon"
                 aria-label="Close PRATUS AI drawer"
                 className={glassIconButtonClasses}
-                onClick={() => setIsPratusAiDrawerOpen(false)}
+                onClick={() => {
+                  setIsPratusAiDrawerOpen(false)
+                  if (
+                    pratusAiIntent === 'ics201-generation' ||
+                    pratusAiIntent === 'sitrep-generation' ||
+                    pratusAiIntent === 'event-rule-generation' ||
+                    pratusAiIntent === 'notification-rule-generation'
+                  ) {
+                    setPratusAiIntent('default')
+                    setPratusAiDraftMessage('')
+                  }
+                }}
               >
                 <X className="h-4 w-4" />
               </Button>
@@ -10319,6 +22364,15 @@ function App() {
                             <li key={`${message.id}-step-${index}`}>{step}</li>
                           ))}
                         </ol>
+                        {message.plan.action === 'draft-sitrep' && message.plan.sitrepScopeId && (
+                          <p className="border-t pt-2 text-xs font-medium text-foreground">
+                            Output: a new draft SITREP for{' '}
+                            {SITREP_SCOPE_OPTIONS.find(
+                              (option) => option.id === message.plan?.sitrepScopeId
+                            )?.label ?? 'the selected scope'}
+                            .
+                          </p>
+                        )}
                         {message.plan.status === 'pending' ? (
                           <div className="flex items-center gap-2">
                             <Button
@@ -10340,11 +22394,15 @@ function App() {
                             </Button>
                           </div>
                         ) : (
-                          <p className="text-xs font-medium text-muted-foreground">
-                            {message.plan.status === 'accepted'
-                              ? 'Plan accepted. Draft ICS-204 recommendations prepared for review.'
-                              : 'Plan cancelled.'}
-                          </p>
+                          message.plan.action !== 'draft-sitrep' && (
+                            <p className="text-xs font-medium text-muted-foreground">
+                              {message.plan.status === 'accepted'
+                                ? message.plan.action === 'draft-ics-204-recommendation'
+                                  ? 'Plan accepted. Draft ICS-204 recommendations prepared for review.'
+                                  : 'Plan accepted.'
+                                : 'Plan cancelled.'}
+                            </p>
+                          )
                         )}
                       </div>
                     )}
@@ -10377,8 +22435,20 @@ function App() {
                     'glass-organic border-white/25 bg-transparent text-foreground placeholder:text-foreground/70'
                 )}
               />
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    variant={isPratusAiSelectingContext ? 'default' : 'outline'}
+                    size="icon"
+                    aria-label="Toggle cursor selection mode"
+                    disabled={isPratusAiLoading}
+                    className={glassIconButtonClasses}
+                    onClick={() => setIsPratusAiSelectingContext((previous) => !previous)}
+                  >
+                    <MousePointer2 className="h-4 w-4" />
+                  </Button>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button
@@ -10392,35 +22462,151 @@ function App() {
                         <Plus className="h-4 w-4" />
                       </Button>
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent align="start" className="w-72">
+                    <DropdownMenuContent align="start" className="w-80">
                       <DropdownMenuLabel>Attachments</DropdownMenuLabel>
                       <DropdownMenuSeparator />
                       <div className="space-y-2 px-3 py-2">
-                        <label className="flex items-center gap-2 text-sm">
-                          <Checkbox
-                            checked={pratusAiDataSources.files}
-                            onCheckedChange={(checked) => togglePratusAiSource('files', checked === true)}
-                          />
-                          <span>File(s)</span>
-                        </label>
-                        {pratusAiDataSources.files && (
-                          <div className="space-y-1 pl-6">
-                            <input
-                              type="file"
-                              multiple
-                              onChange={handlePratusAiFileSelection}
-                              className="block w-full text-xs"
-                            />
-                            {pratusAiSelectedFiles.length > 0 && (
-                              <p className="text-xs text-muted-foreground">
-                                {pratusAiSelectedFiles.join(', ')}
-                              </p>
-                            )}
-                          </div>
-                        )}
+                        {(() => {
+                          const allFileKeys = INCIDENT_FILE_FOLDERS.flatMap((folder) =>
+                            folder.files.map((file) => `${folder.id}::${file.name}`)
+                          )
+                          const totalFiles = allFileKeys.length
+                          const selectedCount = pratusAiSelectedFiles.length
+                          const allSelected =
+                            totalFiles > 0 && selectedCount === totalFiles
+                          const applySelectionUpdate = (
+                            updater: (previous: string[]) => string[]
+                          ) => {
+                            setPratusAiSelectedFiles((previous) => {
+                              const next = updater(previous)
+                              setPratusAiDataSources((prevSources) => ({
+                                ...prevSources,
+                                files: next.length > 0,
+                              }))
+                              return next
+                            })
+                          }
+                          return (
+                            <>
+                              <label className="flex items-center justify-between gap-2 rounded-md border bg-muted/40 px-2 py-1.5 text-sm">
+                                <span className="flex items-center gap-2 font-medium">
+                                  <Checkbox
+                                    checked={allSelected}
+                                    onCheckedChange={(checked) => {
+                                      applySelectionUpdate(() =>
+                                        checked === true ? [...allFileKeys] : []
+                                      )
+                                    }}
+                                  />
+                                  <span>Incident files</span>
+                                </span>
+                                <span className="text-[10px] text-muted-foreground">
+                                  {selectedCount}/{totalFiles} selected
+                                </span>
+                              </label>
+                              <div className="max-h-64 space-y-3 overflow-y-auto pr-1">
+                                {INCIDENT_FILE_FOLDERS.map((folder) => {
+                                  const folderKeys = folder.files.map(
+                                    (file) => `${folder.id}::${file.name}`
+                                  )
+                                  const folderAllSelected =
+                                    folderKeys.length > 0 &&
+                                    folderKeys.every((key) =>
+                                      pratusAiSelectedFiles.includes(key)
+                                    )
+                                  return (
+                                    <div key={folder.id} className="space-y-1">
+                                      <label className="flex cursor-pointer items-center justify-between gap-2 px-1">
+                                        <span className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                          <Checkbox
+                                            checked={folderAllSelected}
+                                            onCheckedChange={(checked) => {
+                                              applySelectionUpdate((previous) => {
+                                                const filtered = previous.filter(
+                                                  (entry) => !folderKeys.includes(entry)
+                                                )
+                                                if (checked === true) {
+                                                  return [...filtered, ...folderKeys]
+                                                }
+                                                return filtered
+                                              })
+                                            }}
+                                          />
+                                          <Folder className="h-3 w-3 text-amber-600 dark:text-amber-400" />
+                                          {folder.name}
+                                        </span>
+                                      </label>
+                                      <div className="space-y-1 pl-5">
+                                        {folder.files.map((file) => {
+                                          const key = `${folder.id}::${file.name}`
+                                          const isSelected =
+                                            pratusAiSelectedFiles.includes(key)
+                                          return (
+                                            <label
+                                              key={key}
+                                              className={cn(
+                                                'flex cursor-pointer items-start gap-2 rounded-md border px-2 py-1.5 text-xs transition-colors',
+                                                isSelected
+                                                  ? 'border-blue-400 bg-blue-50/60 dark:bg-blue-500/10'
+                                                  : 'border-transparent hover:border-border hover:bg-accent/40'
+                                              )}
+                                            >
+                                              <Checkbox
+                                                checked={isSelected}
+                                                onCheckedChange={(checked) => {
+                                                  applySelectionUpdate((previous) => {
+                                                    if (checked === true) {
+                                                      return previous.includes(key)
+                                                        ? previous
+                                                        : [...previous, key]
+                                                    }
+                                                    return previous.filter(
+                                                      (entry) => entry !== key
+                                                    )
+                                                  })
+                                                }}
+                                                className="mt-0.5"
+                                              />
+                                              <div className="flex min-w-0 flex-col">
+                                                <span className="truncate font-medium text-foreground">
+                                                  {file.name}
+                                                </span>
+                                                <span className="truncate text-[10px] text-muted-foreground">
+                                                  {file.meta} • {file.author}
+                                                </span>
+                                              </div>
+                                            </label>
+                                          )
+                                        })}
+                                      </div>
+                                    </div>
+                                  )
+                                })}
+                              </div>
+                            </>
+                          )
+                        })()}
                       </div>
                     </DropdownMenuContent>
                   </DropdownMenu>
+                  {pratusAiDataSources.files && pratusAiSelectedFiles.length > 0 && (
+                    <span className="inline-flex items-center gap-1 rounded-full border border-blue-300 bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700 dark:border-blue-500/60 dark:bg-blue-500/10 dark:text-blue-200">
+                      <FileText className="h-3 w-3" />
+                      {pratusAiSelectedFiles.length} file
+                      {pratusAiSelectedFiles.length === 1 ? '' : 's'} selected
+                    </span>
+                  )}
+                  </div>
+                  <Button
+                    type="button"
+                    onClick={submitPratusAiMessage}
+                    disabled={isPratusAiLoading}
+                    className={glassIconButtonClasses}
+                  >
+                    Send
+                  </Button>
+                </div>
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
                   <label className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
                     <span>Web</span>
                     <Switch
@@ -10431,7 +22617,7 @@ function App() {
                     />
                   </label>
                   <label className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-                    <span>Organization Data</span>
+                    <span>Incident Workspaces</span>
                     <Switch
                       size="sm"
                       checked={pratusAiDataSources.incidentData}
@@ -10441,25 +22627,17 @@ function App() {
                       }
                     />
                   </label>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Button
-                    type="button"
-                    variant={isPratusAiSelectingContext ? 'default' : 'outline'}
-                    disabled={isPratusAiLoading}
-                    className={glassIconButtonClasses}
-                    onClick={() => setIsPratusAiSelectingContext((previous) => !previous)}
-                  >
-                    Select
-                  </Button>
-                  <Button
-                    type="button"
-                    onClick={submitPratusAiMessage}
-                    disabled={isPratusAiLoading}
-                    className={glassIconButtonClasses}
-                  >
-                    Send
-                  </Button>
+                  <label className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <span>Organization Data</span>
+                    <Switch
+                      size="sm"
+                      checked={pratusAiDataSources.organizationData}
+                      disabled={isPratusAiLoading}
+                      onCheckedChange={(checked) =>
+                        togglePratusAiSource('organizationData', checked === true)
+                      }
+                    />
+                  </label>
                 </div>
               </div>
               {pratusAiSelectedContexts.length > 0 && (
@@ -10498,7 +22676,6 @@ function App() {
           </div>
         </aside>
       )}
-      </div>
       </div>
       <Dialog
         open={selectedIcs233Row !== null}
@@ -11088,10 +23265,22 @@ function App() {
                       <span className="inline-block h-2 w-2 rounded-full bg-emerald-500" />
                       Your edits
                     </span>
+                    <span className="text-[10px] font-normal text-muted-foreground">
+                      Editable
+                    </span>
                   </div>
-                  <div className="max-h-64 overflow-y-auto whitespace-pre-wrap rounded-md border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs dark:border-emerald-500/50 dark:bg-emerald-500/10">
-                    {currentSituationConflict.yourDraft || '(empty)'}
-                  </div>
+                  <Textarea
+                    value={currentSituationConflict.yourDraft}
+                    onChange={(event) =>
+                      setCurrentSituationConflict((previous) =>
+                        previous
+                          ? { ...previous, yourDraft: event.target.value }
+                          : previous
+                      )
+                    }
+                    className="max-h-64 min-h-32 cursor-text rounded-md border border-emerald-300 bg-emerald-50 text-xs dark:border-emerald-500/50 dark:bg-emerald-500/10"
+                    placeholder="Edit your version before overriding"
+                  />
                   <div className="flex items-center justify-start">
                     <Button
                       type="button"
@@ -11407,127 +23596,406 @@ function App() {
           }
         }}
       >
-        <DialogContent className="!w-[720px] !max-w-[95vw]">
+        <DialogContent
+          className="!w-[1080px] !max-w-[95vw] max-h-[90vh] overflow-x-hidden overflow-y-auto"
+          onInteractOutside={(event) => {
+            const target = event.target as HTMLElement | null
+            if (target && target.closest('[data-sonner-toaster]')) {
+              event.preventDefault()
+            }
+          }}
+          onPointerDownOutside={(event) => {
+            const target = event.target as HTMLElement | null
+            if (target && target.closest('[data-sonner-toaster]')) {
+              event.preventDefault()
+            }
+          }}
+        >
           {sitrepApprovalRecipientPicker && (
-            <div className="space-y-4">
+            <div className="w-full min-w-0 space-y-4">
               <div className="space-y-1">
-                <div className="text-sm font-semibold">Send draft for review</div>
+                <div className="text-sm font-semibold">
+                  Send draft SITREP for{' '}
+                  {SITREP_SCOPE_OPTIONS.find(
+                    (option) => option.id === selectedSitrepScopeId
+                  )?.label ?? 'selected AOR or Incident'}{' '}
+                  for review
+                </div>
               </div>
-              <div className="space-y-2 rounded-md border border-sky-300 bg-sky-50/70 p-3 text-xs text-sky-900 dark:border-sky-500/60 dark:bg-sky-500/10 dark:text-sky-200">
-                <div className="text-[11px] font-semibold uppercase tracking-wide">
-                  Approval workflow for Incident SITREPs
-                </div>
-                <ol className="ml-4 list-decimal space-y-1">
-                  <li>
-                    Sent first to the{' '}
-                    <span className="font-semibold">Situation Unit Leader</span> for review.
-                  </li>
-                  <li>
-                    Then routed to the{' '}
-                    <span className="font-semibold">Planning Section Chief</span> for review and
-                    signature.
-                  </li>
-                </ol>
-                <p className="text-[11px] leading-snug">
-                  The <span className="font-semibold">Incident Commander</span> can review and
-                  approve this draft at any point, regardless of where it is in the workflow above
-                  or the actions of the other reviewers.
-                </p>
-              </div>
-              <div className="space-y-2">
-                <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                  Notified reviewers
-                </label>
-                <div className="overflow-hidden rounded-md border">
-                  <div className="flex items-center justify-between gap-2 border-b bg-muted/50 px-3 py-2">
-                    <span className="text-xs">
-                      <span className="font-semibold">Step 1 — Situation Unit Leader</span>
-                      <span className="ml-2 text-[10px] uppercase tracking-wide text-muted-foreground">
-                        First approval
-                      </span>
-                    </span>
-                    <span className="text-[10px] text-muted-foreground">
-                      {SITREP_SITUATION_UNIT_LEADERS.length} assigned
-                    </span>
+              {(() => {
+                const previewDraftId = sitrepApprovalRecipientPicker?.draftId
+                const previewDraft = previewDraftId
+                  ? sitrepVersions.find((entry) => entry.id === previewDraftId)
+                  : null
+                if (!previewDraft) return null
+                const previewPrimary = SITREP_SECTION_PRIMARY[sitrepActiveSection]
+                const previewValue = sitrepForm[previewPrimary.field] ?? ''
+                const formatPreviewTime = (timestamp: number) =>
+                  new Date(timestamp).toLocaleTimeString([], {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit',
+                  })
+                return (
+                  <div className="w-full min-w-0 space-y-3">
+                    <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                      Preview & edit draft
+                    </div>
+                    <div className="flex items-center justify-between rounded-md border border-sky-400 bg-sky-50 px-3 py-2 text-xs text-sky-900 dark:border-sky-500 dark:bg-sky-500/10 dark:text-sky-200">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <div className="flex flex-col gap-0.5">
+                          <span>
+                            Created by{' '}
+                            <span className="font-semibold">
+                              {previewDraft.creatorRole} {previewDraft.creatorName}
+                            </span>{' '}
+                            at{' '}
+                            <span className="font-semibold">
+                              {formatPreviewTime(previewDraft.creatorCreatedAt)}
+                            </span>
+                            .
+                          </span>
+                          <span>
+                            {getSitrepLastEditorLabel(previewDraft)}{' '}
+                            <span className="font-semibold">
+                              {formatSitrepLastEditor(previewDraft)}
+                            </span>{' '}
+                            at{' '}
+                            <span className="font-semibold">
+                              {formatPreviewTime(previewDraft.createdAt)}
+                            </span>
+                            .
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="-mx-1 overflow-x-auto px-1">
+                      <div className="flex min-w-max items-center gap-1 border-b">
+                        {SITREP_SECTIONS.map((section) => {
+                          const isActive = sitrepActiveSection === section.id
+                          const showAiSparkle =
+                            previewDraft.aiGeneratedSections?.includes(section.id) ?? false
+                          return (
+                            <button
+                              key={`approval-preview-${section.id}`}
+                              type="button"
+                              onClick={() => setSitrepActiveSection(section.id)}
+                              className={cn(
+                                'inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-t-md border-b-2 px-3 py-1.5 text-xs font-medium transition-colors',
+                                isActive
+                                  ? 'border-foreground text-foreground'
+                                  : 'border-transparent text-muted-foreground hover:text-foreground'
+                              )}
+                            >
+                              {showAiSparkle && (
+                                <Sparkles
+                                  className="h-3 w-3 shrink-0 text-primary"
+                                  aria-hidden
+                                />
+                              )}
+                              {section.label}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+                    <div className="space-y-3">
+                      {SITREP_AI_COMPATIBLE_SECTIONS.includes(sitrepActiveSection) && (
+                      <div className="flex items-center justify-start gap-2">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-7 gap-1 text-xs"
+                          onClick={() => {}}
+                        >
+                          <Sparkles className="h-3.5 w-3.5" />
+                          Update Draft
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-7 gap-1 text-xs"
+                          onClick={() => openSitrepSectionSettings(sitrepActiveSection)}
+                        >
+                          <Settings className="h-3.5 w-3.5" />
+                          Section Generation Settings
+                        </Button>
+                      </div>
+                      )}
+                      {(() => {
+                        if (sitrepActiveSection === 'ongoing-incidents') {
+                          return (
+                            <div className="space-y-2">
+                              {renderSitrepOngoingIncidentsList()}
+                            </div>
+                          )
+                        }
+                        const previewSectionEditValue =
+                          sitrepSectionEdits[sitrepActiveSection]
+                        const isPreviewEditing = previewSectionEditValue !== null
+                        return (
+                          <>
+                            <Textarea
+                              value={isPreviewEditing ? previewSectionEditValue! : previewValue}
+                              onChange={(event) => {
+                                if (isPreviewEditing) {
+                                  setSitrepSectionEditValue(
+                                    sitrepActiveSection,
+                                    event.target.value
+                                  )
+                                }
+                              }}
+                              onFocus={() => beginSitrepSectionEdit(sitrepActiveSection)}
+                              onClick={() => beginSitrepSectionEdit(sitrepActiveSection)}
+                              readOnly={!isPreviewEditing}
+                              className="min-h-[160px] cursor-text text-xs"
+                              placeholder={`Edit ${previewPrimary.label}`}
+                            />
+                            {isPreviewEditing && (
+                              <div className="flex items-center justify-start gap-2">
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-7 gap-1 text-xs"
+                                  onClick={() =>
+                                    saveSitrepSectionEdit(sitrepActiveSection)
+                                  }
+                                >
+                                  Save
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-7 gap-1 text-xs"
+                                  onClick={() =>
+                                    cancelSitrepSectionEdit(sitrepActiveSection)
+                                  }
+                                >
+                                  Cancel
+                                </Button>
+                              </div>
+                            )}
+                          </>
+                        )
+                      })()}
+                    </div>
                   </div>
-                  <ul className="divide-y">
-                    {SITREP_SITUATION_UNIT_LEADERS.map((assignee) => (
-                      <li
-                        key={`sul-${assignee.email}`}
-                        className="flex items-center justify-between gap-2 px-3 py-2 text-xs"
-                      >
-                        <span className="min-w-0 truncate">
-                          <span className="font-medium">Situation Unit Leader</span>{' '}
-                          <span className="text-foreground">{assignee.name}</span>{' '}
-                          <span className="text-muted-foreground">({assignee.email})</span>
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-                <div className="overflow-hidden rounded-md border">
-                  <div className="flex items-center justify-between gap-2 border-b bg-muted/50 px-3 py-2">
-                    <span className="text-xs">
-                      <span className="font-semibold">Step 2 — Planning Section Chief</span>
-                      <span className="ml-2 text-[10px] uppercase tracking-wide text-muted-foreground">
-                        Final approval
-                      </span>
-                    </span>
-                    <span className="text-[10px] text-muted-foreground">
-                      {SITREP_PLANNING_SECTION_CHIEFS.length} assigned
-                    </span>
-                  </div>
-                  <ul className="divide-y">
-                    {SITREP_PLANNING_SECTION_CHIEFS.map((assignee) => (
-                      <li
-                        key={`psc-${assignee.email}`}
-                        className="flex items-center justify-between gap-2 px-3 py-2 text-xs"
-                      >
-                        <span className="min-w-0 truncate">
-                          <span className="font-medium">Planning Section Chief</span>{' '}
-                          <span className="text-foreground">{assignee.name}</span>{' '}
-                          <span className="text-muted-foreground">({assignee.email})</span>
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-                <div className="overflow-hidden rounded-md border border-amber-300 dark:border-amber-500/60">
-                  <div className="flex items-center justify-between gap-2 border-b border-amber-300 bg-amber-50 px-3 py-2 dark:border-amber-500/60 dark:bg-amber-500/10">
-                    <span className="text-xs">
-                      <span className="font-semibold text-amber-900 dark:text-amber-200">
-                        Incident Commander — override authority
-                      </span>
-                      <span className="ml-2 text-[10px] uppercase tracking-wide text-amber-800/80 dark:text-amber-200/80">
-                        May approve at any time
-                      </span>
-                    </span>
-                    <span className="text-[10px] text-amber-800/80 dark:text-amber-200/80">
-                      {SITREP_INCIDENT_COMMANDERS.length} assigned
-                    </span>
-                  </div>
-                  <ul className="divide-y">
-                    {SITREP_INCIDENT_COMMANDERS.map((assignee) => (
-                      <li
-                        key={`ic-${assignee.email}`}
-                        className="flex items-center justify-between gap-2 px-3 py-2 text-xs"
-                      >
-                        <span className="min-w-0 truncate">
-                          <span className="font-medium">Incident Commander</span>{' '}
-                          <span className="text-foreground">{assignee.name}</span>{' '}
-                          <span className="text-muted-foreground">({assignee.email})</span>
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-                <p className="text-[10px] leading-snug text-muted-foreground">
-                  All users currently assigned to these positions will be notified to review the
-                  draft. The Situation Unit Leader and Planning Section Chief complete the
-                  workflow steps in order, while any Incident Commander may review and approve
-                  the draft at any time regardless of the actions of the other reviewers.
-                </p>
-              </div>
+                )
+              })()}
+              {(() => {
+                const selectedScope = SITREP_SCOPE_OPTIONS.find(
+                  (option) => option.id === selectedSitrepScopeId
+                )
+                const isAorScope = selectedScope?.kind === 'aor'
+                if (isAorScope) {
+                  return (
+                    <>
+                      <div className="space-y-2 rounded-md border border-sky-300 bg-sky-50/70 p-3 text-xs text-sky-900 dark:border-sky-500/60 dark:bg-sky-500/10 dark:text-sky-200">
+                        <div className="text-[11px] font-semibold uppercase tracking-wide">
+                          Approval workflow for AOR SITREPs
+                        </div>
+                        <p className="text-[11px] leading-snug">
+                          Any user with permission to approve SITREPs for{' '}
+                          <span className="font-semibold">{selectedScope?.label}</span> can
+                          approve this draft.
+                        </p>
+                      </div>
+                      <div className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-500/60 dark:bg-amber-500/10 dark:text-amber-200">
+                        <Lock className="mt-0.5 h-4 w-4 shrink-0" />
+                        <div className="space-y-0.5">
+                          <div className="text-[11px] font-semibold uppercase tracking-wide">
+                            Editing locked after submission
+                          </div>
+                          <p className="text-[11px] leading-snug">
+                            Once this draft is submitted for review, only the listed approvers
+                            for {selectedScope?.label} will be able to edit it. You will not be
+                            able to edit the draft until an approver returns it.
+                          </p>
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                          Notified approvers
+                        </label>
+                        <div className="overflow-hidden rounded-md border">
+                          <div className="flex items-center justify-between gap-2 border-b bg-muted/50 px-3 py-2">
+                            <span className="text-xs">
+                              <span className="font-semibold">
+                                Approvers for {selectedScope?.label}
+                              </span>
+                              <span className="ml-2 text-[10px] uppercase tracking-wide text-muted-foreground">
+                                Single approval step
+                              </span>
+                            </span>
+                            <span className="text-[10px] text-muted-foreground">
+                              {SITREP_AOR_APPROVERS.length} assigned
+                            </span>
+                          </div>
+                          <ul className="divide-y">
+                            {SITREP_AOR_APPROVERS.map((assignee) => (
+                              <li
+                                key={`aor-${assignee.email}`}
+                                className="flex items-center justify-between gap-2 px-3 py-2 text-xs"
+                              >
+                                <span className="min-w-0 truncate">
+                                  <span className="font-medium">AOR Approver</span>{' '}
+                                  <span className="text-foreground">{assignee.name}</span>{' '}
+                                  <span className="text-muted-foreground">
+                                    ({assignee.email})
+                                  </span>
+                                </span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                        <p className="text-[10px] leading-snug text-muted-foreground">
+                          All users currently authorized to approve SITREPs for{' '}
+                          {selectedScope?.label} will be notified. Any one of them may approve
+                          the draft to complete the workflow.
+                        </p>
+                      </div>
+                    </>
+                  )
+                }
+                return (
+                  <>
+                    <div className="space-y-2 rounded-md border border-sky-300 bg-sky-50/70 p-3 text-xs text-sky-900 dark:border-sky-500/60 dark:bg-sky-500/10 dark:text-sky-200">
+                      <div className="text-[11px] font-semibold uppercase tracking-wide">
+                        Approval workflow for Incident SITREPs
+                      </div>
+                      <ol className="ml-4 list-decimal space-y-1">
+                        <li>
+                          Sent first to the{' '}
+                          <span className="font-semibold">Situation Unit Leader</span> for review.
+                        </li>
+                        <li>
+                          Then routed to the{' '}
+                          <span className="font-semibold">Planning Section Chief</span> for review
+                          and approval.
+                        </li>
+                      </ol>
+                      <p className="text-[11px] leading-snug">
+                        The <span className="font-semibold">Incident Commander</span> can review
+                        and approve this draft at any point, regardless of where it is in the
+                        workflow above or the actions of the other reviewers.
+                      </p>
+                    </div>
+                    <div className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-500/60 dark:bg-amber-500/10 dark:text-amber-200">
+                      <Lock className="mt-0.5 h-4 w-4 shrink-0" />
+                      <div className="space-y-0.5">
+                        <div className="text-[11px] font-semibold uppercase tracking-wide">
+                          Editing locked after submission
+                        </div>
+                        <p className="text-[11px] leading-snug">
+                          Once this draft is submitted for review, only the listed reviewers
+                          (Situation Unit Leader, Planning Section Chief, and Incident Commander)
+                          will be able to edit it. You will not be able to edit the draft until a
+                          reviewer returns it.
+                        </p>
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                        Notified reviewers
+                      </label>
+                      <div className="overflow-hidden rounded-md border">
+                        <div className="flex items-center justify-between gap-2 border-b bg-muted/50 px-3 py-2">
+                          <span className="text-xs">
+                            <span className="font-semibold">Step 1 — Situation Unit Leader</span>
+                            <span className="ml-2 text-[10px] uppercase tracking-wide text-muted-foreground">
+                              First approval
+                            </span>
+                          </span>
+                          <span className="text-[10px] text-muted-foreground">
+                            {SITREP_SITUATION_UNIT_LEADERS.length} assigned
+                          </span>
+                        </div>
+                        <ul className="divide-y">
+                          {SITREP_SITUATION_UNIT_LEADERS.map((assignee) => (
+                            <li
+                              key={`sul-${assignee.email}`}
+                              className="flex items-center justify-between gap-2 px-3 py-2 text-xs"
+                            >
+                              <span className="min-w-0 truncate">
+                                <span className="font-medium">Situation Unit Leader</span>{' '}
+                                <span className="text-foreground">{assignee.name}</span>{' '}
+                                <span className="text-muted-foreground">({assignee.email})</span>
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                      <div className="overflow-hidden rounded-md border">
+                        <div className="flex items-center justify-between gap-2 border-b bg-muted/50 px-3 py-2">
+                          <span className="text-xs">
+                            <span className="font-semibold">Step 2 — Planning Section Chief</span>
+                            <span className="ml-2 text-[10px] uppercase tracking-wide text-muted-foreground">
+                              Final approval
+                            </span>
+                          </span>
+                          <span className="text-[10px] text-muted-foreground">
+                            {SITREP_PLANNING_SECTION_CHIEFS.length} assigned
+                          </span>
+                        </div>
+                        <ul className="divide-y">
+                          {SITREP_PLANNING_SECTION_CHIEFS.map((assignee) => (
+                            <li
+                              key={`psc-${assignee.email}`}
+                              className="flex items-center justify-between gap-2 px-3 py-2 text-xs"
+                            >
+                              <span className="min-w-0 truncate">
+                                <span className="font-medium">Planning Section Chief</span>{' '}
+                                <span className="text-foreground">{assignee.name}</span>{' '}
+                                <span className="text-muted-foreground">({assignee.email})</span>
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                      <div className="overflow-hidden rounded-md border border-amber-300 dark:border-amber-500/60">
+                        <div className="flex items-center justify-between gap-2 border-b border-amber-300 bg-amber-50 px-3 py-2 dark:border-amber-500/60 dark:bg-amber-500/10">
+                          <span className="text-xs">
+                            <span className="font-semibold text-amber-900 dark:text-amber-200">
+                              Incident Commander — override authority
+                            </span>
+                            <span className="ml-2 text-[10px] uppercase tracking-wide text-amber-800/80 dark:text-amber-200/80">
+                              May approve at any time
+                            </span>
+                          </span>
+                          <span className="text-[10px] text-amber-800/80 dark:text-amber-200/80">
+                            {SITREP_INCIDENT_COMMANDERS.length} assigned
+                          </span>
+                        </div>
+                        <ul className="divide-y">
+                          {SITREP_INCIDENT_COMMANDERS.map((assignee) => (
+                            <li
+                              key={`ic-${assignee.email}`}
+                              className="flex items-center justify-between gap-2 px-3 py-2 text-xs"
+                            >
+                              <span className="min-w-0 truncate">
+                                <span className="font-medium">Incident Commander</span>{' '}
+                                <span className="text-foreground">{assignee.name}</span>{' '}
+                                <span className="text-muted-foreground">({assignee.email})</span>
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                      <p className="text-[10px] leading-snug text-muted-foreground">
+                        All users currently assigned to these positions will be notified to review
+                        the draft. The Situation Unit Leader and Planning Section Chief complete
+                        the workflow steps in order, while any Incident Commander may review and
+                        approve the draft at any time regardless of the actions of the other
+                        reviewers.
+                      </p>
+                    </div>
+                  </>
+                )
+              })()}
               <div className="flex items-center justify-end gap-2 pt-2">
                 <Button
                   type="button"
@@ -11554,6 +24022,765 @@ function App() {
           )}
         </DialogContent>
       </Dialog>
+      <Sheet
+        open={sitrepSectionSettingsTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            closeSitrepSectionSettings()
+          }
+        }}
+      >
+        <SheetContent side="right" className="w-[40vw] !max-w-[40vw] !min-w-[360px] p-0">
+          {sitrepSectionSettingsTarget && sitrepSectionSettingsDraft && (
+            <div className="flex h-full flex-col">
+              <SheetHeader className="gap-0 border-b border-border bg-muted/40 px-5 py-4">
+                <SheetTitle className="text-base font-semibold">Edit Section Settings</SheetTitle>
+              </SheetHeader>
+              <div className="flex-1 space-y-6 overflow-y-auto px-5 py-5">
+                <div className="space-y-1.5">
+                  <Label htmlFor="sitrep-section-name" className="text-xs font-medium text-muted-foreground">
+                    Section Name
+                  </Label>
+                  <Input
+                    id="sitrep-section-name"
+                    value={sitrepSectionSettingsDraft.name}
+                    onChange={(event) =>
+                      setSitrepSectionSettingsDraft((previous) =>
+                        previous ? { ...previous, name: event.target.value } : previous
+                      )
+                    }
+                    className="h-9 border-0 border-b border-border bg-transparent px-0 text-sm shadow-none focus-visible:border-b-blue-500 focus-visible:ring-0"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="space-y-1">
+                      <Label className="text-sm font-semibold">Enable AI Generation</Label>
+                      <p className="text-[11px] text-muted-foreground">
+                        Turn on to let PRATUS AI draft this section from the data sources
+                        selected below. When off, this section is filled in manually.
+                      </p>
+                    </div>
+                    <Switch
+                      checked={sitrepSectionSettingsDraft.sectionType === 'ai'}
+                      onCheckedChange={(checked) =>
+                        setSitrepSectionSettingsDraft((previous) =>
+                          previous
+                            ? { ...previous, sectionType: checked ? 'ai' : 'manual' }
+                            : previous
+                        )
+                      }
+                    />
+                  </div>
+                </div>
+                {sitrepSectionSettingsDraft.sectionType === 'ai' && (
+                  <div className="space-y-2">
+                    <Label className="text-sm font-semibold">Data Sources</Label>
+                    <div className="space-y-2">
+                      {SITREP_DATA_SOURCE_OPTIONS.map((option) => {
+                        const checked = sitrepSectionSettingsDraft.dataSources.includes(option.id)
+                        return (
+                          <label
+                            key={option.id}
+                            className="flex cursor-pointer items-center gap-2 text-sm"
+                          >
+                            <Checkbox
+                              checked={checked}
+                              onCheckedChange={() => toggleSitrepSectionDataSource(option.id)}
+                            />
+                            <span>{option.label}</span>
+                          </label>
+                        )
+                      })}
+                    </div>
+                    {sitrepSectionSettingsDraft.dataSources.includes('incident-data') && (
+                      <div className="ml-6 space-y-1.5 rounded-md border border-border bg-muted/30 p-3">
+                        <Label className="text-xs font-medium text-muted-foreground">
+                          Select Incident(s)
+                        </Label>
+                        <div className="space-y-1.5">
+                          {SITREP_AVAILABLE_INCIDENTS.map((incident) => {
+                            const checked =
+                              sitrepSectionSettingsDraft.selectedIncidents.includes(incident.id)
+                            return (
+                              <label
+                                key={incident.id}
+                                className="flex cursor-pointer items-center gap-2 text-xs"
+                              >
+                                <Checkbox
+                                  checked={checked}
+                                  onCheckedChange={() =>
+                                    toggleSitrepSectionIncident(incident.id)
+                                  }
+                                />
+                                <span>{incident.label}</span>
+                              </label>
+                            )
+                          })}
+                        </div>
+                        {sitrepSectionSettingsDraft.selectedIncidents.length === 0 && (
+                          <p className="text-[10px] text-amber-600 dark:text-amber-400">
+                            Select at least one incident.
+                          </p>
+                        )}
+                      </div>
+                    )}
+                    {sitrepSectionSettingsDraft.dataSources.includes('files') && (
+                      <div className="ml-6 space-y-1.5 rounded-md border border-border bg-muted/30 p-3">
+                        <Label className="text-xs font-medium text-muted-foreground">
+                          Select File(s)
+                        </Label>
+                        <div className="space-y-1.5">
+                          {SITREP_AVAILABLE_FILES.map((file) => {
+                            const checked = sitrepSectionSettingsDraft.selectedFiles.includes(
+                              file.id
+                            )
+                            return (
+                              <label
+                                key={file.id}
+                                className="flex cursor-pointer items-center gap-2 text-xs"
+                              >
+                                <Checkbox
+                                  checked={checked}
+                                  onCheckedChange={() => toggleSitrepSectionFile(file.id)}
+                                />
+                                <span className="font-mono">{file.label}</span>
+                              </label>
+                            )
+                          })}
+                        </div>
+                        {sitrepSectionSettingsDraft.selectedFiles.length === 0 && (
+                          <p className="text-[10px] text-amber-600 dark:text-amber-400">
+                            Select at least one file.
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+                {sitrepSectionSettingsDraft.sectionType === 'ai' && (
+                  <div className="space-y-1.5">
+                    <Label
+                      htmlFor="sitrep-section-ai-instructions"
+                      className="text-xs font-medium text-muted-foreground"
+                    >
+                      AI Instructions
+                    </Label>
+                    <p className="text-[11px] text-muted-foreground/80">
+                      AI interprets and generates search queries
+                    </p>
+                    <Textarea
+                      id="sitrep-section-ai-instructions"
+                      value={sitrepSectionSettingsDraft.aiInstructions}
+                      onChange={(event) =>
+                        setSitrepSectionSettingsDraft((previous) =>
+                          previous ? { ...previous, aiInstructions: event.target.value } : previous
+                        )
+                      }
+                      rows={4}
+                      className="min-h-[110px] resize-none border border-border bg-card text-sm"
+                    />
+                  </div>
+                )}
+                {sitrepSectionSettingsDraft.sectionType === 'ai' && (
+                  <div className="space-y-2">
+                    <Label className="text-sm font-semibold">
+                      Output Format (Select at least one, or use AI Prompt)
+                    </Label>
+                    <div className="space-y-2">
+                      {([
+                        { id: 'paragraph', label: 'Paragraph' },
+                        { id: 'table', label: 'Table' },
+                        { id: 'list', label: 'List' },
+                      ] as { id: SitrepOutputFormat; label: string }[]).map((option) => {
+                        const checked =
+                          sitrepSectionSettingsDraft.outputFormats.includes(option.id)
+                        return (
+                          <label
+                            key={option.id}
+                            className="flex cursor-pointer items-center gap-2 text-sm"
+                          >
+                            <Checkbox
+                              checked={checked}
+                              onCheckedChange={() => toggleSitrepSectionOutputFormat(option.id)}
+                            />
+                            <span>{option.label}</span>
+                          </label>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+              <SheetFooter className="flex flex-row items-center justify-end gap-2 border-t border-border bg-muted/40 px-5 py-3 sm:flex-row sm:justify-end sm:space-x-0">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled
+                  className="h-8 text-xs"
+                  onClick={() => {}}
+                >
+                  Move Up
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-8 text-xs"
+                  onClick={() => {}}
+                >
+                  Move Down
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-8 border-red-400 text-xs text-red-600 hover:bg-red-50 dark:border-red-500/60 dark:text-red-300 dark:hover:bg-red-500/10"
+                  onClick={() => {}}
+                >
+                  Delete Section
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-8 text-xs"
+                  onClick={closeSitrepSectionSettings}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  className="h-8 bg-blue-600 text-xs text-white hover:bg-blue-700"
+                  onClick={saveSitrepSectionSettings}
+                >
+                  Save
+                </Button>
+              </SheetFooter>
+            </div>
+          )}
+        </SheetContent>
+      </Sheet>
+      <Sheet
+        open={isLeftSidebarOpen}
+        onOpenChange={(open) => setIsLeftSidebarOpen(open)}
+      >
+        <SheetContent
+          side="left"
+          className="w-[280px] !max-w-[280px] !min-w-[260px] p-0"
+        >
+          <div className="flex h-full flex-col">
+            <SheetHeader className="gap-1 border-b border-border bg-muted/40 px-4 py-4">
+              <SheetTitle className="text-base font-semibold">British Petroleum</SheetTitle>
+              <span className="text-xs text-muted-foreground">Navigation</span>
+            </SheetHeader>
+            <nav className="flex-1 overflow-y-auto px-2 py-3">
+              <div className="space-y-2">
+                <button
+                  type="button"
+                  onClick={navigateToHub}
+                  className={cn(
+                    'flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors',
+                    activeNavigationDestination === 'hub'
+                      ? 'bg-accent text-accent-foreground'
+                      : 'text-foreground hover:bg-accent/60'
+                  )}
+                >
+                  <Home className="h-4 w-4 shrink-0" />
+                  <span className="text-left">The Hub</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={navigateToFileManager}
+                  className={cn(
+                    'flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors',
+                    activeNavigationDestination === 'file-manager'
+                      ? 'bg-accent text-accent-foreground'
+                      : 'text-foreground hover:bg-accent/60'
+                  )}
+                >
+                  <FolderOpen className="h-4 w-4 shrink-0" />
+                  <span className="text-left">File Manager</span>
+                </button>
+                <div
+                  className={cn(
+                    'rounded-md border p-2',
+                    activeNavigationDestination === 'incident-workspace'
+                      ? 'border-primary/40 bg-accent/20'
+                      : 'border-border/60'
+                  )}
+                >
+                  <button
+                    type="button"
+                    onClick={navigateToIncidentWorkspace}
+                    disabled={allIncidentsForWorkspace.length === 0}
+                    className={cn(
+                      'flex w-full items-center gap-2 rounded-md px-1 py-1 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50',
+                      activeNavigationDestination === 'incident-workspace'
+                        ? 'text-accent-foreground'
+                        : 'text-foreground hover:bg-accent/60'
+                    )}
+                  >
+                    <AlertTriangle className="h-4 w-4 shrink-0" />
+                    <span className="text-left">Incident Workspace</span>
+                  </button>
+                  <div className="relative mt-2">
+                    <Search className="pointer-events-none absolute top-1/2 left-2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      value={incidentWorkspaceNavQuery}
+                      onChange={(event) => setIncidentWorkspaceNavQuery(event.target.value)}
+                      placeholder="Search incidents..."
+                      className="h-8 pl-7 text-xs"
+                      disabled={allIncidentsForWorkspace.length === 0}
+                    />
+                  </div>
+                  <div className="mt-1 max-h-40 space-y-0.5 overflow-y-auto">
+                    {filteredIncidentWorkspaceOptions.map((incident) => (
+                      <button
+                        key={incident.id}
+                        type="button"
+                        onClick={() => selectIncidentWorkspace(incident)}
+                        className={cn(
+                          'flex w-full flex-col items-start rounded-md px-2 py-1.5 text-left transition-colors hover:bg-accent/60',
+                          activeIncidentWorkspaceId === incident.id &&
+                            'bg-accent text-accent-foreground'
+                        )}
+                      >
+                        <span className="line-clamp-2 text-xs font-medium">{incident.name}</span>
+                        <span
+                          className={cn(
+                            'text-[11px]',
+                            activeIncidentWorkspaceId === incident.id
+                              ? 'text-accent-foreground/80'
+                              : 'text-muted-foreground'
+                          )}
+                        >
+                          {incident.type} · {incident.severity}
+                        </span>
+                      </button>
+                    ))}
+                    {filteredIncidentWorkspaceOptions.length === 0 && (
+                      <p className="px-2 py-1.5 text-xs text-muted-foreground">No matching incidents</p>
+                    )}
+                  </div>
+                </div>
+                <div
+                  className={cn(
+                    'rounded-md border p-2',
+                    activeNavigationDestination === 'exercise-workspace'
+                      ? 'border-primary/40 bg-accent/20'
+                      : 'border-border/60'
+                  )}
+                >
+                  <button
+                    type="button"
+                    onClick={navigateToExerciseWorkspace}
+                    disabled={exerciseList.length === 0}
+                    className={cn(
+                      'flex w-full items-center gap-2 rounded-md px-1 py-1 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50',
+                      activeNavigationDestination === 'exercise-workspace'
+                        ? 'text-accent-foreground'
+                        : 'text-foreground hover:bg-accent/60'
+                    )}
+                  >
+                    <Shield className="h-4 w-4 shrink-0" />
+                    <span className="text-left">Exercise Workspace</span>
+                  </button>
+                  <div className="relative mt-2">
+                    <Search className="pointer-events-none absolute top-1/2 left-2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      value={exerciseWorkspaceNavQuery}
+                      onChange={(event) => setExerciseWorkspaceNavQuery(event.target.value)}
+                      placeholder="Search exercises..."
+                      className="h-8 pl-7 text-xs"
+                      disabled={exerciseList.length === 0}
+                    />
+                  </div>
+                  <div className="mt-1 max-h-40 space-y-0.5 overflow-y-auto">
+                    {filteredExerciseWorkspaceOptions.map((exercise) => (
+                      <button
+                        key={exercise.id}
+                        type="button"
+                        onClick={() => selectExerciseWorkspace(exercise)}
+                        className={cn(
+                          'flex w-full flex-col items-start rounded-md px-2 py-1.5 text-left transition-colors hover:bg-accent/60',
+                          activeExerciseWorkspaceId === exercise.id &&
+                            'bg-accent text-accent-foreground'
+                        )}
+                      >
+                        <span className="line-clamp-2 text-xs font-medium">{exercise.name}</span>
+                        <span
+                          className={cn(
+                            'text-[11px]',
+                            activeExerciseWorkspaceId === exercise.id
+                              ? 'text-accent-foreground/80'
+                              : 'text-muted-foreground'
+                          )}
+                        >
+                          {exercise.type} · {exercise.severity}
+                        </span>
+                      </button>
+                    ))}
+                    {filteredExerciseWorkspaceOptions.length === 0 && (
+                      <p className="px-2 py-1.5 text-xs text-muted-foreground">No matching exercises</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </nav>
+          </div>
+        </SheetContent>
+      </Sheet>
+      <Dialog
+        open={previewResourceRequest !== null}
+        onOpenChange={(open) => {
+          if (!open) setOpenResourceRequestPreviewId(null)
+        }}
+      >
+        <DialogContent
+          className="!w-[1200px] !max-w-[95vw] h-[88vh] max-h-[88vh] gap-0 overflow-hidden p-0 sm:rounded-md"
+          showCloseButton={false}
+        >
+          {previewResourceRequest && (
+            <div className="flex h-full min-h-0 w-full flex-col">
+              <DialogHeader className="flex-row items-center justify-between gap-3 border-b border-border bg-muted/40 px-4 py-3 sm:flex-row">
+                <div className="flex min-w-0 items-center gap-3">
+                  <FileText className="h-5 w-5 shrink-0 text-blue-600" />
+                  <div className="flex min-w-0 flex-col">
+                    <DialogTitle className="truncate text-sm font-semibold">
+                      ICS 213RR-CG · {previewResourceRequest.requestNumber}
+                    </DialogTitle>
+                    <span className="truncate text-[11px] text-muted-foreground">
+                      {previewResourceRequest.incidentName}
+                    </span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="h-8 gap-1 text-xs"
+                    onClick={() => exportResourceRequestWord(previewResourceRequest)}
+                  >
+                    <FileText className="h-3.5 w-3.5" />
+                    Export Word
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="h-8 gap-1 text-xs"
+                    onClick={() => exportResourceRequestPdf(previewResourceRequest)}
+                  >
+                    <DownloadIcon className="h-3.5 w-3.5" />
+                    Export PDF
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    className="h-8 w-8 p-0"
+                    aria-label="Close"
+                    onClick={() => setOpenResourceRequestPreviewId(null)}
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+              </DialogHeader>
+              <div className="relative min-h-0 flex-1 overflow-auto bg-muted/30">
+                <div className="mx-auto my-6 w-full max-w-3xl rounded-md border bg-background px-8 py-8 shadow-sm sm:px-12">
+                  <Ics213rrDocumentPreview request={previewResourceRequest} />
+                </div>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={openWordDocFileName !== null}
+        onOpenChange={(open) => {
+          if (!open) setOpenWordDocFileName(null)
+        }}
+      >
+        <DialogContent
+          className="!w-[1200px] !max-w-[95vw] h-[88vh] max-h-[88vh] gap-0 overflow-hidden p-0 sm:rounded-md"
+          showCloseButton={false}
+        >
+          {(() => {
+            const docFile = SITUATION_REPORT_DOCX_FILES.find(
+              (entry) => entry.name === openWordDocFileName
+            )
+            if (!docFile) return null
+            const blocks = getDocBlocks(docFile.name)
+            const edited = hasDocEdits(docFile.name)
+            return (
+              <div className="flex h-full min-h-0 w-full flex-col">
+                <DialogHeader className="flex-row items-center justify-between gap-3 border-b border-border bg-muted/40 px-4 py-3 sm:flex-row">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <FileText className="h-5 w-5 shrink-0 text-blue-600" />
+                    <div className="flex min-w-0 flex-col">
+                      <DialogTitle className="truncate text-sm font-semibold">
+                        {docFile.name}
+                        {edited && (
+                          <Badge
+                            variant="outline"
+                            className="ml-2 border-amber-300 bg-amber-50 px-1.5 py-0 align-middle text-[10px] text-amber-700 dark:border-amber-500/60 dark:bg-amber-500/10 dark:text-amber-200"
+                          >
+                            Edited
+                          </Badge>
+                        )}
+                      </DialogTitle>
+                      <span className="truncate text-[11px] text-muted-foreground">
+                        Editable .docx content · {blocks.length}{' '}
+                        {blocks.length === 1 ? 'block' : 'blocks'} · {docFile.collaborators.length}{' '}
+                        editor{docFile.collaborators.length === 1 ? '' : 's'}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div className="flex -space-x-2">
+                      {docFile.collaborators.map((collaborator) => (
+                        <span
+                          key={collaborator.name + collaborator.role}
+                          title={`${collaborator.role} ${collaborator.name}${collaborator.isYou ? ' (you)' : ''}`}
+                          className={cn(
+                            'flex h-7 w-7 items-center justify-center rounded-full border-2 border-background text-[10px] font-semibold text-white shadow-sm',
+                            collaborator.color
+                          )}
+                        >
+                          {collaborator.initials}
+                        </span>
+                      ))}
+                    </div>
+                    {edited && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="h-8 gap-1 text-xs"
+                        onClick={() => resetDocBlocks(docFile.name)}
+                      >
+                        Reset edits
+                      </Button>
+                    )}
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="h-8 gap-1 text-xs"
+                      onClick={() => {
+                        downloadDocx(docFile.name, getDocBlocks(docFile.name))
+                      }}
+                    >
+                      <FileText className="h-3.5 w-3.5" />
+                      Download
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      className="h-8 w-8 p-0"
+                      aria-label="Close"
+                      onClick={() => setOpenWordDocFileName(null)}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </DialogHeader>
+                <div className="relative min-h-0 flex-1 overflow-auto bg-muted/30">
+                  <div className="mx-auto my-6 w-full max-w-3xl space-y-1 rounded-md border bg-background px-12 py-10 shadow-sm">
+                    {blocks.length === 0 && (
+                      <p className="py-12 text-center text-sm text-muted-foreground">
+                        This document is empty. Add a block below to get started.
+                      </p>
+                    )}
+                    {blocks.map((block, index) => {
+                      const blockStyles =
+                        block.kind === 'title'
+                          ? 'text-2xl font-bold leading-tight text-foreground'
+                          : block.kind === 'subtitle'
+                            ? 'text-sm italic text-muted-foreground'
+                            : block.kind === 'heading'
+                              ? 'text-lg font-semibold text-[#1F4E79] dark:text-blue-300 pt-3'
+                              : block.kind === 'bullet'
+                                ? 'text-sm leading-relaxed text-foreground'
+                                : 'text-sm leading-relaxed text-foreground'
+                      const kindLabel =
+                        block.kind === 'title'
+                          ? 'Title'
+                          : block.kind === 'subtitle'
+                            ? 'Subtitle'
+                            : block.kind === 'heading'
+                              ? 'Heading'
+                              : block.kind === 'bullet'
+                                ? 'Bullet'
+                                : 'Paragraph'
+                      return (
+                        <div key={index} className="group relative">
+                          <div
+                            className={cn(
+                              'flex items-start gap-2 rounded-md px-2 py-1 transition-colors hover:bg-accent/30',
+                              block.kind === 'bullet' && 'pl-6'
+                            )}
+                          >
+                            {block.kind === 'bullet' && (
+                              <span
+                                aria-hidden
+                                className="mt-2 -ml-3 select-none text-foreground"
+                              >
+                                •
+                              </span>
+                            )}
+                            <Textarea
+                              value={block.text}
+                              onChange={(event) =>
+                                updateDocBlockText(docFile.name, index, event.target.value)
+                              }
+                              placeholder={
+                                block.kind === 'title'
+                                  ? 'Document title…'
+                                  : block.kind === 'subtitle'
+                                    ? 'Subtitle…'
+                                    : block.kind === 'heading'
+                                      ? 'Section heading…'
+                                      : block.kind === 'bullet'
+                                        ? 'Bullet point…'
+                                        : 'Paragraph text…'
+                              }
+                              rows={
+                                block.kind === 'paragraph'
+                                  ? Math.max(2, Math.ceil((block.text.length || 1) / 70))
+                                  : 1
+                              }
+                              className={cn(
+                                'min-h-0 resize-none border-0 bg-transparent px-1 py-1 shadow-none focus-visible:ring-1 focus-visible:ring-primary/40',
+                                blockStyles
+                              )}
+                              style={{ fieldSizing: 'content' } as unknown as CSSProperties}
+                            />
+                          </div>
+                          <div className="pointer-events-none absolute -left-2 top-1 flex -translate-x-full items-center gap-1 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100">
+                            <Badge
+                              variant="outline"
+                              className="border-transparent bg-muted px-1.5 py-0 text-[10px] font-mono"
+                            >
+                              {kindLabel}
+                            </Badge>
+                          </div>
+                          <div className="pointer-events-none absolute right-1 top-1 flex items-center gap-1 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100">
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button
+                                  type="button"
+                                  size="icon"
+                                  variant="ghost"
+                                  className="h-6 w-6"
+                                  aria-label="Insert block after this one"
+                                  title="Insert block after"
+                                >
+                                  <Plus className="h-3.5 w-3.5" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end" className="text-xs">
+                                <DropdownMenuLabel className="text-[10px] uppercase tracking-wide">
+                                  Insert below
+                                </DropdownMenuLabel>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem
+                                  onSelect={() =>
+                                    insertDocBlockAfter(docFile.name, index, 'heading')
+                                  }
+                                >
+                                  Heading
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onSelect={() =>
+                                    insertDocBlockAfter(docFile.name, index, 'paragraph')
+                                  }
+                                >
+                                  Paragraph
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onSelect={() =>
+                                    insertDocBlockAfter(docFile.name, index, 'bullet')
+                                  }
+                                >
+                                  Bullet
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onSelect={() =>
+                                    insertDocBlockAfter(docFile.name, index, 'subtitle')
+                                  }
+                                >
+                                  Subtitle
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                            <Button
+                              type="button"
+                              size="icon"
+                              variant="ghost"
+                              className="h-6 w-6 text-muted-foreground hover:text-red-600"
+                              aria-label={`Delete ${kindLabel.toLowerCase()} block`}
+                              title="Delete block"
+                              onClick={() => removeDocBlock(docFile.name, index)}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        </div>
+                      )
+                    })}
+                    <div className="flex items-center justify-center gap-2 pt-4">
+                      <span className="text-[11px] text-muted-foreground">Add block:</span>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="h-7 text-xs"
+                        onClick={() => appendDocBlock(docFile.name, 'heading')}
+                      >
+                        Heading
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="h-7 text-xs"
+                        onClick={() => appendDocBlock(docFile.name, 'paragraph')}
+                      >
+                        Paragraph
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="h-7 text-xs"
+                        onClick={() => appendDocBlock(docFile.name, 'bullet')}
+                      >
+                        Bullet
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between gap-2 border-t border-border bg-muted/40 px-4 py-2 text-[11px] text-muted-foreground">
+                  <span>
+                    Real-time co-authoring powered by Microsoft Office for the Web. Changes
+                    sync to OneDrive instantly.
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <Check className="h-3 w-3 text-emerald-600" />
+                    All changes saved
+                  </span>
+                </div>
+              </div>
+            )
+          })()}
+        </DialogContent>
+      </Dialog>
       <Dialog
         open={sitrepApprovalRequestConfirmation !== null}
         onOpenChange={(open) => {
@@ -11562,7 +24789,7 @@ function App() {
           }
         }}
       >
-        <DialogContent className="!w-[420px] !max-w-[90vw]">
+        <DialogContent className="!w-[560px] !max-w-[92vw]">
           {sitrepApprovalRequestConfirmation && (
             <div className="space-y-4">
               <div className="flex items-start gap-2">
@@ -11571,23 +24798,49 @@ function App() {
                   <div className="text-sm font-semibold">Approval requested</div>
                   <div className="text-xs text-muted-foreground">
                     Draft{' '}
-                    <span className="font-semibold">
+                    <span className="font-semibold text-foreground">
                       {sitrepApprovalRequestConfirmation.versionLabel}
                     </span>{' '}
                     by{' '}
-                    <span className="font-semibold">
+                    <span className="font-semibold text-foreground">
                       {sitrepApprovalRequestConfirmation.authorName}
                     </span>{' '}
-                    has been sent for review and signature to{' '}
-                    <span className="font-semibold text-foreground">
-                      {sitrepApprovalRequestConfirmation.recipients
-                        .map((recipient) => `${recipient.role} ${recipient.name}`)
-                        .join(', ')}
-                    </span>
-                    .
+                    has been submitted. Here's what happens next:
                   </div>
                 </div>
               </div>
+              {(() => {
+                const confirmationScope = SITREP_SCOPE_OPTIONS.find(
+                  (option) => option.id === selectedSitrepScopeId
+                )
+                const confirmationKindLabel =
+                  confirmationScope?.kind === 'incident' ? 'Incident' : 'AOR'
+                const confirmationScopeLabel =
+                  confirmationScope?.label ?? 'the selected scope'
+                return (
+                  <div className="space-y-2 rounded-md border border-sky-300 bg-sky-50/70 p-3 text-xs text-sky-900 dark:border-sky-500/60 dark:bg-sky-500/10 dark:text-sky-200">
+                    <div className="text-[11px] font-semibold uppercase tracking-wide">
+                      Review and approval
+                    </div>
+                    <p className="leading-snug">
+                      Every user with permission to review SITREPs for{' '}
+                      <span className="font-semibold">{confirmationKindLabel}</span>{' '}
+                      <span className="font-semibold">{confirmationScopeLabel}</span> has been
+                      notified.
+                    </p>
+                    <p className="text-[11px] leading-snug">
+                      Any of those reviewers can open this draft and either{' '}
+                      <span className="font-semibold">approve</span> or{' '}
+                      <span className="font-semibold">reject</span> it — no fixed sequence or
+                      hand-off is required.
+                    </p>
+                  </div>
+                )
+              })()}
+              <p className="text-[10px] leading-snug text-muted-foreground">
+                You'll be notified as each reviewer takes action. Track progress under the{' '}
+                <span className="font-medium text-foreground">Drafts</span> tab.
+              </p>
               <div className="flex items-center justify-end">
                 <Button
                   type="button"
@@ -11597,106 +24850,6 @@ function App() {
                 >
                   OK
                 </Button>
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
-      <Dialog
-        open={sitrepSectionConflict !== null}
-        onOpenChange={(open) => {
-          if (!open && sitrepSectionConflict) {
-            cancelSitrepSectionEdit(sitrepSectionConflict.section)
-            setSitrepSectionConflict(null)
-          }
-        }}
-      >
-        <DialogContent className="!w-[60vw] !max-w-[60vw] sm:!max-w-[60vw]">
-          {sitrepSectionConflict && (
-            <div className="space-y-4">
-              <div className="flex items-start gap-2">
-                <AlertTriangle className="mt-0.5 h-5 w-5 text-amber-500" />
-                <div className="space-y-1">
-                  <div className="text-sm font-semibold">
-                    This section was edited by another user
-                  </div>
-                  <div className="text-xs text-muted-foreground">
-                    <span
-                      className="mr-1 inline-block rounded px-1.5 py-0.5 text-[10px] font-semibold text-white"
-                      style={{ backgroundColor: sitrepSectionConflict.remoteColor }}
-                    >
-                      {sitrepSectionConflict.remoteAuthorRole}{' '}
-                      {sitrepSectionConflict.remoteAuthor}
-                    </span>
-                    saved changes to {sitrepSectionConflict.sectionLabel} since you started
-                    editing. Review both versions below and choose whether to override with your
-                    edits or keep their content.
-                  </div>
-                </div>
-              </div>
-              <div className="grid gap-3 md:grid-cols-2">
-                <div className="space-y-2">
-                  <div className="flex items-center gap-1 text-xs font-semibold">
-                    <span
-                      className="inline-block h-2 w-2 rounded-full"
-                      style={{ backgroundColor: sitrepSectionConflict.remoteColor }}
-                    />
-                    <span>
-                      Current content (from {sitrepSectionConflict.remoteAuthorRole}{' '}
-                      {sitrepSectionConflict.remoteAuthor}) at{' '}
-                      {new Date(sitrepSectionConflict.remoteAt).toLocaleTimeString([], {
-                        hour: '2-digit',
-                        minute: '2-digit',
-                        second: '2-digit',
-                      })}
-                    </span>
-                  </div>
-                  <div className="max-h-64 overflow-y-auto whitespace-pre-wrap rounded-md border bg-muted/30 px-3 py-2 text-xs">
-                    {sitrepSectionConflict.currentContent || '(empty)'}
-                  </div>
-                  <div className="flex items-center justify-start">
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      className="h-8 text-xs"
-                      onClick={() => {
-                        cancelSitrepSectionEdit(sitrepSectionConflict.section)
-                        setSitrepSectionConflict(null)
-                      }}
-                    >
-                      Keep current content
-                    </Button>
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between text-xs font-semibold">
-                    <span className="flex items-center gap-1">
-                      <span className="inline-block h-2 w-2 rounded-full bg-emerald-500" />
-                      Your edits
-                    </span>
-                  </div>
-                  <div className="max-h-64 overflow-y-auto whitespace-pre-wrap rounded-md border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs dark:border-emerald-500/50 dark:bg-emerald-500/10">
-                    {sitrepSectionConflict.yourDraft || '(empty)'}
-                  </div>
-                  <div className="flex items-center justify-start">
-                    <Button
-                      type="button"
-                      size="sm"
-                      className="h-8 text-xs"
-                      onClick={() => {
-                        const conflict = sitrepSectionConflict
-                        if (!conflict) return
-                        const primaryField = SITREP_SECTION_PRIMARY[conflict.section].field
-                        updateSitrepField(primaryField, conflict.yourDraft)
-                        cancelSitrepSectionEdit(conflict.section)
-                        setSitrepSectionConflict(null)
-                      }}
-                    >
-                      Override with my edits
-                    </Button>
-                  </div>
-                </div>
               </div>
             </div>
           )}
@@ -12309,6 +25462,1829 @@ function App() {
               Sign
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={sitrepCitationDoc !== null}
+        onOpenChange={(open) => {
+          if (!open) setSitrepCitationDoc(null)
+        }}
+      >
+        <DialogContent className="w-[92vw] sm:max-w-[1344px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <span className="rounded bg-primary/10 px-1.5 py-0.5 font-mono text-xs font-semibold text-primary">
+                {sitrepCitationDoc?.marker}
+              </span>
+              <span>{sitrepCitationDoc?.label ?? 'Source'}</span>
+            </DialogTitle>
+            <DialogDescription>
+              {sitrepCitationDoc?.label === 'Incident Data — Cape Cod Coastal Storm Response'
+                ? 'ICS-214 Unit Log (Activity Log) for Cape Cod Coastal Storm Response, with the log entries that back this citation.'
+                : sitrepCitationDoc?.label?.startsWith('Uploaded Doc')
+                  ? 'Preview of the cited document from the Pratus library, rendered with the passage that backs this citation.'
+                  : 'Operational record drawn from the live incident data store, with the entries that back this citation.'}
+            </DialogDescription>
+          </DialogHeader>
+          {sitrepCitationDoc &&
+            (() => {
+              const label = sitrepCitationDoc.label
+              const isDoc = label.startsWith('Uploaded Doc')
+              const sourceName = label.replace(/^Uploaded Doc — |^Incident Data — /, '')
+              type DocMeta = {
+                file: string
+                kind: string
+                size: string
+                pages: string
+                version: string
+                owner: string
+                modified: string
+                classification: string
+              }
+              type IncidentMeta = {
+                incidentId: string
+                type: string
+                location: string
+                operationalPeriod: string
+                status: string
+                lead: string
+                started: string
+                lastUpdate: string
+              }
+              const docMeta: Record<string, DocMeta> = {
+                'SITREP_Template_v3.docx': {
+                  file: 'SITREP_Template_v3.docx',
+                  kind: 'Microsoft Word (.docx)',
+                  size: '184 KB',
+                  pages: '6 pages',
+                  version: 'v3.2 (approved)',
+                  owner: 'Planning Section Chief — A. Reyes',
+                  modified: '2026-04-22 14:08 UTC',
+                  classification: 'Internal — Partner Releasable',
+                },
+                'OPS_Plan_2026.pdf': {
+                  file: 'OPS_Plan_2026.pdf',
+                  kind: 'PDF / 1.7',
+                  size: '4.8 MB',
+                  pages: '42 pages',
+                  version: 'Final — Signed',
+                  owner: 'Operations Section Chief — J. Calderón',
+                  modified: '2026-03-31 21:14 UTC',
+                  classification: 'For Official Use Only',
+                },
+                'Comms_Matrix_OP4.xlsx': {
+                  file: 'Comms_Matrix_OP4.xlsx',
+                  kind: 'Microsoft Excel (.xlsx)',
+                  size: '72 KB',
+                  pages: '1 sheet · 28 rows',
+                  version: 'OP4 — Draft 2',
+                  owner: 'Communications Unit Leader — D. Okafor',
+                  modified: '2026-04-25 11:46 UTC',
+                  classification: 'Internal — Partner Releasable',
+                },
+                'NorthLevee_Geotech_Report.pdf': {
+                  file: 'NorthLevee_Geotech_Report.pdf',
+                  kind: 'PDF / 1.6',
+                  size: '11.3 MB',
+                  pages: '58 pages',
+                  version: 'Issued for Review',
+                  owner: 'USACE District Geotech — K. Larsen, P.E.',
+                  modified: '2026-04-24 19:02 UTC',
+                  classification: 'Sensitive — Critical Infrastructure',
+                },
+                'Shelter_Occupancy_Tracker.csv': {
+                  file: 'Shelter_Occupancy_Tracker.csv',
+                  kind: 'CSV (UTF-8)',
+                  size: '46 KB',
+                  pages: '612 rows · refresh 5 min',
+                  version: 'Live feed',
+                  owner: 'Mass Care Branch — H. Nguyen (ARC)',
+                  modified: '2026-04-25 17:55 UTC',
+                  classification: 'Internal — Partner Releasable',
+                },
+                'MassDOT_REG1_Readiness_Snapshot.csv': {
+                  file: 'MassDOT_REG1_Readiness_Snapshot.csv',
+                  kind: 'CSV (UTF-8)',
+                  size: '28 KB',
+                  pages: '142 rows · daily refresh',
+                  version: '2026-05-09 snapshot',
+                  owner: 'MassDOT Highway Division — Regional Operations Center',
+                  modified: '2026-05-09 07:00 EDT',
+                  classification: 'Internal — FEMA Region 1 Partner Releasable',
+                },
+                'Mass511_Transport_Alerts_2026-05-09.csv': {
+                  file: 'Mass511_Transport_Alerts_2026-05-09.csv',
+                  kind: 'CSV (UTF-8)',
+                  size: '64 KB',
+                  pages: '318 active alerts · 15 min refresh',
+                  version: 'Export — 2026-05-09 08:00 EDT',
+                  owner: 'Mass511 Operations · MassDOT Traffic Management Center',
+                  modified: '2026-05-09 08:00 EDT',
+                  classification: 'Public — Traveler Information',
+                },
+              }
+              const incidentMeta: Record<string, IncidentMeta> = {
+                'FIFA World Cup Security Operations — Boston': {
+                  incidentId: 'INC-2026-0118',
+                  type: 'Planned Event / Special Security',
+                  location: 'Boston Metro · Gillette Stadium · Fan Zones',
+                  operationalPeriod: 'OP 4 (2026-04-25 06:00 – 2026-04-26 06:00 EDT)',
+                  status: 'Active — Threat Level Elevated',
+                  lead: 'Joint Operations Center, MA State Police / FBI Boston',
+                  started: '2026-04-18 08:00 EDT',
+                  lastUpdate: '2026-04-25 17:48 EDT',
+                },
+                'Hurricane Laelia Response — Gulf Coast': {
+                  incidentId: 'INC-2026-0094',
+                  type: 'Tropical Cyclone — Category 3 at landfall',
+                  location: 'AL / MS / LA coastline · Mobile, Biloxi, New Orleans',
+                  operationalPeriod: 'OP 4 (2026-04-25 06:00 – 2026-04-26 06:00 CDT)',
+                  status: 'Active — Response / Early Recovery',
+                  lead: 'FEMA Region IV IMAT-East · State EOCs (AL/MS/LA)',
+                  started: '2026-04-19 14:00 CDT (pre-landfall activation)',
+                  lastUpdate: '2026-04-25 17:32 CDT',
+                },
+                'Cape Cod Coastal Storm Response': {
+                  incidentId: 'INC-2026-0112',
+                  type: 'Nor’easter — Coastal Flood / High Wind',
+                  location: 'Barnstable County, MA · Outer Cape',
+                  operationalPeriod: 'OP 2 (2026-04-25 06:00 – 2026-04-26 06:00 EDT)',
+                  status: 'Active — Sustained Response',
+                  lead: 'MEMA Region 2 · Barnstable County REPC',
+                  started: '2026-04-23 22:00 EDT',
+                  lastUpdate: '2026-04-25 17:51 EDT',
+                },
+                'Boston Metro Water Main Break — I-93 Corridor': {
+                  incidentId: 'INC-2026-0105',
+                  type: 'Infrastructure / Surface Transport',
+                  location: 'Boston Metro · South Station · I-93 northbound corridor',
+                  operationalPeriod: 'OP 1 (2026-05-09 00:00 – 2026-05-10 00:00 EDT)',
+                  status: 'Active — Lane Reductions',
+                  lead: 'Boston OEM · MWRA On-Scene · MassDOT Highway Division IRT',
+                  started: '2026-05-09 02:40 EDT',
+                  lastUpdate: '2026-05-09 08:12 EDT',
+                },
+                'Connecticut River Ice Jam Watch': {
+                  incidentId: 'INC-2026-0103',
+                  type: 'Riverine Flood / Ice Jam',
+                  location: 'Hartford County, CT · Connecticut River upstream of Hartford',
+                  operationalPeriod: 'OP 1 (2026-05-07 18:00 – 2026-05-10 18:00 EDT)',
+                  status: 'Monitoring — No Evacuations',
+                  lead: 'Connecticut DEM · NWS WFO Hartford · CT DOT District 1',
+                  started: '2026-05-07 18:00 EDT',
+                  lastUpdate: '2026-05-09 07:45 EDT',
+                },
+                'Tanker MV Overture Casualty — Port of Houston': {
+                  incidentId: 'INC-2026-0121',
+                  type: 'Marine Casualty / HAZMAT — Vessel Allision',
+                  location: 'Houston Ship Channel · Bayport Terminal',
+                  operationalPeriod: 'OP 1 (2026-04-25 12:00 – 2026-04-26 12:00 CDT)',
+                  status: 'Active — Unified Command Stood Up',
+                  lead: 'USCG Sector Houston-Galveston · Texas GLO · Responsible Party',
+                  started: '2026-04-25 09:24 CDT',
+                  lastUpdate: '2026-04-25 17:39 CDT',
+                },
+                'San Francisco Mass Casualty Exercise': {
+                  incidentId: 'EX-2026-0007',
+                  type: 'Full-Scale Exercise — Mass Casualty / Transit',
+                  location: 'San Francisco · Embarcadero Station · Pier 27',
+                  operationalPeriod: 'Exercise Day 2 (2026-04-25 07:00 – 19:00 PDT)',
+                  status: 'In Progress — Controlled Exercise',
+                  lead: 'SF DEM · SFFD · SFPD · Bay Area UASI',
+                  started: '2026-04-24 07:00 PDT',
+                  lastUpdate: '2026-04-25 17:44 PDT',
+                },
+              }
+              const renderDocBody = () => {
+                if (sourceName === 'Comms_Matrix_OP4.xlsx') {
+                  const rows: { role: string; primary: string; secondary: string; freq: string; channel: string }[] = [
+                    { role: 'Incident Commander', primary: 'Cell — 504-555-0142', secondary: 'Sat — Iridium 8816-7740-2210', freq: 'VHF 154.265 (TAC-1)', channel: 'Pratus #cmd-bridge' },
+                    { role: 'Operations Section Chief', primary: 'Cell — 504-555-0167', secondary: 'P25 Talkgroup 4811', freq: 'UHF 453.775 (OPS-2)', channel: 'Pratus #ops' },
+                    { role: 'Planning Section Chief', primary: 'Cell — 504-555-0184', secondary: 'Desk — JFO x4302', freq: 'UHF 453.825 (PLAN)', channel: 'Pratus #plans' },
+                    { role: 'Logistics Section Chief', primary: 'Cell — 504-555-0199', secondary: 'P25 Talkgroup 4812', freq: 'UHF 453.875 (LOG)', channel: 'Pratus #log' },
+                    { role: 'Air Ops Branch', primary: 'Sat — Iridium 8816-7740-2244', secondary: 'Tower 121.9', freq: 'AM 122.925 (AIR-1)', channel: 'Pratus #air-ops' },
+                    { role: 'Liaison — State EOC', primary: 'Cell — 225-555-0301', secondary: 'WebEOC chat', freq: 'VHF 155.340 (MED-9)', channel: 'Pratus #state-lno' },
+                  ]
+                  return (
+                    <div className="space-y-3">
+                      <div className="rounded-md border bg-background">
+                        <div className="grid grid-cols-12 border-b bg-muted/50 px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                          <div className="col-span-3">Role</div>
+                          <div className="col-span-3">Primary</div>
+                          <div className="col-span-3">Secondary</div>
+                          <div className="col-span-2">RF Freq / Talkgroup</div>
+                          <div className="col-span-1">Chat</div>
+                        </div>
+                        {rows.map((row, idx) => (
+                          <div
+                            key={row.role}
+                            className={cn(
+                              'grid grid-cols-12 px-3 py-1.5 text-[11px]',
+                              idx % 2 === 1 && 'bg-muted/20'
+                            )}
+                          >
+                            <div className="col-span-3 font-medium">{row.role}</div>
+                            <div className="col-span-3 font-mono text-[10px]">{row.primary}</div>
+                            <div className="col-span-3 font-mono text-[10px]">{row.secondary}</div>
+                            <div className="col-span-2 font-mono text-[10px]">{row.freq}</div>
+                            <div className="col-span-1 font-mono text-[10px]">{row.channel}</div>
+                          </div>
+                        ))}
+                      </div>
+                      <p className="text-[11px] text-muted-foreground">
+                        Sheet excerpt — OP4 Comms Matrix (rows 1–6 of 28). Color-coded rows in the
+                        workbook indicate degraded paths; talkgroup 4811 is currently flagged amber
+                        pending coverage validation at the JFO repeater site.
+                      </p>
+                      <div className="rounded-md border border-amber-300/60 bg-amber-50 p-2 text-[11px] text-amber-900">
+                        <span className="font-semibold">Cited row:</span> Talkgroup 4811 (Ops
+                        Section Chief secondary) — degraded path noted in the most recent SITREP
+                        comms section.
+                      </div>
+                    </div>
+                  )
+                }
+                if (sourceName === 'OPS_Plan_2026.pdf') {
+                  return (
+                    <div className="space-y-3 text-[11px] leading-relaxed">
+                      <p className="font-semibold">Section 3 — Operational Objectives (excerpt)</p>
+                      <ol className="ml-4 list-decimal space-y-1">
+                        <li>Preserve life safety and stabilize the incident within the current operational period.</li>
+                        <li>Maintain continuity of critical transportation, power, and communications lifelines.</li>
+                        <li>Coordinate unified messaging with state, local, tribal, and private-sector partners.</li>
+                        <li>Position resources to support a 72-hour sustained response without external reachback.</li>
+                      </ol>
+                      <p className="font-semibold pt-1">Section 5 — Resource Allocation Limits</p>
+                      <p>
+                        Ground transportation strike teams are capped at 12 per branch; aviation
+                        assets require IC approval above two airframes per AOR. Mutual-aid requests
+                        outside the regional compact route through the SCO before commitment.
+                      </p>
+                      <div className="rounded-md border border-primary/30 bg-primary/5 p-2">
+                        <span className="font-semibold">Cited passage:</span> §5.2 — “Aviation
+                        commitments above two airframes per AOR require IC concurrence and a logged
+                        ICS-220 entry within the current operational period.”
+                      </div>
+                    </div>
+                  )
+                }
+                if (sourceName === 'NorthLevee_Geotech_Report.pdf') {
+                  return (
+                    <div className="space-y-3 text-[11px] leading-relaxed">
+                      <p className="font-semibold">Executive Summary (excerpt)</p>
+                      <p>
+                        Inspection of the North Levee reach between stations 142+00 and 168+00
+                        identified three active seepage points along the landside toe. Piezometer
+                        readings at PZ-14 trended upward 0.42 ft over the prior 24 hours and now
+                        sit 1.1 ft above the action threshold.
+                      </p>
+                      <div className="rounded-md border bg-background">
+                        <div className="grid grid-cols-12 border-b bg-muted/50 px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                          <div className="col-span-3">Station</div>
+                          <div className="col-span-3">Observation</div>
+                          <div className="col-span-3">Piezometer Δ24h</div>
+                          <div className="col-span-3">Action</div>
+                        </div>
+                        {[
+                          { s: 'STA 148+50', o: 'Clear seepage, no soil transport', d: '+0.18 ft', a: 'Monitor q-4h' },
+                          { s: 'STA 156+10', o: 'Sand boil, ~2 in diameter', d: '+0.42 ft', a: 'Ring levee deployed' },
+                          { s: 'STA 163+75', o: 'Cracking on landside crown', d: '+0.09 ft', a: 'Survey re-shoot at sunset' },
+                        ].map((row, idx) => (
+                          <div
+                            key={row.s}
+                            className={cn(
+                              'grid grid-cols-12 px-3 py-1.5 text-[11px]',
+                              idx % 2 === 1 && 'bg-muted/20'
+                            )}
+                          >
+                            <div className="col-span-3 font-mono">{row.s}</div>
+                            <div className="col-span-3">{row.o}</div>
+                            <div className="col-span-3 font-mono">{row.d}</div>
+                            <div className="col-span-3">{row.a}</div>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="rounded-md border border-red-300/60 bg-red-50 p-2 text-[11px] text-red-900">
+                        <span className="font-semibold">Cited finding:</span> STA 156+10 sand boil
+                        — ring levee deployed, monitoring at q-1h intervals; recommend evacuation
+                        re-validation for the polder below if Δ24h exceeds 0.6 ft.
+                      </div>
+                    </div>
+                  )
+                }
+                if (sourceName === 'Shelter_Occupancy_Tracker.csv') {
+                  const rows: { id: string; name: string; cap: number; occ: number; status: string }[] = [
+                    { id: 'SH-014', name: 'Magnolia HS Gym — Mobile, AL', cap: 420, occ: 318, status: 'Open' },
+                    { id: 'SH-022', name: 'Gulfport Convention Ctr — MS', cap: 1200, occ: 1054, status: 'Open — near capacity' },
+                    { id: 'SH-031', name: 'Slidell Civic Auditorium — LA', cap: 600, occ: 412, status: 'Open' },
+                    { id: 'SH-047', name: 'Houma Multipurpose Bldg — LA', cap: 350, occ: 0, status: 'Standby (staffed)' },
+                    { id: 'SH-058', name: 'Baton Rouge River Ctr — LA', cap: 1800, occ: 706, status: 'Open' },
+                  ]
+                  return (
+                    <div className="space-y-3">
+                      <pre className="overflow-x-auto rounded-md border bg-muted/40 p-3 text-[10px] leading-snug">
+{'shelter_id,name,capacity,occupancy,pct,status,last_seen\n' +
+  rows
+    .map(
+      (r) =>
+        `${r.id},${r.name},${r.cap},${r.occ},${Math.round((r.occ / r.cap) * 100)}%,${r.status},2026-04-25T17:55Z`
+    )
+    .join('\n')}
+                      </pre>
+                      <p className="text-[11px] text-muted-foreground">
+                        Live feed sample (rows 14, 22, 31, 47, 58 of 612). Tracker refreshes every
+                        5 minutes from ARC NSS; values above 85% utilization auto-flag in the Mass
+                        Care branch dashboard.
+                      </p>
+                      <div className="rounded-md border border-amber-300/60 bg-amber-50 p-2 text-[11px] text-amber-900">
+                        <span className="font-semibold">Cited row:</span> SH-022 Gulfport
+                        Convention Center — 1,054 / 1,200 (87.8%) — overflow plan to SH-058 staged
+                        and ready for tasking.
+                      </div>
+                    </div>
+                  )
+                }
+                if (sourceName === 'MassDOT_REG1_Readiness_Snapshot.csv') {
+                  const rows: { district: string; crews: string; mcPct: string; staging: string }[] = [
+                    { district: 'District 4 (Boston Metro)', crews: '42 / 48', mcPct: '88%', staging: 'South Station IRT, I-93 NB' },
+                    { district: 'District 5 (Southeast/Cape)', crews: '36 / 42', mcPct: '86%', staging: 'Route 6A MP 84, Barnstable' },
+                    { district: 'District 3 (Central MA)', crews: '28 / 32', mcPct: '91%', staging: 'I-90 interchange reserves' },
+                    { district: 'District 2 (Western MA)', crews: '24 / 28', mcPct: '89%', staging: 'I-91 Hartford corridor liaison' },
+                  ]
+                  return (
+                    <div className="space-y-3">
+                      <pre className="overflow-x-auto rounded-md border bg-muted/40 p-3 text-[10px] leading-snug">
+{'district,crews_available,mission_capable_pct,staging_notes,as_of\n' +
+  rows
+    .map(
+      (r) =>
+        `${r.district},${r.crews},${r.mcPct},"${r.staging}",2026-05-09T07:00Z`
+    )
+    .join('\n')}
+                      </pre>
+                      <p className="text-[11px] text-muted-foreground">
+                        Daily organizational readiness export from MassDOT Highway Division Regional
+                        Operations Center. Mission-capable percentage reflects crew availability,
+                        equipment status, and fuel reserves for maintenance and IRT assets.
+                      </p>
+                      <div className="rounded-md border border-primary/30 bg-primary/5 p-2 text-[11px]">
+                        <span className="font-semibold">Cited aggregate:</span> Region-wide
+                        maintenance availability 87% mission-capable; Districts 4 and 5 staging
+                        additional Highway Division crews for I-93 water main response and Cape Cod
+                        coastal operations.
+                      </div>
+                    </div>
+                  )
+                }
+                if (sourceName === 'Mass511_Transport_Alerts_2026-05-09.csv') {
+                  const rows: { id: string; route: string; alert: string; status: string }[] = [
+                    { id: 'MA-88421', route: 'I-93 NB @ South Station', alert: 'Lane reduction — water main break', status: 'Active' },
+                    { id: 'MA-88418', route: 'I-90 WB detour', alert: 'Diversion for I-93 NB closure', status: 'Active' },
+                    { id: 'MA-88392', route: 'Route 6A MP 72–84', alert: 'Periodic lane closure — debris/coastal flood', status: 'Active' },
+                    { id: 'MA-88387', route: 'Route 17 Hartford CT', alert: 'Barricades staged — ice jam monitoring', status: 'Advisory' },
+                  ]
+                  return (
+                    <div className="space-y-3">
+                      <pre className="overflow-x-auto rounded-md border bg-muted/40 p-3 text-[10px] leading-snug">
+{'alert_id,route,description,status,updated\n' +
+  rows
+    .map((r) => `${r.id},${r.route},"${r.alert}",${r.status},2026-05-09T08:00Z`)
+    .join('\n')}
+                      </pre>
+                      <p className="text-[11px] text-muted-foreground">
+                        Mass511 traveler alert export covering active and advisory conditions across
+                        FEMA Region 1 partner states. Refreshes every 15 minutes from MassDOT Traffic
+                        Management Center and CT DOT 511 feeds.
+                      </p>
+                      <div className="rounded-md border border-primary/30 bg-primary/5 p-2 text-[11px]">
+                        <span className="font-semibold">Cited alerts:</span> I-93 NB lane reduction
+                        with I-90 westbound detour active; Route 6A periodic closures; CT Route 17
+                        barricades pre-positioned for ice jam monitoring.
+                      </div>
+                    </div>
+                  )
+                }
+                return (
+                  <div className="space-y-3 text-[11px] leading-relaxed">
+                    <p className="font-semibold">Section 2 — Reporting Cadence (excerpt)</p>
+                    <p>
+                      The Situation Report is published at the start of each operational period
+                      and refreshed mid-period when significant events occur. Sections marked
+                      “Critical Information Requirements (CIR)” must be completed in full; “if
+                      none” entries are acceptable for all other sections.
+                    </p>
+                    <p className="font-semibold pt-1">Section 4 — Section Formatting</p>
+                    <ul className="ml-4 list-disc space-y-1">
+                      <li>Use the Executive Summary to convey commander’s intent in ≤120 words.</li>
+                      <li>Readiness sections must address personnel, equipment, logistics, and comms.</li>
+                      <li>Cite source documents and incident data inline using bracketed numerals.</li>
+                    </ul>
+                    <div className="rounded-md border border-primary/30 bg-primary/5 p-2">
+                      <span className="font-semibold">Cited passage:</span> §4.3 — “Authors should
+                      attribute every assertion of fact to either an uploaded source document or a
+                      live incident data record. Citations appear inline as
+                      <span className="font-mono"> [1]</span>, with full sources listed under
+                      ‘References’ at the end of each section.”
+                    </div>
+                  </div>
+                )
+              }
+              const renderIncidentBody = () => {
+                if (sourceName === 'Hurricane Laelia Response — Gulf Coast') {
+                  return (
+                    <div className="space-y-3 text-[11px] leading-relaxed">
+                      <p className="font-semibold">Operational period 4 — situation</p>
+                      <p>
+                        Laelia made landfall as a Category 3 storm near Pascagoula at 03:14 CDT on
+                        2026-04-21 and has since weakened to a post-tropical low over central
+                        Mississippi. Coastal surge of 9.6 ft observed at Bay St. Louis. Power
+                        outage peak of 612,000 customers has fallen to 274,000 across the three
+                        impacted states.
+                      </p>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="rounded-md border bg-background p-3">
+                          <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Assigned resources (OP4)</p>
+                          <ul className="mt-1 space-y-0.5">
+                            <li>14 USAR strike teams (TX-TF1, FL-TF2, VA-TF1)</li>
+                            <li>22 swift-water rescue teams</li>
+                            <li>6 mobile communications platforms</li>
+                            <li>3 mobile emergency response support (MERS) units</li>
+                          </ul>
+                        </div>
+                        <div className="rounded-md border bg-background p-3">
+                          <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Last 6 hours — key entries</p>
+                          <ul className="mt-1 space-y-0.5">
+                            <li>17:32 — Shelter SH-022 at 87.8% utilization</li>
+                            <li>16:55 — North Levee STA 156+10 sand boil ring-leveed</li>
+                            <li>15:40 — US-90 reopened single-lane Pascagoula to Mobile</li>
+                            <li>14:08 — Power restored to Gulfport substation #3</li>
+                          </ul>
+                        </div>
+                      </div>
+                      <div className="rounded-md border border-red-300/60 bg-red-50 p-2 text-red-900">
+                        <span className="font-semibold">Cited entry:</span> 17:32 — Mass Care
+                        branch logged Gulfport Convention Center at 1,054 / 1,200 occupancy;
+                        overflow tasking issued to SH-058 (Baton Rouge River Center).
+                      </div>
+                    </div>
+                  )
+                }
+                if (sourceName === 'FIFA World Cup Security Operations — Boston') {
+                  return (
+                    <div className="space-y-3 text-[11px] leading-relaxed">
+                      <p className="font-semibold">JOC daily brief — OP4 highlights</p>
+                      <p>
+                        Match-day footprint covers Gillette Stadium, two transit hubs, and four
+                        designated fan zones across metro Boston. Threat assessment remains
+                        elevated based on overseas reporting; no specific credible threat to the
+                        venue has been identified in the past 24 hours.
+                      </p>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="rounded-md border bg-background p-3">
+                          <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Personnel posted (OP4)</p>
+                          <ul className="mt-1 space-y-0.5">
+                            <li>MSP — 412 troopers across venue and corridors</li>
+                            <li>Boston PD — 268 officers in Fan Zone South</li>
+                            <li>FBI Boston — 26 SSA / TFO supporting JOC</li>
+                            <li>TSA VIPR — 4 teams at North Station / South Station</li>
+                          </ul>
+                        </div>
+                        <div className="rounded-md border bg-background p-3">
+                          <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Last 6 hours — key entries</p>
+                          <ul className="mt-1 space-y-0.5">
+                            <li>17:48 — Fan Zone South — crowd density at 78% capacity</li>
+                            <li>16:30 — Suspicious package at Gate B cleared (EOD)</li>
+                            <li>15:12 — Drone detection alert — recovered, operator interviewed</li>
+                            <li>13:00 — Shift change completed, no posts unfilled</li>
+                          </ul>
+                        </div>
+                      </div>
+                      <div className="rounded-md border border-primary/30 bg-primary/5 p-2">
+                        <span className="font-semibold">Cited entry:</span> 16:30 — Gate B
+                        suspicious package, declared safe at 16:52, after EOD render-safe and
+                        canine sweep. No impact to ingress.
+                      </div>
+                    </div>
+                  )
+                }
+                if (sourceName === 'Cape Cod Coastal Storm Response') {
+                  const log = CAPE_COD_ICS214_ACTIVITY_LOG
+                  const citedEntry = log.entries[log.citedEntryIndex]
+                  return (
+                    <div className="space-y-4 text-[11px] leading-relaxed">
+                      <div className="rounded-md border bg-muted/30 px-3 py-2.5">
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                          ICS-214 Unit Log — Activity Log
+                        </p>
+                        <dl className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                          <div>
+                            <dt className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                              1. Incident Name
+                            </dt>
+                            <dd className="font-medium">{log.incidentName}</dd>
+                          </div>
+                          <div>
+                            <dt className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                              2. Unit Name
+                            </dt>
+                            <dd className="font-medium">{log.unitName}</dd>
+                          </div>
+                          <div>
+                            <dt className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                              3. Operational Period
+                            </dt>
+                            <dd>{log.operationalPeriod}</dd>
+                          </div>
+                          <div>
+                            <dt className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                              4. Date of Activity
+                            </dt>
+                            <dd className="font-mono">{log.dateOfActivity}</dd>
+                          </div>
+                          <div className="sm:col-span-2">
+                            <dt className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                              5. Prepared By
+                            </dt>
+                            <dd>{log.preparedBy}</dd>
+                          </div>
+                        </dl>
+                      </div>
+                      <div className="rounded-md border bg-background">
+                        <div className="border-b bg-muted/50 px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                          6. Activity Log
+                        </div>
+                        <div className="grid grid-cols-12 border-b bg-muted/40 px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                          <div className="col-span-3">Date/Time</div>
+                          <div className="col-span-6">Notable Activities</div>
+                          <div className="col-span-3">Personnel / Equipment</div>
+                        </div>
+                        {log.entries.map((entry, idx) => (
+                          <div
+                            key={entry.dateTime}
+                            className={cn(
+                              'grid grid-cols-12 px-3 py-2 text-[11px]',
+                              idx % 2 === 1 && 'bg-muted/20',
+                              idx === log.citedEntryIndex && 'bg-primary/5 ring-1 ring-inset ring-primary/20'
+                            )}
+                          >
+                            <div className="col-span-3 font-mono text-[10px]">{entry.dateTime}</div>
+                            <div className="col-span-6">{entry.activities}</div>
+                            <div className="col-span-3 text-muted-foreground">
+                              {entry.personnelEquipment}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      {citedEntry && (
+                        <div className="rounded-md border border-primary/30 bg-primary/5 p-2">
+                          <span className="font-semibold">Cited entry:</span> {citedEntry.dateTime} —{' '}
+                          {citedEntry.activities}
+                        </div>
+                      )}
+                    </div>
+                  )
+                }
+                if (sourceName === 'Boston Metro Water Main Break — I-93 Corridor') {
+                  return (
+                    <div className="space-y-3 text-[11px] leading-relaxed">
+                      <p className="font-semibold">Boston OEM / MWRA — I-93 corridor update</p>
+                      <p>
+                        48-inch water main rupture near South Station interchange at 02:40 EDT.
+                        I-93 northbound reduced to two lanes; Mass511 detour via I-90 westbound
+                        active. MWRA repair crew on-scene with estimated 6-hour restoration window;
+                        MassDOT Highway Division IRT supporting traffic control.
+                      </p>
+                      <div className="rounded-md border bg-background p-3">
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Last 6 hours — key entries</p>
+                        <ul className="mt-1 space-y-0.5">
+                          <li>08:12 — MWRA estimates 6-hour restoration; Boston DPW supporting excavation</li>
+                          <li>07:30 — MassDOT IRT deployed additional signage at I-93/I-90 interchange</li>
+                          <li>05:10 — Mass511 alert MA-88421 published for I-93 NB lane reduction</li>
+                          <li>02:40 — Incident workspace opened; Boston Fire-Rescue on-scene</li>
+                        </ul>
+                      </div>
+                      <div className="rounded-md border border-amber-300/60 bg-amber-50 p-2 text-amber-900">
+                        <span className="font-semibold">Cited entry:</span> 08:12 — I-93 northbound
+                        two-lane operation with I-90 westbound detour; MassDOT Highway Division IRT
+                        and Boston DPW coordinating restoration timeline.
+                      </div>
+                    </div>
+                  )
+                }
+                if (sourceName === 'Connecticut River Ice Jam Watch') {
+                  return (
+                    <div className="space-y-3 text-[11px] leading-relaxed">
+                      <p className="font-semibold">Connecticut DEM / CT DOT — ice jam monitoring</p>
+                      <p>
+                        Ice jam forming upstream of Hartford with minor flooding in low-lying areas
+                        along Route 17. CT DOT pre-positioned barricades; no evacuations ordered.
+                        NWS WFO Hartford monitoring for breakup over next 24 hours.
+                      </p>
+                      <div className="rounded-md border bg-background p-3">
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Last 6 hours — key entries</p>
+                        <ul className="mt-1 space-y-0.5">
+                          <li>07:45 — CT DOT maintenance crews staged barricades along Route 17</li>
+                          <li>06:20 — Hartford OEM monitoring cell activated; no evacuations ordered</li>
+                          <li>05:00 — NWS WFO Hartford issues ice jam breakup watch</li>
+                          <li>18:00 (prior day) — Incident workspace set to Monitoring posture</li>
+                        </ul>
+                      </div>
+                      <div className="rounded-md border border-primary/30 bg-primary/5 p-2">
+                        <span className="font-semibold">Cited entry:</span> 07:45 — CT DOT barricades
+                        pre-positioned on Route 17; monitoring posture maintained with NWS breakup
+                        watch over next 24 hours.
+                      </div>
+                    </div>
+                  )
+                }
+                if (sourceName === 'Tanker MV Overture Casualty — Port of Houston') {
+                  return (
+                    <div className="space-y-3 text-[11px] leading-relaxed">
+                      <p className="font-semibold">USCG Sector Houston-Galveston — UC update</p>
+                      <p>
+                        MV Overture (LR/IMO 9821044) allided with the Bayport Terminal cell at
+                        09:24 CDT; reported breach in fuel oil bunker tank #4. Initial sheen
+                        observed approximately 220 m × 60 m drifting downstream with the flood
+                        tide. Channel restricted to one-way traffic, no injuries reported.
+                      </p>
+                      <div className="rounded-md border bg-background p-3">
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Last 6 hours — key entries</p>
+                        <ul className="mt-1 space-y-0.5">
+                          <li>17:39 — Boom deployed at Bayport Berth 4, sheen contained</li>
+                          <li>16:10 — OSRO mobilization confirmed — T&T Marine, ETA 18:30</li>
+                          <li>14:55 — Captain of the Port restricts traffic to inbound only</li>
+                          <li>12:14 — Unified Command stood up at USCG Sector Houston</li>
+                        </ul>
+                      </div>
+                      <div className="rounded-md border border-amber-300/60 bg-amber-50 p-2 text-amber-900">
+                        <span className="font-semibold">Cited entry:</span> 17:39 — Containment
+                        boom around Berth 4 holding; product transfer to barge AGT-219 begins at
+                        slack water, anticipated 21:00 CDT.
+                      </div>
+                    </div>
+                  )
+                }
+                return (
+                  <div className="space-y-3 text-[11px] leading-relaxed">
+                    <p className="font-semibold">Exercise control update — Day 2</p>
+                    <p>
+                      Pier 27 reception staging functioning per ExPlan; triage throughput averaging
+                      9 patients per minute. Embarcadero station evacuation completed in 11
+                      minutes (target 12). Communications between EOC and field controllers stable
+                      after morning P25 retune.
+                    </p>
+                    <div className="rounded-md border bg-background p-3">
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Last 6 hours — key entries</p>
+                      <ul className="mt-1 space-y-0.5">
+                        <li>17:44 — Cold-zone medical group reset for second injects</li>
+                        <li>16:22 — Liaison cell with BART operations exercised</li>
+                        <li>14:50 — Tabletop pivot exercised (loss of secondary PSAP)</li>
+                        <li>11:05 — Initial EEI deconfliction with HSEEP evaluators</li>
+                      </ul>
+                    </div>
+                    <div className="rounded-md border border-primary/30 bg-primary/5 p-2">
+                      <span className="font-semibold">Cited entry:</span> 14:50 — Tabletop pivot —
+                      EOC successfully reconstituted dispatch via backup CAD within
+                      controller-set 8-minute window.
+                    </div>
+                  </div>
+                )
+              }
+              return (
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-[260px_minmax(0,1fr)]">
+                  <aside className="space-y-3 rounded-md border bg-muted/30 p-3 text-[11px]">
+                    <div className="flex items-center justify-between text-[10px] uppercase tracking-wide text-muted-foreground">
+                      <span>
+                        {sourceName === 'Cape Cod Coastal Storm Response'
+                          ? 'ICS-214 Activity Log'
+                          : isDoc
+                            ? 'Document Preview'
+                            : 'Incident Record'}
+                      </span>
+                      <span>Retrieved 17:58 UTC</span>
+                    </div>
+                    {isDoc ? (
+                      (() => {
+                        const meta = docMeta[sourceName]
+                        return (
+                          <dl className="space-y-1.5">
+                            <div>
+                              <dt className="text-[10px] uppercase tracking-wide text-muted-foreground">File</dt>
+                              <dd className="font-mono text-[11px]">{meta?.file ?? sourceName}</dd>
+                            </div>
+                            <div>
+                              <dt className="text-[10px] uppercase tracking-wide text-muted-foreground">Kind / Size</dt>
+                              <dd>{meta?.kind ?? '—'} · {meta?.size ?? '—'}</dd>
+                            </div>
+                            <div>
+                              <dt className="text-[10px] uppercase tracking-wide text-muted-foreground">Extent</dt>
+                              <dd>{meta?.pages ?? '—'}</dd>
+                            </div>
+                            <div>
+                              <dt className="text-[10px] uppercase tracking-wide text-muted-foreground">Version</dt>
+                              <dd>{meta?.version ?? '—'}</dd>
+                            </div>
+                            <div>
+                              <dt className="text-[10px] uppercase tracking-wide text-muted-foreground">Owner</dt>
+                              <dd>{meta?.owner ?? '—'}</dd>
+                            </div>
+                            <div>
+                              <dt className="text-[10px] uppercase tracking-wide text-muted-foreground">Modified</dt>
+                              <dd className="font-mono text-[11px]">{meta?.modified ?? '—'}</dd>
+                            </div>
+                            <div>
+                              <dt className="text-[10px] uppercase tracking-wide text-muted-foreground">Classification</dt>
+                              <dd>{meta?.classification ?? '—'}</dd>
+                            </div>
+                          </dl>
+                        )
+                      })()
+                    ) : (
+                      (() => {
+                        const meta = incidentMeta[sourceName]
+                        if (sourceName === 'Cape Cod Coastal Storm Response') {
+                          return (
+                            <dl className="space-y-1.5">
+                              <div>
+                                <dt className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                                  Record type
+                                </dt>
+                                <dd className="font-medium">ICS-214 Unit Log (Activity Log)</dd>
+                              </div>
+                              <div>
+                                <dt className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                                  Incident ID
+                                </dt>
+                                <dd className="font-mono text-[11px]">{meta?.incidentId ?? '—'}</dd>
+                              </div>
+                              <div>
+                                <dt className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                                  Unit
+                                </dt>
+                                <dd>{CAPE_COD_ICS214_ACTIVITY_LOG.unitName}</dd>
+                              </div>
+                              <div>
+                                <dt className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                                  Operational period
+                                </dt>
+                                <dd>{CAPE_COD_ICS214_ACTIVITY_LOG.operationalPeriod}</dd>
+                              </div>
+                              <div>
+                                <dt className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                                  Status
+                                </dt>
+                                <dd>{meta?.status ?? '—'}</dd>
+                              </div>
+                              <div>
+                                <dt className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                                  Prepared by
+                                </dt>
+                                <dd>{CAPE_COD_ICS214_ACTIVITY_LOG.preparedBy}</dd>
+                              </div>
+                              <div>
+                                <dt className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                                  Last update
+                                </dt>
+                                <dd className="font-mono text-[11px]">{meta?.lastUpdate ?? '—'}</dd>
+                              </div>
+                            </dl>
+                          )
+                        }
+                        return (
+                          <dl className="space-y-1.5">
+                            <div>
+                              <dt className="text-[10px] uppercase tracking-wide text-muted-foreground">Incident ID</dt>
+                              <dd className="font-mono text-[11px]">{meta?.incidentId ?? '—'}</dd>
+                            </div>
+                            <div>
+                              <dt className="text-[10px] uppercase tracking-wide text-muted-foreground">Type</dt>
+                              <dd>{meta?.type ?? '—'}</dd>
+                            </div>
+                            <div>
+                              <dt className="text-[10px] uppercase tracking-wide text-muted-foreground">Location</dt>
+                              <dd>{meta?.location ?? '—'}</dd>
+                            </div>
+                            <div>
+                              <dt className="text-[10px] uppercase tracking-wide text-muted-foreground">Operational period</dt>
+                              <dd>{meta?.operationalPeriod ?? '—'}</dd>
+                            </div>
+                            <div>
+                              <dt className="text-[10px] uppercase tracking-wide text-muted-foreground">Status</dt>
+                              <dd>{meta?.status ?? '—'}</dd>
+                            </div>
+                            <div>
+                              <dt className="text-[10px] uppercase tracking-wide text-muted-foreground">Lead</dt>
+                              <dd>{meta?.lead ?? '—'}</dd>
+                            </div>
+                            <div>
+                              <dt className="text-[10px] uppercase tracking-wide text-muted-foreground">Started</dt>
+                              <dd className="font-mono text-[11px]">{meta?.started ?? '—'}</dd>
+                            </div>
+                            <div>
+                              <dt className="text-[10px] uppercase tracking-wide text-muted-foreground">Last update</dt>
+                              <dd className="font-mono text-[11px]">{meta?.lastUpdate ?? '—'}</dd>
+                            </div>
+                          </dl>
+                        )
+                      })()
+                    )}
+                    <div className="border-t border-border/60 pt-2 text-[10px] text-muted-foreground">
+                      Referenced as <span className="font-mono">{sitrepCitationDoc.marker}</span> in
+                      the active SITREP section.
+                    </div>
+                  </aside>
+                  <section className="space-y-3 rounded-md border bg-background p-4 text-xs">
+                    {isDoc ? renderDocBody() : renderIncidentBody()}
+                  </section>
+                </div>
+              )
+            })()}
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={isCreateActivationOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            resetCreateIncidentForm()
+            setIsCreateIncidentOpen(false)
+            setIsCreateExerciseOpen(false)
+          }
+        }}
+      >
+        <DialogContent className="flex h-[80vh] w-[95vw] flex-col sm:max-w-[1344px]">
+          <DialogHeader>
+            <DialogTitle>
+              {isExerciseActivationWizard ? 'Create Exercise' : 'Create Incident'}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="flex-1 space-y-4 overflow-y-auto pr-1">
+            <div
+              className={cn(
+                'grid gap-2',
+                activationSteps.length === 6
+                  ? 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-6'
+                  : activationSteps.length === 5
+                    ? 'grid-cols-2 sm:grid-cols-5'
+                    : 'grid-cols-2 sm:grid-cols-4'
+              )}
+            >
+              {activationSteps.map((stepLabel, index) => {
+                const isActive = activationStep === index
+                const isComplete = activationStep > index
+                return (
+                  <button
+                    type="button"
+                    key={stepLabel}
+                    onClick={() => setActivationStep(index)}
+                    className={cn(
+                      'rounded-md border px-2 py-2 text-center text-xs transition-colors hover:bg-muted/40',
+                      isActive && 'border-primary bg-primary/10 font-medium',
+                      isComplete && 'border-emerald-500 bg-emerald-500/10'
+                    )}
+                  >
+                    <p>{stepLabel}</p>
+                  </button>
+                )
+              })}
+            </div>
+            {activationStep === 0 && (
+              <div className="grid min-h-[560px] grid-cols-2 gap-4">
+                <div className="grid content-start gap-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="grid gap-2">
+                      <Label htmlFor="incident-name">{activationEntityLabel} Name</Label>
+                      <Input
+                        id="incident-name"
+                        placeholder="e.g. East Grid Transformer Fault"
+                        value={incidentName}
+                        onChange={(event) => setIncidentName(event.target.value)}
+                      />
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="incident-category">{activationEntityLabel} Category</Label>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            id="incident-category"
+                            type="button"
+                            variant="outline"
+                            className="w-full justify-between font-normal"
+                          >
+                            <span className="truncate text-left">
+                              {incidentCategory.length > 0
+                                ? incidentCategory.join(', ')
+                                : 'Select categories'}
+                            </span>
+                            <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="start">
+                          {incidentCategoryOptions.map((category) => (
+                            <DropdownMenuItem
+                              key={category}
+                              className="pr-2"
+                              onSelect={(event) => {
+                                event.preventDefault()
+                                setIncidentCategory((previous) => {
+                                  if (previous.includes(category)) {
+                                    return previous.filter((item) => item !== category)
+                                  }
+
+                                  return [...previous, category]
+                                })
+                              }}
+                            >
+                              <div className="flex items-center gap-2">
+                                <Checkbox
+                                  checked={incidentCategory.includes(category)}
+                                  className="pointer-events-none"
+                                  aria-hidden="true"
+                                />
+                                <span>{category}</span>
+                              </div>
+                            </DropdownMenuItem>
+                          ))}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
+                  </div>
+                  {!isExerciseActivationWizard && (
+                    <div className="grid gap-2">
+                      <Label htmlFor="incident-related-events">Related Events</Label>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            id="incident-related-events"
+                            type="button"
+                            variant="outline"
+                            className="w-full justify-between font-normal"
+                          >
+                            <span className="truncate text-left">
+                              {incidentRelatedEventIds.length > 0
+                                ? eventList
+                                    .filter((event) => incidentRelatedEventIds.includes(event.id))
+                                    .map((event) => event.name)
+                                    .join(', ')
+                                : 'Select related events'}
+                            </span>
+                            <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="start" className="max-h-72 overflow-y-auto">
+                          {eventList.length === 0 ? (
+                            <DropdownMenuItem disabled>No events available</DropdownMenuItem>
+                          ) : (
+                            eventList.map((event) => (
+                              <DropdownMenuItem
+                                key={event.id}
+                                className="pr-2"
+                                onSelect={(selectEvent) => {
+                                  selectEvent.preventDefault()
+                                  setIncidentRelatedEventIds((previous) => {
+                                    if (previous.includes(event.id)) {
+                                      return previous.filter((item) => item !== event.id)
+                                    }
+
+                                    return [...previous, event.id]
+                                  })
+                                }}
+                              >
+                                <div className="flex min-w-0 items-start gap-2">
+                                  <Checkbox
+                                    checked={incidentRelatedEventIds.includes(event.id)}
+                                    className="pointer-events-none mt-0.5"
+                                    aria-hidden="true"
+                                  />
+                                  <div className="min-w-0">
+                                    <p className="truncate text-sm">{event.name}</p>
+                                    <p className="truncate text-xs text-muted-foreground">
+                                      {event.type} · {event.region}
+                                    </p>
+                                  </div>
+                                </div>
+                              </DropdownMenuItem>
+                            ))
+                          )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
+                  )}
+                  <div className="grid gap-2">
+                    <Label htmlFor="incident-workflow">Select Workspace Format</Label>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          id="incident-workflow"
+                          type="button"
+                          variant="outline"
+                          className="w-full justify-between font-normal"
+                        >
+                          <span className="truncate text-left">
+                            {incidentWorkflowOptions.find(
+                              (option) => option.value === incidentWorkflow
+                            )?.label ?? 'Select workspace format'}
+                          </span>
+                          <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="start">
+                        {incidentWorkflowOptions.map((option) => (
+                          <DropdownMenuItem
+                            key={option.value}
+                            className="pr-2"
+                            onClick={() => setIncidentWorkflow(option.value)}
+                          >
+                            <div className="flex items-center gap-2">
+                              <Checkbox
+                                checked={incidentWorkflow === option.value}
+                                className="pointer-events-none"
+                                aria-hidden="true"
+                              />
+                              <span>{option.label}</span>
+                            </div>
+                          </DropdownMenuItem>
+                        ))}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="incident-template">Select Template</Label>
+                    <RadioGroup
+                      id="incident-template"
+                      value={incidentTemplate}
+                      onValueChange={setIncidentTemplate}
+                      className="gap-2"
+                    >
+                      {incidentTemplateOptions.map((template) => {
+                        const isPreviewOpen = previewTemplateId === template.id
+                        return (
+                          <div key={template.id} className="rounded-md border p-2">
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="flex items-center gap-2">
+                                <RadioGroupItem
+                                  id={`incident-template-${template.id}`}
+                                  value={template.id}
+                                />
+                                <Label
+                                  htmlFor={`incident-template-${template.id}`}
+                                  className="cursor-pointer"
+                                >
+                                  {template.label}
+                                </Label>
+                              </div>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() =>
+                                  setPreviewTemplateId((previous) =>
+                                    previous === template.id ? null : template.id
+                                  )
+                                }
+                              >
+                                {isPreviewOpen ? 'Hide Preview' : 'Preview Template'}
+                              </Button>
+                            </div>
+                            {isPreviewOpen && (
+                              <div className="mt-2 space-y-1">
+                                {template.previewItems.map((previewItem) => (
+                                  <Item
+                                    key={`${template.id}-${previewItem}`}
+                                    variant="muted"
+                                    size="sm"
+                                  >
+                                    <ItemDescription className="text-xs text-foreground">
+                                      {previewItem}
+                                    </ItemDescription>
+                                  </Item>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </RadioGroup>
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="incident-start-time">Start Time</Label>
+                    <Input
+                      id="incident-start-time"
+                      type="datetime-local"
+                      value={incidentStartTime}
+                      onChange={(event) => setIncidentStartTime(event.target.value)}
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="incident-location">Location</Label>
+                    <NativeSelect
+                      id="incident-location"
+                      value={incidentLocation}
+                      onChange={(event) => {
+                        setIncidentLocation(event.target.value)
+                      }}
+                      className="w-full"
+                    >
+                      <NativeSelectOption value="">Select location method</NativeSelectOption>
+                      <NativeSelectOption value="draw-point">Draw Point</NativeSelectOption>
+                      <NativeSelectOption value="draw-polygon">Draw Polygon</NativeSelectOption>
+                      <NativeSelectOption value="enter-address">Enter Address</NativeSelectOption>
+                    </NativeSelect>
+                    {incidentGeometrySummary &&
+                      (incidentLocation === 'draw-point' ||
+                        incidentLocation === 'draw-polygon') && (
+                        <div className="flex items-center gap-2">
+                          <p className="text-xs text-muted-foreground">
+                            {incidentGeometrySummary}
+                          </p>
+                          <Button
+                            type="button"
+                            variant="link"
+                            size="sm"
+                            className="h-auto p-0 text-xs"
+                            onClick={restartIncidentGeometryDraw}
+                          >
+                            Edit location
+                          </Button>
+                        </div>
+                      )}
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="incident-aors">AORs</Label>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          id="incident-aors"
+                          type="button"
+                          variant="outline"
+                          className="w-full justify-between font-normal"
+                        >
+                          <span className="truncate text-left">
+                            {incidentAors.length > 0
+                              ? incidentAors.join(', ')
+                              : 'Select AORs'}
+                          </span>
+                          <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="start">
+                        {femaAors.map((aor) => (
+                          <DropdownMenuItem
+                            key={aor.id}
+                            className="pr-2"
+                            onSelect={(event) => {
+                              event.preventDefault()
+                              setIncidentAors((previous) => {
+                                if (previous.includes(aor.name)) {
+                                  return previous.filter((item) => item !== aor.name)
+                                }
+
+                                return [...previous, aor.name]
+                              })
+                            }}
+                          >
+                            <div className="flex items-center gap-2">
+                              <Checkbox
+                                checked={incidentAors.includes(aor.name)}
+                                className="pointer-events-none"
+                                aria-hidden="true"
+                              />
+                              <span>{aor.name}</span>
+                            </div>
+                          </DropdownMenuItem>
+                        ))}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="incident-situation-report">
+                      Initial {isExerciseActivationWizard ? 'Exercise' : 'Situation'} Report
+                    </Label>
+                    <Textarea
+                      id="incident-situation-report"
+                      placeholder="Describe current conditions, risks, and immediate priorities."
+                      value={incidentSituationReport}
+                      onChange={(event) => setIncidentSituationReport(event.target.value)}
+                      className="min-h-28"
+                    />
+                  </div>
+                </div>
+                <div className="relative h-[560px] overflow-hidden rounded-md border bg-muted/10">
+                  <div ref={createIncidentMapContainerRef} className="absolute inset-0" />
+                  {(incidentLocation === 'draw-point' ||
+                    incidentLocation === 'draw-polygon') && (
+                    <div className="pointer-events-none absolute top-2 left-2 rounded-md border bg-background/90 px-2 py-1 text-xs text-muted-foreground shadow-sm">
+                      {incidentLocation === 'draw-point'
+                        ? 'Click on the map to place a point'
+                        : 'Click to start polygon and double-click to finish'}
+                    </div>
+                  )}
+                  {incidentGeometrySummary && (
+                    <div className="pointer-events-none absolute right-2 bottom-2 rounded-md border bg-background/90 px-2 py-1 text-xs text-muted-foreground shadow-sm">
+                      {incidentGeometrySummary}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+            {activationStep === 1 && !isExerciseActivationWizard && (
+              <CcmerDutyNotificationForm
+                idPrefix="initial-report"
+                value={initialIncidentReport}
+                onChange={setInitialIncidentReport}
+              />
+            )}
+            {activationStep === 1 && isExerciseActivationWizard && renderExerciseObjectivesEditor()}
+            {activationStep === 2 && isExerciseActivationWizard && (
+              <CcmerDutyNotificationForm
+                idPrefix="initial-exercise-report"
+                value={initialIncidentReport}
+                onChange={setInitialIncidentReport}
+              />
+            )}
+            {activationStep === 2 && !isExerciseActivationWizard && (
+              <div className="grid gap-3">
+                <div className="grid gap-2">
+                  <Label htmlFor="incident-team-template">Select Team Template</Label>
+                  <NativeSelect
+                    id="incident-team-template"
+                    value={incidentTeamTemplate}
+                    onChange={(event) => setIncidentTeamTemplate(event.target.value)}
+                    className="w-full"
+                  >
+                    <NativeSelectOption value="">Select a team template</NativeSelectOption>
+                    {incidentTeamTemplateOptions.map((template) => (
+                      <NativeSelectOption key={template} value={template}>
+                        {template}
+                      </NativeSelectOption>
+                    ))}
+                  </NativeSelect>
+                </div>
+                <div className="rounded-md border border-dashed bg-muted/20 p-4">
+                  <p className="text-sm font-medium">
+                    {activationEntityLabel} Roster Configuration
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Placeholder for roster configuration UI (roles, assignments, and shifts).
+                  </p>
+                </div>
+              </div>
+            )}
+            {activationStep === 3 && isExerciseActivationWizard && (
+              <div className="grid gap-3">
+                <div className="grid gap-2">
+                  <Label htmlFor="incident-team-template">Select Team Template</Label>
+                  <NativeSelect
+                    id="incident-team-template"
+                    value={incidentTeamTemplate}
+                    onChange={(event) => setIncidentTeamTemplate(event.target.value)}
+                    className="w-full"
+                  >
+                    <NativeSelectOption value="">Select a team template</NativeSelectOption>
+                    {incidentTeamTemplateOptions.map((template) => (
+                      <NativeSelectOption key={template} value={template}>
+                        {template}
+                      </NativeSelectOption>
+                    ))}
+                  </NativeSelect>
+                </div>
+                <div className="rounded-md border border-dashed bg-muted/20 p-4">
+                  <p className="text-sm font-medium">
+                    {activationEntityLabel} Roster Configuration
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Placeholder for roster configuration UI (roles, assignments, and shifts).
+                  </p>
+                </div>
+              </div>
+            )}
+            {((activationStep === 3 && !isExerciseActivationWizard) ||
+              (activationStep === 4 && isExerciseActivationWizard)) && (
+              <div className="grid gap-3">
+                <div className="space-y-2">
+                  <div className="flex justify-start">
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={() => {
+                        const nextId =
+                          meetingScheduleItems.length > 0
+                            ? Math.max(...meetingScheduleItems.map((meeting) => meeting.id)) + 1
+                            : 1
+
+                        setMeetingScheduleItems((previous) => [
+                          {
+                            id: nextId,
+                            start: '',
+                            end: '',
+                            meeting: 'New Meeting',
+                            attendees: '',
+                            agendaItems: ['New agenda item'],
+                            createTeamsMeeting: false,
+                          },
+                          ...previous,
+                        ])
+                        setExpandedMeetingItemId(nextId)
+                      }}
+                    >
+                      <Plus className="mr-1 h-4 w-4" /> Create Meeting
+                    </Button>
+                  </div>
+                  <div className="hidden grid-cols-[2.25rem_repeat(4,minmax(0,1fr))_minmax(0,1fr)] items-center gap-3 px-3 text-xs text-black dark:text-black md:grid">
+                    <p className="invisible select-none" aria-hidden="true">
+                      Expand
+                    </p>
+                    <p className="pl-1">Start</p>
+                    <p className="pl-1">End</p>
+                    <p>Meeting</p>
+                    <p>Attendees</p>
+                    <div className="-ml-1 flex items-center gap-1">
+                      <p>Create Microsoft Teams Meeting</p>
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="h-5 w-5"
+                              aria-label="Microsoft Teams meeting info"
+                            >
+                              <Info className="h-3.5 w-3.5" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="max-w-sm">
+                            If enabled, a Microsoft Teams calendar event will be created and all
+                            attendees will be emailed an invitation.
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </div>
+                  </div>
+                  {meetingScheduleItems.length === 0 && (
+                    <div className="rounded-md border border-dashed bg-muted/20 p-4 text-sm text-muted-foreground">
+                      No scheduled meetings.
+                    </div>
+                  )}
+                  {meetingScheduleItems.map((item) => {
+                    const isMeetingOpen = expandedMeetingItemId === item.id
+                    return (
+                      <Item key={item.id} variant="outline" className="flex-col items-stretch">
+                        <Collapsible
+                          open={isMeetingOpen}
+                          onOpenChange={(open) =>
+                            setExpandedMeetingItemId(open ? item.id : null)
+                          }
+                        >
+                          <div className="grid gap-3 p-3 md:grid-cols-[2.25rem_repeat(4,minmax(0,1fr))_minmax(0,1fr)]">
+                            <div className="flex items-center">
+                              <CollapsibleTrigger asChild>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  aria-label={`Toggle agenda for meeting row ${item.id}`}
+                                >
+                                  <ChevronDown
+                                    className={cn(
+                                      'h-4 w-4 transition-transform',
+                                      isMeetingOpen && 'rotate-180'
+                                    )}
+                                  />
+                                </Button>
+                              </CollapsibleTrigger>
+                            </div>
+                            <div>
+                              <Input
+                                type="datetime-local"
+                                value={item.start}
+                                onChange={(event) => {
+                                  const value = event.target.value
+                                  setMeetingScheduleItems((previous) =>
+                                    previous.map((meetingItem) =>
+                                      meetingItem.id === item.id
+                                        ? { ...meetingItem, start: value }
+                                        : meetingItem
+                                    )
+                                  )
+                                }}
+                              />
+                            </div>
+                            <div>
+                              <Input
+                                type="datetime-local"
+                                value={item.end}
+                                onChange={(event) => {
+                                  const value = event.target.value
+                                  setMeetingScheduleItems((previous) =>
+                                    previous.map((meetingItem) =>
+                                      meetingItem.id === item.id
+                                        ? { ...meetingItem, end: value }
+                                        : meetingItem
+                                    )
+                                  )
+                                }}
+                              />
+                            </div>
+                            <div>
+                              <Input
+                                value={item.meeting}
+                                onChange={(event) => {
+                                  const value = event.target.value
+                                  setMeetingScheduleItems((previous) =>
+                                    previous.map((meetingItem) =>
+                                      meetingItem.id === item.id
+                                        ? { ...meetingItem, meeting: value }
+                                        : meetingItem
+                                    )
+                                  )
+                                }}
+                              />
+                            </div>
+                            <div>
+                              <Input
+                                value={item.attendees}
+                                onChange={(event) => {
+                                  const value = event.target.value
+                                  setMeetingScheduleItems((previous) =>
+                                    previous.map((meetingItem) =>
+                                      meetingItem.id === item.id
+                                        ? { ...meetingItem, attendees: value }
+                                        : meetingItem
+                                    )
+                                  )
+                                }}
+                              />
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Switch
+                                id={`teams-meeting-${item.id}`}
+                                aria-label={`Create Microsoft Teams Meeting for row ${item.id}`}
+                                checked={item.createTeamsMeeting}
+                                onCheckedChange={(checked) => {
+                                  setMeetingScheduleItems((previous) =>
+                                    previous.map((meetingItem) =>
+                                      meetingItem.id === item.id
+                                        ? { ...meetingItem, createTeamsMeeting: checked }
+                                        : meetingItem
+                                    )
+                                  )
+                                }}
+                              />
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="ml-auto"
+                                aria-label={`Delete meeting row ${item.id}`}
+                                onClick={() => {
+                                  setMeetingScheduleItems((previous) =>
+                                    previous.filter((meetingItem) => meetingItem.id !== item.id)
+                                  )
+                                  setExpandedMeetingItemId((previous) =>
+                                    previous === item.id ? null : previous
+                                  )
+                                }}
+                              >
+                                <X className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </div>
+                          <CollapsibleContent>
+                            <div className="border-t px-3 py-3">
+                              <div className="mb-2 flex items-center justify-between">
+                                <Label className="text-xs text-muted-foreground">Agenda</Label>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => {
+                                    setMeetingScheduleItems((previous) =>
+                                      previous.map((meetingItem) =>
+                                        meetingItem.id === item.id
+                                          ? {
+                                              ...meetingItem,
+                                              agendaItems: [
+                                                ...meetingItem.agendaItems,
+                                                'New agenda item',
+                                              ],
+                                            }
+                                          : meetingItem
+                                      )
+                                    )
+                                  }}
+                                >
+                                  <Plus className="mr-1 h-4 w-4" />
+                                  Create Agenda Item
+                                </Button>
+                              </div>
+                              <div className="space-y-2">
+                                {item.agendaItems.length === 0 && (
+                                  <div className="rounded-md border border-dashed bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
+                                    No agenda items yet.
+                                  </div>
+                                )}
+                                {item.agendaItems.map((agendaItem, agendaIndex) => (
+                                  <Item
+                                    key={`${item.id}-agenda-${agendaIndex}`}
+                                    variant="muted"
+                                    size="sm"
+                                    className="flex-nowrap"
+                                  >
+                                    <Input
+                                      className="min-w-0 flex-1"
+                                      value={agendaItem}
+                                      onChange={(event) => {
+                                        const value = event.target.value
+                                        setMeetingScheduleItems((previous) =>
+                                          previous.map((meetingItem) => {
+                                            if (meetingItem.id !== item.id) {
+                                              return meetingItem
+                                            }
+
+                                            return {
+                                              ...meetingItem,
+                                              agendaItems: meetingItem.agendaItems.map(
+                                                (entry, entryIndex) =>
+                                                  entryIndex === agendaIndex ? value : entry
+                                              ),
+                                            }
+                                          })
+                                        )
+                                      }}
+                                    />
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="icon"
+                                      className="ml-auto"
+                                      aria-label={`Delete agenda item ${agendaIndex + 1} for meeting row ${item.id}`}
+                                      onClick={() => {
+                                        setMeetingScheduleItems((previous) =>
+                                          previous.map((meetingItem) => {
+                                            if (meetingItem.id !== item.id) {
+                                              return meetingItem
+                                            }
+
+                                            return {
+                                              ...meetingItem,
+                                              agendaItems: meetingItem.agendaItems.filter(
+                                                (_, entryIndex) => entryIndex !== agendaIndex
+                                              ),
+                                            }
+                                          })
+                                        )
+                                      }}
+                                    >
+                                      <X className="h-4 w-4" />
+                                    </Button>
+                                  </Item>
+                                ))}
+                              </div>
+                            </div>
+                          </CollapsibleContent>
+                        </Collapsible>
+                      </Item>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+            {isExerciseActivationWizard && activationStep === 5 && renderExerciseMselInjectsEditor()}
+          </div>
+          <DialogFooter className="flex items-center justify-between gap-2 sm:justify-between">
+            <div>
+              {activationStep > 0 && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setActivationStep((step) => Math.max(0, step - 1))}
+                >
+                  <ChevronLeft className="mr-1 h-4 w-4" />
+                  Back
+                </Button>
+              )}
+            </div>
+            {activationStep < activationSteps.length - 1 ? (
+              <Button
+                type="button"
+                onClick={() =>
+                  setActivationStep((step) => Math.min(activationSteps.length - 1, step + 1))
+                }
+              >
+                Next
+                <ChevronUp className="ml-1 h-4 w-4 rotate-90" />
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                onClick={
+                  isExerciseActivationWizard
+                    ? handleCreateExerciseSubmit
+                    : handleCreateIncidentSubmit
+                }
+              >
+                {isExerciseActivationWizard ? 'Create Exercise' : 'Create Incident'}
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={isCreateEventOpen}
+        onOpenChange={(open) => {
+          setIsCreateEventOpen(open)
+          if (!open) {
+            resetCreateEventForm()
+          }
+        }}
+      >
+        <DialogContent className="flex max-h-[85vh] w-[92vw] flex-col overflow-hidden sm:max-w-3xl">
+          <DialogHeader className="shrink-0">
+            <DialogTitle>Create Event</DialogTitle>
+            <DialogDescription>
+              Log a GOM CCMER duty notification and add it to the Events list.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="min-h-0 flex-1 overflow-y-auto pr-1">
+            <CcmerDutyNotificationForm
+              idPrefix="create-event"
+              value={createEventReport}
+              onChange={setCreateEventReport}
+            />
+          </div>
+          <DialogFooter className="shrink-0 gap-2 sm:justify-end">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setIsCreateEventOpen(false)
+                resetCreateEventForm()
+              }}
+            >
+              Cancel
+            </Button>
+            <Button type="button" onClick={handleCreateEventSubmit}>
+              Create Event
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={viewingEventModalId != null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setViewingEventModalId(null)
+          }
+        }}
+      >
+        <DialogContent className="flex max-h-[85vh] flex-col overflow-hidden sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Event Details</DialogTitle>
+            <DialogDescription>
+              {viewingEventModalEvent?.name ?? 'Event details'}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="min-h-0 flex-1 overflow-y-auto pr-1">
+            {viewingEventModalEvent &&
+              renderEventListItem(viewingEventModalEvent, {
+                listKey: `event-modal-${viewingEventModalEvent.id}`,
+                isOpen: true,
+                isSelected: false,
+                onToggle: () => undefined,
+                onOpenChange: () => undefined,
+                variant: 'modal',
+              })}
+          </div>
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={isCreateTaskOpen}
+        onOpenChange={(open) => {
+          setIsCreateTaskOpen(open)
+          if (!open) {
+            setActiveTaskAction(null)
+            setTaskAssignmentResource('')
+          }
+        }}
+      >
+        <DialogContent className="flex max-h-[480px] flex-col sm:max-w-[600px]">
+          <DialogHeader>
+            <DialogTitle>Create Task</DialogTitle>
+          </DialogHeader>
+          {activeTaskAction && (
+            <div className="rounded-md border bg-muted/30 px-3 py-2 text-sm">
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                Task
+              </p>
+              <p className="mt-1">{activeTaskAction.label}</p>
+            </div>
+          )}
+          <div className="flex min-h-0 flex-1 flex-col gap-2">
+            <Label>Assign to Resource</Label>
+            <div className="min-h-0 flex-1 space-y-1.5 overflow-y-auto pr-1">
+              {(activeTaskAction
+                ? (NOTIFICATION_TASK_RESOURCE_CATALOG[activeTaskAction.label] ?? [])
+                    .slice()
+                    .sort((a, b) => {
+                      if (a.availability === b.availability) {
+                        return 0
+                      }
+                      return a.availability === 'Available' ? -1 : 1
+                    })
+                : []
+              ).map((resource) => {
+                const isAvailable = resource.availability === 'Available'
+                const availabilityLabel = resource.availability
+                const isSelected = taskAssignmentResource === resource.name
+                const checkboxId = `create-task-resource-${resource.id}`
+                return (
+                  <Item
+                    key={resource.id}
+                    variant="outline"
+                    className="flex cursor-pointer items-start gap-3 px-3 py-2 hover:bg-muted/40"
+                    onClick={() =>
+                      setTaskAssignmentResource(isSelected ? '' : resource.name)
+                    }
+                  >
+                    <Checkbox
+                      id={checkboxId}
+                      checked={isSelected}
+                      onClick={(event) => event.stopPropagation()}
+                      onCheckedChange={(value) =>
+                        setTaskAssignmentResource(value ? resource.name : '')
+                      }
+                      className="mt-0.5"
+                    />
+                    <div className="flex flex-1 flex-col gap-1">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <Label
+                          htmlFor={checkboxId}
+                          onClick={(event) => event.preventDefault()}
+                          className="cursor-pointer text-sm font-medium"
+                        >
+                          {resource.name}
+                        </Label>
+                        <Badge
+                          className={cn(
+                            'border-transparent',
+                            isAvailable
+                              ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
+                              : 'bg-amber-500/15 text-amber-700 dark:text-amber-300'
+                          )}
+                        >
+                          {availabilityLabel}
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Location: {resource.location}
+                      </p>
+                    </div>
+                  </Item>
+                )
+              })}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setIsCreateTaskOpen(false)
+                setActiveTaskAction(null)
+                setTaskAssignmentResource('')
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              disabled={!taskAssignmentResource || !activeTaskAction}
+              onClick={() => {
+                if (!activeTaskAction || !taskAssignmentResource) {
+                  return
+                }
+                const timestamp = new Date().toLocaleString(undefined, {
+                  year: 'numeric',
+                  month: '2-digit',
+                  day: '2-digit',
+                  hour: '2-digit',
+                  minute: '2-digit',
+                })
+                setTaskAssignments((previous) => ({
+                  ...previous,
+                  [activeTaskAction.id]: {
+                    resource: taskAssignmentResource,
+                    timestamp,
+                  },
+                }))
+                setIsCreateTaskOpen(false)
+                setActiveTaskAction(null)
+                setTaskAssignmentResource('')
+              }}
+            >
+              Assign
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </main>
