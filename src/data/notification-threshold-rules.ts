@@ -544,7 +544,7 @@ export const removeNotificationRuleCondition = (
 
   const conditions = normalizedRule.conditions.filter((condition) => condition.id !== conditionId)
   const logicBlocks = sanitizeLogicBlocks(
-    normalizedRule.logicBlocks.flatMap((block) => {
+    normalizedRule.logicBlocks.flatMap((block): NotificationRuleLogicBlock[] => {
       if (block.type === 'condition') {
         if (block.conditionId === conditionId) {
           return []

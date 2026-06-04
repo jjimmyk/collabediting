@@ -13,6 +13,8 @@ import ArcGISMap from '@arcgis/core/Map'
 import Graphic from '@arcgis/core/Graphic'
 import Point from '@arcgis/core/geometry/Point'
 import FeatureLayer from '@arcgis/core/layers/FeatureLayer'
+import type { FieldProperties } from '@arcgis/core/layers/support/Field'
+import type { GraphicHit, ViewHitTestResult } from '@arcgis/core/views/types'
 import GraphicsLayer from '@arcgis/core/layers/GraphicsLayer'
 import MapView from '@arcgis/core/views/MapView'
 import SketchViewModel from '@arcgis/core/widgets/Sketch/SketchViewModel'
@@ -1095,7 +1097,7 @@ const getAnalyticsCategoryColor = (
 // Cluster when zoomed out; individual markers when zoomed in past ~zoom 10 (1:577,790).
 const ANALYTICS_MAP_CLUSTER_MAX_SCALE = 577790
 
-const ANALYTICS_POINT_FEATURE_FIELDS: __esri.FieldProperties[] = [
+const ANALYTICS_POINT_FEATURE_FIELDS: FieldProperties[] = [
   { name: 'ObjectID', type: 'oid' },
   { name: 'mapKey', type: 'string' },
   { name: 'title', type: 'string' },
@@ -1110,8 +1112,8 @@ const ANALYTICS_POINT_FEATURE_FIELDS: __esri.FieldProperties[] = [
   { name: 'resolutionHours', type: 'string' },
 ]
 
-const createAnalyticsClusterFeatureReduction = (): __esri.FeatureReductionClusterProperties => ({
-  type: 'cluster',
+const createAnalyticsClusterFeatureReduction = () => ({
+  type: 'cluster' as const,
   clusterRadius: '80px',
   clusterMinSize: '28px',
   clusterMaxSize: '56px',
@@ -1131,16 +1133,16 @@ const createAnalyticsClusterFeatureReduction = (): __esri.FeatureReductionCluste
   },
   labelingInfo: [
     {
-      deconflictionStrategy: 'none',
+      deconflictionStrategy: 'none' as const,
       labelExpressionInfo: {
         expression: "Text($feature.cluster_count, '#,###')",
       },
       symbol: {
-        type: 'text',
+        type: 'text' as const,
         color: 'white',
         font: {
           size: 12,
-          weight: 'bold',
+          weight: 'bold' as const,
         },
         haloColor: [0, 0, 0, 0.45],
         haloSize: 1,
@@ -1993,7 +1995,9 @@ const applyFemaAorPopupState = (graphic: Graphic, aor: FemaAorItem) => {
   graphic.popupTemplate = FEMA_AOR_POPUP_TEMPLATE
 }
 
-const isFemaAorGraphicAttributes = (attrs: Record<string, unknown> | undefined) =>
+const isFemaAorGraphicAttributes = (
+  attrs: Record<string, unknown> | undefined
+): attrs is Record<string, unknown> & { femaAorId: number; kind: 'AOR' } =>
   attrs !== undefined &&
   typeof attrs.femaAorId === 'number' &&
   attrs.kind === 'AOR'
@@ -2008,11 +2012,19 @@ const getGraphicMapLocation = (graphic: Graphic): [number, number] | null => {
   }
 
   if (geometry.type === 'point') {
-    return [geometry.longitude, geometry.latitude]
+    const { longitude, latitude } = geometry
+    if (longitude == null || latitude == null) {
+      return null
+    }
+    return [longitude, latitude]
   }
 
   if (geometry.extent?.center) {
-    return [geometry.extent.center.longitude, geometry.extent.center.latitude]
+    const { longitude, latitude } = geometry.extent.center
+    if (longitude == null || latitude == null) {
+      return null
+    }
+    return [longitude, latitude]
   }
 
   return null
@@ -2023,7 +2035,7 @@ type MapClickTarget =
   | { type: 'fema'; femaAorId: number }
   | { type: 'cluster'; graphic: Graphic }
 
-const resolveMapClickTarget = (results: __esri.HitTestResult[]): MapClickTarget | null => {
+const resolveMapClickTarget = (results: ViewHitTestResult['results']): MapClickTarget | null => {
   let femaFallback: { type: 'fema'; femaAorId: number } | null = null
   let polygonItemFallback: { type: 'item'; graphic: Graphic; mapKey: string } | null = null
 
@@ -2032,7 +2044,7 @@ const resolveMapClickTarget = (results: __esri.HitTestResult[]): MapClickTarget 
       continue
     }
 
-    const graphic = (result as __esri.GraphicHit).graphic
+    const graphic = (result as GraphicHit).graphic
     const attrs = graphic.attributes as Record<string, unknown> | undefined
 
     if (isClusterGraphicAttributes(attrs)) {
@@ -2412,7 +2424,7 @@ const buildEventFromCcmerReport = (report: InitialIncidentReportState): EventLis
   const primaryFacility =
     report.facilityLocations.find((location) => location !== 'Other') ??
     (report.facilityLocationOther.trim() ? 'Other' : undefined)
-  const location =
+  const location: [number, number] =
     primaryFacility && GOM_CCMER_FACILITY_COORDS[primaryFacility]
       ? GOM_CCMER_FACILITY_COORDS[primaryFacility]
       : [-90.0, 28.0]
@@ -9133,6 +9145,7 @@ function App() {
 
     try {
       if (records.length === 1) {
+        view.padding = getMapViewportPadding()
         await view.goTo(
           {
             center: records[0].location,
@@ -9143,17 +9156,15 @@ function App() {
         return
       }
 
+      view.padding = getMapViewportPadding()
       await view.goTo(
-        {
-          target: records.map(
-            (record) =>
-              new Point({
-                longitude: record.location[0],
-                latitude: record.location[1],
-              })
-          ),
-          padding: getMapViewportPadding(),
-        },
+        records.map(
+          (record) =>
+            new Point({
+              longitude: record.location[0],
+              latitude: record.location[1],
+            })
+        ),
         { animate: false }
       )
     } catch {
@@ -9310,11 +9321,11 @@ function App() {
       setIsMapVisible(true)
 
       try {
+        view.padding = getMapViewportPadding()
         await view.goTo(
           {
             center: location,
             scale,
-            padding: getMapViewportPadding(),
           },
           {
             animate: false,
@@ -9346,11 +9357,11 @@ function App() {
     })
 
     try {
+      view.padding = getMapViewportPadding()
       await view.goTo(
         {
           center: location,
           scale: scale ?? view.scale,
-          padding: getMapViewportPadding(),
         },
         {
           animate: false,
@@ -9362,14 +9373,19 @@ function App() {
 
     await alignMapPointInVisibleArea(view, location, 0.68)
 
-    view.popup.alignment = 'top-right'
+    const popup = view.popup
+    if (!popup) {
+      return
+    }
+
+    popup.alignment = 'top-right'
     view.openPopup({
       features: [graphic],
       location: popupLocation,
     })
 
     await adjustMapViewForOpenPopup(view, graphic, popupLocation)
-    view.popup.alignment = 'auto'
+    popup.alignment = 'auto'
   }
 
   openFemaAorMapPopupRef.current = async (aorId, mapPoint) => {
@@ -9383,13 +9399,13 @@ function App() {
     applyFemaAorPopupState(polygonGraphic, aor)
 
     try {
-      await view.goTo(
-        {
-          target: polygonGraphic.geometry,
-          padding: getMapViewportPadding(),
-        },
-        { animate: false }
-      )
+      const geometry = polygonGraphic.geometry
+      if (!geometry) {
+        return
+      }
+
+      view.padding = getMapViewportPadding()
+      await view.goTo(geometry, { animate: false })
     } catch {
       return
     }
@@ -9403,14 +9419,19 @@ function App() {
 
     await alignMapPointInVisibleArea(view, [aor.location[0], aor.location[1]], 0.62)
 
-    view.popup.alignment = 'top-right'
+    const popup = view.popup
+    if (!popup) {
+      return
+    }
+
+    popup.alignment = 'top-right'
     view.openPopup({
       features: [polygonGraphic],
       location: popupLocation,
     })
 
     await adjustMapViewForOpenPopup(view, polygonGraphic, popupLocation)
-    view.popup.alignment = 'auto'
+    popup.alignment = 'auto'
   }
 
   const normalizedQuery = searchQuery.trim().toLowerCase()
@@ -11512,13 +11533,13 @@ function App() {
 
     void (async () => {
       try {
-        await view.goTo(
-          {
-            target: polygonGraphic.geometry,
-            padding: getMapViewportPadding(),
-          },
-          { animate: false }
-        )
+        const geometry = polygonGraphic.geometry
+        if (!geometry) {
+          return
+        }
+
+        view.padding = getMapViewportPadding()
+        await view.goTo(geometry, { animate: false })
       } catch {
         return
       }
@@ -11530,14 +11551,19 @@ function App() {
         latitude: incident.location[1],
       })
 
-      view.popup.alignment = 'top-right'
+      const popup = view.popup
+      if (!popup) {
+        return
+      }
+
+      popup.alignment = 'top-right'
       view.openPopup({
         features: [polygonGraphic],
         location: popupLocation,
       })
 
       await adjustMapViewForOpenPopup(view, polygonGraphic, popupLocation)
-      view.popup.alignment = 'auto'
+      popup.alignment = 'auto'
     })()
   }
 
@@ -12022,7 +12048,7 @@ function App() {
               ...message,
               plan: {
                 ...message.plan,
-                status: 'accepted',
+                status: 'accepted' as const,
               },
             }
           }),
@@ -12039,7 +12065,7 @@ function App() {
               ...message,
               plan: {
                 ...message.plan,
-                status: 'cancelled',
+                status: 'cancelled' as const,
               },
             }
           })
@@ -23623,7 +23649,7 @@ function App() {
                   : null
                 if (!previewDraft) return null
                 const previewPrimary = SITREP_SECTION_PRIMARY[sitrepActiveSection]
-                const previewValue = sitrepForm[previewPrimary.field] ?? ''
+                const previewValue = (sitrepForm[previewPrimary.field] as string) ?? ''
                 const formatPreviewTime = (timestamp: number) =>
                   new Date(timestamp).toLocaleTimeString([], {
                     hour: '2-digit',
@@ -26317,9 +26343,7 @@ function App() {
                 'grid gap-2',
                 activationSteps.length === 6
                   ? 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-6'
-                  : activationSteps.length === 5
-                    ? 'grid-cols-2 sm:grid-cols-5'
-                    : 'grid-cols-2 sm:grid-cols-4'
+                  : 'grid-cols-2 sm:grid-cols-4'
               )}
             >
               {activationSteps.map((stepLabel, index) => {
