@@ -158,7 +158,7 @@ type NotificationItem = {
   title: string
   severity: 'Critical' | 'High' | 'Medium' | 'Low'
   status: 'New' | 'Acknowledged' | 'Resolved'
-  category: 'Power' | 'Transport' | 'Shelter' | 'Weather'
+  category: 'Power' | 'Transport' | 'Shelter' | 'Weather' | 'Hazmat'
   timestamp: string
   owner: string
   summary: string
@@ -186,82 +186,160 @@ type NotificationTaskResource = {
 }
 
 const NOTIFICATION_TASK_RESOURCE_CATALOG: Record<string, NotificationTaskResource[]> = {
-  'Activate BP Gulf of Mexico Unified Command and CCMER duty protocol; notify BSEE and USCG Sector NOLA.':
+  'Activate BP Cherry Point refinery ERP and unified command; notify Whatcom County OEM, WA Ecology, and USCG Sector Puget Sound.':
     [
       {
-        id: 'bp-gom-unified-command',
-        name: 'BP Gulf of Mexico Unified Command',
+        id: 'bp-cherry-point-uc',
+        name: 'BP Cherry Point Refinery Unified Command',
         availability: 'Available',
-        location: 'Houston, TX',
+        location: 'Ferndale, WA',
       },
       {
         id: 'bp-ccmer-watch',
         name: 'BP CCMER Advisor on Duty',
         availability: 'Available',
-        location: 'Houston, TX',
+        location: 'Seattle, WA',
       },
       {
-        id: 'bsee-district-nola',
-        name: 'BSEE District New Orleans',
-        availability: 'Available',
-        location: 'New Orleans, LA',
-      },
-      {
-        id: 'uscg-sector-nola',
-        name: 'USCG Sector New Orleans',
+        id: 'whatcom-oem',
+        name: 'Whatcom County Office of Emergency Management',
         availability: 'Assigned',
-        location: 'New Orleans, LA',
+        location: 'Bellingham, WA',
       },
       {
-        id: 'bp-mad-dog-oim',
-        name: 'BP Offshore Installation Manager — Mad Dog',
+        id: 'wa-ecology-spill',
+        name: 'WA Department of Ecology — Spill Response',
         availability: 'Assigned',
-        location: 'Green Canyon 782',
+        location: 'Bellingham, WA',
       },
       {
-        id: 'bp-ert-houston',
-        name: 'BP Emergency Response Team — Houston',
+        id: 'uscg-sector-puget',
+        name: 'USCG Sector Puget Sound',
+        availability: 'Assigned',
+        location: 'Seattle, WA',
+      },
+      {
+        id: 'bp-ert-pnw',
+        name: 'BP Emergency Response Team — Pacific Northwest',
         availability: 'Available',
-        location: 'Houston, TX',
+        location: 'Ferndale, WA',
       },
     ],
-  'Pre-position offshore evacuation helicopters and standby vessel crews at inland Gulf Coast heliports.':
+  'Deploy industrial firefighting foam units and mutual-aid strike teams; establish downwind air monitoring perimeter.':
     [
       {
-        id: 'bp-aviation-gc',
-        name: 'BP Aviation Coordinator — Green Canyon',
-        availability: 'Available',
-        location: 'Houma, LA',
-      },
-      {
-        id: 'phi-heli-evac',
-        name: 'PHI Heliport Evacuation Standby — Houma',
-        availability: 'Available',
-        location: 'Houma, LA',
-      },
-      {
-        id: 'bp-standby-vessel',
-        name: 'Offshore Standby Vessel — M/V BP Responder',
-        availability: 'Available',
-        location: 'Port Fourchon, LA',
-      },
-      {
-        id: 'bp-logistics-fourchon',
-        name: 'BP Logistics Staging — Port Fourchon',
+        id: 'whatcom-fd7-mutual-aid',
+        name: 'Whatcom County Fire District 7 — Industrial Mutual Aid',
         availability: 'Assigned',
-        location: 'Port Fourchon, LA',
+        location: 'Ferndale, WA',
       },
       {
-        id: 'bp-helo-venice',
-        name: 'BP Helicopter Operations — Venice Heliport',
-        availability: 'Available',
-        location: 'Venice, LA',
+        id: 'bp-fire-brigade-cherry-point',
+        name: 'BP Industrial Fire Brigade — Cherry Point',
+        availability: 'Assigned',
+        location: 'Cherry Point Refinery',
       },
       {
-        id: 'bp-marine-galveston',
-        name: 'BP Marine Logistics Cell — Galveston',
+        id: 'epa-region10-air',
+        name: 'EPA Region 10 Air Monitoring Cell',
         availability: 'Available',
-        location: 'Galveston, TX',
+        location: 'Seattle, WA',
+      },
+      {
+        id: 'wa-ecology-air',
+        name: 'WA Ecology Downwind Air Monitoring Team',
+        availability: 'Available',
+        location: 'Blaine, WA',
+      },
+      {
+        id: 'bp-hazmat-monitoring',
+        name: 'BP Refinery Fixed Gas Detection Network',
+        availability: 'Assigned',
+        location: 'Cherry Point Refinery',
+      },
+      {
+        id: 'nw-municipal-foam-strike',
+        name: 'Northwest Regional Foam Strike Team',
+        availability: 'Available',
+        location: 'Bellingham, WA',
+      },
+    ],
+  'Activate BP Senegal refinery ERP and unified command; notify Ministry of Petroleum and Mines, ANACIM, and Dakar port authority.':
+    [
+      {
+        id: 'bp-sar-unified-command',
+        name: 'BP SAR Refinery Unified Command — Mbao',
+        availability: 'Available',
+        location: 'Dakar, Senegal',
+      },
+      {
+        id: 'bp-ccmer-africa-watch',
+        name: 'BP CCMER Advisor on Duty — Africa',
+        availability: 'Available',
+        location: 'London, UK',
+      },
+      {
+        id: 'senegal-petroleum-ministry',
+        name: 'Ministry of Petroleum and Mines — Senegal',
+        availability: 'Assigned',
+        location: 'Dakar, Senegal',
+      },
+      {
+        id: 'anacim-senegal',
+        name: 'ANACIM — Civil Aviation Meteorology',
+        availability: 'Assigned',
+        location: 'Dakar, Senegal',
+      },
+      {
+        id: 'dakar-port-authority',
+        name: 'Port Autonome de Dakar',
+        availability: 'Assigned',
+        location: 'Dakar, Senegal',
+      },
+      {
+        id: 'bp-ert-west-africa',
+        name: 'BP Emergency Response Team — West Africa',
+        availability: 'Available',
+        location: 'Dakar, Senegal',
+      },
+    ],
+  'Deploy industrial firefighting and blast-response teams; establish downwind air monitoring and casualty accounting perimeter.':
+    [
+      {
+        id: 'senegal-fire-brigade-mbao',
+        name: 'Senegal National Fire Brigade — Mbao Industrial Zone',
+        availability: 'Assigned',
+        location: 'Mbao, Dakar',
+      },
+      {
+        id: 'bp-fire-brigade-sar',
+        name: 'BP Industrial Fire Brigade — SAR Refinery',
+        availability: 'Assigned',
+        location: 'SAR Refinery, Mbao',
+      },
+      {
+        id: 'unep-spill-west-africa',
+        name: 'UNEP Regional Environmental Emergency Cell',
+        availability: 'Available',
+        location: 'Abidjan, Côte d\'Ivoire',
+      },
+      {
+        id: 'dakar-air-monitoring',
+        name: 'Dakar Prefecture Air Monitoring Team',
+        availability: 'Available',
+        location: 'Guédiawaye, Senegal',
+      },
+      {
+        id: 'bp-blast-gas-network',
+        name: 'BP SAR Fixed Gas Detection Network',
+        availability: 'Assigned',
+        location: 'SAR Refinery, Mbao',
+      },
+      {
+        id: 'msf-casualty-cell',
+        name: 'MSF Forward Trauma Staging Cell',
+        availability: 'Available',
+        location: 'Dakar, Senegal',
       },
     ],
 }
@@ -660,6 +738,43 @@ const getEventCreationLabel = (event: EventListItem) => {
   return `Auto-created by Pratus · ${event.thresholdDescription ?? 'Threshold reached'}`
 }
 
+const formatInitialIncidentReportSummary = (report: InitialIncidentReportState) => {
+  const parts: string[] = []
+
+  if (report.shortDescription.trim()) {
+    parts.push(report.shortDescription.trim())
+  }
+
+  const locationLabel = [
+    ...report.facilityLocations.filter((location) => location !== 'Other'),
+    report.facilityLocations.includes('Other') && report.facilityLocationOther.trim()
+      ? report.facilityLocationOther.trim()
+      : null,
+  ]
+    .filter((entry): entry is string => Boolean(entry))
+    .join(', ')
+
+  if (locationLabel) {
+    parts.push(`Location: ${locationLabel}`)
+  } else if (report.facilityLocationOther.trim()) {
+    parts.push(`Location: ${report.facilityLocationOther.trim()}`)
+  }
+
+  if (report.whatHappened.trim()) {
+    parts.push(report.whatHappened.trim())
+  }
+
+  if (report.icNotified === 'yes' && report.icNotifiedName.trim()) {
+    parts.push(`IC notified: ${report.icNotifiedName.trim()}`)
+  }
+
+  if (report.scenarios.length > 0) {
+    parts.push(`ERP scenarios: ${report.scenarios.join('; ')}`)
+  }
+
+  return parts.join(' ')
+}
+
 const EVENT_SEVERITY_FILTER_OPTIONS: EventListItem['severity'][] = ['High', 'Medium', 'Low']
 
 type ExerciseListItem = IncidentListItem
@@ -671,7 +786,7 @@ const DEFAULT_EXERCISE_LIST: ExerciseListItem[] = [
     type: 'Tabletop / ICS Activation',
     status: 'Active',
     severity: 'Medium',
-    region: 'FEMA Region 4 — Southeast',
+    region: 'BP Business Unit — Southeast',
     location: [-84.388, 33.749],
     lead: 'FEMA Region 4 IMAT · Exercise Director',
     startedAt: '2026-05-08 09:00 EST',
@@ -688,7 +803,7 @@ const DEFAULT_EXERCISE_LIST: ExerciseListItem[] = [
     type: 'Functional Exercise',
     status: 'Monitoring',
     severity: 'Low',
-    region: 'FEMA Region 6 — South Central',
+    region: 'BP Business Unit — South Central',
     location: [-96.797, 32.7765],
     lead: 'PHMSA Southwest District · Exercise Controller',
     startedAt: '2026-05-07 13:00 CST',
@@ -705,7 +820,7 @@ const DEFAULT_EXERCISE_LIST: ExerciseListItem[] = [
     type: 'Drill / Coordination',
     status: 'Demobilizing',
     severity: 'Low',
-    region: 'FEMA Region 9 — Pacific',
+    region: 'BP Business Unit — Pacific',
     location: [-119.4179, 36.7783],
     lead: 'CAL FIRE SLO Unit · Exercise Lead',
     startedAt: '2026-05-06 08:00 PST',
@@ -726,7 +841,7 @@ const DEFAULT_EVENT_LIST: EventListItem[] = (
     type: 'Coastal Flood Watch',
     status: 'Monitoring',
     severity: 'Medium',
-    region: 'FEMA Region 4 — Southeast',
+    region: 'BP Business Unit — Southeast',
     location: [-80.1918, 26.1224],
     lead: 'NWS Miami · FEMA Region 4 Liaison',
     startedAt: '2026-05-08 18:00 EST',
@@ -735,10 +850,10 @@ const DEFAULT_EVENT_LIST: EventListItem[] = (
       'Minor coastal flooding expected along Atlantic barrier islands from Sebastian Inlet to Miami-Dade. No road closures; FDOT monitoring A1A low spots and pump stations. Related to but below Hurricane Edgar incident threshold.',
     resourcesCommitted:
       'FDOT District 4 flood monitors, Palm Beach County OEM watch desk, 2 ESF-1 liaison officers',
-    businessUnit: 'FEMA Region 4 — Southeast',
+    businessUnit: 'BP Business Unit — Southeast',
     creationKind: 'threshold',
     createdByUser: null,
-    thresholdDescription: 'Coastal flood watch threshold reached for FEMA Region 4',
+    thresholdDescription: 'Coastal flood watch threshold reached for BP Business Unit — Southeast',
   },
   {
     id: 2,
@@ -746,7 +861,7 @@ const DEFAULT_EVENT_LIST: EventListItem[] = (
     type: 'Roadway Maintenance / Debris',
     status: 'Monitoring',
     severity: 'Low',
-    region: 'FEMA Region 4 — Southeast',
+    region: 'BP Business Unit — Southeast',
     location: [-81.0378, 29.5544],
     lead: 'FDOT District 5 · Maintenance Supervisor',
     startedAt: '2026-05-09 05:00 EST',
@@ -754,7 +869,7 @@ const DEFAULT_EVENT_LIST: EventListItem[] = (
     summary:
       'Wind-blown palm fronds and signage debris on I-95 northbound shoulder near Exit 284. Right shoulder closed 0.3 mi; mainline traffic unaffected. Routine maintenance response, not escalated to incident.',
     resourcesCommitted: 'FDOT maintenance crew (3), FHP traffic assist unit',
-    businessUnit: 'FEMA Region 4 — Southeast',
+    businessUnit: 'BP Business Unit — Southeast',
     creationKind: 'threshold',
     createdByUser: null,
     thresholdDescription: 'Roadway debris accumulation threshold reached on I-95 corridor',
@@ -785,7 +900,7 @@ const DEFAULT_EVENT_LIST: EventListItem[] = (
     type: 'Wildfire / Red Flag Warning',
     status: 'Monitoring',
     severity: 'Medium',
-    region: 'FEMA Region 9 — Pacific',
+    region: 'BP Business Unit — Pacific',
     location: [-119.2932, 34.2783],
     lead: 'CAL FIRE · Ventura Unit Forecaster',
     startedAt: '2026-05-08 17:00 PST',
@@ -794,7 +909,7 @@ const DEFAULT_EVENT_LIST: EventListItem[] = (
       'Elevated fire weather index with gusty sundowner winds in Ventura foothills. No active ignitions; Caltrans pre-positioning SR-33 detour signage. Watch-level posture supporting inland wildfire incident monitoring.',
     resourcesCommitted:
       'CAL FIRE Ventura Unit engine standby, Caltrans D7 sign crew, 1 air attack spotter',
-    businessUnit: 'FEMA Region 9 — Pacific',
+    businessUnit: 'BP Business Unit — Pacific',
     creationKind: 'threshold',
     createdByUser: null,
     thresholdDescription: 'Red Flag fire weather index threshold exceeded for Ventura Unit',
@@ -805,7 +920,7 @@ const DEFAULT_EVENT_LIST: EventListItem[] = (
     type: 'Riverine / Coastal Flood',
     status: 'Monitoring',
     severity: 'Medium',
-    region: 'FEMA Region 6 — South Central',
+    region: 'BP Business Unit — South Central',
     location: [-95.2695, 29.7355],
     lead: 'Harris County OEM · Hydrology Desk',
     startedAt: '2026-05-08 22:00 CST',
@@ -813,7 +928,7 @@ const DEFAULT_EVENT_LIST: EventListItem[] = (
     summary:
       'Tidal flooding watch for SH-146 approach to Houston Ship Channel. TxDOT gates staged; no lane closures. Monitoring only — separate from LBJ Express hazmat incident operations.',
     resourcesCommitted: 'Harris County OEM hydrology desk, TxDOT Houston District flood monitors',
-    businessUnit: 'FEMA Region 6 — South Central',
+    businessUnit: 'BP Business Unit — South Central',
     creationKind: 'threshold',
     createdByUser: null,
     thresholdDescription: 'Tidal flood watch threshold reached for Houston Ship Channel approach',
@@ -824,7 +939,7 @@ const DEFAULT_EVENT_LIST: EventListItem[] = (
     type: 'Coastal Erosion',
     status: 'Monitoring',
     severity: 'Low',
-    region: 'FEMA Region 1 — New England',
+    region: 'BP Business Unit — New England',
     location: [-69.9595, 41.6821],
     lead: 'Town of Chatham · DPW Director',
     startedAt: '2026-05-08 08:00 EST',
@@ -832,7 +947,7 @@ const DEFAULT_EVENT_LIST: EventListItem[] = (
     summary:
       'Nor\'easter swell causing minor bluff erosion at Lighthouse Beach. Local road detour on Bridge Street; no shelter activations. Tracked as event under broader Cape Cod storm response.',
     resourcesCommitted: 'Chatham DPW (2 crews), MassDOT District 5 liaison officer',
-    businessUnit: 'FEMA Region 1 — New England',
+    businessUnit: 'BP Business Unit — New England',
     creationKind: 'threshold',
     createdByUser: null,
     thresholdDescription: 'Coastal erosion monitoring threshold reached for Cape Cod shoreline',
@@ -843,7 +958,7 @@ const DEFAULT_EVENT_LIST: EventListItem[] = (
     type: 'Infrastructure / Power',
     status: 'Active',
     severity: 'Low',
-    region: 'FEMA Region 4 — Southeast',
+    region: 'BP Business Unit — Southeast',
     location: [-81.3792, 28.5383],
     lead: 'FDOT District 5 · TMC Operator',
     startedAt: '2026-05-09 07:10 EST',
@@ -851,7 +966,7 @@ const DEFAULT_EVENT_LIST: EventListItem[] = (
     summary:
       'Brief power blip caused 4 interconnected signals to fail on Colonial Drive corridor. Flashing red ops in effect; Duke Energy ETA 45 minutes. Localized impact, not unified command.',
     resourcesCommitted: 'FDOT signal tech team, Orlando Police traffic unit, Duke Energy line crew',
-    businessUnit: 'FEMA Region 4 — Southeast',
+    businessUnit: 'BP Business Unit — Southeast',
     creationKind: 'threshold',
     createdByUser: null,
     thresholdDescription: 'Traffic signal outage cluster threshold reached on Colonial Drive corridor',
@@ -882,7 +997,7 @@ const DEFAULT_EVENT_LIST: EventListItem[] = (
     type: 'Winter Weather',
     status: 'Monitoring',
     severity: 'Low',
-    region: 'FEMA Region 1 — New England',
+    region: 'BP Business Unit — New England',
     location: [-70.2553, 43.6591],
     lead: 'NWS Gray · Maine DOT Liaison',
     startedAt: '2026-05-07 12:00 EST',
@@ -890,7 +1005,7 @@ const DEFAULT_EVENT_LIST: EventListItem[] = (
     summary:
       'Late-season coastal storm watch for Downeast Maine. MaineDOT pre-treating US-1 bridges; no travel restrictions. Standard seasonal watch posture.',
     resourcesCommitted: 'MaineDOT pre-treat crews (4), NWS Gray forecast desk',
-    businessUnit: 'FEMA Region 1 — New England',
+    businessUnit: 'BP Business Unit — New England',
     creationKind: 'threshold',
     createdByUser: null,
     thresholdDescription: 'Winter storm watch threshold reached for Downeast Maine coast',
@@ -901,7 +1016,7 @@ const DEFAULT_EVENT_LIST: EventListItem[] = (
     type: 'Hazmat Support / Perimeter',
     status: 'Monitoring',
     severity: 'Medium',
-    region: 'FEMA Region 6 — South Central',
+    region: 'BP Business Unit — South Central',
     location: [-96.8717, 32.9067],
     lead: 'EPA Region 6 · Air Monitoring Lead',
     startedAt: '2026-05-09 05:30 CST',
@@ -910,31 +1025,72 @@ const DEFAULT_EVENT_LIST: EventListItem[] = (
       'Downwind air monitoring at 1.5-mile perimeter for anhydrous ammonia release. Readings below action levels; shelter-in-place remains per unified command. Support event to active hazmat incident.',
     resourcesCommitted:
       'EPA Region 6 air monitoring team, Dallas Fire-Rescue hazmat techs, 2 fixed-site sensors',
-    businessUnit: 'FEMA Region 6 — South Central',
+    businessUnit: 'BP Business Unit — South Central',
     creationKind: 'threshold',
     createdByUser: null,
     thresholdDescription: 'Perimeter air monitoring watch threshold reached for hazmat support zone',
   },
   {
     id: 11,
-    name: 'Hurricane EDGAR — Gulf Coast Offshore Threat Watch',
-    type: 'Tropical Cyclone / Offshore Operations',
+    name: 'Cherry Point Refinery Fire — Process Unit Alert',
+    type: 'Industrial Fire / Refinery Operations',
     status: 'Active',
     severity: 'High',
-    region: 'Gulf of Mexico — Offshore',
-    location: [-90.78, 27.53],
-    lead: 'NHC · BP Gulf of Mexico Unified Command Liaison',
-    startedAt: '2026-05-09 09:45 EST',
-    lastUpdate: '2026-05-09 09:45 EST',
+    region: 'BP Business Unit — Northwest',
+    location: [-122.7589, 48.862],
+    lead: 'BP Cherry Point Unified Command · Whatcom County OEM Liaison',
+    startedAt: '2026-05-09 09:45 PST',
+    lastUpdate: '2026-05-09 09:45 PST',
     summary:
-      'Cat-4 hurricane EDGAR threatens BP offshore production across the eastern Gulf of Mexico. Mad Dog, Atlantis, Thunder Horse, and NaKika installations face potential shut-in, evacuation, and marine logistics disruption.',
+      'Process unit fire reported at BP Cherry Point Refinery in Ferndale, WA. Partial unit shutdown underway; all personnel accounted for; downwind air monitoring initiated per refinery ERP.',
     resourcesCommitted:
-      'BP CCMER advisor on duty, Gulf of Mexico unified command cell, aviation evacuation standby, offshore standby vessels',
-    businessUnit: 'Gulf of Mexico — Offshore',
-    creationKind: 'threshold',
-    createdByUser: null,
+      'BP industrial fire brigade, Whatcom County mutual aid, WA Ecology spill response liaison, USCG Sector Puget Sound notification',
+    businessUnit: 'Pacific Northwest — Refining',
+    creationKind: 'user',
+    createdByUser: 'John Smith · john.smith@bp.com',
     thresholdDescription:
-      'Hurricane threat threshold crossed for BP Gulf of Mexico offshore asset exposure',
+      'Industrial fire threshold crossed for BP Cherry Point refinery process safety ERP',
+    sourceReport: {
+      shortDescription: 'Cherry Point Refinery Fire — Process Unit Alert',
+      reportDate: '2026-05-09',
+      reportTime: '09:45',
+      facilityLocations: [],
+      facilityLocationOther: 'BP Cherry Point Refinery — Crude Processing Unit, Ferndale, WA',
+      ccmerAdvisors: [],
+      callerName: 'John Smith',
+      callbackNumber: 'john.smith@bp.com',
+      callType: 'incident',
+      whatHappened:
+        'Process unit fire reported at BP Cherry Point Refinery in Ferndale, WA. Partial unit shutdown underway; all personnel accounted for; downwind air monitoring initiated per refinery ERP.',
+      facilityMuster: 'yes',
+      abandonStations: 'no',
+      assistanceNeeded: 'yes',
+      qiDrill: 'no',
+      icNotified: 'yes',
+      icNotifiedName: 'BP Cherry Point Unified Command',
+      scenarios: ['Fire – Jet Pressurized', 'Process Area - Gas Release'],
+    },
+  },
+  {
+    id: 12,
+    name: 'SAR Refinery Explosion — Dakar Process Unit Alert',
+    type: 'Industrial Explosion / Refinery Operations',
+    status: 'Active',
+    severity: 'High',
+    region: 'BP Business Unit — West Africa',
+    location: [-17.439, 14.739],
+    lead: 'BP SAR Refinery Unified Command · Ministry of Petroleum and Mines Liaison',
+    startedAt: '2026-05-09 10:15 GMT',
+    lastUpdate: '2026-05-09 10:15 GMT',
+    summary:
+      'Process unit explosion reported at BP SAR Refinery in Mbao, Dakar, Senegal. Emergency shutdown initiated; casualty accounting and downwind monitoring underway per refinery ERP.',
+    resourcesCommitted:
+      'BP industrial fire brigade, Senegal National Fire Brigade, Ministry of Petroleum and Mines liaison, Port Autonome de Dakar notification',
+    businessUnit: 'West Africa — Refining',
+    creationKind: 'user',
+    createdByUser: 'Fatou Ndiaye · fatou.ndiaye@bp.com',
+    thresholdDescription:
+      'Industrial explosion threshold crossed for BP SAR refinery process safety ERP',
   },
   ] as Omit<EventListItem, 'sendNotificationOnCreate' | 'notificationRecipients'>[]
 ).map((event) => ({
@@ -1296,7 +1452,7 @@ const getAnalyticsRecordSpendDollars = (
   seed: number
 ) => {
   const regionMultiplier =
-    region === 'GOM Offshore' ? 1.35 : region.startsWith('FEMA Region 4') ? 1.15 : 1
+    region === 'GOM Offshore' ? 1.35 : region.startsWith('BP Business Unit — Southeast') ? 1.15 : 1
   const base = ANALYTICS_CATEGORY_SPEND_BASE[resolutionCategory] ?? 320000
   const kindMultiplier = kind === 'incident' ? 1 : 0.42
 
@@ -1901,7 +2057,7 @@ const SITREP_ONGOING_INCIDENTS: IncidentListItem[] = [
     type: 'Coastal Storm / Nor\'easter',
     status: 'Active',
     severity: 'Medium',
-    region: 'FEMA Region 1 — New England',
+    region: 'BP Business Unit — New England',
     location: [-70.2962, 41.6688],
     lead: 'Massachusetts EMA · RA Boston, MA',
     startedAt: '2026-05-08 06:15 EST',
@@ -1918,7 +2074,7 @@ const SITREP_ONGOING_INCIDENTS: IncidentListItem[] = [
     type: 'Infrastructure / Surface Transport',
     status: 'Active',
     severity: 'High',
-    region: 'FEMA Region 1 — New England',
+    region: 'BP Business Unit — New England',
     location: [-71.0589, 42.3601],
     lead: 'Boston OEM · MWRA On-Scene',
     startedAt: '2026-05-09 02:40 EST',
@@ -1935,7 +2091,7 @@ const SITREP_ONGOING_INCIDENTS: IncidentListItem[] = [
     type: 'Riverine Flood / Ice Jam',
     status: 'Monitoring',
     severity: 'Low',
-    region: 'FEMA Region 1 — New England',
+    region: 'BP Business Unit — New England',
     location: [-72.6734, 41.7658],
     lead: 'Connecticut DEM · NWS WFO Hartford',
     startedAt: '2026-05-07 18:00 EST',
@@ -2264,6 +2420,12 @@ const getOngoingIncidentSitrepSectionValue = (
 }
 
 const isNonHumanSitrepAuthor = (name: string) => name.trim().toLowerCase() === 'pratus ai'
+
+const getNotificationSourceDisplayName = (owner: string) =>
+  owner.split('·')[0]?.trim() || owner
+
+const formatResourceAtRiskUpdatedLine = (timestamp: string, owner: string) =>
+  `${timestamp} by ${getNotificationSourceDisplayName(owner)}`
 
 const getHumanSitrepAuthorName = (
   version: { authorName: string; creatorName: string } | null | undefined
@@ -2667,6 +2829,20 @@ const buildInitialIncidentReportFromEvent = (event: EventListItem): InitialIncid
   }
 }
 
+const getEventUpdatedByUser = (event: EventListItem) => {
+  if (event.creationKind === 'user' && event.createdByUser) {
+    return getNotificationSourceDisplayName(event.createdByUser)
+  }
+
+  return 'Pratus'
+}
+
+const formatEventUpdatedLine = (event: EventListItem) =>
+  `${event.lastUpdate} by ${getEventUpdatedByUser(event)}`
+
+const getEventReportSummary = (event: EventListItem) =>
+  formatInitialIncidentReportSummary(buildInitialIncidentReportFromEvent(event))
+
 const buildCreateIncidentFormFromEvent = (
   event: EventListItem,
   aorNames: string[]
@@ -2679,7 +2855,7 @@ const buildCreateIncidentFormFromEvent = (
   const incidentAors =
     matchingAor != null
       ? [matchingAor]
-      : event.region.startsWith('FEMA Region')
+      : event.region.startsWith('BP Business Unit')
         ? [event.region]
         : []
 
@@ -4934,7 +5110,8 @@ function App() {
   const [incidentName, setIncidentName] = useState('')
   const [incidentLocation, setIncidentLocation] = useState('')
   const [incidentCategory, setIncidentCategory] = useState<string[]>([])
-  const [incidentWorkflow, setIncidentWorkflow] = useState('')
+  const [incidentWorkflow, setIncidentWorkflow] = useState('ipieca-ims')
+  const [incidentComplexity, setIncidentComplexity] = useState('tier-1')
   const [incidentTemplate, setIncidentTemplate] = useState('')
   const [previewTemplateId, setPreviewTemplateId] = useState<string | null>(null)
   const [incidentSituationReport, setIncidentSituationReport] = useState('')
@@ -5038,6 +5215,7 @@ function App() {
     'Other',
   ] as const
   const incidentWorkflowOptions = [
+    { value: 'ipieca-ims', label: 'IPIECA IMS' },
     { value: 'uscg-ics', label: 'United States Coast Guard ICS' },
     { value: 'epa-ics', label: 'Environmental Protection Agency ICS' },
     { value: 'bsee-ics', label: 'Bureau of Safety and Environmental Enforcement ICS' },
@@ -5045,11 +5223,17 @@ function App() {
     { value: 'washington-ics', label: 'Washington ICS' },
     { value: 'phmsa-ics', label: 'Pipeline and Hazardous Materials Safety Administration ICS' },
   ] as const
+  const incidentComplexityOptions = [
+    { value: 'tier-1', label: 'Minor (Tier 1)' },
+    { value: 'tier-2', label: 'Major (Tier 2)' },
+    { value: 'tier-3', label: 'Full (Tier 3)' },
+  ] as const
   const incidentTeamTemplateOptions = [
     'Unified Command',
     'Operations Focused',
     'Logistics Heavy',
     'Public Safety Coordination',
+    'Scotland Celtics Soccer Club',
   ] as const
   const incidentTemplateOptions = [
     {
@@ -5073,7 +5257,8 @@ function App() {
     setIncidentName('')
     setIncidentLocation('')
     setIncidentCategory([])
-    setIncidentWorkflow('')
+    setIncidentWorkflow('ipieca-ims')
+    setIncidentComplexity('tier-1')
     setIncidentTemplate('')
     setPreviewTemplateId(null)
     setIncidentSituationReport('')
@@ -7232,71 +7417,115 @@ function App() {
   const [notifications] = useState<NotificationItem[]>([
     {
       id: 0,
-      title: 'Hurricane EDGAR threatening Gulf Coast offshore operations',
+      title: 'Refinery fire reported at BP Cherry Point, Washington',
       severity: 'Critical',
       status: 'New',
-      category: 'Weather',
+      category: 'Hazmat',
       timestamp: '2026-05-09 09:45',
-      owner: 'NHC',
+      owner: 'Sensor Alpha',
       summary:
-        'Cat-4 hurricane EDGAR tracking toward the Florida peninsula with landfall expected within 48 hours; eastern Gulf of Mexico BP installations entering storm watch posture.',
+        'User-reported process unit fire at BP Cherry Point Refinery, Ferndale, WA. Refinery unified command activating ERP; Whatcom County OEM and WA Ecology notified per standing protocol.',
       impact:
-        'Production shut-in, personnel evacuation, and marine logistics disruption forecast across BP Gulf of Mexico assets from Green Canyon through Mississippi Canyon.',
-      location: [-90.78, 27.53],
+        'Crude processing curtailment, marine terminal load suspensions, and downwind air quality monitoring across Whatcom County and northern Puget Sound.',
+      location: [-122.7589, 48.862],
       relatedEventId: 11,
       regionalThreats: {
-        region: 'Gulf of Mexico — Offshore',
+        region: 'BP Business Unit — Northwest',
         description:
-          'Projected hurricane-force winds, high seas, and evacuation windows place the following BP resources at elevated risk:',
+          'Active refinery fire, thermal plume, and product transfer disruptions place the following BP assets and adjacent receptors at elevated risk:',
         threats: [
           {
-            resource: 'BP Mad Dog Platform (Green Canyon 782)',
-            risk: 'Sustained tropical-storm-force winds and 30–40 ft seas would force phased shut-in, suspend crew-change helicopter ops, and require OIM-directed partial evacuation within the next 24-hour window.',
-            location: [-90.78, 27.53],
-            operationalStatus: 'Operational',
+            resource: 'BP Cherry Point Refinery — Crude Processing Unit',
+            risk: 'Confirmed fire in crude processing unit requires full unit isolation, foam application, and perimeter cooling; adjacent units on controlled shutdown with potential cascade impact to alkylation and reformer trains.',
+            location: [-122.7589, 48.862],
+            operationalStatus: 'Partially Operational',
           },
           {
-            resource: 'BP Atlantis Platform (Green Canyon 787)',
-            risk: 'Cat-4 track uncertainty and elevated loop-current swell would disrupt riser monitoring, delay supply vessel offload, and trigger BSEE-mandated production curtailment if wind thresholds are exceeded.',
-            location: [-88.0, 27.2],
-            operationalStatus: 'Operational',
+            resource: 'Cherry Point Marine Terminal',
+            risk: 'Tanker loading and berthing suspended; vapor recovery and firewater supply prioritized to protect dock manifold and export tanks from radiant heat exposure.',
+            location: [-122.745, 48.855],
+            operationalStatus: 'Not Operational',
           },
           {
-            resource: 'BP Thunder Horse PDQ (Mississippi Canyon 778)',
-            risk: 'Heavy seas and sustained gale-force winds would suspend drilling and workover activity, strand non-essential personnel offshore, and stress mooring systems pending post-storm inspection.',
-            location: [-88.6, 28.2],
-            operationalStatus: 'Operational',
+            resource: 'Refinery Tank Farm — North Battery',
+            risk: 'Elevated thermal radiation and smoke plume require fixed monitor activation, foam stock drawdown tracking, and secondary containment inspection on gasoline and diesel storage.',
+            location: [-122.752, 48.868],
+            operationalStatus: 'Partially Operational',
           },
           {
-            resource: 'BP NaKika Floating Production Hub (Mississippi Canyon 474)',
-            risk: 'Eastern Gulf swell and tropical-storm wind radii would halt export tanker loading, interrupt gas-lift compression, and require CCMER notification if process safety margins are compressed.',
-            location: [-88.5, 28.3],
+            resource: 'Ferndale / Blaine Downwind Community Corridor',
+            risk: 'Modeled downwind particulate and VOC plume may require public shelter-in-place messaging, road closures on Grandview Rd, and continuous air monitoring at school and hospital receptors.',
+            location: [-122.591, 48.846],
             operationalStatus: 'Operational',
           },
         ],
         responseChecklist: [
           {
             label:
-              'Activate BP Gulf of Mexico Unified Command and CCMER duty protocol; notify BSEE and USCG Sector NOLA.',
+              'Activate BP Cherry Point refinery ERP and unified command; notify Whatcom County OEM, WA Ecology, and USCG Sector Puget Sound.',
           },
           {
             label:
-              'Pre-position offshore evacuation helicopters and standby vessel crews at inland Gulf Coast heliports.',
+              'Deploy industrial firefighting foam units and mutual-aid strike teams; establish downwind air monitoring perimeter.',
           },
         ],
       },
     },
     {
       id: 1,
-      title: 'Power outage reported in North Levee Sector',
+      title: 'Refinery explosion reported at BP SAR Refinery, Senegal',
       severity: 'Critical',
       status: 'New',
-      category: 'Power',
-      timestamp: '2026-03-28 08:12',
-      owner: 'Dispatch',
-      summary: 'Multiple feeders offline. Crews requested for immediate assessment.',
-      impact: '18,400 customers without power',
-      location: [-96.7969, 32.7767],
+      category: 'Hazmat',
+      timestamp: '2026-05-09 10:15',
+      owner: 'Fatou Ndiaye · fatou.ndiaye@bp.com',
+      summary:
+        'User-reported process unit explosion at BP SAR Refinery, Mbao, Dakar, Senegal. Refinery unified command activating ERP; Ministry of Petroleum and Mines and Port Autonome de Dakar notified per standing protocol.',
+      impact:
+        'Crude and LPG processing curtailment, marine berth suspensions, and downwind air quality monitoring across Mbao, Guédiawaye, and the Dakar metropolitan area.',
+      location: [-17.439, 14.739],
+      relatedEventId: 12,
+      regionalThreats: {
+        region: 'BP Business Unit — West Africa',
+        description:
+          'Active refinery explosion, blast overpressure, and product transfer disruptions place the following BP assets and adjacent receptors at elevated risk:',
+        threats: [
+          {
+            resource: 'BP SAR Refinery — Mbao Cracking Unit',
+            risk: 'Confirmed explosion in the cracking unit requires full plant isolation, foam and cooling application on adjacent columns, and structural assessment before re-entry; potential cascade impact to reformer and LPG recovery trains.',
+            location: [-17.439, 14.739],
+            operationalStatus: 'Partially Operational',
+          },
+          {
+            resource: 'Dakar Marine Terminal — SAR Berth',
+            risk: 'Tanker loading and bunkering suspended; firewater and vapor recovery prioritized to protect dock manifold and export tanks from secondary ignition and radiant heat exposure.',
+            location: [-17.42, 14.695],
+            operationalStatus: 'Not Operational',
+          },
+          {
+            resource: 'Refinery LPG Sphere Farm — East Battery',
+            risk: 'Blast overpressure and fire impingement require deluge system activation, foam stock drawdown tracking, and BLEVE watch on propane storage spheres.',
+            location: [-17.435, 14.732],
+            operationalStatus: 'Partially Operational',
+          },
+          {
+            resource: 'Mbao / Guédiawaye Downwind Community Corridor',
+            risk: 'Modeled downwind particulate, SO₂, and VOC plume may require public shelter-in-place messaging, N1 corridor closures, and continuous air monitoring at clinic and school receptors.',
+            location: [-17.41, 14.78],
+            operationalStatus: 'Operational',
+          },
+        ],
+        responseChecklist: [
+          {
+            label:
+              'Activate BP Senegal refinery ERP and unified command; notify Ministry of Petroleum and Mines, ANACIM, and Dakar port authority.',
+          },
+          {
+            label:
+              'Deploy industrial firefighting and blast-response teams; establish downwind air monitoring and casualty accounting perimeter.',
+          },
+        ],
+      },
     },
     {
       id: 2,
@@ -7326,107 +7555,107 @@ function App() {
   const [resources] = useState<ResourceItem[]>([
     {
       id: 1,
-      name: 'PHI Offshore Evacuation Helicopter — S-92',
-      owner: 'BP Aviation',
+      name: 'Northwest Regional Foam Strike Team',
+      owner: 'Whatcom County Fire District 7',
       status: 'Assigned',
-      type: 'Helicopter / Personnel Evacuation',
-      teamLead: 'Capt. R. Delacroix',
+      type: 'Industrial Firefighting / Foam',
+      teamLead: 'Battalion Chief M. Reeves',
       eta: 'On-site',
-      location: 'Green Canyon 782 heli-deck',
-      notes: 'Supporting phased non-essential personnel evacuation from Mad Dog ahead of Hurricane EDGAR.',
-      mapLocation: [-90.78, 27.53],
-      currentLocation: 'BP Mad Dog Platform',
+      location: 'Cherry Point Refinery — crude unit perimeter',
+      notes: 'Supporting BP industrial fire brigade with high-expansion foam application and cooling water on adjacent process equipment.',
+      mapLocation: [-122.7589, 48.862],
+      currentLocation: 'BP Cherry Point Refinery',
       datetimeOrdered: '05/09/2026 07:15 UTC',
-      opcon: 'BP Gulf of Mexico Unified Command',
-      tacon: 'Mad Dog OIM',
-      pointOfContact: 'BP Aviation Coordinator',
-      owningOrganization: 'British Petroleum',
+      opcon: 'BP Cherry Point Unified Command',
+      tacon: 'Whatcom County Fire District 7',
+      pointOfContact: 'Battalion Chief M. Reeves',
+      owningOrganization: 'Whatcom County Fire District 7',
       quantity: 2,
-      unit: 'aircraft',
-      hullTailNumber: 'N492PH',
-      symbology: 'Rotary-wing evacuation',
-      latitude: '27.53',
-      longitude: '-90.78',
-      capabilities: 'Offshore crew change and emergency evacuation; IFR/night ops certified',
+      unit: 'teams',
+      hullTailNumber: '---',
+      symbology: 'Industrial firefighting',
+      latitude: '48.862',
+      longitude: '-122.7589',
+      capabilities: 'High-expansion foam; aerial monitor ops; refinery mutual-aid coordination',
       currentOpPeriod: 'Op Period 1',
       nextOpPeriod: 'Op Period 2',
-      currentOpPeriodAssignment: 'Mad Dog partial evacuation sorties',
-      nextOpPeriodAssignment: 'Atlantis standby evacuation window',
+      currentOpPeriodAssignment: 'Crude unit perimeter foam and cooling operations',
+      nextOpPeriodAssignment: 'Tank farm secondary containment standby',
       checkInStatus: 'Onsite',
       costUnitType: 'per hour',
-      costPerUnit: 4200,
+      costPerUnit: 2800,
       deploymentKind: 'incident',
-      assignedIncidentName: 'Hurricane EDGAR — Gulf of Mexico Offshore Response',
+      assignedIncidentName: 'Cherry Point Refinery Fire — Process Unit Response',
       assignedExerciseName: null,
     },
     {
       id: 2,
-      name: 'M/V BP Responder — Offshore Standby Vessel',
-      owner: 'BP Marine Logistics',
+      name: 'EPA Region 10 — Portable Air Monitoring Suite',
+      owner: 'EPA Region 10',
       status: 'Staged',
-      type: 'Offshore Support Vessel',
-      teamLead: 'M. Torres',
-      eta: '4 hr',
-      location: 'Port Fourchon staging',
-      notes: 'Standby for platform evacuations, equipment transfer, and post-storm re-entry support.',
-      mapLocation: [-88.72, 29.11],
-      currentLocation: 'Port Fourchon, LA',
+      type: 'Air Monitoring / Environmental',
+      teamLead: 'Dr. A. Chen',
+      eta: '45 min',
+      location: 'Downwind monitoring corridor — Blaine, WA',
+      notes: 'Deploying particulate and VOC monitors along Grandview Rd and Blaine receptor points per unified command air modeling.',
+      mapLocation: [-122.591, 48.846],
+      currentLocation: 'Blaine staging area, WA',
       datetimeOrdered: '05/09/2026 06:00 UTC',
-      opcon: 'BP Logistics Section',
-      tacon: 'USCG Sector NOLA',
-      pointOfContact: 'BP Marine Logistics Cell',
-      owningOrganization: 'British Petroleum',
-      quantity: 1,
-      unit: 'vessel',
-      hullTailNumber: 'IMO 9345123',
-      symbology: 'Offshore standby',
-      latitude: '29.11',
-      longitude: '-88.72',
-      capabilities: 'Personnel transfer; limited firefighting; deck cargo for platform resupply',
+      opcon: 'BP Cherry Point Unified Command',
+      tacon: 'WA Department of Ecology',
+      pointOfContact: 'EPA Region 10 Air Monitoring Cell',
+      owningOrganization: 'U.S. Environmental Protection Agency',
+      quantity: 4,
+      unit: 'monitoring stations',
+      hullTailNumber: '---',
+      symbology: 'Environmental monitoring',
+      latitude: '48.846',
+      longitude: '-122.591',
+      capabilities: 'PM2.5/PM10; benzene and VOC speciation; real-time telemetry to unified command',
       currentOpPeriod: 'Op Period 1',
       nextOpPeriod: 'Op Period 2',
-      currentOpPeriodAssignment: 'Fourchon staging — Edgar pre-landfall posture',
-      nextOpPeriodAssignment: 'Green Canyon platform re-entry support',
+      currentOpPeriodAssignment: 'Blaine downwind perimeter monitoring',
+      nextOpPeriodAssignment: 'Ferndale community receptor expansion',
       checkInStatus: 'Staged',
       costUnitType: 'per day',
-      costPerUnit: 18500,
+      costPerUnit: 9200,
       deploymentKind: 'incident',
-      assignedIncidentName: 'Hurricane EDGAR — Gulf of Mexico Offshore Response',
+      assignedIncidentName: 'Cherry Point Refinery Fire — Process Unit Response',
       assignedExerciseName: null,
     },
     {
       id: 3,
-      name: 'BP CCMER Field Response Team',
+      name: 'BP Emergency Response Team — Pacific Northwest',
       owner: 'BP Emergency Response',
       status: 'Available',
       type: 'Emergency Response Team',
       teamLead: 'C. Landry',
-      eta: '2 hr',
-      location: 'Houston crisis center',
-      notes: 'Available for process-safety support at Mad Dog gas release monitoring and unified command liaison.',
-      mapLocation: [-95.3698, 29.7604],
-      currentLocation: 'BP Westlake Campus, Houston',
+      eta: 'On-site',
+      location: 'Cherry Point refinery EOC',
+      notes: 'Available for process-safety support, ERP documentation, and unified command liaison with Whatcom County OEM and WA Ecology.',
+      mapLocation: [-122.7589, 48.862],
+      currentLocation: 'BP Cherry Point Refinery EOC',
       datetimeOrdered: '05/09/2026 05:30 UTC',
       opcon: 'BP CCMER Program',
-      tacon: 'BSEE District New Orleans',
+      tacon: 'BP Cherry Point Unified Command',
       pointOfContact: 'BP CCMER Advisor on Duty',
       owningOrganization: 'British Petroleum',
       quantity: 1,
       unit: 'team',
       hullTailNumber: '---',
       symbology: 'ERT/CCMER',
-      latitude: '29.7604',
-      longitude: '-95.3698',
-      capabilities: 'Process area assessment; gas detection; ERP scenario coordination; BSEE liaison',
+      latitude: '48.862',
+      longitude: '-122.7589',
+      capabilities: 'Process area assessment; incident command support; regulatory liaison; ERP scenario coordination',
       currentOpPeriod: 'Op Period 1',
       nextOpPeriod: 'Op Period 2',
-      currentOpPeriodAssignment: 'Mad Dog gas release advisory support',
-      nextOpPeriodAssignment: 'Thunder Horse shut-in monitoring',
-      checkInStatus: 'Available',
+      currentOpPeriodAssignment: 'Cherry Point unified command advisory support',
+      nextOpPeriodAssignment: 'Post-fire process safety review support',
+      checkInStatus: 'Onsite',
       costUnitType: 'per day',
       costPerUnit: 8900,
-      deploymentKind: 'available',
-      assignedIncidentName: null,
+      deploymentKind: 'incident',
+      assignedIncidentName: 'Cherry Point Refinery Fire — Process Unit Response',
       assignedExerciseName: null,
     },
   ])
@@ -7449,19 +7678,19 @@ function App() {
   const [incidentList, setIncidentList] = useState<IncidentListItem[]>([
     {
       id: 1,
-      name: 'Hurricane EDGAR — Gulf of Mexico Offshore Response',
-      type: 'Tropical Cyclone / Offshore Operations',
+      name: 'Cherry Point Refinery Fire — Process Unit Response',
+      type: 'Industrial Fire / Refinery Operations',
       status: 'Active',
       severity: 'High',
-      region: 'Gulf of Mexico — Offshore',
-      location: [-90.78, 27.53],
-      lead: 'BP Gulf of Mexico Unified Command · IC Hartman',
-      startedAt: '2026-05-09 07:00 CST',
-      lastUpdate: '2026-05-09 09:46 CST',
+      region: 'BP Business Unit — Northwest',
+      location: [-122.7589, 48.862],
+      lead: 'BP Cherry Point Unified Command · IC Hartman',
+      startedAt: '2026-05-09 07:00 PST',
+      lastUpdate: '2026-05-09 09:46 PST',
       summary:
-        'Cat-4 Hurricane EDGAR approaching the eastern Gulf. BP activating phased shut-in at Mad Dog, Atlantis, Thunder Horse, and NaKika; partial evacuations and helicopter sorties underway under CCMER protocol.',
+        'Process unit fire at BP Cherry Point Refinery in Ferndale, WA. BP industrial fire brigade and Whatcom County mutual aid on-scene; crude unit isolated; marine terminal loadings suspended; downwind air monitoring active under unified command.',
       resourcesCommitted:
-        'BP CCMER advisor, 2 PHI evacuation helicopters, M/V BP Responder, unified command cell, BSEE liaison',
+        'BP industrial fire brigade, Northwest foam strike team, EPA Region 10 air monitoring, WA Ecology liaison, Whatcom County OEM',
       relatedEventIds: [11],
     },
     {
@@ -7496,7 +7725,7 @@ function App() {
         'Eastern Gulf swell and tropical-storm wind radii from EDGAR prompting export curtailment planning at NaKika. Tanker loading suspended; compression margins reviewed with Houston trading desk.',
       resourcesCommitted:
         'NaKika operations team, marine logistics coordinator, offshore weather analyst, export scheduling cell',
-      relatedEventIds: [11],
+      relatedEventIds: [8],
     },
   ])
   const [incidentEventFilters, setIncidentEventFilters] = useState<number[]>([])
@@ -7525,8 +7754,8 @@ function App() {
   const [femaAors] = useState<FemaAorItem[]>([
     {
       id: 1,
-      name: 'FEMA Region 1 — New England',
-      lead: 'RA — Boston, MA',
+      name: 'BP Business Unit — New England',
+      lead: 'BU Lead — Boston, MA',
       incidents: 0,
       priority: 'Low',
       population: '14.8M',
@@ -7535,7 +7764,7 @@ function App() {
       notes: 'CT, ME, MA, NH, RI, VT — steady-state DOT operations.',
       sitrep:
         'Steady-state DOT operations across CT, ME, MA, NH, RI, VT. NWS marine forecasts stable; no active surface-transport disruptions reported.',
-      sitrepUpdatedBy: 'RA Boston, MA',
+      sitrepUpdatedBy: 'BU Lead Boston, MA',
       sitrepSources: [
         'NWS Marine Forecast (WFO Boston, Caribou, Gray)',
         'Mass511 / 511CT / 511NH traffic feeds',
@@ -7546,8 +7775,8 @@ function App() {
     },
     {
       id: 2,
-      name: 'FEMA Region 2 — NY/NJ/PR/USVI',
-      lead: 'RA — New York, NY',
+      name: 'BP Business Unit — NY/NJ/PR/USVI',
+      lead: 'BU Lead — New York, NY',
       incidents: 0,
       priority: 'Low',
       population: '31.5M',
@@ -7556,7 +7785,7 @@ function App() {
       notes: 'NJ, NY, PR, USVI — monitoring downstream coastal impacts.',
       sitrep:
         'Monitoring downstream coastal swell from Atlantic system. Port of NY/NJ traffic normal; PR/USVI EOC reports no DOT impacts at this time.',
-      sitrepUpdatedBy: 'RA New York, NY',
+      sitrepUpdatedBy: 'BU Lead New York, NY',
       sitrepSources: [
         'NHC Atlantic basin swell guidance',
         'PANYNJ TRANSCOM port traffic feed',
@@ -7568,8 +7797,8 @@ function App() {
     },
     {
       id: 3,
-      name: 'FEMA Region 3 — Mid-Atlantic',
-      lead: 'RA — Philadelphia, PA',
+      name: 'BP Business Unit — Mid-Atlantic',
+      lead: 'BU Lead — Philadelphia, PA',
       incidents: 0,
       priority: 'Medium',
       population: '32.1M',
@@ -7578,11 +7807,11 @@ function App() {
       notes: 'DE, DC, MD, PA, VA, WV — staging ESF-1 backfill assets for Region 4.',
       sitrep:
         'ESF-1 backfill assets staged at Richmond and Petersburg in support of Region 4. I-95 corridor flowing southbound; contraflow plans on standby pending FDOT request.',
-      sitrepUpdatedBy: 'RA Philadelphia, PA',
+      sitrepUpdatedBy: 'BU Lead Philadelphia, PA',
       sitrepSources: [
         'FHWA ESF-1 staging tracker',
         'VDOT 511 / Maryland CHART probe data',
-        'FEMA Region 3 WebEOC',
+        'BP Business Unit — Mid-Atlantic operations center',
         'I-95 Corridor Coalition contraflow plan',
         'PennDOT 511 / DelDOT DelTrac',
       ],
@@ -7590,8 +7819,8 @@ function App() {
     },
     {
       id: 4,
-      name: 'FEMA Region 4 — Southeast',
-      lead: 'RA — Atlanta, GA',
+      name: 'BP Business Unit — Southeast',
+      lead: 'BU Lead — Atlanta, GA',
       incidents: 8,
       priority: 'High',
       population: '67.2M',
@@ -7601,7 +7830,7 @@ function App() {
         'AL, FL, GA, KY, MS, NC, SC, TN — major hurricane response, multi-state contraflow active.',
       sitrep:
         'Multi-state contraflow active on I-75/I-95; FDOT TMC managing Wildwood gridlock. 8 active DOT incidents; FEMA airlift staging at MCO holding through current ground stop.',
-      sitrepUpdatedBy: 'RA Atlanta, GA',
+      sitrepUpdatedBy: 'BU Lead Atlanta, GA',
       sitrepSources: [
         'FDOT SunGuide TMC live traffic feed',
         'FAA NAS Status / OIS — MCO ground stop',
@@ -7614,8 +7843,8 @@ function App() {
     },
     {
       id: 5,
-      name: 'FEMA Region 5 — Great Lakes',
-      lead: 'RA — Chicago, IL',
+      name: 'BP Business Unit — Great Lakes',
+      lead: 'BU Lead — Chicago, IL',
       incidents: 0,
       priority: 'Low',
       population: '52.6M',
@@ -7624,7 +7853,7 @@ function App() {
       notes: 'IL, IN, MI, MN, OH, WI — steady-state DOT operations.',
       sitrep:
         'Steady-state DOT operations across IL, IN, MI, MN, OH, WI. Lake-effect bands forecast for upper MI; salt brine staged but no closures in effect.',
-      sitrepUpdatedBy: 'RA Chicago, IL',
+      sitrepUpdatedBy: 'BU Lead Chicago, IL',
       sitrepSources: [
         'NWS WFO Marquette / Gaylord / Milwaukee',
         'MDOT / MnDOT / WisDOT 511 winter ops',
@@ -7635,8 +7864,8 @@ function App() {
     },
     {
       id: 6,
-      name: 'FEMA Region 6 — South Central',
-      lead: 'RA — Denton, TX',
+      name: 'BP Business Unit — South Central',
+      lead: 'BU Lead — Denton, TX',
       incidents: 3,
       priority: 'High',
       population: '41.0M',
@@ -7646,7 +7875,7 @@ function App() {
         'AR, LA, NM, OK, TX — multiple active surface-transport incidents under DOT response.',
       sitrep:
         '3 active surface-transport incidents in TX. PHMSA on-scene at LBJ Express hazmat; AUS runway closure expected to lift this afternoon. NWS flash-flood watch over Houston metro.',
-      sitrepUpdatedBy: 'RA Denton, TX',
+      sitrepUpdatedBy: 'BU Lead Denton, TX',
       sitrepSources: [
         'TxDOT Lone Star ITS / DriveTexas feed',
         'PHMSA NRC hazmat incident log',
@@ -7658,8 +7887,8 @@ function App() {
     },
     {
       id: 7,
-      name: 'FEMA Region 7 — Heartland',
-      lead: 'RA — Kansas City, MO',
+      name: 'BP Business Unit — Heartland',
+      lead: 'BU Lead — Kansas City, MO',
       incidents: 0,
       priority: 'Low',
       population: '14.3M',
@@ -7668,7 +7897,7 @@ function App() {
       notes: 'IA, KS, MO, NE — steady-state DOT operations.',
       sitrep:
         'Steady-state DOT operations across IA, KS, MO, NE. NWS severe weather outlook marginal; FRA monitoring elevated grain-train activity but no incidents reported.',
-      sitrepUpdatedBy: 'RA Kansas City, MO',
+      sitrepUpdatedBy: 'BU Lead Kansas City, MO',
       sitrepSources: [
         'NWS SPC Day-1 Convective Outlook',
         'FRA Office of Safety incident database',
@@ -7679,8 +7908,8 @@ function App() {
     },
     {
       id: 8,
-      name: 'FEMA Region 8 — Mountain',
-      lead: 'RA — Denver, CO',
+      name: 'BP Business Unit — Mountain',
+      lead: 'BU Lead — Denver, CO',
       incidents: 0,
       priority: 'Low',
       population: '12.5M',
@@ -7689,7 +7918,7 @@ function App() {
       notes: 'CO, MT, ND, SD, UT, WY — steady-state DOT operations.',
       sitrep:
         'Steady-state DOT operations across CO, MT, ND, SD, UT, WY. CDOT chain laws stood down; mountain pass forecasts clear through next 48 hours.',
-      sitrepUpdatedBy: 'RA Denver, CO',
+      sitrepUpdatedBy: 'BU Lead Denver, CO',
       sitrepSources: [
         'CDOT / WYDOT / MDT 511 mountain-pass APIs',
         'NWS WFO Boulder / Salt Lake / Riverton',
@@ -7700,8 +7929,8 @@ function App() {
     },
     {
       id: 9,
-      name: 'FEMA Region 9 — Pacific',
-      lead: 'RA — Oakland, CA',
+      name: 'BP Business Unit — Pacific',
+      lead: 'BU Lead — Oakland, CA',
       incidents: 0,
       priority: 'Medium',
       population: '50.5M',
@@ -7710,7 +7939,7 @@ function App() {
       notes: 'AZ, CA, HI, NV, Pacific Territories — wildfire watch, otherwise steady-state.',
       sitrep:
         'CAL FIRE Red Flag Warning posted for inland CA; Caltrans staging detour resources along SR-1. Pacific territories nominal; HI DOT reports normal ops.',
-      sitrepUpdatedBy: 'RA Oakland, CA',
+      sitrepUpdatedBy: 'BU Lead Oakland, CA',
       sitrepSources: [
         'CAL FIRE Incident Information feed',
         'NWS WFO Hanford / LA / San Diego Red Flag warnings',
@@ -7722,24 +7951,25 @@ function App() {
     },
     {
       id: 10,
-      name: 'FEMA Region 10 — Northwest',
-      lead: 'RA — Bothell, WA',
-      incidents: 0,
-      priority: 'Low',
+      name: 'BP Business Unit — Northwest',
+      lead: 'BU Lead — Bothell, WA',
+      incidents: 1,
+      priority: 'High',
       population: '14.4M',
-      lastUpdate: '2026-05-09 08:15 EST',
-      evacuationStatus: 'None',
-      notes: 'AK, ID, OR, WA — steady-state DOT operations.',
+      lastUpdate: '2026-05-09 09:46 PST',
+      evacuationStatus: 'Recommended',
+      notes: 'AK, ID, OR, WA — BP Cherry Point refinery fire response active in Whatcom County.',
       sitrep:
-        'Steady-state DOT operations across AK, ID, OR, WA. WSDOT mountain pass conditions clear; AK DOT&PF reports normal ferry schedule on the Marine Highway.',
-      sitrepUpdatedBy: 'RA Bothell, WA',
+        'BP Cherry Point refinery fire in Ferndale, WA driving partial unit shutdown and marine terminal suspensions. Whatcom County OEM unified command active; WSDOT monitoring Grandview Rd corridor closures; no state highway contraflow required.',
+      sitrepUpdatedBy: 'BU Lead Bothell, WA',
       sitrepSources: [
-        'WSDOT Mountain Pass API',
-        'AK DOT&PF Marine Highway System feed',
-        'NWS WFO Anchorage / Seattle / Portland',
-        'ODOT TripCheck / ITD 511',
+        'Whatcom County OEM incident status board',
+        'WA Department of Ecology spill and air monitoring feed',
+        'WSDOT traffic cameras — Grandview Rd / I-5 Blaine corridor',
+        'NWS WFO Seattle smoke and wind forecast',
+        'USCG Sector Puget Sound marine safety broadcast',
       ],
-      location: [-120.0, 46.0],
+      location: [-122.7589, 48.862],
     },
   ])
   const SITREP_SCOPE_OPTIONS: SitrepScopeOption[] = [
@@ -8288,7 +8518,7 @@ function App() {
     if (!femaRegionsLayerRef.current) {
       const femaLayer = new GraphicsLayer({
         id: 'fema-regions-layer',
-        title: 'FEMA Regions',
+        title: 'BP Business Units',
         listMode: 'hide',
       })
       femaRegionGraphicsRef.current = new globalThis.Map<number, Graphic>()
@@ -8337,13 +8567,17 @@ function App() {
       (notification.regionalThreats?.threats ?? []).map((threat, threatIndex) => ({
         mapKey: `notification-${notification.id}-threat-${threatIndex}`,
         title: threat.resource,
-        kind: `Resource at Risk — ${notification.regionalThreats?.region ?? ''}`,
+        kind: `Asset at Risk — ${notification.regionalThreats?.region ?? ''}`,
         coordinates: threat.location,
         color: [234, 88, 12, 0.95] as [number, number, number, number],
         status: notification.severity,
         owner: notification.owner,
-        timestamp: notification.timestamp,
-        impact: threat.risk,
+        updatedByLine: formatResourceAtRiskUpdatedLine(
+          notification.timestamp,
+          notification.owner
+        ),
+        report: threat.risk,
+        isResourceAtRisk: true as const,
       }))
     )
     const pointGraphics = [
@@ -8362,7 +8596,7 @@ function App() {
       ...resources.map((item) => ({
         mapKey: `resource-${item.id}`,
         title: item.name,
-        kind: 'Resource',
+        kind: 'Asset',
         coordinates: item.mapLocation,
         color: [14, 116, 144, 0.9] as [number, number, number, number],
         status: item.status,
@@ -8426,9 +8660,15 @@ function App() {
         owner: item.lead,
         timestamp: item.lastUpdate,
         impact: `${item.type} · ${item.severity} · ${item.region}`,
+        isEvent: true as const,
+        creationLabel: getEventCreationLabel(item),
+        updatedByLine: formatEventUpdatedLine(item),
+        eventReport: getEventReportSummary(item),
       })),
     ].map((item) => {
       const usesExecutiveSummary = 'executiveSummary' in item
+      const isResourceAtRisk = 'isResourceAtRisk' in item && item.isResourceAtRisk
+      const isEvent = 'isEvent' in item && item.isEvent
       const graphic = new Graphic({
         geometry: {
           type: 'point',
@@ -8450,19 +8690,36 @@ function App() {
           kind: item.kind,
           status: item.status,
           owner: item.owner,
-          timestamp: item.timestamp,
-          ...(usesExecutiveSummary
+          ...(isResourceAtRisk
             ? {
-                executiveSummary: item.executiveSummary,
                 updatedByLine: item.updatedByLine,
+                report: item.report,
               }
-            : { impact: item.impact }),
+            : isEvent
+              ? {
+                  creationLabel: item.creationLabel,
+                  updatedByLine: item.updatedByLine,
+                  eventReport: item.eventReport,
+                }
+              : usesExecutiveSummary
+                ? {
+                    executiveSummary: item.executiveSummary,
+                    updatedByLine: item.updatedByLine,
+                  }
+                : {
+                    timestamp: 'timestamp' in item ? item.timestamp : '',
+                    impact: 'impact' in item ? item.impact : '',
+                  }),
         },
         popupTemplate: {
           title: '{title}',
-          content: usesExecutiveSummary
-            ? '<b>Type:</b> {kind}<br/><b>Status:</b> {status}<br/><b>Owner:</b> {owner}<br/><b>Updated:</b> {updatedByLine}<br/><b>Executive Summary:</b> {executiveSummary}'
-            : '<b>Type:</b> {kind}<br/><b>Status:</b> {status}<br/><b>Owner:</b> {owner}<br/><b>Updated:</b> {timestamp}<br/><b>Impact:</b> {impact}',
+          content: isResourceAtRisk
+            ? '<b>Type:</b> {kind}<br/><b>Status:</b> {status}<br/><b>Source:</b> {owner}<br/><b>Updated:</b> {updatedByLine}<br/><b>Report:</b> {report}'
+            : isEvent
+              ? '<b>Type:</b> {kind}<br/><b>Status:</b> {status}<br/><b>Created:</b> {creationLabel}<br/><b>Updated:</b> {updatedByLine}<br/><b>Event Report:</b> {eventReport}'
+              : usesExecutiveSummary
+                ? '<b>Type:</b> {kind}<br/><b>Status:</b> {status}<br/><b>Owner:</b> {owner}<br/><b>Updated:</b> {updatedByLine}<br/><b>Executive Summary:</b> {executiveSummary}'
+                : '<b>Type:</b> {kind}<br/><b>Status:</b> {status}<br/><b>Owner:</b> {owner}<br/><b>Updated:</b> {timestamp}<br/><b>Impact:</b> {impact}',
         },
       })
       return { mapKey: item.mapKey, graphic }
@@ -8988,6 +9245,8 @@ function App() {
     ? 'glass-organic glass-organic-results'
     : 'bg-background/95'
   const glassItemBorderClasses = isGlassMode ? 'border-black dark:border-black' : ''
+  const selectedPanelItemClasses =
+    'relative z-10 ring-2 ring-primary/60 ring-offset-2 ring-offset-background bg-primary/5'
   const glassIconButtonClasses = isGlassMode
     ? 'glass-organic border-white/25 bg-transparent text-foreground'
     : ''
@@ -9017,9 +9276,9 @@ function App() {
   const activeFormTabLabel = activeTab.startsWith('form-') ? activeTab.replace('form-', '') : null
   const getPratusContextLabelForTab = (tab: LeftTab) => {
     if (tab === 'notifications') return 'Notifications'
-    if (tab === 'resources') return 'Resources'
+    if (tab === 'resources') return 'Assets'
     if (tab === 'aors') return 'Objectives & Actions'
-    if (tab === 'fema-regions') return 'Business Units'
+    if (tab === 'fema-regions') return 'BP Business Units'
     if (tab === 'incident-list') return 'Incidents'
     if (tab === 'exercises') return 'Exercises'
     if (tab === 'events') return 'Events'
@@ -10023,6 +10282,7 @@ function App() {
     setIncidentName(seed.incidentName)
     setIncidentCategory(seed.incidentCategory)
     setIncidentWorkflow(seed.incidentWorkflow)
+    setIncidentComplexity('tier-1')
     setIncidentTemplate(seed.incidentTemplate)
     setPreviewTemplateId(null)
     setIncidentSituationReport(seed.incidentSituationReport)
@@ -10069,10 +10329,10 @@ function App() {
         <span className="font-medium">Started:</span> {event.startedAt}
       </p>
       <p className="mt-1">
-        <span className="font-medium">Last Update:</span> {event.lastUpdate}
+        <span className="font-medium">Updated:</span> {formatEventUpdatedLine(event)}
       </p>
       <p className="mt-2">
-        <span className="font-medium">Summary:</span> {event.summary}
+        <span className="font-medium">Event Report:</span> {getEventReportSummary(event)}
       </p>
       <p className="mt-2">
         <span className="font-medium">Resources Committed:</span> {event.resourcesCommitted}
@@ -13480,12 +13740,12 @@ function App() {
                           variant={isGlassMode ? 'outline' : activeTab === 'resources' ? 'default' : 'outline'}
                           className={selectedGlassTabClasses(activeTab === 'resources')}
                           onClick={() => setActiveTab('resources')}
-                          aria-label="Open Resources tab"
+                          aria-label="Open Assets tab"
                         >
                           <Box className="h-4 w-4" />
                         </Button>
                       </TooltipTrigger>
-                      <TooltipContent side="bottom" sideOffset={6}>Resources</TooltipContent>
+                      <TooltipContent side="bottom" sideOffset={6}>Assets</TooltipContent>
                     </Tooltip>
                     {isInIncidentWorkspace && (
                       <Tooltip>
@@ -13514,14 +13774,14 @@ function App() {
                           variant={isGlassMode ? 'outline' : activeTab === 'fema-regions' ? 'default' : 'outline'}
                           className={selectedGlassTabClasses(activeTab === 'fema-regions')}
                           onClick={() => setActiveTab('fema-regions')}
-                          aria-label="Open Business Units tab"
+                          aria-label="Open BP Business Units tab"
                           data-pratus-context-id="tab:fema-regions"
-                          data-pratus-context-label="Business Units"
+                          data-pratus-context-label="BP Business Units"
                         >
                           <MapPin className="h-4 w-4" />
                         </Button>
                       </TooltipTrigger>
-                      <TooltipContent side="bottom" sideOffset={6}>Business Units</TooltipContent>
+                      <TooltipContent side="bottom" sideOffset={6}>BP Business Units</TooltipContent>
                     </Tooltip>
                     {!isInExerciseWorkspace && (
                       <Tooltip>
@@ -13968,9 +14228,9 @@ function App() {
                       'Notifications'
                     ))}
                   {activeTab === 'resources' &&
-                    (resourcesPanelView === 'resource-requests' ? 'Resource Requests' : 'Resources')}
+                    (resourcesPanelView === 'resource-requests' ? 'Asset Requests' : 'Assets')}
                   {activeTab === 'aors' && 'Objectives & Actions'}
-                  {activeTab === 'fema-regions' && 'Business Units'}
+                  {activeTab === 'fema-regions' && 'BP Business Units'}
                   {activeTab === 'incident-list' && 'Incidents'}
                   {activeTab === 'exercises' && 'Exercises'}
                   {activeTab === 'events' &&
@@ -14010,13 +14270,13 @@ function App() {
                       }}
                       variant="outline"
                       size="sm"
-                      aria-label="Resources panel view"
+                      aria-label="Assets panel view"
                     >
                       <ToggleGroupItem value="resources" className="px-2.5 text-xs">
-                        Resources
+                        Assets
                       </ToggleGroupItem>
                       <ToggleGroupItem value="resource-requests" className="px-2.5 text-xs">
-                        Resource Requests
+                        Asset Requests
                       </ToggleGroupItem>
                     </ToggleGroup>
                     <Popover
@@ -14038,7 +14298,7 @@ function App() {
                           variant={activeResourcesFieldFilterCount > 0 ? 'default' : 'outline'}
                           size="icon"
                           className="relative h-8 w-8"
-                          aria-label="Filter resources"
+                          aria-label="Filter assets"
                         >
                           <SlidersHorizontal className="h-4 w-4" />
                           {activeResourcesFieldFilterCount > 0 && (
@@ -14171,7 +14431,7 @@ function App() {
                           variant="outline"
                           size="icon"
                           className="h-8 w-8"
-                          aria-label="Resources display options"
+                          aria-label="Assets display options"
                         >
                           <MoreVertical className="h-4 w-4" />
                         </Button>
@@ -14380,8 +14640,8 @@ function App() {
                         <Button type="button" size="sm" variant="outline">
                           <span className="max-w-[12rem] truncate">
                             {eventBusinessUnitFilters.length > 0
-                              ? `Business Units: ${eventBusinessUnitFilters.length} selected`
-                              : 'Business Unit: All'}
+                              ? `BP Business Units: ${eventBusinessUnitFilters.length} selected`
+                              : 'BP Business Unit: All'}
                           </span>
                           <ChevronDown className="ml-1 h-4 w-4" />
                         </Button>
@@ -14489,7 +14749,8 @@ function App() {
                       </ItemContent>
                     </Item>
                   ) : (
-                    cardFilteredNotifications.map((item) => {
+                    <div className="flex flex-col gap-2 px-0.5 pt-1">
+                    {cardFilteredNotifications.map((item) => {
                     const key = `notification-${item.id}`
                     const isOpen = expandedItemId === key
                     const relatedEvent =
@@ -14503,7 +14764,7 @@ function App() {
                         className={cn(
                           'flex-col items-stretch p-0',
                           glassItemBorderClasses,
-                          selectedPanelItemId === key && 'ring-2 ring-primary/60 bg-primary/5'
+                          selectedPanelItemId === key && selectedPanelItemClasses
                         )}
                       >
                         <Collapsible
@@ -14540,6 +14801,14 @@ function App() {
                                   event.stopPropagation()
                                   setSelectedPanelItemId(key)
                                   setSelectedNestedItemId(null)
+                                  if (relatedEvent) {
+                                    void focusMapItem(
+                                      `event-list-${relatedEvent.id}`,
+                                      relatedEvent.location,
+                                      50000
+                                    )
+                                    return
+                                  }
                                   const linkedAor = item.regionalThreats
                                     ? femaAors.find((aor) =>
                                         aor.name.startsWith(item.regionalThreats!.region)
@@ -14614,7 +14883,7 @@ function App() {
                                     </p>
                                   )}
                                   <p className="font-medium">
-                                    Resources at Risk in {item.regionalThreats.region}
+                                    Assets at Risk in {item.regionalThreats.region}
                                   </p>
                                   <div className="mt-2 space-y-1.5">
                                     {item.regionalThreats.threats.map((threat, threatIndex) => {
@@ -14674,7 +14943,7 @@ function App() {
                                                   <Button
                                                     variant="ghost"
                                                     size="icon"
-                                                    aria-label="Toggle resource threat details"
+                                                    aria-label="Toggle asset threat details"
                                                     onClick={(event) => event.stopPropagation()}
                                                   >
                                                     <ChevronDown
@@ -14688,8 +14957,22 @@ function App() {
                                               </ItemActions>
                                             </div>
                                             <CollapsibleContent>
-                                              <div className="border-t px-2.5 py-2 text-sm text-muted-foreground">
-                                                {threat.risk}
+                                              <div className="space-y-1 border-t px-2.5 py-2 text-sm text-muted-foreground">
+                                                <p>
+                                                  <span className="font-medium text-foreground">
+                                                    Updated:
+                                                  </span>{' '}
+                                                  {formatResourceAtRiskUpdatedLine(
+                                                    item.timestamp,
+                                                    item.owner
+                                                  )}
+                                                </p>
+                                                <p>
+                                                  <span className="font-medium text-foreground">
+                                                    Report:
+                                                  </span>{' '}
+                                                  {threat.risk}
+                                                </p>
                                               </div>
                                             </CollapsibleContent>
                                           </Collapsible>
@@ -14794,7 +15077,8 @@ function App() {
                         </Collapsible>
                       </Item>
                     )
-                    })
+                    })}
+                    </div>
                   )
                 )}
 
@@ -14803,7 +15087,7 @@ function App() {
                   cardFilteredResources.length === 0 && (
                     <Item variant="outline" className={glassItemBorderClasses}>
                       <ItemContent>
-                        <ItemTitle>No matching resources</ItemTitle>
+                        <ItemTitle>No matching assets</ItemTitle>
                         <ItemDescription>Try a broader search term.</ItemDescription>
                       </ItemContent>
                     </Item>
@@ -14895,7 +15179,7 @@ function App() {
                                   <Button
                                     variant="ghost"
                                     size="icon"
-                                    aria-label="Zoom map to resource"
+                                    aria-label="Zoom map to asset"
                                     onClick={() => {
                                       setSelectedPanelItemId(key)
                                       void focusMapItem(
@@ -14953,7 +15237,7 @@ function App() {
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                aria-label="Zoom map to resource"
+                                aria-label="Zoom map to asset"
                                 onClick={(event) => {
                                   event.stopPropagation()
                                   setSelectedPanelItemId(key)
@@ -14967,7 +15251,7 @@ function App() {
                                 <Button
                                   variant="ghost"
                                   size="icon"
-                                  aria-label="Toggle resource details"
+                                  aria-label="Toggle asset details"
                                   onClick={(event) => event.stopPropagation()}
                                 >
                                   <ChevronDown
@@ -15066,7 +15350,7 @@ function App() {
                   cardFilteredResourceRequests.length === 0 && (
                     <Item variant="outline" className={glassItemBorderClasses}>
                       <ItemContent>
-                        <ItemTitle>No matching resource requests</ItemTitle>
+                        <ItemTitle>No matching asset requests</ItemTitle>
                         <ItemDescription>Try a broader search term.</ItemDescription>
                       </ItemContent>
                     </Item>
@@ -15153,7 +15437,7 @@ function App() {
                                     <Button
                                       variant="ghost"
                                       size="icon"
-                                      aria-label="Zoom map to resource request"
+                                      aria-label="Zoom map to asset request"
                                       onClick={() => {
                                         setSelectedPanelItemId(key)
                                         void focusMapItem(
@@ -15255,7 +15539,7 @@ function App() {
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                aria-label="Zoom map to resource request"
+                                aria-label="Zoom map to asset request"
                                 onClick={(event) => {
                                   event.stopPropagation()
                                   setSelectedPanelItemId(key)
@@ -15272,7 +15556,7 @@ function App() {
                                 <Button
                                   variant="ghost"
                                   size="icon"
-                                  aria-label="Toggle resource request details"
+                                  aria-label="Toggle asset request details"
                                   onClick={(event) => event.stopPropagation()}
                                 >
                                   <ChevronDown
@@ -16709,7 +16993,7 @@ function App() {
                   cardFilteredFemaAors.length === 0 ? (
                     <Item variant="outline" className={glassItemBorderClasses}>
                       <ItemContent>
-                        <ItemTitle>No matching Business Units</ItemTitle>
+                        <ItemTitle>No matching BP Business Units</ItemTitle>
                         <ItemDescription>Try a broader search term.</ItemDescription>
                       </ItemContent>
                     </Item>
@@ -26515,6 +26799,44 @@ function App() {
                             <div className="flex items-center gap-2">
                               <Checkbox
                                 checked={incidentWorkflow === option.value}
+                                className="pointer-events-none"
+                                aria-hidden="true"
+                              />
+                              <span>{option.label}</span>
+                            </div>
+                          </DropdownMenuItem>
+                        ))}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="incident-complexity">Select Incident Complexity</Label>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          id="incident-complexity"
+                          type="button"
+                          variant="outline"
+                          className="w-full justify-between font-normal"
+                        >
+                          <span className="truncate text-left">
+                            {incidentComplexityOptions.find(
+                              (option) => option.value === incidentComplexity
+                            )?.label ?? 'Select incident complexity'}
+                          </span>
+                          <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="start">
+                        {incidentComplexityOptions.map((option) => (
+                          <DropdownMenuItem
+                            key={option.value}
+                            className="pr-2"
+                            onClick={() => setIncidentComplexity(option.value)}
+                          >
+                            <div className="flex items-center gap-2">
+                              <Checkbox
+                                checked={incidentComplexity === option.value}
                                 className="pointer-events-none"
                                 aria-hidden="true"
                               />
