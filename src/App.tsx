@@ -73,6 +73,7 @@ import {
   Sun,
   Target,
   Trash2,
+  UserCircle,
   Users,
   X,
 } from 'lucide-react'
@@ -15649,6 +15650,36 @@ function App() {
               <img src={pratusLogo} alt="" className="h-4 w-auto object-contain" aria-hidden="true" />
               PRATUS AI
             </Button>
+            {isSupabaseEnabled && profileEmail && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className={cn('h-10 w-10', glassIconButtonClasses)}
+                    aria-label="Open profile menu"
+                  >
+                    <UserCircle className="h-5 w-5" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-56">
+                  <DropdownMenuLabel className="truncate font-normal text-muted-foreground">
+                    {profileEmail}
+                    {isOrgAdmin ? ' · Org admin' : ''}
+                  </DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onClick={() => {
+                      void signOut()
+                    }}
+                  >
+                    <LogOut className="mr-2 h-4 w-4" />
+                    Sign out
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
           </div>
         </div>
       </div>
@@ -16158,23 +16189,6 @@ function App() {
                       <DropdownMenuItem onClick={() => setPanelWidthMode('one-third')}>
                         Panel width: 1/3
                       </DropdownMenuItem>
-                      {isSupabaseEnabled && profileEmail && (
-                        <>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuLabel className="truncate text-xs font-normal text-muted-foreground">
-                            {profileEmail}
-                            {isOrgAdmin ? ' · Org admin' : ''}
-                          </DropdownMenuLabel>
-                          <DropdownMenuItem
-                            onClick={() => {
-                              void signOut()
-                            }}
-                          >
-                            <LogOut className="mr-2 h-4 w-4" />
-                            Sign out
-                          </DropdownMenuItem>
-                        </>
-                      )}
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </div>
