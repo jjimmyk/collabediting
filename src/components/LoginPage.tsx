@@ -9,7 +9,6 @@ import {
   formatCooldownDuration,
   getSignInCooldownRemainingMs,
   hasRecentSignInLinkSent,
-  markSignInLinkSent,
 } from '@/lib/auth-errors'
 import pratusLogo from '@/assets/pratus-logo.png'
 
@@ -41,19 +40,7 @@ export function LoginPage() {
 
     const remaining = getSignInCooldownRemainingMs()
     if (remaining > 0) {
-      if (hasRecentSignInLinkSent()) {
-        setMessage(
-          `${SUCCESS_MESSAGE} You can request another link in ${formatCooldownDuration(remaining)}.`
-        )
-      } else {
-        setError(`Please wait ${formatCooldownDuration(remaining)} before requesting another sign-in link.`)
-      }
-      return
-    }
-
-    if (hasRecentSignInLinkSent()) {
-      markSignInLinkSent()
-      setMessage(`${SUCCESS_MESSAGE} You can request another link in about 2 minutes if needed.`)
+      setError(`Please wait ${formatCooldownDuration(remaining)} before requesting another sign-in link.`)
       return
     }
 

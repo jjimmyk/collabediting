@@ -1,6 +1,10 @@
 import type { WorkspaceRosterMember } from '@/lib/workspace-types'
 
-export const DEFAULT_WORKSPACE_ROSTER_EMAIL = 'jimmy.king@disastertech.com'
+export const DEFAULT_WORKSPACE_ROSTER_EMAILS = [
+  'jimmy.king@disastertech.com',
+  'jamespking47@gmail.com',
+] as const
+
 export const DEFAULT_WORKSPACE_ROSTER_POSITION = 'Incident Commander'
 
 const DEFAULT_INCIDENT_WORKSPACE_IDS = [1, 2, 3] as const
@@ -16,9 +20,7 @@ function formatNow(): string {
   })
 }
 
-export function createDefaultRosterMember(
-  email: string = DEFAULT_WORKSPACE_ROSTER_EMAIL
-): WorkspaceRosterMember {
+export function createDefaultRosterMember(email: string): WorkspaceRosterMember {
   return {
     id: `default-${email}`,
     email: email.toLowerCase(),
@@ -30,20 +32,26 @@ export function createDefaultRosterMember(
 }
 
 export function buildDefaultLocalWorkspaceRosters(): Record<string, WorkspaceRosterMember[]> {
-  const member = createDefaultRosterMember()
   const rosters: Record<string, WorkspaceRosterMember[]> = {}
 
   for (const id of DEFAULT_INCIDENT_WORKSPACE_IDS) {
-    rosters[`incident-${id}`] = [{ ...member, id: `${member.id}-incident-${id}` }]
+    rosters[`incident-${id}`] = DEFAULT_WORKSPACE_ROSTER_EMAILS.map((email) => ({
+      ...createDefaultRosterMember(email),
+      id: `default-${email}-incident-${id}`,
+    }))
   }
 
   for (const id of DEFAULT_EXERCISE_WORKSPACE_IDS) {
-    rosters[`exercise-${id}`] = [{ ...member, id: `${member.id}-exercise-${id}` }]
+    rosters[`exercise-${id}`] = DEFAULT_WORKSPACE_ROSTER_EMAILS.map((email) => ({
+      ...createDefaultRosterMember(email),
+      id: `default-${email}-exercise-${id}`,
+    }))
   }
 
   return rosters
 }
 
 export function isDefaultRosterEmail(email: string): boolean {
-  return email.trim().toLowerCase() === DEFAULT_WORKSPACE_ROSTER_EMAIL
+  const normalized = email.trim().toLowerCase()
+  return DEFAULT_WORKSPACE_ROSTER_EMAILS.some((entry) => entry === normalized)
 }

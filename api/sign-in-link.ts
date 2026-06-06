@@ -20,8 +20,61 @@ function getAppUrl(): string {
   ).replace(/\/$/, '')
 }
 
+function parseRetryAfterSeconds(message: string): number | null {
+  const match = message.match(/after\s+(\d+)\s+seconds?/i)
+  if (!match) return null
+  const seconds = Number(match[1])
+  return Number.isFinite(seconds) && seconds > 0 ? seconds : null
+}
+
+function authErrorResponse(res: VercelResponse, message: string) {
+  const retryAfterSeconds = parseRetryAfterSeconds(message)
+  const normalized = message.toLowerCase()
+  const isRateLimited =
+    retryAfterSeconds !== null ||
+    normalized.includes('rate limit') ||
+    normalized.includes('too many requests')
+
+  return res.status(isRateLimited ? 429 : 400).json({
+    error: message,
+    retryAfterSeconds: retryAfterSeconds ?? undefined,
+  })
+}
+
 type SignInBody = {
   email?: string
+}
+
+async function sendSignInEmailViaResend(params: {
+  apiKey: string
+  fromAddress: string
+  email: string
+  signInLink: string
+}): Promise<{ ok: true } | { ok: false; details: string }> {
+  const emailResponse = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${params.apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      from: params.fromAddress,
+      to: [params.email],
+      subject: 'Your Pratus sign-in link',
+      html: `
+        <p>Click the link below to sign in to Pratus. This link expires in about one hour.</p>
+        <p><a href="${params.signInLink}">Sign in to Pratus</a></p>
+        <p>If you did not request this email, you can ignore it.</p>
+      `,
+    }),
+  })
+
+  if (!emailResponse.ok) {
+    const details = await emailResponse.text().catch(() => '')
+    return { ok: false, details: details.slice(0, 300) }
+  }
+
+  return { ok: true }
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -40,49 +93,31 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const redirectTo = `${getAppUrl()}/auth/callback`
   const admin = createClient(supabaseUrl, supabaseServiceRoleKey)
-
-  const { data, error } = await admin.auth.admin.generateLink({
-    type: 'magiclink',
-    email,
-    options: { redirectTo },
-  })
-
-  if (error) {
-    const message = error.message.toLowerCase().includes('rate limit')
-      ? 'Email rate limit exceeded.'
-      : error.message
-    const status = message.toLowerCase().includes('rate limit') ? 429 : 400
-    return res.status(status).json({ error: message })
-  }
-
-  const signInLink = data.properties.action_link
   const resendKey = process.env.RESEND_API_KEY
   const fromAddress = process.env.SIGN_IN_EMAIL_FROM ?? 'Pratus <onboarding@resend.dev>'
 
   if (resendKey) {
-    const emailResponse = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${resendKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        from: fromAddress,
-        to: [email],
-        subject: 'Your Pratus sign-in link',
-        html: `
-          <p>Click the link below to sign in to Pratus. This link expires in about one hour.</p>
-          <p><a href="${signInLink}">Sign in to Pratus</a></p>
-          <p>If you did not request this email, you can ignore it.</p>
-        `,
-      }),
+    const { data, error } = await admin.auth.admin.generateLink({
+      type: 'magiclink',
+      email,
+      options: { redirectTo },
     })
 
-    if (!emailResponse.ok) {
-      const details = await emailResponse.text().catch(() => '')
+    if (error) {
+      return authErrorResponse(res, error.message)
+    }
+
+    const sent = await sendSignInEmailViaResend({
+      apiKey: resendKey,
+      fromAddress,
+      email,
+      signInLink: data.properties.action_link,
+    })
+
+    if (!sent.ok) {
       return res.status(502).json({
         error: 'Could not send sign-in email.',
-        details: details.slice(0, 300),
+        details: sent.details,
       })
     }
 
@@ -95,8 +130,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   })
 
   if (otpError) {
-    const status = otpError.message.toLowerCase().includes('rate limit') ? 429 : 400
-    return res.status(status).json({ error: otpError.message })
+    return authErrorResponse(res, otpError.message)
   }
 
   return res.status(200).json({ ok: true, delivery: 'supabase' })

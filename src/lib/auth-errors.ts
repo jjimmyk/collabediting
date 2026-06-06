@@ -1,10 +1,23 @@
 const SIGN_IN_SENT_STORAGE_KEY = 'pratus-signin-link-sent-at'
-const SIGN_IN_COOLDOWN_MS = 2 * 60 * 1000
+const SIGN_IN_RETRY_AFTER_STORAGE_KEY = 'pratus-signin-retry-after-until'
 const SIGN_IN_RATE_LIMIT_COOLDOWN_MS = 15 * 60 * 1000
 const SIGN_IN_RATE_LIMIT_STORAGE_KEY = 'pratus-signin-rate-limited-at'
+const DEFAULT_SIGN_IN_COOLDOWN_MS = 65 * 1000
+
+export function parseSignInRetryAfterSeconds(message: string): number | null {
+  const match = message.match(/after\s+(\d+)\s+seconds?/i)
+  if (!match) return null
+  const seconds = Number(match[1])
+  return Number.isFinite(seconds) && seconds > 0 ? seconds : null
+}
 
 export function formatSignInError(message: string): string {
   const normalized = message.toLowerCase()
+  const retryAfterSeconds = parseSignInRetryAfterSeconds(message)
+
+  if (retryAfterSeconds !== null) {
+    return `Please wait ${retryAfterSeconds} seconds before requesting another sign-in link.`
+  }
 
   if (
     normalized.includes('rate limit') ||
@@ -21,10 +34,17 @@ export function formatSignInError(message: string): string {
   return message
 }
 
-export function markSignInLinkSent(): void {
+export function markSignInLinkSent(cooldownMs: number = DEFAULT_SIGN_IN_COOLDOWN_MS): void {
   if (typeof window === 'undefined') return
   sessionStorage.setItem(SIGN_IN_SENT_STORAGE_KEY, String(Date.now()))
+  sessionStorage.setItem(SIGN_IN_RETRY_AFTER_STORAGE_KEY, String(Date.now() + cooldownMs))
   sessionStorage.removeItem(SIGN_IN_RATE_LIMIT_STORAGE_KEY)
+}
+
+export function markSignInRetryAfter(seconds: number): void {
+  if (typeof window === 'undefined') return
+  const cooldownMs = Math.max(seconds, 1) * 1000
+  sessionStorage.setItem(SIGN_IN_RETRY_AFTER_STORAGE_KEY, String(Date.now() + cooldownMs))
 }
 
 export function markSignInRateLimited(): void {
@@ -34,6 +54,13 @@ export function markSignInRateLimited(): void {
 
 export function getSignInCooldownRemainingMs(): number {
   if (typeof window === 'undefined') return 0
+
+  const retryUntil = sessionStorage.getItem(SIGN_IN_RETRY_AFTER_STORAGE_KEY)
+  if (retryUntil) {
+    const remaining = Number(retryUntil) - Date.now()
+    if (remaining > 0) return remaining
+    sessionStorage.removeItem(SIGN_IN_RETRY_AFTER_STORAGE_KEY)
+  }
 
   const rateLimitedAt = sessionStorage.getItem(SIGN_IN_RATE_LIMIT_STORAGE_KEY)
   if (rateLimitedAt) {
@@ -47,7 +74,7 @@ export function getSignInCooldownRemainingMs(): number {
   if (!sentAt) return 0
 
   const elapsed = Date.now() - Number(sentAt)
-  const remaining = SIGN_IN_COOLDOWN_MS - elapsed
+  const remaining = DEFAULT_SIGN_IN_COOLDOWN_MS - elapsed
   return remaining > 0 ? remaining : 0
 }
 
