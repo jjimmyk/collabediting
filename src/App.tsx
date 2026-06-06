@@ -11159,25 +11159,6 @@ function App() {
       .toLowerCase()
       .includes(normalizedQuery)
   })
-  const searchFilteredExercises = exerciseList.filter((item) => {
-    if (!normalizedQuery) {
-      return true
-    }
-
-    return [
-      item.name,
-      item.type,
-      item.status,
-      item.severity,
-      item.region,
-      item.lead,
-      item.summary,
-      item.resourcesCommitted,
-    ]
-      .join(' ')
-      .toLowerCase()
-      .includes(normalizedQuery)
-  })
   const searchFilteredEvents = eventList.filter((item) => {
     if (!normalizedQuery) {
       return true
@@ -11458,29 +11439,6 @@ function App() {
       .toLowerCase()
       .includes(activePanelSearchQuery)
   })
-  const cardFilteredExerciseList = exerciseList.filter((item) => {
-    if (isSupabaseEnabled && !canAccessWorkspace('exercise', item.id)) {
-      return false
-    }
-
-    if (!activePanelSearchQuery) {
-      return true
-    }
-
-    return [
-      item.name,
-      item.type,
-      item.status,
-      item.severity,
-      item.region,
-      item.lead,
-      item.summary,
-      item.resourcesCommitted,
-    ]
-      .join(' ')
-      .toLowerCase()
-      .includes(activePanelSearchQuery)
-  })
   const cardFilteredFemaAors = femaAors.filter((item) => {
     if (!activePanelSearchQuery) {
       return true
@@ -11604,6 +11562,52 @@ function App() {
     }
     return sortIncidentsBySeverity([...byId.values()])
   }, [accessibleWorkspaces, exerciseList, isSupabaseEnabled, profileEmail])
+  const searchFilteredExercises = allExercisesForWorkspace.filter((item) => {
+    if (isSupabaseEnabled && !canAccessWorkspace('exercise', item.id)) {
+      return false
+    }
+
+    if (!normalizedQuery) {
+      return true
+    }
+
+    return [
+      item.name,
+      item.type,
+      item.status,
+      item.severity,
+      item.region,
+      item.lead,
+      item.summary,
+      item.resourcesCommitted,
+    ]
+      .join(' ')
+      .toLowerCase()
+      .includes(normalizedQuery)
+  })
+  const cardFilteredExerciseList = allExercisesForWorkspace.filter((item) => {
+    if (isSupabaseEnabled && !canAccessWorkspace('exercise', item.id)) {
+      return false
+    }
+
+    if (!activePanelSearchQuery) {
+      return true
+    }
+
+    return [
+      item.name,
+      item.type,
+      item.status,
+      item.severity,
+      item.region,
+      item.lead,
+      item.summary,
+      item.resourcesCommitted,
+    ]
+      .join(' ')
+      .toLowerCase()
+      .includes(activePanelSearchQuery)
+  })
   const activeExerciseWorkspace = useMemo(() => {
     if (activeExerciseWorkspaceId === null) return null
     return (
