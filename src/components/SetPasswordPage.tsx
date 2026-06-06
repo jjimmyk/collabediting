@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Shield } from 'lucide-react'
+import App from '@/App'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -7,24 +8,38 @@ import { Label } from '@/components/ui/label'
 import { useAuth } from '@/contexts/AuthContext'
 import pratusLogo from '@/assets/pratus-logo.png'
 
-export function LoginPage() {
-  const { signInWithPassword } = useAuth()
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
+export function SetPasswordPage() {
+  const { profileEmail, setPassword, needsPasswordSetup } = useAuth()
+  const [password, setPasswordValue] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault()
     setError(null)
-    setIsSubmitting(true)
 
-    const result = await signInWithPassword(email, password)
+    if (password.length < 8) {
+      setError('Password must be at least 8 characters.')
+      return
+    }
+
+    if (password !== confirmPassword) {
+      setError('Passwords do not match.')
+      return
+    }
+
+    setIsSubmitting(true)
+    const result = await setPassword(password)
     setIsSubmitting(false)
 
     if (!result.ok) {
       setError(result.message)
     }
+  }
+
+  if (!needsPasswordSetup) {
+    return <App />
   }
 
   return (
@@ -37,45 +52,43 @@ export function LoginPage() {
           <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
             <Shield className="h-5 w-5 text-primary" />
           </div>
-          <CardTitle>Sign in to Pratus</CardTitle>
+          <CardTitle>Create your password</CardTitle>
           <CardDescription>
-            Sign in with the email on your workspace roster and the password you created from your
-            invitation link.
+            {profileEmail
+              ? `Set a password for ${profileEmail} to finish signing in.`
+              : 'Set a password to finish signing in.'}
           </CardDescription>
         </CardHeader>
         <CardContent>
           <form className="space-y-4" onSubmit={handleSubmit}>
             <div className="space-y-2">
-              <Label htmlFor="login-email">Work email</Label>
+              <Label htmlFor="new-password">Password</Label>
               <Input
-                id="login-email"
-                type="email"
-                autoComplete="email"
-                placeholder="name@agency.gov"
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
+                id="new-password"
+                type="password"
+                autoComplete="new-password"
+                value={password}
+                onChange={(event) => setPasswordValue(event.target.value)}
                 required
+                minLength={8}
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="login-password">Password</Label>
+              <Label htmlFor="confirm-password">Confirm password</Label>
               <Input
-                id="login-password"
+                id="confirm-password"
                 type="password"
-                autoComplete="current-password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
+                autoComplete="new-password"
+                value={confirmPassword}
+                onChange={(event) => setConfirmPassword(event.target.value)}
                 required
+                minLength={8}
               />
             </div>
             {error && <p className="text-sm text-destructive">{error}</p>}
             <Button type="submit" className="w-full" disabled={isSubmitting}>
-              {isSubmitting ? 'Signing in…' : 'Sign in'}
+              {isSubmitting ? 'Saving…' : 'Save password and continue'}
             </Button>
-            <p className="text-xs text-muted-foreground">
-              First time here? Open the <strong>Sign In</strong> link in your invitation email,
-              then create your password. After that, use email and password on this screen.
-            </p>
           </form>
         </CardContent>
       </Card>

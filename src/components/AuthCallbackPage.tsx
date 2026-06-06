@@ -2,14 +2,22 @@ import { useEffect, useState } from 'react'
 import { Loader2 } from 'lucide-react'
 import App from '@/App'
 import { LoginPage } from '@/components/LoginPage'
+import { SetPasswordPage } from '@/components/SetPasswordPage'
 import { useAuth } from '@/contexts/AuthContext'
+import {
+  parseAuthCallbackUrl,
+  shouldPromptForPasswordSetup,
+  userNeedsPasswordSetup,
+} from '@/lib/auth-callback'
 import { getSupabaseClient } from '@/lib/supabase'
+import type { Session } from '@supabase/supabase-js'
 
-type Status = 'processing' | 'ready' | 'failed'
+type Status = 'processing' | 'ready' | 'needs-password' | 'failed'
 
 export function AuthCallbackPage() {
-  const { refreshAccess, session } = useAuth()
+  const { refreshAccess, session, setNeedsPasswordSetupFlag } = useAuth()
   const [status, setStatus] = useState<Status>('processing')
+  const [resolvedSession, setResolvedSession] = useState<Session | null>(null)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
   useEffect(() => {
@@ -25,42 +33,73 @@ export function AuthCallbackPage() {
         return
       }
 
-      const hash = window.location.hash.startsWith('#')
-        ? window.location.hash.slice(1)
-        : window.location.hash
-      const hashParams = new URLSearchParams(hash)
-      const searchParams = new URLSearchParams(window.location.search)
-
-      const accessToken = hashParams.get('access_token')
-      const refreshToken = hashParams.get('refresh_token')
-      const code = searchParams.get('code')
+      const callback = parseAuthCallbackUrl()
 
       try {
-        if (accessToken && refreshToken) {
-          const { error } = await supabase.auth.setSession({
-            access_token: accessToken,
-            refresh_token: refreshToken,
+        if (callback.tokenHash && callback.type) {
+          const { error } = await supabase.auth.verifyOtp({
+            token_hash: callback.tokenHash,
+            type: callback.type,
           })
           if (error) {
             throw error
           }
-        } else if (code) {
-          const { error } = await supabase.auth.exchangeCodeForSession(code)
+        } else if (callback.accessToken && callback.refreshToken) {
+          const { error } = await supabase.auth.setSession({
+            access_token: callback.accessToken,
+            refresh_token: callback.refreshToken,
+          })
+          if (error) {
+            throw error
+          }
+        } else if (callback.code) {
+          const { error } = await supabase.auth.exchangeCodeForSession(callback.code)
           if (error) {
             throw error
           }
         } else {
-          const { error } = await supabase.auth.getSession()
+          const { data, error } = await supabase.auth.getSession()
           if (error) {
             throw error
           }
+          if (!data.session) {
+            throw new Error('No sign-in credentials were found in this link. Request a new one.')
+          }
         }
 
+        const {
+          data: { session: currentSession },
+          error: sessionError,
+        } = await supabase.auth.getSession()
+
+        if (sessionError) {
+          throw sessionError
+        }
+
+        if (!currentSession) {
+          throw new Error('Sign-in completed but no session was created.')
+        }
+
+        if (!mounted) return
+
+        setResolvedSession(currentSession)
         await refreshAccess()
 
         if (!mounted) return
 
         window.history.replaceState({}, '', '/')
+
+        const needsPassword =
+          shouldPromptForPasswordSetup(callback.type) ||
+          userNeedsPasswordSetup(currentSession.user)
+
+        if (needsPassword) {
+          setNeedsPasswordSetupFlag(true)
+          setStatus('needs-password')
+          return
+        }
+
+        setNeedsPasswordSetupFlag(false)
         setStatus('ready')
       } catch (error) {
         if (!mounted) return
@@ -74,7 +113,7 @@ export function AuthCallbackPage() {
     return () => {
       mounted = false
     }
-  }, [refreshAccess])
+  }, [refreshAccess, setNeedsPasswordSetupFlag])
 
   if (status === 'processing') {
     return (
@@ -94,9 +133,18 @@ export function AuthCallbackPage() {
     )
   }
 
-  if (session) {
+  if (status === 'needs-password') {
+    return <SetPasswordPage />
+  }
+
+  if (status === 'ready' && (resolvedSession || session)) {
     return <App />
   }
 
-  return <LoginPage />
+  return (
+    <div className="flex min-h-screen flex-col items-center justify-center gap-3">
+      <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      <p className="text-sm text-muted-foreground">Loading your account…</p>
+    </div>
+  )
 }

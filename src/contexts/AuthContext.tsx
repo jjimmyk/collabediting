@@ -9,8 +9,7 @@ import {
 } from 'react'
 import type { Session, User } from '@supabase/supabase-js'
 import { getSupabaseClient, isSupabaseConfigured } from '@/lib/supabase'
-import { getAuthCallbackUrl } from '@/lib/app-url'
-import { formatSignInError, markSignInLinkSent, markSignInRateLimited, markSignInRetryAfter } from '@/lib/auth-errors'
+import { userNeedsPasswordSetup } from '@/lib/auth-callback'
 import type { AccessibleWorkspace } from '@/lib/workspace-types'
 import {
   activatePendingInvites,
@@ -27,7 +26,13 @@ type AuthContextValue = {
   profileEmail: string | null
   isOrgAdmin: boolean
   accessibleWorkspaces: AccessibleWorkspace[]
-  signInWithEmail: (email: string) => Promise<{ ok: true } | { ok: false; message: string }>
+  needsPasswordSetup: boolean
+  signInWithPassword: (
+    email: string,
+    password: string
+  ) => Promise<{ ok: true } | { ok: false; message: string }>
+  setPassword: (password: string) => Promise<{ ok: true } | { ok: false; message: string }>
+  setNeedsPasswordSetupFlag: (value: boolean) => void
   signOut: () => Promise<void>
   refreshAccess: () => Promise<void>
   canAccessWorkspace: (kind: 'incident' | 'exercise', legacyId: number) => boolean
@@ -41,6 +46,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null)
   const [isOrgAdmin, setIsOrgAdmin] = useState(!isSupabaseConfigured)
   const [accessibleWorkspaces, setAccessibleWorkspaces] = useState<AccessibleWorkspace[]>([])
+  const [needsPasswordSetup, setNeedsPasswordSetup] = useState(false)
 
   const refreshAccess = useCallback(async () => {
     if (!isSupabaseConfigured) {
@@ -59,6 +65,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!currentSession?.user) {
       setIsOrgAdmin(false)
       setAccessibleWorkspaces([])
+      setNeedsPasswordSetup(false)
       return
     }
 
@@ -70,6 +77,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const workspaces = await fetchAccessibleWorkspaces(currentSession.user.id, orgAdmin)
     setAccessibleWorkspaces(workspaces)
+
+    setNeedsPasswordSetup((current) => current || userNeedsPasswordSetup(currentSession.user))
   }, [])
 
   useEffect(() => {
@@ -89,6 +98,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     supabase.auth.getSession().then(({ data }) => {
       if (!mounted) return
       setSession(data.session)
+      if (data.session?.user) {
+        setNeedsPasswordSetup(userNeedsPasswordSetup(data.session.user))
+      }
       setLoading(false)
     })
 
@@ -96,6 +108,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, nextSession) => {
       setSession(nextSession)
+      if (nextSession?.user) {
+        setNeedsPasswordSetup((current) => current || userNeedsPasswordSetup(nextSession.user))
+      } else {
+        setNeedsPasswordSetup(false)
+      }
     })
 
     return () => {
@@ -110,7 +127,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     void refreshAccess()
   }, [loading, session?.user?.id, refreshAccess])
 
-  const signInWithEmail = useCallback(async (email: string) => {
+  const signInWithPassword = useCallback(async (email: string, password: string) => {
     const supabase = getSupabaseClient()
     if (!supabase) {
       return { ok: false as const, message: 'Supabase is not configured.' }
@@ -121,31 +138,58 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return { ok: false as const, message: 'Enter a valid email address.' }
     }
 
-    const redirectTo = getAuthCallbackUrl()
-    const response = await fetch('/api/sign-in-link', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: trimmed, redirectTo }),
+    if (password.length === 0) {
+      return { ok: false as const, message: 'Enter your password.' }
+    }
+
+    const { error } = await supabase.auth.signInWithPassword({
+      email: trimmed,
+      password,
     })
 
-    const payload = (await response.json().catch(() => ({}))) as {
-      error?: string
-      ok?: boolean
-      retryAfterSeconds?: number
-    }
-
-    if (!response.ok) {
-      const message = formatSignInError(payload.error ?? 'Sign-in request failed.')
-      if (typeof payload.retryAfterSeconds === 'number' && payload.retryAfterSeconds > 0) {
-        markSignInRetryAfter(payload.retryAfterSeconds)
-      } else if (response.status === 429) {
-        markSignInRateLimited()
+    if (error) {
+      const normalized = error.message.toLowerCase()
+      if (normalized.includes('invalid login credentials')) {
+        return {
+          ok: false as const,
+          message:
+            'Invalid email or password. If this is your first sign-in, use the link in your invitation email to create a password.',
+        }
       }
-      return { ok: false as const, message }
+      return { ok: false as const, message: error.message }
     }
 
-    markSignInLinkSent()
+    setNeedsPasswordSetup(false)
+    await refreshAccess()
     return { ok: true as const }
+  }, [refreshAccess])
+
+  const setPassword = useCallback(async (password: string) => {
+    const supabase = getSupabaseClient()
+    if (!supabase) {
+      return { ok: false as const, message: 'Supabase is not configured.' }
+    }
+
+    if (password.length < 8) {
+      return { ok: false as const, message: 'Password must be at least 8 characters.' }
+    }
+
+    const { error } = await supabase.auth.updateUser({
+      password,
+      data: { password_set: true },
+    })
+
+    if (error) {
+      return { ok: false as const, message: error.message }
+    }
+
+    setNeedsPasswordSetup(false)
+    await refreshAccess()
+    return { ok: true as const }
+  }, [refreshAccess])
+
+  const setNeedsPasswordSetupFlag = useCallback((value: boolean) => {
+    setNeedsPasswordSetup(value)
   }, [])
 
   const signOut = useCallback(async () => {
@@ -154,6 +198,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await supabase.auth.signOut()
     setAccessibleWorkspaces([])
     setIsOrgAdmin(false)
+    setNeedsPasswordSetup(false)
   }, [])
 
   const getAccessToken = useCallback(async () => {
@@ -180,7 +225,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       profileEmail: session?.user?.email?.toLowerCase() ?? null,
       isOrgAdmin,
       accessibleWorkspaces,
-      signInWithEmail,
+      needsPasswordSetup,
+      signInWithPassword,
+      setPassword,
+      setNeedsPasswordSetupFlag,
       signOut,
       refreshAccess,
       canAccessWorkspace,
@@ -191,7 +239,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       session,
       isOrgAdmin,
       accessibleWorkspaces,
-      signInWithEmail,
+      needsPasswordSetup,
+      signInWithPassword,
+      setPassword,
+      setNeedsPasswordSetupFlag,
       signOut,
       refreshAccess,
       canAccessWorkspace,
