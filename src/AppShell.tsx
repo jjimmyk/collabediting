@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Loader2 } from 'lucide-react'
 import App from '@/App'
+import { AuthCallbackPage } from '@/components/AuthCallbackPage'
 import { LoginPage } from '@/components/LoginPage'
 import { useAuth } from '@/contexts/AuthContext'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -47,10 +48,24 @@ function AcceptInvitePage() {
   return <App />
 }
 
+function hasAuthTokensInUrl(): boolean {
+  if (typeof window === 'undefined') {
+    return false
+  }
+  if (window.location.hash.includes('access_token=')) {
+    return true
+  }
+  const params = new URLSearchParams(window.location.search)
+  return params.has('code')
+}
+
 export function AppShell() {
   const { isSupabaseEnabled, loading, session } = useAuth()
-  const isAcceptInviteRoute =
-    typeof window !== 'undefined' && window.location.pathname.startsWith('/accept-invite')
+
+  const pathname = typeof window !== 'undefined' ? window.location.pathname : '/'
+  const isAuthCallbackRoute = pathname.startsWith('/auth/callback')
+  const isAcceptInviteRoute = pathname.startsWith('/accept-invite')
+  const shouldHandleAuthCallback = isAuthCallbackRoute || hasAuthTokensInUrl()
 
   if (!isSupabaseEnabled) {
     return <App />
@@ -64,6 +79,10 @@ export function AppShell() {
     )
   }
 
+  if (shouldHandleAuthCallback) {
+    return <AuthCallbackPage />
+  }
+
   if (isAcceptInviteRoute) {
     return <AcceptInvitePage />
   }
@@ -72,7 +91,7 @@ export function AppShell() {
     return <LoginPage />
   }
 
-  if (session && !isAcceptInviteRoute) {
+  if (session) {
     return <App />
   }
 

@@ -125,7 +125,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const inviteRedirect =
     redirectTo && redirectTo.startsWith('http')
       ? redirectTo
-      : `${getAppUrl()}/accept-invite?workspace=${workspaceId}`
+      : `${getAppUrl()}/auth/callback?workspace=${workspaceId}`
 
   const { error: inviteError } = await admin.auth.admin.inviteUserByEmail(email, {
     redirectTo: inviteRedirect,

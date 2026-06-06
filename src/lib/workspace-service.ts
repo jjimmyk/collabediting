@@ -1,4 +1,5 @@
-import { getAppOrigin, getSupabaseClient, isSupabaseConfigured } from '@/lib/supabase'
+import { getAcceptInviteUrl } from '@/lib/app-url'
+import { getSupabaseClient, isSupabaseConfigured } from '@/lib/supabase'
 import type {
   AccessibleWorkspace,
   DbWorkspaceMember,
@@ -203,7 +204,7 @@ export async function inviteWorkspaceMember(params: {
       workspaceId: params.workspaceId,
       email: params.email,
       icsPosition: params.icsPosition,
-      redirectTo: `${getAppOrigin()}/accept-invite?workspace=${params.workspaceId}`,
+      redirectTo: getAcceptInviteUrl(params.workspaceId),
     }),
   })
 

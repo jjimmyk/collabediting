@@ -9,6 +9,7 @@ import {
 } from 'react'
 import type { Session, User } from '@supabase/supabase-js'
 import { getSupabaseClient, isSupabaseConfigured } from '@/lib/supabase'
+import { getAuthCallbackUrl } from '@/lib/app-url'
 import type { AccessibleWorkspace } from '@/lib/workspace-types'
 import {
   activatePendingInvites,
@@ -119,7 +120,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return { ok: false as const, message: 'Enter a valid email address.' }
     }
 
-    const redirectTo = `${window.location.origin}/accept-invite`
+    const redirectTo = getAuthCallbackUrl()
     const { error } = await supabase.auth.signInWithOtp({
       email: trimmed,
       options: { emailRedirectTo: redirectTo },

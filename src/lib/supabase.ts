@@ -26,10 +26,3 @@ export function getSupabaseClient(): SupabaseClient | null {
   }
   return client
 }
-
-export function getAppOrigin(): string {
-  if (typeof window !== 'undefined' && window.location.origin) {
-    return window.location.origin
-  }
-  return (import.meta.env.VITE_APP_URL as string | undefined) ?? 'http://localhost:5173'
-}
