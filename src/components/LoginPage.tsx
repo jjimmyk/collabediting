@@ -39,8 +39,7 @@ export function LoginPage() {
           </div>
           <CardTitle>Sign in to Pratus</CardTitle>
           <CardDescription>
-            Sign in with the email on your workspace roster and the password you created from your
-            invitation link.
+            Sign in with your roster email and password.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -51,7 +50,7 @@ export function LoginPage() {
                 id="login-email"
                 type="email"
                 autoComplete="email"
-                placeholder="name@agency.gov"
+                placeholder="jimmy.king@disastertech.com"
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
                 required
@@ -73,8 +72,8 @@ export function LoginPage() {
               {isSubmitting ? 'Signing in…' : 'Sign in'}
             </Button>
             <p className="text-xs text-muted-foreground">
-              First time here? Open the <strong>Sign In</strong> link in your invitation email,
-              then create your password. After that, use email and password on this screen.
+              Demo accounts: <strong>jimmy.king@disastertech.com</strong> and{' '}
+              <strong>jamespking47@gmail.com</strong>
             </p>
           </form>
         </CardContent>
