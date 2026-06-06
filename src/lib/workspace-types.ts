@@ -17,6 +17,8 @@ export type AccessibleWorkspace = {
   legacyId: number
   name: string
   icsPosition: string
+  region: string | null
+  summary: string | null
 }
 
 export type UserProfile = {

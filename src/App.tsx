@@ -4,6 +4,7 @@ import {
   type Dispatch,
   type ReactNode,
   type SetStateAction,
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -157,7 +158,9 @@ import { consumeInvitedWorkspaceId } from '@/lib/auth-callback'
 import type { WorkspaceRosterMember } from '@/lib/workspace-types'
 import { buildDefaultLocalWorkspaceRosters } from '@/lib/default-roster'
 import {
+  createWorkspace,
   fetchWorkspaceRoster,
+  findAccessibleWorkspaceUuid,
   inviteWorkspaceMember,
   removeWorkspaceRosterMember as removeWorkspaceRosterMemberFromDb,
   resolveWorkspaceId,
@@ -174,6 +177,35 @@ import {
 import { EventsSettingsPage } from '@/components/EventsSettingsPage'
 import { NotificationSettingsPage } from '@/components/NotificationSettingsPage'
 import pratusLogo from '@/assets/pratus-logo.png'
+import { Ics201SectionEditorBadges } from '@/features/ics201/Ics201SectionEditorBadges'
+import {
+  BASELINE_MAP_SKETCH_POLYGON,
+  createInitialIcs201Form,
+  ICS201_SECTION_LABELS,
+  ICS201_SECTION_PROMPTS,
+  MOCK_ICS201_COLLABORATORS,
+} from '@/features/ics201/constants'
+import type {
+  Ics201ActionRow,
+  Ics201FormState,
+  Ics201MapSketchVertex,
+  Ics201ResourceSummaryRow,
+  Ics201SafetyRow,
+  Ics201SectionId,
+  Ics201Version,
+  Ics201VersionSignature,
+} from '@/features/ics201/types'
+import {
+  cloneIcs201FormState,
+  createLocalIcs201Version,
+  createSeedIcs201Versions,
+  ics201VersionAuthorLabel,
+  resolveActiveIcs201Section,
+} from '@/features/ics201/utils'
+import { useIcs201ObjectivesSectionEditor } from '@/hooks/useIcs201ObjectivesSectionEditor'
+import { useIcs201Presence } from '@/hooks/useIcs201Presence'
+import { useIcs201Sync } from '@/hooks/useIcs201Sync'
+import { useIcs201TextSectionEditor } from '@/hooks/useIcs201TextSectionEditor'
 
 type OperationalStatus = 'Operational' | 'Partially Operational' | 'Not Operational'
 
@@ -672,6 +704,8 @@ type CalendarItem = {
 
 type IncidentListItem = {
   id: number
+  /** Supabase `workspaces.id` when synced */
+  workspaceId?: string
   name: string
   type: string
   category: string
@@ -2520,6 +2554,92 @@ const getOngoingIncidentSitrepSectionValue = (
   }
 }
 
+type WorkspaceSitrepSource = {
+  id: number
+  name: string
+  region: string
+  summary: string
+  lead: string
+  type: string
+  resourcesCommitted: string
+  severity: string
+  status: string
+  startedAt?: string
+}
+
+function buildDefaultSitrepForWorkspace(
+  workspace: WorkspaceSitrepSource,
+  kind: 'incident' | 'exercise',
+  baseForm: SitrepFormState
+): SitrepFormState {
+  const workspaceKindLabel = kind === 'exercise' ? 'Exercise' : 'Incident'
+  const ongoing =
+    kind === 'incident' ? ONGOING_INCIDENT_SITREP_CONTENT[workspace.id] : undefined
+  const stamp = new Date().toISOString().slice(0, 16).replace('T', ' ') + ' UTC'
+
+  if (ongoing) {
+    return {
+      ...baseForm,
+      reportNumber: `SITREP-${workspace.id}-${new Date().getFullYear()}`,
+      preparedDateTime: stamp,
+      reportingPeriodStart: workspace.startedAt ?? stamp,
+      reportingPeriodEnd: stamp,
+      incidentName: workspace.name,
+      incidentLocation: workspace.region,
+      preparedBy: workspace.lead,
+      agency: workspace.region,
+      executiveSummary: ongoing.executiveSummary,
+      readinessAssessment: ongoing.readinessAssessment,
+      riskToMission: ongoing.riskToMission,
+      outstandingRfiRfr: ongoing.outstandingRfiRfr,
+      previousCriticalIncidentComms: ongoing.previousCriticalIncidentComms,
+      generalComments: ongoing.generalComments,
+      imageryNotes: ongoing.imageryNotes,
+      currentSituationSummary: workspace.summary,
+    }
+  }
+
+  return {
+    ...baseForm,
+    reportNumber: `SITREP-${kind === 'exercise' ? 'EX' : 'IN'}-${workspace.id}-${new Date().getFullYear()}`,
+    preparedDateTime: stamp,
+    reportingPeriodStart: workspace.startedAt ?? stamp,
+    reportingPeriodEnd: stamp,
+    incidentName: workspace.name,
+    incidentLocation: workspace.region,
+    preparedBy: workspace.lead,
+    agency: workspace.region,
+    executiveSummary:
+      workspace.summary ||
+      `${workspaceKindLabel} ${workspace.name} is ${workspace.status} with ${workspace.severity} severity in ${workspace.region}.`,
+    readinessAssessment:
+      kind === 'exercise'
+        ? `Exercise planning posture for ${workspace.name}: ${workspace.resourcesCommitted}. Objectives and MSEL injects aligned to the current exercise timeline.`
+        : `Operational readiness for ${workspace.name}: ${workspace.resourcesCommitted}. Status ${workspace.status}; severity ${workspace.severity}.`,
+    riskToMission:
+      kind === 'exercise'
+        ? `Primary exercise risks include scenario inject timing, evaluator coverage gaps, and controller-to-player communications. Mitigations: MSEL synchronization, dedicated evaluators, and redundant comms checks.`
+        : `Primary operational risks for ${workspace.name} include sustained resource demand, weather impacts, and coordination across ${workspace.region}. Mitigations tracked through the incident action plan.`,
+    outstandingRfiRfr:
+      kind === 'exercise'
+        ? `RFI-EX-${workspace.id}: Confirm exercise evaluation criteria for ${workspace.name}.\nRFR-EX-${workspace.id}: Additional simulation cell support for the next exercise period.`
+        : `RFI-IN-${workspace.id}: Updated situational assessment for ${workspace.name}.\nRFR-IN-${workspace.id}: Additional resources for ${workspace.region}.`,
+    previousCriticalIncidentComms:
+      kind === 'exercise'
+        ? `${workspaceKindLabel} workspace activated for ${workspace.name}. Initial coordination with exercise controllers and participating agencies complete.`
+        : `${workspaceKindLabel} workspace activated for ${workspace.name}. Unified command coordination established for ${workspace.region}.`,
+    generalComments:
+      kind === 'exercise'
+        ? `${workspace.type} exercise in ${workspace.status} status. ${workspace.resourcesCommitted}. Next exercise period briefing scheduled.`
+        : `${workspace.type} in ${workspace.status} status. ${workspace.resourcesCommitted}. Next operational period briefing scheduled.`,
+    imageryNotes:
+      kind === 'exercise'
+        ? `Exercise map overlays and controller logs for ${workspace.name} archived to the workspace file manager.`
+        : `Situation map and field imagery for ${workspace.name} archived to the incident workspace file manager.`,
+    currentSituationSummary: workspace.summary,
+  }
+}
+
 const isNonHumanSitrepAuthor = (name: string) => name.trim().toLowerCase() === 'pratus ai'
 
 const getNotificationSourceDisplayName = (owner: string) =>
@@ -3423,29 +3543,6 @@ type AssigneeOption = {
   position: string
   availability: 'Available'
 }
-type Ics201ActionRow = {
-  id: number
-  task: string
-  owner: string
-  startTime: string
-  endTime: string
-  status: string
-}
-type Ics201ResourceSummaryRow = {
-  id: number
-  category: string
-  identifier: string
-  quantity: string
-  status: string
-  assignment: string
-}
-type Ics201SafetyRow = {
-  id: number
-  hazard: string
-  mitigation: string
-  ppe: string
-  medicalPlan: string
-}
 type Ics209ReportVersion = 'Initial' | 'Updated' | 'Final'
 type Ics209IncidentType =
   | 'SAR'
@@ -3586,55 +3683,6 @@ type Ics233TaskRow = {
   start: string
   deadline: string
   status: 'Not Started' | 'In Progress' | 'Complete' | 'Cannot Complete'
-}
-type Ics201MapSketchVertex = {
-  longitude: number
-  latitude: number
-}
-type Ics201FormState = {
-  incidentName: string
-  incidentNumber: string
-  incidentLocation: string
-  dateInitiated: string
-  timeInitiated: string
-  preparedDateTime: string
-  operationalPeriodStart: string
-  operationalPeriodEnd: string
-  jurisdiction: string
-  preparedBy: string
-  preparedByName: string
-  preparedByPositionTitle: string
-  preparedBySignature: string
-  mapSketchPolygon: Ics201MapSketchVertex[]
-  currentSituationSummary: string
-  weatherForecast: string
-  projectedIncidentCourse: string
-  objectives: string[]
-  actions: Ics201ActionRow[]
-  orgChart: {
-    incidentCommander: string
-    operationsSectionChief: string
-    planningSectionChief: string
-    logisticsSectionChief: string
-    financeSectionChief: string
-    publicInformationOfficer: string
-    safetyOfficer: string
-    liaisonOfficer: string
-  }
-  resources: Ics201ResourceSummaryRow[]
-  safetyAnalysis: Ics201SafetyRow[]
-}
-
-function cloneIcs201FormState(form: Ics201FormState): Ics201FormState {
-  return {
-    ...form,
-    mapSketchPolygon: form.mapSketchPolygon.map((vertex) => ({ ...vertex })),
-    objectives: [...form.objectives],
-    actions: form.actions.map((action) => ({ ...action })),
-    orgChart: { ...form.orgChart },
-    resources: form.resources.map((resource) => ({ ...resource })),
-    safetyAnalysis: form.safetyAnalysis.map((row) => ({ ...row })),
-  }
 }
 type SitrepActivityRow = {
   id: number
@@ -5735,13 +5783,6 @@ function buildIcs201Baseline(preparedBy?: string): Ics201FormStateForGenerator {
   }
 }
 
-const BASELINE_MAP_SKETCH_POLYGON: Ics201MapSketchVertex[] = [
-  { longitude: -122.4115, latitude: 37.8096 },
-  { longitude: -122.4071, latitude: 37.8096 },
-  { longitude: -122.4071, latitude: 37.8074 },
-  { longitude: -122.4115, latitude: 37.8074 },
-]
-
 const BASELINE_CURRENT_SITUATION_SUMMARY =
   'Operations remain in the life-safety phase following vessel grounding and resulting structural damage at Pier 33. Evacuation orders active for Sectors A and B. Mutual-aid response continues with Alameda County OES and CAL FIRE.'
 
@@ -6088,11 +6129,13 @@ const buildRegion1DotExecutiveSummary = (scopeLabel: string): string => {
 function App() {
   const {
     isSupabaseEnabled,
+    user,
     profileEmail,
     isOrgAdmin,
     canAccessWorkspace,
     accessibleWorkspaces,
     getAccessToken,
+    refreshAccess,
     signOut,
   } = useAuth()
   const mapContainerRef = useRef<HTMLDivElement | null>(null)
@@ -6145,6 +6188,7 @@ function App() {
     }
   }, [isLeftSidebarOpen])
   const [isCreateIncidentOpen, setIsCreateIncidentOpen] = useState(false)
+  const [isCreatingWorkspace, setIsCreatingWorkspace] = useState(false)
   const [createIncidentStep, setCreateIncidentStep] = useState(0)
   const [incidentName, setIncidentName] = useState('')
   const [incidentLocation, setIncidentLocation] = useState('')
@@ -6322,7 +6366,7 @@ function App() {
     resetCreateEventForm()
     setActiveTab('events')
   }
-  const handleCreateExerciseSubmit = () => {
+  const handleCreateExerciseSubmit = async () => {
     const fallbackLocation: [number, number] = [-98.5795, 39.8283]
     let location: [number, number] = fallbackLocation
     const coordsMatch = incidentGeometrySummary.match(
@@ -6408,20 +6452,64 @@ function App() {
       severity: 'Medium',
       region,
       location,
-      lead: 'You',
+      lead: profileEmail ?? 'You',
       startedAt,
       lastUpdate: nowLabel,
       summary,
       resourcesCommitted,
       relatedEventIds: [],
     }
+
+    if (isSupabaseEnabled) {
+      setIsCreatingWorkspace(true)
+      try {
+        const accessToken = await getAccessToken()
+        if (!accessToken) {
+          toast.error('Sign in required to create an exercise workspace.')
+          return
+        }
+
+        const result = await createWorkspace({
+          accessToken,
+          kind: 'exercise',
+          name: displayName,
+          region,
+          summary,
+        })
+
+        if (!result.ok) {
+          toast.error(result.message)
+          return
+        }
+
+        const persistedExercise: ExerciseListItem = {
+          ...newExercise,
+          id: result.workspace.legacyId,
+          workspaceId: result.workspace.workspaceId,
+        }
+
+        setExerciseList((previous) => [persistedExercise, ...previous])
+        await refreshAccess()
+        setActiveWorkspaceSupabaseId(result.workspace.workspaceId)
+        const roster = await fetchWorkspaceRoster(result.workspace.workspaceId)
+        setSupabaseWorkspaceRoster(roster)
+        setIsCreateExerciseOpen(false)
+        resetCreateIncidentForm()
+        toast.success(`${displayName} created. Exercise activation requests have been sent.`)
+        enterExerciseWorkspace(persistedExercise)
+      } finally {
+        setIsCreatingWorkspace(false)
+      }
+      return
+    }
+
     setExerciseList((previous) => [newExercise, ...previous])
     toast.success(`${displayName} created. Exercise activation requests have been sent.`)
     setIsCreateExerciseOpen(false)
     resetCreateIncidentForm()
-    setActiveTab('exercises')
+    enterExerciseWorkspace(newExercise)
   }
-  const handleCreateIncidentSubmit = () => {
+  const handleCreateIncidentSubmit = async () => {
     const fallbackLocation: [number, number] = [-98.5795, 39.8283]
     let location: [number, number] = fallbackLocation
     const coordsMatch = incidentGeometrySummary.match(
@@ -6503,19 +6591,66 @@ function App() {
       severity: 'Medium',
       region,
       location,
-      lead: 'You',
+      lead: profileEmail ?? 'You',
       startedAt,
       lastUpdate: nowLabel,
       summary,
       resourcesCommitted,
       relatedEventIds: [...incidentRelatedEventIds],
     }
+
+    if (isSupabaseEnabled) {
+      setIsCreatingWorkspace(true)
+      try {
+        const accessToken = await getAccessToken()
+        if (!accessToken) {
+          toast.error('Sign in required to create an incident workspace.')
+          return
+        }
+
+        const result = await createWorkspace({
+          accessToken,
+          kind: 'incident',
+          name: displayName,
+          region,
+          summary,
+        })
+
+        if (!result.ok) {
+          toast.error(result.message)
+          return
+        }
+
+        const persistedIncident: IncidentListItem = {
+          ...newIncident,
+          id: result.workspace.legacyId,
+          workspaceId: result.workspace.workspaceId,
+        }
+
+        setIncidentList((previous) => [persistedIncident, ...previous])
+        await refreshAccess()
+        setActiveWorkspaceSupabaseId(result.workspace.workspaceId)
+        const roster = await fetchWorkspaceRoster(result.workspace.workspaceId)
+        setSupabaseWorkspaceRoster(roster)
+        setIsCreateIncidentOpen(false)
+        resetCreateIncidentForm()
+        toast.success(
+          `${displayName} created. Activation requests have been sent.`
+        )
+        enterIncidentWorkspace(persistedIncident)
+      } finally {
+        setIsCreatingWorkspace(false)
+      }
+      return
+    }
+
     setIncidentList((previous) => [newIncident, ...previous])
     toast.success(
       `${displayName} created. Activation requests have been sent.`
     )
     setIsCreateIncidentOpen(false)
     resetCreateIncidentForm()
+    enterIncidentWorkspace(newIncident)
   }
   const restartIncidentGeometryDraw = () => {
     if (incidentLocation !== 'draw-point' && incidentLocation !== 'draw-polygon') {
@@ -6612,47 +6747,6 @@ function App() {
     | 'event-rule-generation'
     | 'notification-rule-generation'
   >('default')
-  type Ics201SectionId =
-    | 'report-info'
-    | 'incident-briefing'
-    | 'map-sketch'
-    | 'current-situation'
-    | 'objectives'
-    | 'actions'
-    | 'org-chart'
-    | 'resources'
-    | 'safety-analysis'
-  const ICS201_SECTION_LABELS: Record<Ics201SectionId, string> = {
-    'report-info': 'Report Identification',
-    'incident-briefing': 'ICS-201 Incident Briefing',
-    'map-sketch': 'Map Sketch',
-    'current-situation': 'Current Situation',
-    objectives: 'Objectives',
-    actions: 'Actions',
-    'org-chart': 'Organization Chart',
-    resources: 'Resources Summary',
-    'safety-analysis': 'Safety Analysis',
-  }
-  const ICS201_SECTION_PROMPTS: Record<Ics201SectionId, string> = {
-    'report-info':
-      'Draft the Report Identification fields for the current ICS-201 (Incident Name, Incident Location, and Date/Time Initiated) using the latest incident data, current operational period, and prior versions for continuity.',
-    'incident-briefing':
-      'Draft the ICS-201 Incident Briefing header fields (Incident Name, Incident Number, Date/Time Prepared, Prepared By, Operational Period start/end, and Jurisdiction/Agency) using the latest incident metadata and the current operational period.',
-    'map-sketch':
-      'Propose a tightened incident perimeter polygon (5–8 vertices, WGS84 lat/lon) around the current area of operations using the latest situation summary, mapped resources, and any prior ICS-201 perimeter for reference.',
-    'current-situation':
-      'Write a concise Current Situation summary for the ICS-201 that reflects the latest incident posture, weather, status of life-safety operations, and impacts to the area of operations. Keep it within the 1,000-character strict-structure limit and avoid duplicating other sections.',
-    objectives:
-      'Draft a numbered set of SMART operational-period objectives for the ICS-201, aligned to the current Incident Commander priorities. Cover life safety, incident stabilization, property/environmental protection, and continuity of operations. Keep the combined text within the strict-structure character limit.',
-    actions:
-      'Draft a set of priority actions for the current operational period with task, owner (ICS role), start time, and end time. Align each action to one of the ICS-201 objectives and the current operational tempo.',
-    'org-chart':
-      'Populate the ICS-201 Organization Chart (Incident Commander, Operations, Planning, Logistics, Finance/Admin Section Chiefs, Public Information Officer, Safety Officer, Liaison Officer) using the current roster and the latest staffing assignments.',
-    resources:
-      'Draft a Resources Summary for the ICS-201 (category, identifier, quantity, status, assignment) drawn from the resources currently checked in or ordered for this incident.',
-    'safety-analysis':
-      'Draft the ICS-201 Safety Analysis (hazard, mitigation, PPE, medical plan) covering the top operational hazards for the current operational period, drawing from the situation summary, weather, and any prior safety analyses.',
-  }
   const [pratusAiIcs201Section, setPratusAiIcs201Section] = useState<Ics201SectionId | null>(null)
   const openIcs201SectionGeneration = (section: Ics201SectionId) => {
     setPratusAiIntent('ics201-section-generation')
@@ -6713,94 +6807,7 @@ function App() {
   })
   const [pratusAiSelectedFiles, setPratusAiSelectedFiles] = useState<string[]>([])
   const [selectedPratusResourceId, setSelectedPratusResourceId] = useState<number | null>(null)
-  const INITIAL_ICS201_FORM: Ics201FormState = {
-    incidentName: 'Incident Alpha',
-    incidentNumber: 'ALPHA-2026-001',
-    incidentLocation: 'Pier 33, San Francisco, CA',
-    dateInitiated: '2026-04-25',
-    timeInitiated: '16:00',
-    preparedDateTime: '2026-04-25 16:00 UTC',
-    operationalPeriodStart: '2026-04-25T12:00',
-    operationalPeriodEnd: '2026-04-26T00:00',
-    jurisdiction: 'State Emergency Operations Center',
-    preparedBy: 'Planning Section Chief',
-    preparedByName: 'A. Rivera',
-    preparedByPositionTitle: 'Planning Section Chief',
-    preparedBySignature: 'A. Rivera',
-    mapSketchPolygon: BASELINE_MAP_SKETCH_POLYGON.map((vertex) => ({ ...vertex })),
-    currentSituationSummary: '',
-    weatherForecast:
-      'Next 12 hours: scattered thunderstorms, wind gusts 25-35 mph, localized flash-flood risk in low-lying corridors.',
-    projectedIncidentCourse:
-      'Expect sustained transportation and power disruptions through next operational period with elevated public safety messaging requirements.',
-    objectives: [
-      'Protect life safety in high-risk flood corridors.',
-      'Maintain access for emergency medical transport routes.',
-      'Stabilize shelter operations and staffing coverage.',
-    ],
-    actions: [
-      {
-        id: 1,
-        task: 'Deploy barricade teams to South Connector choke points.',
-        owner: 'Operations Branch I',
-        startTime: '2026-04-25 16:30 UTC',
-        endTime: '2026-04-25 20:30 UTC',
-        status: 'In Progress',
-      },
-      {
-        id: 2,
-        task: 'Coordinate utility assessment sweep for North Levee Sector.',
-        owner: 'Infrastructure Group',
-        startTime: '2026-04-25 17:00 UTC',
-        endTime: '2026-04-25 22:00 UTC',
-        status: 'Planned',
-      },
-    ],
-    orgChart: {
-      incidentCommander: 'R. Morgan',
-      operationsSectionChief: 'T. Hale',
-      planningSectionChief: 'A. Rivera',
-      logisticsSectionChief: 'J. Nguyen',
-      financeSectionChief: 'D. Ortiz',
-      publicInformationOfficer: 'M. Wells',
-      safetyOfficer: 'K. Simmons',
-      liaisonOfficer: 'R. Patel',
-    },
-    resources: [
-      {
-        id: 1,
-        category: 'USAR',
-        identifier: 'Urban Search Team Alpha',
-        quantity: '2',
-        status: 'Assigned',
-        assignment: 'North Levee Sector',
-      },
-      {
-        id: 2,
-        category: 'Medical',
-        identifier: 'Medical Strike Team',
-        quantity: '1',
-        status: 'Available',
-        assignment: 'South Aid Station',
-      },
-    ],
-    safetyAnalysis: [
-      {
-        id: 1,
-        hazard: 'Flooded roadways and unseen washouts',
-        mitigation: 'Use spotters; enforce route checks before convoy movement',
-        ppe: 'High-visibility PPE and water-resistant boots',
-        medicalPlan: 'Nearest treatment: Central Medical Corridor',
-      },
-      {
-        id: 2,
-        hazard: 'Downed power infrastructure',
-        mitigation: 'Maintain exclusion zones and utility escort procedures',
-        ppe: 'Electrical hazard gloves and insulated tools',
-        medicalPlan: 'EMS support staged at Grid N-4',
-      },
-    ],
-  }
+  const INITIAL_ICS201_FORM = createInitialIcs201Form()
   const [ics201Form, setIcs201Form] = useState<Ics201FormState>(() =>
     cloneIcs201FormState(INITIAL_ICS201_FORM)
   )
@@ -6838,7 +6845,6 @@ function App() {
   const [ics201MapSketchDraft, setIcs201MapSketchDraft] = useState<Ics201MapSketchVertex[]>([])
   const ics201EditingMapSketchRef = useRef(false)
   const [ics201EditingCurrentSituation, setIcs201EditingCurrentSituation] = useState(false)
-  const [ics201CurrentSituationDraft, setIcs201CurrentSituationDraft] = useState('')
   const [ics201StructureMode, setIcs201StructureMode] = useState<
     'flexible' | 'paginated' | 'strict'
   >('strict')
@@ -6875,7 +6881,6 @@ function App() {
     )
   }
   const [ics201EditingObjectives, setIcs201EditingObjectives] = useState(false)
-  const [ics201ObjectivesDraft, setIcs201ObjectivesDraft] = useState<string[]>([])
   const [ics201EditingActions, setIcs201EditingActions] = useState(false)
   const [ics201ActionsDraft, setIcs201ActionsDraft] = useState<Ics201ActionRow[]>([])
   const [ics201EditingOrgChart, setIcs201EditingOrgChart] = useState(false)
@@ -7512,77 +7517,9 @@ function App() {
     })
     setIcs209EquipmentTypesDialogOpen(false)
   }
-  const ics201Collaborators = [
-    {
-      id: 'maya',
-      name: 'Maya Chen',
-      initials: 'MC',
-      color: '#ef4444',
-      position: 'Planning Section Chief',
-    },
-    {
-      id: 'diego',
-      name: 'Diego Alvarez',
-      initials: 'DA',
-      color: '#3b82f6',
-      position: 'Operations Section Chief',
-    },
-  ]
-  type Ics201VersionSignature = {
-    name: string
-    role: string
-    signedAt: number
-  }
-  type Ics201Version = {
-    id: string
-    createdAt: number
-    authorName: string
-    authorColor: string
-    snapshot: Ics201FormState
-    signatures: Ics201VersionSignature[]
-  }
-  const [ics201Versions, setIcs201Versions] = useState<Ics201Version[]>(() => {
-    const now = Date.now()
-    const authors: Array<{ name: string; color: string }> = [
-      { name: 'You', color: '#16a34a' },
-      { name: 'Maya Chen', color: '#ef4444' },
-      { name: 'Diego Alvarez', color: '#3b82f6' },
-      { name: 'A. Rivera', color: '#16a34a' },
-    ]
-    const signers: Array<{ name: string; role: string }> = [
-      { name: 'R. Morgan', role: 'Incident Commander' },
-      { name: 'A. Rivera', role: 'Planning Section Chief' },
-      { name: 'T. Hale', role: 'Operations Section Chief' },
-      { name: 'K. Simmons', role: 'Safety Officer' },
-      { name: 'Maya Chen', role: 'Situation Unit Leader' },
-    ]
-    const signedIndices = new Set([0, 2, 4, 6, 8])
-    let signedCursor = 0
-    return Array.from({ length: 10 }, (_, index) => {
-      const minutesAgo = (10 - index) * 2
-      const createdAt = now - minutesAgo * 60_000
-      const author = authors[index % authors.length]
-      const isSigned = signedIndices.has(index)
-      const signatures: Ics201VersionSignature[] = []
-      if (isSigned) {
-        const signer = signers[signedCursor % signers.length]
-        signedCursor += 1
-        signatures.push({
-          name: signer.name,
-          role: signer.role,
-          signedAt: createdAt + 30_000,
-        })
-      }
-      return {
-        id: `seed-v${index + 1}`,
-        createdAt,
-        authorName: author.name,
-        authorColor: author.color,
-        snapshot: cloneIcs201FormState(INITIAL_ICS201_FORM),
-        signatures,
-      }
-    })
-  })
+  const [ics201Versions, setIcs201Versions] = useState<Ics201Version[]>(() =>
+    isSupabaseEnabled ? [] : createSeedIcs201Versions(INITIAL_ICS201_FORM)
+  )
   const [isIcs201VersionDialogOpen, setIsIcs201VersionDialogOpen] = useState(false)
   const [isIcs201SignedVersionsDialogOpen, setIsIcs201SignedVersionsDialogOpen] = useState(false)
   const [isCreatingSignedIcs201Version, setIsCreatingSignedIcs201Version] = useState(false)
@@ -7871,19 +7808,17 @@ function App() {
   }
   type SitrepViewMode = 'current' | 'historical' | 'drafts' | 'review-queue'
   const [sitrepViewMode, setSitrepViewMode] = useState<SitrepViewMode>('current')
-  type SitrepScopeKind = 'aor' | 'incident'
-  type SitrepScopeOption = { id: string; kind: SitrepScopeKind; label: string }
-  const SITREP_INCIDENT_SCOPE_OPTIONS: SitrepScopeOption[] = [
-    { id: 'incident-mateo', kind: 'incident', label: 'Hurricane Mateo Response' },
-    { id: 'incident-caspian-star', kind: 'incident', label: 'M/V Caspian Star Distress' },
-    { id: 'incident-port-houston-spill', kind: 'incident', label: 'Port Houston Oil Spill' },
-    {
-      id: 'incident-fl-straits-interdiction',
-      kind: 'incident',
-      label: 'Florida Straits Migrant Interdiction',
-    },
-  ]
+  type SitrepScopeKind = 'aor' | 'incident' | 'exercise'
+  type SitrepScopeOption = {
+    id: string
+    kind: SitrepScopeKind
+    label: string
+    workspace?: IncidentListItem
+  }
   const [selectedSitrepScopeId, setSelectedSitrepScopeId] = useState<string>('aor-fema-1')
+  const [sitrepFormsByScopeId, setSitrepFormsByScopeId] = useState<
+    Record<string, SitrepFormState>
+  >({})
   const createNewSitrepDraft = () => {
     const now = Date.now()
     const newId = `${now}-sitrep-draft-${Math.random().toString(36).slice(2, 8)}`
@@ -9188,14 +9123,6 @@ function App() {
       location: [-122.7589, 48.862],
     },
   ])
-  const SITREP_SCOPE_OPTIONS: SitrepScopeOption[] = [
-    ...femaAors.map((aor) => ({
-      id: `aor-fema-${aor.id}`,
-      kind: 'aor' as SitrepScopeKind,
-      label: aor.name,
-    })),
-    ...SITREP_INCIDENT_SCOPE_OPTIONS,
-  ]
   const DEFAULT_SEERIST_ENDPOINT =
     'https://app.seerist.com/hyperionapi/v1/wod?start=2026-05-20T00:00:00.000Z&end=2026-05-20T23:59:59.999Z&aoiId=us-004&sources=news'
   const [seeristEndpoint, setSeeristEndpoint] = useState<string>(DEFAULT_SEERIST_ENDPOINT)
@@ -11576,18 +11503,203 @@ function App() {
       .toLowerCase()
       .includes(activePanelSearchQuery)
   })
-  const activeExerciseWorkspace = useMemo(
-    () => exerciseList.find((exercise) => exercise.id === activeExerciseWorkspaceId) ?? null,
-    [exerciseList, activeExerciseWorkspaceId]
-  )
+  const allIncidentsForWorkspace = useMemo(() => {
+    const byId = new Map<number, IncidentListItem>()
+    for (const incident of incidentList) {
+      byId.set(incident.id, incident)
+    }
+    for (const incident of SITREP_ONGOING_INCIDENTS) {
+      byId.set(incident.id, incident)
+    }
+    if (isSupabaseEnabled) {
+      const nowLabel = new Date().toLocaleString([], {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+      })
+      for (const workspace of accessibleWorkspaces) {
+        if (workspace.kind !== 'incident') {
+          continue
+        }
+        const existing = byId.get(workspace.legacyId)
+        if (existing) {
+          byId.set(workspace.legacyId, {
+            ...existing,
+            workspaceId: workspace.workspaceId,
+            name: workspace.name,
+            region: workspace.region ?? existing.region,
+            summary: workspace.summary ?? existing.summary,
+          })
+          continue
+        }
+        byId.set(workspace.legacyId, {
+          id: workspace.legacyId,
+          workspaceId: workspace.workspaceId,
+          name: workspace.name,
+          type: 'Incident Workspace',
+          category: 'Special Event',
+          status: 'Active',
+          severity: 'Medium',
+          region: workspace.region ?? 'Unassigned AOR',
+          location: [-98.5795, 39.8283],
+          lead: profileEmail ?? 'You',
+          startedAt: nowLabel,
+          lastUpdate: nowLabel,
+          summary: workspace.summary ?? '',
+          resourcesCommitted: 'Initial responders mobilizing',
+          relatedEventIds: [],
+        })
+      }
+    }
+    return sortIncidentsBySeverity([...byId.values()])
+  }, [accessibleWorkspaces, incidentList, isSupabaseEnabled, profileEmail])
+  const allExercisesForWorkspace = useMemo(() => {
+    const byId = new Map<number, ExerciseListItem>()
+    for (const exercise of exerciseList) {
+      byId.set(exercise.id, exercise)
+    }
+    if (isSupabaseEnabled) {
+      const nowLabel = new Date().toLocaleString([], {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+      })
+      for (const workspace of accessibleWorkspaces) {
+        if (workspace.kind !== 'exercise') {
+          continue
+        }
+        const existing = byId.get(workspace.legacyId)
+        if (existing) {
+          byId.set(workspace.legacyId, {
+            ...existing,
+            workspaceId: workspace.workspaceId,
+            name: workspace.name,
+            region: workspace.region ?? existing.region,
+            summary: workspace.summary ?? existing.summary,
+          })
+          continue
+        }
+        byId.set(workspace.legacyId, {
+          id: workspace.legacyId,
+          workspaceId: workspace.workspaceId,
+          name: workspace.name,
+          type: 'Exercise Workspace',
+          category: 'Exercise',
+          status: 'Active',
+          severity: 'Medium',
+          region: workspace.region ?? 'Unassigned AOR',
+          location: [-98.5795, 39.8283],
+          lead: profileEmail ?? 'You',
+          startedAt: nowLabel,
+          lastUpdate: nowLabel,
+          summary: workspace.summary ?? '',
+          resourcesCommitted: 'Exercise planning cell forming',
+          relatedEventIds: [],
+        })
+      }
+    }
+    return sortIncidentsBySeverity([...byId.values()])
+  }, [accessibleWorkspaces, exerciseList, isSupabaseEnabled, profileEmail])
+  const activeExerciseWorkspace = useMemo(() => {
+    if (activeExerciseWorkspaceId === null) return null
+    return (
+      allExercisesForWorkspace.find((exercise) => exercise.id === activeExerciseWorkspaceId) ??
+      null
+    )
+  }, [allExercisesForWorkspace, activeExerciseWorkspaceId])
   const activeIncidentWorkspace = useMemo(() => {
     if (activeIncidentWorkspaceId === null) return null
     return (
-      incidentList.find((incident) => incident.id === activeIncidentWorkspaceId) ??
-      SITREP_ONGOING_INCIDENTS.find((incident) => incident.id === activeIncidentWorkspaceId) ??
+      allIncidentsForWorkspace.find((incident) => incident.id === activeIncidentWorkspaceId) ??
       null
     )
-  }, [incidentList, activeIncidentWorkspaceId])
+  }, [allIncidentsForWorkspace, activeIncidentWorkspaceId])
+  const SITREP_SCOPE_OPTIONS = useMemo(
+    (): SitrepScopeOption[] => [
+      ...femaAors.map((aor) => ({
+        id: `aor-fema-${aor.id}`,
+        kind: 'aor' as const,
+        label: aor.name,
+      })),
+      ...allIncidentsForWorkspace.map((incident) => ({
+        id: `incident-${incident.id}`,
+        kind: 'incident' as const,
+        label: incident.name,
+        workspace: incident,
+      })),
+      ...allExercisesForWorkspace.map((exercise) => ({
+        id: `exercise-${exercise.id}`,
+        kind: 'exercise' as const,
+        label: exercise.name,
+        workspace: exercise,
+      })),
+    ],
+    [allExercisesForWorkspace, allIncidentsForWorkspace, femaAors]
+  )
+  const getSitrepScopeKindLabel = (kind: SitrepScopeKind | undefined) => {
+    if (kind === 'exercise') return 'Exercise'
+    if (kind === 'incident') return 'Incident'
+    return 'AOR'
+  }
+  const applySitrepScope = useCallback(
+    (scopeId: string, options?: { persistCurrent?: boolean }) => {
+      if (options?.persistCurrent !== false && selectedSitrepScopeId) {
+        setSitrepFormsByScopeId((previous) => ({
+          ...previous,
+          [selectedSitrepScopeId]: sitrepForm,
+        }))
+      }
+
+      setSelectedSitrepScopeId(scopeId)
+
+      const scope = SITREP_SCOPE_OPTIONS.find((option) => option.id === scopeId)
+      if (!scope) {
+        return
+      }
+
+      setSitrepFormsByScopeId((previous) => {
+        const cachedForm = previous[scopeId]
+        if (cachedForm) {
+          liveSitrepFormRef.current = null
+          setSitrepForm(cachedForm)
+          return previous
+        }
+
+        let nextForm: SitrepFormState
+        if (scope.kind === 'incident' && scope.workspace) {
+          nextForm = buildDefaultSitrepForWorkspace(
+            scope.workspace,
+            'incident',
+            INITIAL_SITREP_FORM
+          )
+        } else if (scope.kind === 'exercise' && scope.workspace) {
+          nextForm = buildDefaultSitrepForWorkspace(
+            scope.workspace,
+            'exercise',
+            INITIAL_SITREP_FORM
+          )
+        } else {
+          nextForm = {
+            ...INITIAL_SITREP_FORM,
+            incidentName: scope.label,
+            incidentLocation: scope.label,
+            executiveSummary: scope.label.includes('Region 1')
+              ? buildRegion1DotExecutiveSummary(scope.label)
+              : `${scope.label} situational summary for the current reporting period.`,
+          }
+        }
+
+        liveSitrepFormRef.current = null
+        setSitrepForm(nextForm)
+        return { ...previous, [scopeId]: nextForm }
+      })
+    },
+    [INITIAL_SITREP_FORM, selectedSitrepScopeId, sitrepForm, SITREP_SCOPE_OPTIONS]
+  )
   const isInExerciseWorkspace = activeExerciseWorkspace !== null
   const isInIncidentWorkspace = activeIncidentWorkspace !== null
   const activeWorkspaceRosterKey =
@@ -11609,6 +11721,43 @@ function App() {
     setRosterMemberPositionDraft(ICS_ROSTER_POSITION_OPTIONS[0])
   }
   useEffect(() => {
+    if (!isSupabaseEnabled || accessibleWorkspaces.length === 0) {
+      return
+    }
+
+    setIncidentList((previous) => {
+      let changed = false
+      const next = previous.map((incident) => {
+        const match = accessibleWorkspaces.find(
+          (workspace) =>
+            workspace.kind === 'incident' && workspace.legacyId === incident.id
+        )
+        if (match && incident.workspaceId !== match.workspaceId) {
+          changed = true
+          return { ...incident, workspaceId: match.workspaceId }
+        }
+        return incident
+      })
+      return changed ? next : previous
+    })
+
+    setExerciseList((previous) => {
+      let changed = false
+      const next = previous.map((exercise) => {
+        const match = accessibleWorkspaces.find(
+          (workspace) =>
+            workspace.kind === 'exercise' && workspace.legacyId === exercise.id
+        )
+        if (match && exercise.workspaceId !== match.workspaceId) {
+          changed = true
+          return { ...exercise, workspaceId: match.workspaceId }
+        }
+        return exercise
+      })
+      return changed ? next : previous
+    })
+  }, [accessibleWorkspaces, isSupabaseEnabled])
+  useEffect(() => {
     let cancelled = false
 
     async function loadSupabaseRoster() {
@@ -11624,6 +11773,12 @@ function App() {
           ? ('exercise' as const)
           : null
       const legacyId = activeIncidentWorkspace?.id ?? activeExerciseWorkspace?.id ?? null
+      const knownWorkspaceId =
+        activeIncidentWorkspace?.workspaceId ??
+        activeExerciseWorkspace?.workspaceId ??
+        (kind !== null && legacyId !== null
+          ? findAccessibleWorkspaceUuid(accessibleWorkspaces, kind, legacyId)
+          : null)
 
       if (!kind || legacyId === null) {
         setActiveWorkspaceSupabaseId(null)
@@ -11632,7 +11787,8 @@ function App() {
       }
 
       setIsRosterLoading(true)
-      const workspaceId = await resolveWorkspaceId(kind, legacyId)
+      const workspaceId =
+        knownWorkspaceId ?? (await resolveWorkspaceId(kind, legacyId))
       if (cancelled) return
 
       setActiveWorkspaceSupabaseId(workspaceId)
@@ -11656,9 +11812,173 @@ function App() {
   }, [
     isSupabaseEnabled,
     activeIncidentWorkspace?.id,
+    activeIncidentWorkspace?.workspaceId,
     activeExerciseWorkspace?.id,
+    activeExerciseWorkspace?.workspaceId,
+    accessibleWorkspaces,
     isAddRosterMemberOpen,
   ])
+  const isInIcs201Workspace = isInIncidentWorkspace || isInExerciseWorkspace
+  const ics201EditingFlags = useMemo(
+    () => ({
+      reportInfo: ics201EditingReportInfo,
+      incidentBriefing: ics201EditingIncidentBriefing,
+      mapSketch: ics201EditingMapSketch,
+      currentSituation: ics201EditingCurrentSituation,
+      objectives: ics201EditingObjectives,
+      actions: ics201EditingActions,
+      orgChart: ics201EditingOrgChart,
+      resources: ics201EditingResources,
+      safetyAnalysis: ics201EditingSafetyAnalysis,
+    }),
+    [
+      ics201EditingReportInfo,
+      ics201EditingIncidentBriefing,
+      ics201EditingMapSketch,
+      ics201EditingCurrentSituation,
+      ics201EditingObjectives,
+      ics201EditingActions,
+      ics201EditingOrgChart,
+      ics201EditingResources,
+      ics201EditingSafetyAnalysis,
+    ]
+  )
+  const activeIcs201Section = useMemo(
+    () => resolveActiveIcs201Section(ics201EditingFlags),
+    [ics201EditingFlags]
+  )
+  const handleIcs201Loaded = useCallback(
+    (payload: {
+      documentId: string
+      form: Ics201FormState
+      versions: Ics201Version[]
+      structureMode: 'flexible' | 'paginated' | 'strict'
+    }) => {
+      setIcs201Form(cloneIcs201FormState(payload.form))
+      setIcs201Versions(payload.versions)
+      setIcs201StructureMode(payload.structureMode)
+    },
+    []
+  )
+  const handleIcs201RemoteFormUpdated = useCallback((form: Ics201FormState) => {
+    setIcs201Form(cloneIcs201FormState(form))
+  }, [])
+  const handleIcs201RemoteVersionInserted = useCallback((version: Ics201Version) => {
+    setIcs201Versions((previous) => {
+      if (previous.some((entry) => entry.id === version.id)) {
+        return previous
+      }
+      return [...previous, version].slice(-100)
+    })
+  }, [])
+  const {
+    documentId: ics201DocumentId,
+    loading: isIcs201Loading,
+    syncError: ics201SyncError,
+    isSaving: isIcs201Saving,
+    authorName: ics201AuthorName,
+    authorEmail: ics201AuthorEmail,
+    authorColor: ics201AuthorColor,
+    appendVersion: appendIcs201Version,
+  } = useIcs201Sync({
+    enabled: isSupabaseEnabled && isInIcs201Workspace && activeWorkspaceSupabaseId !== null,
+    workspaceId: activeWorkspaceSupabaseId,
+    userId: user?.id ?? null,
+    profileEmail,
+    structureMode: ics201StructureMode,
+    editingFlags: ics201EditingFlags,
+    onLoaded: handleIcs201Loaded,
+    onRemoteFormUpdated: handleIcs201RemoteFormUpdated,
+    onRemoteVersionInserted: handleIcs201RemoteVersionInserted,
+  })
+  const currentUserRosterPosition =
+    activeWorkspaceRoster.find(
+      (member) => member.email.toLowerCase() === (profileEmail ?? '').toLowerCase()
+    )?.icsPosition ?? 'Incident Commander'
+  const {
+    activeEditors: ics201ActiveEditors,
+    sectionEditors: ics201SectionEditors,
+    selfColor: ics201SelfColor,
+  } = useIcs201Presence({
+    enabled: isSupabaseEnabled && ics201DocumentId !== null,
+    documentId: ics201DocumentId,
+    userId: user?.id ?? null,
+    userEmail: profileEmail?.toLowerCase() ?? 'you@local.dev',
+    userPosition: currentUserRosterPosition,
+    activeSection: activeIcs201Section,
+  })
+  const ics201VersionAuthorDisplay = useCallback(
+    (version: Ics201Version) =>
+      ics201VersionAuthorLabel(version, {
+        profileEmail,
+        rosterMembers: activeWorkspaceRoster,
+      }),
+    [activeWorkspaceRoster, profileEmail]
+  )
+  const ics201CurrentSituationEditor = useIcs201TextSectionEditor({
+    enabled: isSupabaseEnabled,
+    active: ics201EditingCurrentSituation,
+    documentId: ics201DocumentId,
+    sectionId: 'current-situation',
+    seedValue: ics201Form.currentSituationSummary,
+    maxLength: ics201EnforcesCharLimit ? ICS201_STRICT_CHAR_LIMIT : undefined,
+  })
+  const ics201ObjectivesEditor = useIcs201ObjectivesSectionEditor({
+    enabled: isSupabaseEnabled,
+    active: ics201EditingObjectives,
+    documentId: ics201DocumentId,
+    sectionId: 'objectives',
+    seedValue: ics201Form.objectives,
+    maxLength: ics201EnforcesCharLimit ? ICS201_STRICT_CHAR_LIMIT : undefined,
+  })
+  const ics201TopBarEditors = isSupabaseEnabled
+    ? ics201ActiveEditors
+    : MOCK_ICS201_COLLABORATORS.map((collaborator) => ({
+        ...collaborator,
+        activeSection: null as Ics201SectionId | null,
+        isSelf: false,
+      }))
+  const pushIcs201Version = useCallback(
+    (
+      snapshot: Ics201FormState,
+      options?: {
+        signatures?: Ics201VersionSignature[]
+        sectionId?: Ics201SectionId
+        authorNameOverride?: string
+        authorColorOverride?: string
+      }
+    ) => {
+      const nextAuthorName = options?.authorNameOverride ?? ics201AuthorName
+      const nextAuthorColor = options?.authorColorOverride ?? ics201AuthorColor
+      const nextAuthorEmail =
+        options?.authorNameOverride && !options.authorNameOverride.includes('@')
+          ? null
+          : ics201AuthorEmail
+      const optimisticVersion = createLocalIcs201Version(
+        snapshot,
+        nextAuthorName,
+        nextAuthorColor,
+        options?.signatures ?? [],
+        options?.sectionId,
+        nextAuthorEmail
+      )
+      setIcs201Versions((previous) => [...previous, optimisticVersion].slice(-100))
+      void appendIcs201Version(snapshot, options).then((persisted) => {
+        if (!persisted) return
+        setIcs201Versions((previous) =>
+          previous
+            .map((entry) => (entry.id === optimisticVersion.id ? persisted : entry))
+            .slice(-100)
+        )
+      })
+    },
+    [appendIcs201Version, ics201AuthorColor, ics201AuthorEmail, ics201AuthorName]
+  )
+  useEffect(() => {
+    if (ics201SyncError) {
+      toast.error(ics201SyncError)
+    }
+  }, [ics201SyncError])
   const addWorkspaceRosterMember = async () => {
     if (activeWorkspaceRosterKey === null) return
     const email = rosterMemberEmailDraft.trim().toLowerCase()
@@ -11774,16 +12094,6 @@ function App() {
     if (activeTab === 'files') return 'file-manager' as const
     return 'hub' as const
   }, [activeTab, isInExerciseWorkspace, isInIncidentWorkspace])
-  const allIncidentsForWorkspace = useMemo(() => {
-    const byId = new Map<number, IncidentListItem>()
-    for (const incident of incidentList) {
-      byId.set(incident.id, incident)
-    }
-    for (const incident of SITREP_ONGOING_INCIDENTS) {
-      byId.set(incident.id, incident)
-    }
-    return sortIncidentsBySeverity([...byId.values()])
-  }, [incidentList])
   const filteredIncidentWorkspaceOptions = useMemo(
     () =>
       allIncidentsForWorkspace.filter(
@@ -11795,14 +12105,12 @@ function App() {
   )
   const filteredExerciseWorkspaceOptions = useMemo(
     () =>
-      sortIncidentsBySeverity(
-        exerciseList.filter(
-          (exercise) =>
-            (!isSupabaseEnabled || canAccessWorkspace('exercise', exercise.id)) &&
-            matchesWorkspaceNavSearch(exercise, exerciseWorkspaceNavQuery)
-        )
+      allExercisesForWorkspace.filter(
+        (exercise) =>
+          (!isSupabaseEnabled || canAccessWorkspace('exercise', exercise.id)) &&
+          matchesWorkspaceNavSearch(exercise, exerciseWorkspaceNavQuery)
       ),
-    [exerciseList, exerciseWorkspaceNavQuery, isSupabaseEnabled, canAccessWorkspace]
+    [allExercisesForWorkspace, exerciseWorkspaceNavQuery, isSupabaseEnabled, canAccessWorkspace]
   )
   const enterIncidentWorkspace = (incident: IncidentListItem) => {
     if (isSupabaseEnabled && !canAccessWorkspace('incident', incident.id)) {
@@ -11811,6 +12119,14 @@ function App() {
     }
     setActiveExerciseWorkspaceId(null)
     setActiveIncidentWorkspaceId(incident.id)
+    if (isSupabaseEnabled) {
+      const workspaceUuid =
+        incident.workspaceId ??
+        findAccessibleWorkspaceUuid(accessibleWorkspaces, 'incident', incident.id)
+      if (workspaceUuid) {
+        setActiveWorkspaceSupabaseId(workspaceUuid)
+      }
+    }
     setIsObjectivesOpen(true)
     setIsMapVisible(true)
     setActiveTab('sitreps')
@@ -11824,6 +12140,7 @@ function App() {
       })
     )
     liveIcs201FormRef.current = null
+    applySitrepScope(`incident-${incident.id}`, { persistCurrent: false })
   }
   const enterExerciseWorkspace = (exercise: ExerciseListItem) => {
     if (isSupabaseEnabled && !canAccessWorkspace('exercise', exercise.id)) {
@@ -11832,9 +12149,17 @@ function App() {
     }
     setActiveIncidentWorkspaceId(null)
     setActiveExerciseWorkspaceId(exercise.id)
+    if (isSupabaseEnabled) {
+      const workspaceUuid =
+        exercise.workspaceId ??
+        findAccessibleWorkspaceUuid(accessibleWorkspaces, 'exercise', exercise.id)
+      if (workspaceUuid) {
+        setActiveWorkspaceSupabaseId(workspaceUuid)
+      }
+    }
     setIsObjectivesOpen(true)
     setIsMapVisible(true)
-    setActiveTab('briefing')
+    setActiveTab('sitreps')
     setIcs201Form(
       cloneIcs201FormState({
         ...INITIAL_ICS201_FORM,
@@ -11845,6 +12170,7 @@ function App() {
       })
     )
     liveIcs201FormRef.current = null
+    applySitrepScope(`exercise-${exercise.id}`, { persistCurrent: false })
   }
   useEffect(() => {
     if (!isSupabaseEnabled || accessibleWorkspaces.length === 0 || hasHandledInviteRedirectRef.current) {
@@ -11866,20 +12192,22 @@ function App() {
     hasHandledInviteRedirectRef.current = true
 
     if (invitedWorkspace.kind === 'incident') {
-      const incident =
-        incidentList.find((item) => item.id === invitedWorkspace.legacyId) ??
-        SITREP_ONGOING_INCIDENTS.find((item) => item.id === invitedWorkspace.legacyId)
+      const incident = allIncidentsForWorkspace.find(
+        (item) => item.id === invitedWorkspace.legacyId
+      )
       if (incident) {
         enterIncidentWorkspace(incident)
       }
       return
     }
 
-    const exercise = exerciseList.find((item) => item.id === invitedWorkspace.legacyId)
+    const exercise = allExercisesForWorkspace.find(
+      (item) => item.id === invitedWorkspace.legacyId
+    )
     if (exercise) {
       enterExerciseWorkspace(exercise)
     }
-  }, [isSupabaseEnabled, accessibleWorkspaces, incidentList, exerciseList])
+  }, [isSupabaseEnabled, accessibleWorkspaces, allIncidentsForWorkspace, allExercisesForWorkspace])
   useEffect(() => {
     if (!isSupabaseEnabled) return
     if (
@@ -11921,7 +12249,7 @@ function App() {
     setIsLeftSidebarOpen(false)
   }
   const navigateToExerciseWorkspace = () => {
-    const exercise = activeExerciseWorkspace ?? exerciseList[0]
+    const exercise = activeExerciseWorkspace ?? allExercisesForWorkspace[0]
     if (!exercise) return
     enterExerciseWorkspace(exercise)
     setIsLeftSidebarOpen(false)
@@ -13902,7 +14230,7 @@ function App() {
   const executeSitrepGeneration = (scopeId: string) => {
     const selectedScope = SITREP_SCOPE_OPTIONS.find((option) => option.id === scopeId)
     const scopeLabel = selectedScope?.label ?? 'Selected scope'
-    const scopeKindLabel = selectedScope?.kind === 'incident' ? 'Incident' : 'AOR'
+    const scopeKindLabel = getSitrepScopeKindLabel(selectedScope?.kind)
     setPratusAiIntent('default')
     setPratusAiDraftMessage('')
     setPratusAiSelectedFiles([])
@@ -14381,11 +14709,11 @@ function App() {
             setIcs201EditingMapSketch(true)
             break
           case 'current-situation':
-            setIcs201CurrentSituationDraft(ics201Form.currentSituationSummary)
+            ics201CurrentSituationEditor.replaceValue(ics201Form.currentSituationSummary)
             setIcs201EditingCurrentSituation(true)
             break
           case 'objectives':
-            setIcs201ObjectivesDraft([...ics201Form.objectives])
+            ics201ObjectivesEditor.replaceObjectives([...ics201Form.objectives])
             setIcs201EditingObjectives(true)
             break
           case 'actions':
@@ -14499,7 +14827,7 @@ function App() {
             const clipped = ics201EnforcesCharLimit
               ? generated.slice(0, ICS201_STRICT_CHAR_LIMIT)
               : generated
-            setIcs201CurrentSituationDraft(clipped)
+            ics201CurrentSituationEditor.replaceValue(clipped)
             break
           }
           case 'objectives': {
@@ -14518,9 +14846,9 @@ function App() {
                 selected.push(candidate)
                 total += candidate.length
               }
-              setIcs201ObjectivesDraft(selected.length > 0 ? selected : [candidates[0]])
+              ics201ObjectivesEditor.replaceObjectives(selected.length > 0 ? selected : [candidates[0]])
             } else {
-              setIcs201ObjectivesDraft(candidates)
+              ics201ObjectivesEditor.replaceObjectives(candidates)
             }
             break
           }
@@ -14743,17 +15071,10 @@ function App() {
       }
       window.setTimeout(() => {
         setIcs201Form(nextSnapshot)
-        const newVersion: Ics201Version = {
-          id: `${Date.now()}-ai-draft-${Math.random()
-            .toString(36)
-            .slice(2, 8)}`,
-          createdAt: Date.now(),
-          authorName: 'PRATUS AI',
-          authorColor: '#7c3aed',
-          snapshot: nextSnapshot,
-          signatures: [],
-        }
-        setIcs201Versions((previous) => [...previous, newVersion].slice(-100))
+        pushIcs201Version(nextSnapshot, {
+          authorNameOverride: 'PRATUS AI',
+          authorColorOverride: '#7c3aed',
+        })
         setIcs201GeneratingFromFile(null)
         toast.success(
           hasFiles
@@ -14768,7 +15089,7 @@ function App() {
         (option) => option.id === selectedSitrepScopeId
       )
       const scopeLabel = selectedScope?.label ?? 'Selected scope'
-      const scopeKindLabel = selectedScope?.kind === 'incident' ? 'Incident' : 'AOR'
+      const scopeKindLabel = getSitrepScopeKindLabel(selectedScope?.kind)
       const dataSourceLabels = [
         pratusAiDataSources.web && 'Web',
         pratusAiDataSources.incidentData && 'Incident Workspaces',
@@ -14880,20 +15201,10 @@ function App() {
       [field]: value,
     }))
   }
-  const saveIcs201Section = (nextForm: Ics201FormState) => {
+  const saveIcs201Section = (nextForm: Ics201FormState, sectionId?: Ics201SectionId) => {
     const savedForm = cloneIcs201FormState(nextForm)
     setIcs201Form(savedForm)
-    setIcs201Versions((previous) => {
-      const newVersion: Ics201Version = {
-        id: `${Date.now()}-draft-${Math.random().toString(36).slice(2, 8)}`,
-        createdAt: Date.now(),
-        authorName: 'You',
-        authorColor: '#16a34a',
-        snapshot: cloneIcs201FormState(savedForm),
-        signatures: [],
-      }
-      return [...previous, newVersion].slice(-100)
-    })
+    pushIcs201Version(savedForm, { sectionId })
   }
   const updateIcs201Objective = (index: number, value: string) => {
     setIcs201Form((previous) => ({
@@ -15960,29 +16271,31 @@ function App() {
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant={
-                                isGlassMode ? 'outline' : activeTab === 'msel' ? 'default' : 'outline'
-                              }
-                              className={cn(
-                                'h-8',
-                                glassIconButtonClasses,
-                                selectedGlassTabClasses(activeTab === 'msel')
-                              )}
-                              onClick={() => setActiveTab('msel')}
-                              aria-label="Open MSEL tab"
-                              data-pratus-context-id="tab:msel"
-                              data-pratus-context-label="MSEL"
-                            >
-                              MSEL
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent side="bottom" sideOffset={6}>MSEL</TooltipContent>
-                        </Tooltip>
+                        {isInIncidentWorkspace && (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant={
+                                  isGlassMode ? 'outline' : activeTab === 'msel' ? 'default' : 'outline'
+                                }
+                                className={cn(
+                                  'h-8',
+                                  glassIconButtonClasses,
+                                  selectedGlassTabClasses(activeTab === 'msel')
+                                )}
+                                onClick={() => setActiveTab('msel')}
+                                aria-label="Open MSEL tab"
+                                data-pratus-context-id="tab:msel"
+                                data-pratus-context-label="MSEL"
+                              >
+                                MSEL
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent side="bottom" sideOffset={6}>MSEL</TooltipContent>
+                          </Tooltip>
+                        )}
                       </>
                     )}
                     {!isCompactPanelTabs && (
@@ -20636,7 +20949,7 @@ function App() {
                               className="rounded px-1.5 py-0.5 text-[10px] font-semibold text-white"
                               style={{ backgroundColor: viewingIcs201Version.authorColor }}
                             >
-                              {viewingIcs201Version.authorName}
+                              {ics201VersionAuthorDisplay(viewingIcs201Version)}
                             </span>
                             .
                           </span>
@@ -20712,7 +21025,7 @@ function App() {
                                 className="rounded px-1.5 py-0.5 text-[10px] font-semibold text-white"
                                 style={{ backgroundColor: latest.authorColor }}
                               >
-                                {latest.authorName}
+                                {ics201VersionAuthorDisplay(latest)}
                               </span>
                               .
                             </span>
@@ -20734,40 +21047,43 @@ function App() {
                       ) : (
                         <TooltipProvider delayDuration={150}>
                           <div className="flex items-center gap-2">
-                            <div className="flex -space-x-2">
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <div
-                                    className="flex h-6 w-6 cursor-default items-center justify-center rounded-full border-2 border-background text-[10px] font-semibold text-white"
-                                    style={{ backgroundColor: '#16a34a' }}
-                                  >
-                                    You
-                                  </div>
-                                </TooltipTrigger>
-                                <TooltipContent side="top" className="text-xs">
-                                  <div className="font-medium">Incident Commander</div>
-                                  <div className="opacity-80">You</div>
-                                </TooltipContent>
-                              </Tooltip>
-                              {ics201Collaborators.map((collaborator) => (
-                                <Tooltip key={collaborator.id}>
-                                  <TooltipTrigger asChild>
-                                    <div
-                                      className="flex h-6 w-6 cursor-default items-center justify-center rounded-full border-2 border-background text-[10px] font-semibold text-white"
-                                      style={{ backgroundColor: collaborator.color }}
-                                    >
-                                      {collaborator.initials}
-                                    </div>
-                                  </TooltipTrigger>
-                                  <TooltipContent side="top" className="text-xs">
-                                    <div className="font-medium">{collaborator.position}</div>
-                                    <div className="opacity-80">{collaborator.name}</div>
-                                  </TooltipContent>
-                                </Tooltip>
-                              ))}
-                            </div>
+                            {ics201TopBarEditors.length > 0 ? (
+                              <div className="flex -space-x-2">
+                                {ics201TopBarEditors.map((editor) => (
+                                  <Tooltip key={editor.id}>
+                                    <TooltipTrigger asChild>
+                                      <div
+                                        className="flex h-6 w-6 cursor-default items-center justify-center rounded-full border-2 border-background text-[10px] font-semibold text-white"
+                                        style={{ backgroundColor: editor.color }}
+                                      >
+                                        {editor.initials}
+                                      </div>
+                                    </TooltipTrigger>
+                                    <TooltipContent side="top" className="text-xs">
+                                      <div className="font-medium">{editor.position}</div>
+                                      <div className="opacity-80">{editor.email}</div>
+                                      {editor.activeSection ? (
+                                        <div className="opacity-80">
+                                          Editing {ICS201_SECTION_LABELS[editor.activeSection]}
+                                        </div>
+                                      ) : null}
+                                    </TooltipContent>
+                                  </Tooltip>
+                                ))}
+                              </div>
+                            ) : null}
                             <span className="text-muted-foreground">
-                              You and {ics201Collaborators.length} others are editing now.
+                              {ics201TopBarEditors.length === 0
+                                ? activeIcs201Section
+                                  ? `You are editing ${ICS201_SECTION_LABELS[activeIcs201Section]}.`
+                                  : 'You are viewing the ICS-201.'
+                                : ics201TopBarEditors.length === 1 && ics201TopBarEditors[0]?.isSelf
+                                  ? `You are editing ${ICS201_SECTION_LABELS[ics201TopBarEditors[0].activeSection!]}.`
+                                  : `${ics201TopBarEditors.length} ${
+                                      ics201TopBarEditors.length === 1 ? 'person is' : 'people are'
+                                    } editing now.`}
+                              {isIcs201Saving ? ' Saving…' : null}
+                              {isIcs201Loading ? ' Loading…' : null}
                             </span>
                           </div>
                         </TooltipProvider>
@@ -20870,19 +21186,7 @@ function App() {
                               }
                               onClick={() => {
                                 if (isLatestSigned) {
-                                  const newVersion: Ics201Version = {
-                                    id: `${Date.now()}-draft-${Math.random()
-                                      .toString(36)
-                                      .slice(2, 8)}`,
-                                    createdAt: Date.now(),
-                                    authorName: 'You',
-                                    authorColor: '#16a34a',
-                                    snapshot: ics201Form,
-                                    signatures: [],
-                                  }
-                                  setIcs201Versions((previous) =>
-                                    [...previous, newVersion].slice(-100)
-                                  )
+                                  pushIcs201Version(ics201Form)
                                   return
                                 }
                                 setIsCreatingSignedIcs201Version(true)
@@ -20934,7 +21238,10 @@ function App() {
                     >
                       <div className="space-y-2 px-3 py-2.5">
                         <div className="flex items-center justify-between gap-2">
-                          <Label className="text-xs font-semibold">Report Identification</Label>
+                          <div className="flex items-center gap-1.5">
+                            <Label className="text-xs font-semibold">Report Identification</Label>
+                            <Ics201SectionEditorBadges editors={ics201SectionEditors['report-info'] ?? []} />
+                          </div>
                           {!ics201EditingReportInfo && (
                             <Button
                               type="button"
@@ -21168,7 +21475,12 @@ function App() {
                       <div className="px-3 py-2.5">
                         <ItemContent className="space-y-3">
                           <div className="flex items-center justify-between gap-2">
-                            <ItemTitle>ICS-201 Incident Briefing</ItemTitle>
+                            <div className="flex items-center gap-1.5">
+                              <ItemTitle>ICS-201 Incident Briefing</ItemTitle>
+                              <Ics201SectionEditorBadges
+                                editors={ics201SectionEditors['incident-briefing'] ?? []}
+                              />
+                            </div>
                             {!ics201EditingIncidentBriefing && (
                               <Button
                                 type="button"
@@ -21357,31 +21669,8 @@ function App() {
                           <div className="flex items-center justify-between gap-2">
                             <div className="flex items-center gap-1.5">
                               <ItemTitle>Map Sketch</ItemTitle>
+                              <Ics201SectionEditorBadges editors={ics201SectionEditors['map-sketch'] ?? []} />
                               <TooltipProvider delayDuration={150}>
-                                {(() => {
-                                  const collaborator = ics201Collaborators.find(
-                                    (entry) => entry.id === 'maya'
-                                  )
-                                  if (!collaborator) return null
-                                  return (
-                                    <Tooltip>
-                                      <TooltipTrigger asChild>
-                                        <div
-                                          className="flex h-5 w-5 cursor-default items-center justify-center rounded-full border-2 border-background text-[9px] font-semibold text-white"
-                                          style={{ backgroundColor: collaborator.color }}
-                                          aria-label={`${collaborator.position} ${collaborator.name} is editing this section`}
-                                        >
-                                          {collaborator.initials}
-                                        </div>
-                                      </TooltipTrigger>
-                                      <TooltipContent side="top" className="text-xs">
-                                        <div className="font-medium">{collaborator.position}</div>
-                                        <div className="opacity-80">{collaborator.name}</div>
-                                        <div className="opacity-80">Editing this section</div>
-                                      </TooltipContent>
-                                    </Tooltip>
-                                  )
-                                })()}
                                 <Tooltip>
                                   <TooltipTrigger asChild>
                                     <Button
@@ -21700,7 +21989,12 @@ function App() {
                       <div className="px-3 py-2.5">
                         <ItemContent className="space-y-2">
                           <div className="flex items-center justify-between gap-2">
-                            <ItemTitle>Current Situation</ItemTitle>
+                            <div className="flex items-center gap-1.5">
+                              <ItemTitle>Current Situation</ItemTitle>
+                              <Ics201SectionEditorBadges
+                                editors={ics201SectionEditors['current-situation'] ?? []}
+                              />
+                            </div>
                             {!ics201EditingCurrentSituation && (
                               <Button
                                 type="button"
@@ -21709,7 +22003,6 @@ function App() {
                                 className="h-7 w-7 text-muted-foreground"
                                 aria-label="Edit current situation"
                                 onClick={() => {
-                                  setIcs201CurrentSituationDraft(ics201Form.currentSituationSummary)
                                   setIcs201EditingCurrentSituation(true)
                                 }}
                               >
@@ -21721,12 +22014,9 @@ function App() {
                             <>
                               <Textarea
                                 autoFocus
-                                value={ics201CurrentSituationDraft}
+                                value={ics201CurrentSituationEditor.value}
                                 onChange={(event) => {
-                                  const next = ics201EnforcesCharLimit
-                                    ? event.target.value.slice(0, ICS201_STRICT_CHAR_LIMIT)
-                                    : event.target.value
-                                  setIcs201CurrentSituationDraft(next)
+                                  ics201CurrentSituationEditor.setValue(event.target.value)
                                 }}
                                 maxLength={
                                   ics201EnforcesCharLimit ? ICS201_STRICT_CHAR_LIMIT : undefined
@@ -21738,12 +22028,12 @@ function App() {
                                 className={cn(
                                   'flex justify-end text-[10px]',
                                   ics201EnforcesCharLimit &&
-                                    ics201CurrentSituationDraft.length >= ICS201_STRICT_CHAR_LIMIT
+                                    ics201CurrentSituationEditor.value.length >= ICS201_STRICT_CHAR_LIMIT
                                     ? 'text-amber-600 dark:text-amber-400'
                                     : 'text-muted-foreground'
                                 )}
                               >
-                                {ics201CurrentSituationDraft.length.toLocaleString()}
+                                {ics201CurrentSituationEditor.value.length.toLocaleString()}
                                 {ics201EnforcesCharLimit
                                   ? ` / ${ICS201_STRICT_CHAR_LIMIT.toLocaleString()} characters`
                                   : ics201StructureMode === 'paginated'
@@ -21786,13 +22076,17 @@ function App() {
                                 className="h-7 gap-1 bg-blue-600 text-xs text-white hover:bg-blue-700"
                                 disabled={
                                   ics201EnforcesCharLimit &&
-                                  ics201CurrentSituationDraft.length > ICS201_STRICT_CHAR_LIMIT
+                                  ics201CurrentSituationEditor.value.length > ICS201_STRICT_CHAR_LIMIT
                                 }
                                 onClick={() => {
-                                  saveIcs201Section({
-                                    ...ics201Form,
-                                    currentSituationSummary: ics201CurrentSituationDraft,
-                                  })
+                                  void ics201CurrentSituationEditor.persistNow()
+                                  saveIcs201Section(
+                                    {
+                                      ...ics201Form,
+                                      currentSituationSummary: ics201CurrentSituationEditor.value,
+                                    },
+                                    'current-situation'
+                                  )
                                   setIcs201EditingCurrentSituation(false)
                                 }}
                               >
@@ -21810,32 +22104,7 @@ function App() {
                           <div className="flex items-center justify-between gap-2">
                             <div className="flex items-center gap-1.5">
                               <ItemTitle>Objectives</ItemTitle>
-                              <TooltipProvider delayDuration={150}>
-                                {(() => {
-                                  const collaborator = ics201Collaborators.find(
-                                    (entry) => entry.id === 'diego'
-                                  )
-                                  if (!collaborator) return null
-                                  return (
-                                    <Tooltip>
-                                      <TooltipTrigger asChild>
-                                        <div
-                                          className="flex h-5 w-5 cursor-default items-center justify-center rounded-full border-2 border-background text-[9px] font-semibold text-white"
-                                          style={{ backgroundColor: collaborator.color }}
-                                          aria-label={`${collaborator.position} ${collaborator.name} is editing this section`}
-                                        >
-                                          {collaborator.initials}
-                                        </div>
-                                      </TooltipTrigger>
-                                      <TooltipContent side="top" className="text-xs">
-                                        <div className="font-medium">{collaborator.position}</div>
-                                        <div className="opacity-80">{collaborator.name}</div>
-                                        <div className="opacity-80">Editing this section</div>
-                                      </TooltipContent>
-                                    </Tooltip>
-                                  )
-                                })()}
-                              </TooltipProvider>
+                              <Ics201SectionEditorBadges editors={ics201SectionEditors.objectives ?? []} />
                             </div>
                             {!ics201EditingObjectives ? (
                               <Button
@@ -21845,7 +22114,6 @@ function App() {
                                 className="h-7 w-7 text-muted-foreground"
                                 aria-label="Edit objectives"
                                 onClick={() => {
-                                  setIcs201ObjectivesDraft([...ics201Form.objectives])
                                   setIcs201EditingObjectives(true)
                                 }}
                               >
@@ -21856,9 +22124,7 @@ function App() {
                                 type="button"
                                 size="sm"
                                 variant="outline"
-                                onClick={() =>
-                                  setIcs201ObjectivesDraft((draft) => [...draft, ''])
-                                }
+                                onClick={() => ics201ObjectivesEditor.addObjective()}
                               >
                                 + Add Objective
                               </Button>
@@ -21866,7 +22132,7 @@ function App() {
                           </div>
                           {ics201EditingObjectives ? (
                             (() => {
-                              const totalObjectivesLength = ics201ObjectivesDraft.reduce(
+                              const totalObjectivesLength = ics201ObjectivesEditor.objectives.reduce(
                                 (sum, entry) => sum + entry.length,
                                 0
                               )
@@ -21875,34 +22141,15 @@ function App() {
                                 totalObjectivesLength > ICS201_STRICT_CHAR_LIMIT
                               return (
                                 <>
-                                  {ics201ObjectivesDraft.map((objective, index) => (
+                                  {ics201ObjectivesEditor.objectives.map((objective, index) => (
                                     <input
                                       key={`ics-objective-draft-${index}`}
                                       value={objective}
                                       onChange={(event) => {
-                                        const rawValue = event.target.value
-                                        setIcs201ObjectivesDraft((draft) => {
-                                          if (ics201EnforcesCharLimit) {
-                                            const otherTotal = draft.reduce(
-                                              (sum, entry, entryIndex) =>
-                                                entryIndex === index
-                                                  ? sum
-                                                  : sum + entry.length,
-                                              0
-                                            )
-                                            const remaining = Math.max(
-                                              0,
-                                              ICS201_STRICT_CHAR_LIMIT - otherTotal
-                                            )
-                                            const clipped = rawValue.slice(0, remaining)
-                                            return draft.map((entry, entryIndex) =>
-                                              entryIndex === index ? clipped : entry
-                                            )
-                                          }
-                                          return draft.map((entry, entryIndex) =>
-                                            entryIndex === index ? rawValue : entry
-                                          )
-                                        })
+                                        ics201ObjectivesEditor.updateObjective(
+                                          index,
+                                          event.target.value
+                                        )
                                       }}
                                       placeholder={`Objective ${index + 1}`}
                                       className="h-8 w-full rounded-md border bg-transparent px-2 text-xs outline-none"
@@ -21952,10 +22199,14 @@ function App() {
                                       className="h-7 gap-1 bg-blue-600 text-xs text-white hover:bg-blue-700"
                                       disabled={objectivesOverLimit}
                                       onClick={() => {
-                                        saveIcs201Section({
-                                          ...ics201Form,
-                                          objectives: [...ics201ObjectivesDraft],
-                                        })
+                                        void ics201ObjectivesEditor.persistNow()
+                                        saveIcs201Section(
+                                          {
+                                            ...ics201Form,
+                                            objectives: [...ics201ObjectivesEditor.objectives],
+                                          },
+                                          'objectives'
+                                        )
                                         setIcs201EditingObjectives(false)
                                       }}
                                     >
@@ -21990,7 +22241,10 @@ function App() {
                       <div className="px-3 py-2.5">
                         <ItemContent className="space-y-3">
                           <div className="flex items-center justify-between gap-2">
-                            <ItemTitle>Actions</ItemTitle>
+                            <div className="flex items-center gap-1.5">
+                              <ItemTitle>Actions</ItemTitle>
+                              <Ics201SectionEditorBadges editors={ics201SectionEditors.actions ?? []} />
+                            </div>
                             {!ics201EditingActions ? (
                               <Button
                                 type="button"
@@ -22158,7 +22412,10 @@ function App() {
                       <div className="px-3 py-2.5">
                         <ItemContent className="space-y-2">
                           <div className="flex items-center justify-between gap-2">
-                            <ItemTitle>Organization Chart</ItemTitle>
+                            <div className="flex items-center gap-1.5">
+                              <ItemTitle>Organization Chart</ItemTitle>
+                              <Ics201SectionEditorBadges editors={ics201SectionEditors['org-chart'] ?? []} />
+                            </div>
                             {!ics201EditingOrgChart && (
                               <Button
                                 type="button"
@@ -22289,7 +22546,10 @@ function App() {
                       <div className="px-3 py-2.5">
                         <ItemContent className="space-y-3">
                           <div className="flex items-center justify-between gap-2">
-                            <ItemTitle>Resources Summary</ItemTitle>
+                            <div className="flex items-center gap-1.5">
+                              <ItemTitle>Resources Summary</ItemTitle>
+                              <Ics201SectionEditorBadges editors={ics201SectionEditors.resources ?? []} />
+                            </div>
                             {!ics201EditingResources ? (
                               <Button
                                 type="button"
@@ -22476,7 +22736,12 @@ function App() {
                       <div className="px-3 py-2.5">
                         <ItemContent className="space-y-3">
                           <div className="flex items-center justify-between gap-2">
-                            <ItemTitle>Safety Analysis</ItemTitle>
+                            <div className="flex items-center gap-1.5">
+                              <ItemTitle>Safety Analysis</ItemTitle>
+                              <Ics201SectionEditorBadges
+                                editors={ics201SectionEditors['safety-analysis'] ?? []}
+                              />
+                            </div>
                             {!ics201EditingSafetyAnalysis ? (
                               <Button
                                 type="button"
@@ -22720,12 +22985,12 @@ function App() {
                   </div>
                 )}
 
-                {activeTab === 'msel' && isInExerciseWorkspace && (
+                {activeTab === 'msel' && isInIncidentWorkspace && (
                   <div className="space-y-3">
                     <div className="rounded-md border px-3 py-2">
                       <p className="text-sm font-medium">MSEL</p>
                       <p className="text-xs text-muted-foreground">
-                        Exercise workspace for {activeExerciseWorkspace?.name}
+                        Incident workspace for {activeIncidentWorkspace?.name}
                       </p>
                     </div>
                     {renderExerciseMselInjectsEditor()}
@@ -22951,11 +23216,9 @@ function App() {
                             selectedScopeForBanner?.label ??
                             activeDraft.snapshot.incidentName?.trim() ??
                             ''
-                          const bannerScopeKindLabel = selectedScopeForBanner
-                            ? selectedScopeForBanner.kind === 'incident'
-                              ? 'Incident'
-                              : 'AOR'
-                            : 'Incident'
+                          const bannerScopeKindLabel = getSitrepScopeKindLabel(
+                            selectedScopeForBanner?.kind
+                          )
                           return (
                             <>
                               {bannerScopeLabel.length > 0 && (
@@ -23096,14 +23359,14 @@ function App() {
                             </span>
                             <Select
                               value={selectedSitrepScopeId}
-                              onValueChange={(value) => setSelectedSitrepScopeId(value)}
+                              onValueChange={(value) => applySitrepScope(value)}
                             >
                               <SelectTrigger
                                 size="sm"
-                                aria-label="SITREP AOR or Incident"
+                                aria-label="SITREP scope: AOR, incident, or exercise"
                                 className="h-8 w-[280px] text-xs"
                               >
-                                <SelectValue placeholder="Select AOR or Incident" />
+                                <SelectValue placeholder="Select scope" />
                               </SelectTrigger>
                               <SelectContent className="text-xs">
                                 <SelectGroup>
@@ -23128,6 +23391,22 @@ function App() {
                                   </SelectLabel>
                                   {SITREP_SCOPE_OPTIONS.filter(
                                     (option) => option.kind === 'incident'
+                                  ).map((option) => (
+                                    <SelectItem
+                                      key={option.id}
+                                      value={option.id}
+                                      className="text-xs"
+                                    >
+                                      {option.label}
+                                    </SelectItem>
+                                  ))}
+                                </SelectGroup>
+                                <SelectGroup>
+                                  <SelectLabel className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                                    Exercises
+                                  </SelectLabel>
+                                  {SITREP_SCOPE_OPTIONS.filter(
+                                    (option) => option.kind === 'exercise'
                                   ).map((option) => (
                                     <SelectItem
                                       key={option.id}
@@ -23195,8 +23474,7 @@ function App() {
                                       (option) => option.id === selectedSitrepScopeId
                                     )
                                     const scopeLabel = selectedScope?.label ?? 'the selected scope'
-                                    const scopeKindLabel =
-                                      selectedScope?.kind === 'incident' ? 'Incident' : 'AOR'
+                                    const scopeKindLabel = getSitrepScopeKindLabel(selectedScope?.kind)
                                     const scopeContextId = selectedScope
                                       ? `sitrep-scope:${selectedScope.id}`
                                       : 'sitrep-scope:none'
@@ -27974,7 +28252,7 @@ function App() {
                           className="flex h-5 items-center gap-1 rounded-full px-2 text-[10px] font-semibold text-white"
                           style={{ backgroundColor: version.authorColor }}
                         >
-                          {version.authorName}
+                          {ics201VersionAuthorDisplay(version)}
                         </span>
                         <span className="flex-1 truncate text-muted-foreground">
                           {preview || '(no summary changes)'}
@@ -28087,7 +28365,7 @@ function App() {
                           className="flex h-5 items-center gap-1 rounded-full px-2 text-[10px] font-semibold text-white"
                           style={{ backgroundColor: version.authorColor }}
                         >
-                          {version.authorName}
+                          {ics201VersionAuthorDisplay(version)}
                         </span>
                         <span className="flex-1 truncate text-muted-foreground">
                           {preview || '(no summary changes)'}
@@ -28187,12 +28465,8 @@ function App() {
                 if (!name) {
                   return
                 }
-                const newVersion: Ics201Version = {
-                  id: `${Date.now()}-signed-${Math.random().toString(36).slice(2, 8)}`,
-                  createdAt: Date.now(),
-                  authorName: name,
-                  authorColor: '#16a34a',
-                  snapshot: ics201Form,
+                pushIcs201Version(ics201Form, {
+                  authorColorOverride: ics201AuthorColor,
                   signatures: [
                     {
                       name,
@@ -28200,8 +28474,7 @@ function App() {
                       signedAt: Date.now(),
                     },
                   ],
-                }
-                setIcs201Versions((previous) => [...previous, newVersion].slice(-100))
+                })
                 setIsIcs201SignNameDialogOpen(false)
                 setIsCreatingSignedIcs201Version(false)
                 setIcs201SignNameInput('You')
@@ -29085,7 +29358,7 @@ function App() {
                   <button
                     type="button"
                     onClick={navigateToExerciseWorkspace}
-                    disabled={exerciseList.length === 0}
+                    disabled={allExercisesForWorkspace.length === 0}
                     className={cn(
                       'flex w-full items-center gap-2 rounded-md px-1 py-1 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50',
                       activeNavigationDestination === 'exercise-workspace'
@@ -29103,7 +29376,7 @@ function App() {
                       onChange={(event) => setExerciseWorkspaceNavQuery(event.target.value)}
                       placeholder="Search exercises..."
                       className="h-8 pl-7 text-xs"
-                      disabled={exerciseList.length === 0}
+                      disabled={allExercisesForWorkspace.length === 0}
                     />
                   </div>
                   <div className="mt-1 max-h-40 space-y-0.5 overflow-y-auto">
@@ -29522,7 +29795,7 @@ function App() {
                   (option) => option.id === selectedSitrepScopeId
                 )
                 const confirmationKindLabel =
-                  confirmationScope?.kind === 'incident' ? 'Incident' : 'AOR'
+                getSitrepScopeKindLabel(confirmationScope?.kind)
                 const confirmationScopeLabel =
                   confirmationScope?.label ?? 'the selected scope'
                 return (
@@ -31818,13 +32091,22 @@ function App() {
             ) : (
               <Button
                 type="button"
+                disabled={isCreatingWorkspace}
                 onClick={
                   isExerciseActivationWizard
-                    ? handleCreateExerciseSubmit
-                    : handleCreateIncidentSubmit
+                    ? () => {
+                        void handleCreateExerciseSubmit()
+                      }
+                    : () => {
+                        void handleCreateIncidentSubmit()
+                      }
                 }
               >
-                {isExerciseActivationWizard ? 'Create Exercise' : 'Create Incident'}
+                {isCreatingWorkspace
+                  ? 'Creating…'
+                  : isExerciseActivationWizard
+                    ? 'Create Exercise'
+                    : 'Create Incident'}
               </Button>
             )}
           </DialogFooter>

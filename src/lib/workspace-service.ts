@@ -73,7 +73,7 @@ export async function fetchAccessibleWorkspaces(
   if (isOrgAdmin) {
     const { data, error } = await supabase
       .from('workspaces')
-      .select('id, kind, legacy_id, name')
+      .select('id, kind, legacy_id, name, region, summary')
       .order('name')
 
     if (error || !data) {
@@ -86,6 +86,8 @@ export async function fetchAccessibleWorkspaces(
       legacyId: row.legacy_id,
       name: row.name,
       icsPosition: 'Org Admin',
+      region: row.region ?? null,
+      summary: row.summary ?? null,
     }))
   }
 
@@ -98,7 +100,9 @@ export async function fetchAccessibleWorkspaces(
         id,
         kind,
         legacy_id,
-        name
+        name,
+        region,
+        summary
       )
     `
     )
@@ -117,12 +121,16 @@ export async function fetchAccessibleWorkspaces(
             kind: WorkspaceKind
             legacy_id: number
             name: string
+            region: string | null
+            summary: string | null
           }
         | {
             id: string
             kind: WorkspaceKind
             legacy_id: number
             name: string
+            region: string | null
+            summary: string | null
           }[]
         | null
       const workspace = Array.isArray(workspaceRaw) ? workspaceRaw[0] : workspaceRaw
@@ -133,6 +141,8 @@ export async function fetchAccessibleWorkspaces(
         legacyId: workspace.legacy_id,
         name: workspace.name,
         icsPosition: row.ics_position as string,
+        region: workspace.region ?? null,
+        summary: workspace.summary ?? null,
       }
     })
     .filter((entry): entry is AccessibleWorkspace => entry !== null)
@@ -145,6 +155,16 @@ export async function resolveWorkspaceId(
   const fallbackId = getSeededWorkspaceId(kind, legacyId)
   const supabase = getSupabaseClient()
   if (!supabase) return fallbackId
+
+  const POSTGRES_INT_MAX = 2_147_483_647
+  if (
+    !Number.isFinite(legacyId) ||
+    !Number.isInteger(legacyId) ||
+    legacyId < 1 ||
+    legacyId > POSTGRES_INT_MAX
+  ) {
+    return fallbackId
+  }
 
   const { data, error } = await supabase
     .from('workspaces')
@@ -163,6 +183,18 @@ export async function resolveWorkspaceId(
   }
 
   return data.id
+}
+
+export function findAccessibleWorkspaceUuid(
+  accessibleWorkspaces: AccessibleWorkspace[],
+  kind: WorkspaceKind,
+  legacyId: number
+): string | null {
+  return (
+    accessibleWorkspaces.find(
+      (workspace) => workspace.kind === kind && workspace.legacyId === legacyId
+    )?.workspaceId ?? null
+  )
 }
 
 export async function fetchWorkspaceRoster(workspaceId: string): Promise<WorkspaceRosterMember[]> {
@@ -236,6 +268,55 @@ export async function inviteWorkspaceMember(params: {
   }
 
   return { ok: true }
+}
+
+export type CreatedWorkspace = {
+  workspaceId: string
+  kind: WorkspaceKind
+  legacyId: number
+  name: string
+  region: string | null
+  summary: string | null
+}
+
+export async function createWorkspace(params: {
+  accessToken: string
+  kind: WorkspaceKind
+  name: string
+  region?: string
+  summary?: string
+}): Promise<{ ok: true; workspace: CreatedWorkspace } | { ok: false; message: string }> {
+  if (!isSupabaseConfigured) {
+    return { ok: false, message: 'Supabase is not configured.' }
+  }
+
+  const response = await fetch('/api/create-workspace', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${params.accessToken}`,
+    },
+    body: JSON.stringify({
+      kind: params.kind,
+      name: params.name,
+      region: params.region,
+      summary: params.summary,
+    }),
+  })
+
+  const payload = (await response.json().catch(() => ({}))) as {
+    error?: string
+    workspace?: CreatedWorkspace
+  }
+
+  if (!response.ok || !payload.workspace) {
+    return {
+      ok: false,
+      message: payload.error ?? 'Could not create workspace.',
+    }
+  }
+
+  return { ok: true, workspace: payload.workspace }
 }
 
 export function canAccessLegacyWorkspace(
