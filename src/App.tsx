@@ -15828,6 +15828,7 @@ function App() {
                       size="icon"
                       className={cn('h-7 w-7', glassIconButtonClasses)}
                       aria-label="Workspace options"
+                      data-ics201-tutorial="workspace-menu"
                     >
                       <MoreVertical className="h-4 w-4" />
                     </Button>
@@ -16286,6 +16287,7 @@ function App() {
                               aria-label="Open forms menu"
                               data-pratus-context-id="tab:forms"
                               data-pratus-context-label="Forms"
+                              data-ics201-tutorial="forms-menu"
                             >
                               Forms
                               <ChevronDown className="h-3.5 w-3.5" />
@@ -17247,6 +17249,7 @@ function App() {
                           className="h-8 w-8"
                           aria-label="Export ICS-201"
                           title="Export ICS-201"
+                          data-ics201-tutorial="ics201-export"
                         >
                           <DownloadIcon className="h-4 w-4" />
                         </Button>
@@ -20936,7 +20939,7 @@ function App() {
                 )}
 
                 {activeTab === 'briefing' && (isInIncidentWorkspace || isInExerciseWorkspace) && (
-                  <div className="space-y-3">
+                  <div className="space-y-3" data-ics201-tutorial="ics201-panel">
                     {ics201GeneratingFromFile && (
                       <div className="flex items-center gap-2 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-800 dark:border-blue-800/60 dark:bg-blue-500/10 dark:text-blue-200">
                         <img
@@ -21126,6 +21129,7 @@ function App() {
                           size="sm"
                           variant="outline"
                           className="h-7 gap-1 text-xs"
+                          data-ics201-tutorial="ics201-version-history"
                           onClick={() => setIsIcs201VersionDialogOpen(true)}
                         >
                           <History className="h-3.5 w-3.5" />
@@ -21170,6 +21174,7 @@ function App() {
                                 type="button"
                                 size="sm"
                                 className="h-7 gap-1 bg-blue-600 text-xs text-white hover:bg-blue-700"
+                                data-ics201-tutorial="ics201-generate-draft"
                                 disabled={
                                   viewingIcs201Version !== null ||
                                   isCreatingSignedIcs201Version ||
@@ -22017,7 +22022,11 @@ function App() {
                         </ItemContent>
                       </div>
                     </Item>
-                    <Item variant="outline" className={cn('flex-col items-stretch p-0', glassItemBorderClasses)}>
+                    <Item
+                      variant="outline"
+                      className={cn('flex-col items-stretch p-0', glassItemBorderClasses)}
+                      data-ics201-tutorial="ics201-current-situation"
+                    >
                       <div className="px-3 py-2.5">
                         <ItemContent className="space-y-2">
                           <div className="flex items-center justify-between gap-2">
