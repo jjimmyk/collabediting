@@ -48,10 +48,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const client = new pg.Client({
     connectionString,
-    ssl: { rejectUnauthorized: false },
+    ssl: connectionString.includes('localhost')
+      ? undefined
+      : {
+          rejectUnauthorized: false,
+          requestCert: false,
+        },
   })
 
   try {
+    // Supabase pooler certificates can fail default Node verification on Vercel.
+    process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'
     await client.connect()
     await client.query(sql)
     return res.status(200).json({ ok: true, message: 'Schema migration applied.' })
