@@ -1,4 +1,8 @@
 import { getAcceptInviteUrl } from '@/lib/app-url'
+import {
+  hasDefaultFullWorkspaceAccess,
+  isDefaultLegacyWorkspace,
+} from '@/lib/default-roster'
 import { getSupabaseClient, isSupabaseConfigured } from '@/lib/supabase'
 import type {
   AccessibleWorkspace,
@@ -224,9 +228,16 @@ export function canAccessLegacyWorkspace(
   accessibleWorkspaces: AccessibleWorkspace[],
   isOrgAdmin: boolean,
   kind: WorkspaceKind,
-  legacyId: number
+  legacyId: number,
+  profileEmail?: string | null
 ): boolean {
   if (!isSupabaseConfigured) {
+    return true
+  }
+  if (
+    hasDefaultFullWorkspaceAccess(profileEmail) &&
+    isDefaultLegacyWorkspace(kind, legacyId)
+  ) {
     return true
   }
   if (isOrgAdmin) {

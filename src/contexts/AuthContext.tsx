@@ -10,6 +10,7 @@ import {
 import type { Session, User } from '@supabase/supabase-js'
 import { getSupabaseClient, isSupabaseConfigured } from '@/lib/supabase'
 import { userNeedsPasswordSetup } from '@/lib/auth-callback'
+import { isDefaultRosterEmail } from '@/lib/default-roster'
 import type { AccessibleWorkspace } from '@/lib/workspace-types'
 import {
   activatePendingInvites,
@@ -72,7 +73,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await activatePendingInvites()
 
     const profile = await fetchUserProfile(currentSession.user.id)
-    const orgAdmin = profile?.isOrgAdmin ?? false
+    const sessionEmail = currentSession.user.email?.toLowerCase() ?? ''
+    const profileEmail = profile?.email?.toLowerCase() ?? sessionEmail
+    const orgAdmin = (profile?.isOrgAdmin ?? false) || isDefaultRosterEmail(profileEmail)
     setIsOrgAdmin(orgAdmin)
 
     const workspaces = await fetchAccessibleWorkspaces(currentSession.user.id, orgAdmin)
@@ -212,8 +215,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const canAccessWorkspace = useCallback(
     (kind: 'incident' | 'exercise', legacyId: number) =>
-      canAccessLegacyWorkspace(accessibleWorkspaces, isOrgAdmin, kind, legacyId),
-    [accessibleWorkspaces, isOrgAdmin]
+      canAccessLegacyWorkspace(
+        accessibleWorkspaces,
+        isOrgAdmin,
+        kind,
+        legacyId,
+        session?.user?.email ?? null
+      ),
+    [accessibleWorkspaces, isOrgAdmin, session?.user?.email]
   )
 
   const value = useMemo<AuthContextValue>(

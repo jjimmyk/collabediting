@@ -7,8 +7,19 @@ export const DEFAULT_WORKSPACE_ROSTER_EMAILS = [
 
 export const DEFAULT_WORKSPACE_ROSTER_POSITION = 'Incident Commander'
 
-const DEFAULT_INCIDENT_WORKSPACE_IDS = [1, 2, 3] as const
-const DEFAULT_EXERCISE_WORKSPACE_IDS = [1, 2, 3] as const
+export const DEFAULT_INCIDENT_WORKSPACE_IDS = [1, 2, 3] as const
+export const DEFAULT_EXERCISE_WORKSPACE_IDS = [1, 2, 3] as const
+
+export function isDefaultLegacyWorkspace(kind: 'incident' | 'exercise', legacyId: number): boolean {
+  if (kind === 'incident') {
+    return DEFAULT_INCIDENT_WORKSPACE_IDS.includes(legacyId as (typeof DEFAULT_INCIDENT_WORKSPACE_IDS)[number])
+  }
+  return DEFAULT_EXERCISE_WORKSPACE_IDS.includes(legacyId as (typeof DEFAULT_EXERCISE_WORKSPACE_IDS)[number])
+}
+
+export function hasDefaultFullWorkspaceAccess(email: string | null | undefined): boolean {
+  return isDefaultRosterEmail(email ?? '')
+}
 
 function formatNow(): string {
   return new Date().toLocaleString([], {

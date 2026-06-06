@@ -40,6 +40,90 @@ async function findUserIdByEmail(
   return null
 }
 
+async function ensureAuthUser(
+  admin: ReturnType<typeof createClient>,
+  email: string,
+  password: string
+): Promise<{ userId: string; action: 'created' | 'updated' }> {
+  const existingUserId = await findUserIdByEmail(admin, email)
+
+  if (existingUserId) {
+    const { error } = await admin.auth.admin.updateUserById(existingUserId, {
+      password,
+      email_confirm: true,
+      user_metadata: { password_set: true },
+    })
+    if (error) {
+      throw error
+    }
+    return { userId: existingUserId, action: 'updated' }
+  }
+
+  const { data, error } = await admin.auth.admin.createUser({
+    email,
+    password,
+    email_confirm: true,
+    user_metadata: { password_set: true },
+  })
+
+  if (error || !data.user) {
+    throw error ?? new Error(`Could not create auth user for ${email}.`)
+  }
+
+  return { userId: data.user.id, action: 'created' }
+}
+
+async function syncProfileAndRoster(
+  admin: ReturnType<typeof createClient>,
+  userId: string,
+  email: string
+): Promise<{ rosterRows: number }> {
+  const { error: profileError } = await admin.from('profiles').upsert(
+    {
+      id: userId,
+      email,
+      full_name: email.split('@')[0],
+      is_org_admin: true,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: 'id' }
+  )
+
+  if (profileError) {
+    throw profileError
+  }
+
+  const { data: workspaces, error: workspacesError } = await admin
+    .from('workspaces')
+    .select('id')
+
+  if (workspacesError) {
+    throw workspacesError
+  }
+
+  let rosterRows = 0
+  for (const workspace of workspaces ?? []) {
+    const { error: rosterError } = await admin.from('workspace_members').upsert(
+      {
+        workspace_id: workspace.id,
+        email,
+        ics_position: 'Incident Commander',
+        status: 'active',
+        user_id: userId,
+        joined_at: new Date().toISOString(),
+      },
+      { onConflict: 'workspace_id,email' }
+    )
+
+    if (rosterError) {
+      throw rosterError
+    }
+    rosterRows += 1
+  }
+
+  return { rosterRows }
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' })
@@ -65,37 +149,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   const admin = createClient(supabaseUrl, supabaseServiceRoleKey)
-  const results: Array<{ email: string; action: 'created' | 'updated' }> = []
+  const results: Array<{
+    email: string
+    action: 'created' | 'updated'
+    rosterRows: number
+  }> = []
 
   for (const seedUser of SEED_USERS) {
     const email = seedUser.email.toLowerCase()
-    const existingUserId = await findUserIdByEmail(admin, email)
-
-    if (existingUserId) {
-      const { error } = await admin.auth.admin.updateUserById(existingUserId, {
-        password: seedUser.password,
-        email_confirm: true,
-        user_metadata: { password_set: true },
-      })
-      if (error) {
-        return res.status(500).json({ error: error.message, email })
-      }
-      results.push({ email, action: 'updated' })
-      continue
-    }
-
-    const { error } = await admin.auth.admin.createUser({
-      email,
-      password: seedUser.password,
-      email_confirm: true,
-      user_metadata: { password_set: true },
-    })
-
-    if (error) {
-      return res.status(500).json({ error: error.message, email })
-    }
-
-    results.push({ email, action: 'created' })
+    const { userId, action } = await ensureAuthUser(admin, email, seedUser.password)
+    const { rosterRows } = await syncProfileAndRoster(admin, userId, email)
+    results.push({ email, action, rosterRows })
   }
 
   return res.status(200).json({ ok: true, results })
