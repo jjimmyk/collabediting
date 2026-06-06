@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { readFileSync } from 'node:fs'
+import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import pg from 'pg'
 
@@ -36,14 +36,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     })
   }
 
-  let sql: string
+  let migrationFiles: string[]
+  const migrationDir = join(process.cwd(), 'supabase/migrations')
   try {
-    sql = readFileSync(
-      join(process.cwd(), 'supabase/migrations/001_workspaces_roster_auth.sql'),
-      'utf8'
-    )
+    migrationFiles = readdirSync(migrationDir)
+      .filter((file) => file.endsWith('.sql'))
+      .sort()
   } catch {
-    return res.status(500).json({ error: 'Could not read migration file.' })
+    return res.status(500).json({ error: 'Could not read migrations directory.' })
+  }
+
+  if (migrationFiles.length === 0) {
+    return res.status(500).json({ error: 'No migration files found.' })
   }
 
   const client = new pg.Client({
@@ -60,8 +64,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Supabase pooler certificates can fail default Node verification on Vercel.
     process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'
     await client.connect()
-    await client.query(sql)
-    return res.status(200).json({ ok: true, message: 'Schema migration applied.' })
+    for (const file of migrationFiles) {
+      const sql = readFileSync(join(migrationDir, file), 'utf8')
+      await client.query(sql)
+    }
+    return res.status(200).json({
+      ok: true,
+      message: 'Schema migrations applied.',
+      files: migrationFiles,
+    })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Migration failed'
     return res.status(500).json({ error: message })

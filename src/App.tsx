@@ -153,6 +153,7 @@ import {
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/contexts/AuthContext'
 import type { WorkspaceRosterMember } from '@/lib/workspace-types'
+import { buildDefaultLocalWorkspaceRosters } from '@/lib/default-roster'
 import {
   fetchWorkspaceRoster,
   inviteWorkspaceMember,
@@ -8931,7 +8932,7 @@ function App() {
   const [activeExerciseWorkspaceId, setActiveExerciseWorkspaceId] = useState<number | null>(null)
   const [localWorkspaceRostersByKey, setLocalWorkspaceRostersByKey] = useState<
     Record<string, WorkspaceRosterMember[]>
-  >({})
+  >(() => buildDefaultLocalWorkspaceRosters())
   const [supabaseWorkspaceRoster, setSupabaseWorkspaceRoster] = useState<WorkspaceRosterMember[]>(
     []
   )
