@@ -3,6 +3,7 @@ import {
   hasDefaultFullWorkspaceAccess,
   isDefaultLegacyWorkspace,
 } from '@/lib/default-roster'
+import { getSeededWorkspaceId } from '@/lib/workspace-ids'
 import { getSupabaseClient, isSupabaseConfigured } from '@/lib/supabase'
 import type {
   AccessibleWorkspace,
@@ -141,8 +142,9 @@ export async function resolveWorkspaceId(
   kind: WorkspaceKind,
   legacyId: number
 ): Promise<string | null> {
+  const fallbackId = getSeededWorkspaceId(kind, legacyId)
   const supabase = getSupabaseClient()
-  if (!supabase) return null
+  if (!supabase) return fallbackId
 
   const { data, error } = await supabase
     .from('workspaces')
@@ -151,8 +153,13 @@ export async function resolveWorkspaceId(
     .eq('legacy_id', legacyId)
     .maybeSingle()
 
-  if (error || !data) {
-    return null
+  if (error) {
+    console.warn('resolveWorkspaceId failed; using seeded workspace id fallback.', error.message)
+    return fallbackId
+  }
+
+  if (!data) {
+    return fallbackId
   }
 
   return data.id
