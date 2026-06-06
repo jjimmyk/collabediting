@@ -10,6 +10,7 @@ import {
 import type { Session, User } from '@supabase/supabase-js'
 import { getSupabaseClient, isSupabaseConfigured } from '@/lib/supabase'
 import { getAuthCallbackUrl } from '@/lib/app-url'
+import { formatSignInError, markSignInLinkSent, markSignInRateLimited } from '@/lib/auth-errors'
 import type { AccessibleWorkspace } from '@/lib/workspace-types'
 import {
   activatePendingInvites,
@@ -121,15 +122,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     const redirectTo = getAuthCallbackUrl()
-    const { error } = await supabase.auth.signInWithOtp({
-      email: trimmed,
-      options: { emailRedirectTo: redirectTo },
+    const response = await fetch('/api/sign-in-link', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: trimmed, redirectTo }),
     })
 
-    if (error) {
-      return { ok: false as const, message: error.message }
+    const payload = (await response.json().catch(() => ({}))) as {
+      error?: string
+      ok?: boolean
     }
 
+    if (!response.ok) {
+      const message = formatSignInError(payload.error ?? 'Sign-in request failed.')
+      if (response.status === 429) {
+        markSignInRateLimited()
+      }
+      return { ok: false as const, message }
+    }
+
+    markSignInLinkSent()
     return { ok: true as const }
   }, [])
 
