@@ -1,0 +1,237 @@
+import { getAppOrigin, getSupabaseClient, isSupabaseConfigured } from '@/lib/supabase'
+import type {
+  AccessibleWorkspace,
+  DbWorkspaceMember,
+  UserProfile,
+  WorkspaceKind,
+  WorkspaceRosterMember,
+} from '@/lib/workspace-types'
+
+function formatMemberDate(iso: string): string {
+  return new Date(iso).toLocaleString([], {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
+function mapDbMember(row: DbWorkspaceMember): WorkspaceRosterMember {
+  return {
+    id: row.id,
+    email: row.email,
+    icsPosition: row.ics_position,
+    status: row.status,
+    addedAt: formatMemberDate(row.joined_at ?? row.invited_at),
+    userId: row.user_id,
+  }
+}
+
+export async function fetchUserProfile(userId: string): Promise<UserProfile | null> {
+  const supabase = getSupabaseClient()
+  if (!supabase) return null
+
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id, email, full_name, is_org_admin')
+    .eq('id', userId)
+    .maybeSingle()
+
+  if (error || !data) {
+    return null
+  }
+
+  return {
+    id: data.id,
+    email: data.email,
+    fullName: data.full_name,
+    isOrgAdmin: data.is_org_admin,
+  }
+}
+
+export async function activatePendingInvites(): Promise<void> {
+  const supabase = getSupabaseClient()
+  if (!supabase) return
+
+  await supabase.rpc('activate_my_invites')
+}
+
+export async function fetchAccessibleWorkspaces(
+  userId: string,
+  isOrgAdmin: boolean
+): Promise<AccessibleWorkspace[]> {
+  const supabase = getSupabaseClient()
+  if (!supabase) return []
+
+  if (isOrgAdmin) {
+    const { data, error } = await supabase
+      .from('workspaces')
+      .select('id, kind, legacy_id, name')
+      .order('name')
+
+    if (error || !data) {
+      return []
+    }
+
+    return data.map((row) => ({
+      workspaceId: row.id,
+      kind: row.kind as WorkspaceKind,
+      legacyId: row.legacy_id,
+      name: row.name,
+      icsPosition: 'Org Admin',
+    }))
+  }
+
+  const { data, error } = await supabase
+    .from('workspace_members')
+    .select(
+      `
+      ics_position,
+      workspace:workspaces (
+        id,
+        kind,
+        legacy_id,
+        name
+      )
+    `
+    )
+    .eq('user_id', userId)
+    .eq('status', 'active')
+
+  if (error || !data) {
+    return []
+  }
+
+  return data
+    .map((row) => {
+      const workspaceRaw = row.workspace as
+        | {
+            id: string
+            kind: WorkspaceKind
+            legacy_id: number
+            name: string
+          }
+        | {
+            id: string
+            kind: WorkspaceKind
+            legacy_id: number
+            name: string
+          }[]
+        | null
+      const workspace = Array.isArray(workspaceRaw) ? workspaceRaw[0] : workspaceRaw
+      if (!workspace) return null
+      return {
+        workspaceId: workspace.id,
+        kind: workspace.kind,
+        legacyId: workspace.legacy_id,
+        name: workspace.name,
+        icsPosition: row.ics_position as string,
+      }
+    })
+    .filter((entry): entry is AccessibleWorkspace => entry !== null)
+}
+
+export async function resolveWorkspaceId(
+  kind: WorkspaceKind,
+  legacyId: number
+): Promise<string | null> {
+  const supabase = getSupabaseClient()
+  if (!supabase) return null
+
+  const { data, error } = await supabase
+    .from('workspaces')
+    .select('id')
+    .eq('kind', kind)
+    .eq('legacy_id', legacyId)
+    .maybeSingle()
+
+  if (error || !data) {
+    return null
+  }
+
+  return data.id
+}
+
+export async function fetchWorkspaceRoster(workspaceId: string): Promise<WorkspaceRosterMember[]> {
+  const supabase = getSupabaseClient()
+  if (!supabase) return []
+
+  const { data, error } = await supabase
+    .from('workspace_members')
+    .select('id, workspace_id, user_id, email, ics_position, status, invited_at, joined_at')
+    .eq('workspace_id', workspaceId)
+    .neq('status', 'removed')
+    .order('invited_at', { ascending: true })
+
+  if (error || !data) {
+    return []
+  }
+
+  return (data as DbWorkspaceMember[]).map(mapDbMember)
+}
+
+export async function removeWorkspaceRosterMember(memberId: string): Promise<boolean> {
+  const supabase = getSupabaseClient()
+  if (!supabase) return false
+
+  const { error } = await supabase
+    .from('workspace_members')
+    .update({ status: 'removed' })
+    .eq('id', memberId)
+
+  return !error
+}
+
+export async function inviteWorkspaceMember(params: {
+  accessToken: string
+  workspaceId: string
+  email: string
+  icsPosition: string
+}): Promise<{ ok: true } | { ok: false; message: string }> {
+  if (!isSupabaseConfigured) {
+    return { ok: false, message: 'Supabase is not configured.' }
+  }
+
+  const response = await fetch('/api/invite', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${params.accessToken}`,
+    },
+    body: JSON.stringify({
+      workspaceId: params.workspaceId,
+      email: params.email,
+      icsPosition: params.icsPosition,
+      redirectTo: `${getAppOrigin()}/accept-invite?workspace=${params.workspaceId}`,
+    }),
+  })
+
+  const payload = (await response.json().catch(() => ({}))) as {
+    error?: string
+    message?: string
+  }
+
+  if (!response.ok) {
+    return { ok: false, message: payload.error ?? payload.message ?? 'Invite failed.' }
+  }
+
+  return { ok: true }
+}
+
+export function canAccessLegacyWorkspace(
+  accessibleWorkspaces: AccessibleWorkspace[],
+  isOrgAdmin: boolean,
+  kind: WorkspaceKind,
+  legacyId: number
+): boolean {
+  if (!isSupabaseConfigured) {
+    return true
+  }
+  if (isOrgAdmin) {
+    return true
+  }
+  return accessibleWorkspaces.some(
+    (workspace) => workspace.kind === kind && workspace.legacyId === legacyId
+  )
+}

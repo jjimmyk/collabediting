@@ -332,7 +332,7 @@ export const buildEventRuleGenerationPrompt = (businessUnitOptions: string[]) =>
       ? businessUnitOptions.join('; ')
       : 'available business units in the hub'
 
-  return `Help me create an automated event creation rule for British Petroleum emergency operations.
+  return `Help me create an automated event creation rule for United States Coast Guard emergency operations.
 
 I need a rule that auto-creates an event when monitored data crosses defined thresholds. Please propose a complete rule including:
 1. One or more conditions (data input, operator, threshold value)
@@ -364,8 +364,8 @@ export const DEFAULT_EVENT_CREATION_RULES: EventCreationRule[] = [
     logicBlocks: [{ type: 'condition', conditionId: 1 }],
     eventNameTemplate: 'Coastal Flood Watch — {businessUnit}',
     severity: 'Medium',
-    businessUnit: 'BP Business Unit — Southeast',
-    thresholdDescription: 'Coastal flood watch threshold reached for BP Business Unit — Southeast',
+    businessUnit: 'USCG District 7 — Southeast',
+    thresholdDescription: 'Coastal flood watch threshold reached for USCG District 7 — Southeast',
     sendNotificationOnCreate: true,
     notificationUserIds: ['user-rivera', 'user-chen'],
     notificationGroupIds: ['group-r4-watch'],
@@ -399,7 +399,7 @@ export const DEFAULT_EVENT_CREATION_RULES: EventCreationRule[] = [
     ],
     eventNameTemplate: 'Road Debris Accumulation — {businessUnit}',
     severity: 'Medium',
-    businessUnit: 'BP Business Unit — Southeast',
+    businessUnit: 'USCG District 7 — Southeast',
     thresholdDescription: 'Roadway debris accumulation threshold reached on I-95 corridor',
     sendNotificationOnCreate: true,
     notificationUserIds: ['user-park'],
@@ -430,7 +430,7 @@ export const DEFAULT_EVENT_CREATION_RULES: EventCreationRule[] = [
     ],
     eventNameTemplate: 'Red Flag Warning — {businessUnit}',
     severity: 'High',
-    businessUnit: 'BP Business Unit — Pacific',
+    businessUnit: 'USCG District 11 — Pacific',
     thresholdDescription: 'Red Flag fire weather index threshold exceeded for Ventura Unit',
     sendNotificationOnCreate: false,
     notificationUserIds: [],

@@ -12,12 +12,23 @@ import {
 import ArcGISMap from '@arcgis/core/Map'
 import Graphic from '@arcgis/core/Graphic'
 import Point from '@arcgis/core/geometry/Point'
+import type Polygon from '@arcgis/core/geometry/Polygon'
+import * as webMercatorUtils from '@arcgis/core/geometry/support/webMercatorUtils'
 import FeatureLayer from '@arcgis/core/layers/FeatureLayer'
 import type { FieldProperties } from '@arcgis/core/layers/support/Field'
 import type { GraphicHit, ViewHitTestResult } from '@arcgis/core/views/types'
 import GraphicsLayer from '@arcgis/core/layers/GraphicsLayer'
 import MapView from '@arcgis/core/views/MapView'
 import SketchViewModel from '@arcgis/core/widgets/Sketch/SketchViewModel'
+import {
+  PDFBool,
+  PDFDocument,
+  PDFName,
+  type PDFFont,
+  type PDFPage,
+  rgb,
+  StandardFonts,
+} from 'pdf-lib'
 import Zoom from '@arcgis/core/widgets/Zoom'
 import {
   AlertTriangle,
@@ -40,6 +51,7 @@ import {
   Home,
   Image as ImageIcon,
   Info,
+  LogOut,
   Map as MapIcon,
   MapPin,
   Menu,
@@ -61,6 +73,7 @@ import {
   Sun,
   Target,
   Trash2,
+  Users,
   X,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
@@ -138,6 +151,14 @@ import {
   type ResourceRequestItem,
 } from '@/lib/ics-213rr-resource-request'
 import { cn } from '@/lib/utils'
+import { useAuth } from '@/contexts/AuthContext'
+import type { WorkspaceRosterMember } from '@/lib/workspace-types'
+import {
+  fetchWorkspaceRoster,
+  inviteWorkspaceMember,
+  removeWorkspaceRosterMember as removeWorkspaceRosterMemberFromDb,
+  resolveWorkspaceId,
+} from '@/lib/workspace-service'
 import { femaRegionGeometries } from '@/data/fema-regions'
 import {
   DEFAULT_EVENT_CREATION_RULES,
@@ -169,6 +190,7 @@ type NotificationItem = {
     region: string
     description: string
     threats: {
+      id: string
       resource: string
       risk: string
       location: [number, number]
@@ -593,6 +615,24 @@ type RosterPositionItem = {
   location: [number, number]
 }
 
+const ICS_ROSTER_POSITION_OPTIONS = [
+  'Incident Commander',
+  'Public Information Officer',
+  'Safety Officer',
+  'Liaison Officer',
+  'Operations Section Chief',
+  'Planning Section Chief',
+  'Logistics Section Chief',
+  'Finance/Admin Section Chief',
+  'Situation Unit Leader',
+  'Resources Unit Leader',
+  'Documentation Unit Leader',
+  'Display Unit Leader',
+  'Demobilization Unit Leader',
+  'Technical Specialist',
+  'Agency Representative',
+] as const
+
 type SafetyAnalysisItem = {
   id: number
   hazard: string
@@ -631,6 +671,7 @@ type IncidentListItem = {
   id: number
   name: string
   type: string
+  category: string
   status: 'Active' | 'Monitoring' | 'Demobilizing'
   severity: 'High' | 'Medium' | 'Low'
   region: string
@@ -642,6 +683,57 @@ type IncidentListItem = {
   resourcesCommitted: string
   relatedEventIds: number[]
 }
+
+const INCIDENT_CATEGORY_OPTIONS = [
+  'World Cup 2026',
+  'Special Event',
+  'Hazardous Materials',
+  'Exercise',
+] as const
+
+const INCIDENT_CATEGORY_COLORS: Record<(typeof INCIDENT_CATEGORY_OPTIONS)[number], [number, number, number]> = {
+  'World Cup 2026': [22, 163, 74],
+  'Special Event': [37, 99, 235],
+  'Hazardous Materials': [220, 38, 38],
+  Exercise: [147, 51, 234],
+}
+
+const DEFAULT_INCIDENT_CATEGORY_COLOR: [number, number, number] = [100, 116, 139]
+
+const getIncidentPrimaryCategory = (incident: IncidentListItem) => incident.category
+
+const getIncidentCategoryRgb = (category: string): [number, number, number] =>
+  INCIDENT_CATEGORY_COLORS[category as (typeof INCIDENT_CATEGORY_OPTIONS)[number]] ??
+  DEFAULT_INCIDENT_CATEGORY_COLOR
+
+const getIncidentCategoryColorHex = (category: string) => {
+  const [red, green, blue] = getIncidentCategoryRgb(category)
+  return `rgb(${red}, ${green}, ${blue})`
+}
+
+const getIncidentCategoryFillColor = (
+  category: string,
+  alpha = 0.18
+): [number, number, number, number] => {
+  const [red, green, blue] = getIncidentCategoryRgb(category)
+  return [red, green, blue, alpha]
+}
+
+const renderIncidentCategoryBadge = (category: string) => (
+  <Badge variant="secondary" className="gap-1.5">
+    <span
+      className="inline-block h-2 w-2 shrink-0 rounded-full"
+      style={{ backgroundColor: getIncidentCategoryColorHex(category || 'Uncategorized') }}
+      aria-hidden="true"
+    />
+    {category || 'Uncategorized'}
+  </Badge>
+)
+
+const matchesIncidentCategoryFilters = (
+  incident: IncidentListItem,
+  filters: string[]
+) => filters.length === 0 || filters.includes(incident.category)
 
 const getIncidentRelatedEventNames = (incident: IncidentListItem, events: EventListItem[]) =>
   incident.relatedEventIds
@@ -784,9 +876,10 @@ const DEFAULT_EXERCISE_LIST: ExerciseListItem[] = [
     id: 1,
     name: 'Gulf Coast Unified Command Tabletop — Edgar Scenario',
     type: 'Tabletop / ICS Activation',
+    category: 'Exercise',
     status: 'Active',
     severity: 'Medium',
-    region: 'BP Business Unit — Southeast',
+    region: 'USCG District 7 — Southeast',
     location: [-84.388, 33.749],
     lead: 'FEMA Region 4 IMAT · Exercise Director',
     startedAt: '2026-05-08 09:00 EST',
@@ -801,9 +894,10 @@ const DEFAULT_EXERCISE_LIST: ExerciseListItem[] = [
     id: 2,
     name: 'PHMSA Hazmat Rail Response Functional Exercise',
     type: 'Functional Exercise',
+    category: 'Exercise',
     status: 'Monitoring',
     severity: 'Low',
-    region: 'BP Business Unit — South Central',
+    region: 'USCG District 8 — Gulf',
     location: [-96.797, 32.7765],
     lead: 'PHMSA Southwest District · Exercise Controller',
     startedAt: '2026-05-07 13:00 CST',
@@ -818,9 +912,10 @@ const DEFAULT_EXERCISE_LIST: ExerciseListItem[] = [
     id: 3,
     name: 'CAL FIRE Red Flag Coordination Drill',
     type: 'Drill / Coordination',
+    category: 'Exercise',
     status: 'Demobilizing',
     severity: 'Low',
-    region: 'BP Business Unit — Pacific',
+    region: 'USCG District 11 — Pacific',
     location: [-119.4179, 36.7783],
     lead: 'CAL FIRE SLO Unit · Exercise Lead',
     startedAt: '2026-05-06 08:00 PST',
@@ -841,7 +936,7 @@ const DEFAULT_EVENT_LIST: EventListItem[] = (
     type: 'Coastal Flood Watch',
     status: 'Monitoring',
     severity: 'Medium',
-    region: 'BP Business Unit — Southeast',
+    region: 'USCG District 7 — Southeast',
     location: [-80.1918, 26.1224],
     lead: 'NWS Miami · FEMA Region 4 Liaison',
     startedAt: '2026-05-08 18:00 EST',
@@ -850,10 +945,10 @@ const DEFAULT_EVENT_LIST: EventListItem[] = (
       'Minor coastal flooding expected along Atlantic barrier islands from Sebastian Inlet to Miami-Dade. No road closures; FDOT monitoring A1A low spots and pump stations. Related to but below Hurricane Edgar incident threshold.',
     resourcesCommitted:
       'FDOT District 4 flood monitors, Palm Beach County OEM watch desk, 2 ESF-1 liaison officers',
-    businessUnit: 'BP Business Unit — Southeast',
+    businessUnit: 'USCG District 7 — Southeast',
     creationKind: 'threshold',
     createdByUser: null,
-    thresholdDescription: 'Coastal flood watch threshold reached for BP Business Unit — Southeast',
+    thresholdDescription: 'Coastal flood watch threshold reached for USCG District 7 — Southeast',
   },
   {
     id: 2,
@@ -861,7 +956,7 @@ const DEFAULT_EVENT_LIST: EventListItem[] = (
     type: 'Roadway Maintenance / Debris',
     status: 'Monitoring',
     severity: 'Low',
-    region: 'BP Business Unit — Southeast',
+    region: 'USCG District 7 — Southeast',
     location: [-81.0378, 29.5544],
     lead: 'FDOT District 5 · Maintenance Supervisor',
     startedAt: '2026-05-09 05:00 EST',
@@ -869,7 +964,7 @@ const DEFAULT_EVENT_LIST: EventListItem[] = (
     summary:
       'Wind-blown palm fronds and signage debris on I-95 northbound shoulder near Exit 284. Right shoulder closed 0.3 mi; mainline traffic unaffected. Routine maintenance response, not escalated to incident.',
     resourcesCommitted: 'FDOT maintenance crew (3), FHP traffic assist unit',
-    businessUnit: 'BP Business Unit — Southeast',
+    businessUnit: 'USCG District 7 — Southeast',
     creationKind: 'threshold',
     createdByUser: null,
     thresholdDescription: 'Roadway debris accumulation threshold reached on I-95 corridor',
@@ -900,7 +995,7 @@ const DEFAULT_EVENT_LIST: EventListItem[] = (
     type: 'Wildfire / Red Flag Warning',
     status: 'Monitoring',
     severity: 'Medium',
-    region: 'BP Business Unit — Pacific',
+    region: 'USCG District 11 — Pacific',
     location: [-119.2932, 34.2783],
     lead: 'CAL FIRE · Ventura Unit Forecaster',
     startedAt: '2026-05-08 17:00 PST',
@@ -909,7 +1004,7 @@ const DEFAULT_EVENT_LIST: EventListItem[] = (
       'Elevated fire weather index with gusty sundowner winds in Ventura foothills. No active ignitions; Caltrans pre-positioning SR-33 detour signage. Watch-level posture supporting inland wildfire incident monitoring.',
     resourcesCommitted:
       'CAL FIRE Ventura Unit engine standby, Caltrans D7 sign crew, 1 air attack spotter',
-    businessUnit: 'BP Business Unit — Pacific',
+    businessUnit: 'USCG District 11 — Pacific',
     creationKind: 'threshold',
     createdByUser: null,
     thresholdDescription: 'Red Flag fire weather index threshold exceeded for Ventura Unit',
@@ -920,7 +1015,7 @@ const DEFAULT_EVENT_LIST: EventListItem[] = (
     type: 'Riverine / Coastal Flood',
     status: 'Monitoring',
     severity: 'Medium',
-    region: 'BP Business Unit — South Central',
+    region: 'USCG District 8 — Gulf',
     location: [-95.2695, 29.7355],
     lead: 'Harris County OEM · Hydrology Desk',
     startedAt: '2026-05-08 22:00 CST',
@@ -928,7 +1023,7 @@ const DEFAULT_EVENT_LIST: EventListItem[] = (
     summary:
       'Tidal flooding watch for SH-146 approach to Houston Ship Channel. TxDOT gates staged; no lane closures. Monitoring only — separate from LBJ Express hazmat incident operations.',
     resourcesCommitted: 'Harris County OEM hydrology desk, TxDOT Houston District flood monitors',
-    businessUnit: 'BP Business Unit — South Central',
+    businessUnit: 'USCG District 8 — Gulf',
     creationKind: 'threshold',
     createdByUser: null,
     thresholdDescription: 'Tidal flood watch threshold reached for Houston Ship Channel approach',
@@ -939,7 +1034,7 @@ const DEFAULT_EVENT_LIST: EventListItem[] = (
     type: 'Coastal Erosion',
     status: 'Monitoring',
     severity: 'Low',
-    region: 'BP Business Unit — New England',
+    region: 'USCG District 1 — Northeast',
     location: [-69.9595, 41.6821],
     lead: 'Town of Chatham · DPW Director',
     startedAt: '2026-05-08 08:00 EST',
@@ -947,7 +1042,7 @@ const DEFAULT_EVENT_LIST: EventListItem[] = (
     summary:
       'Nor\'easter swell causing minor bluff erosion at Lighthouse Beach. Local road detour on Bridge Street; no shelter activations. Tracked as event under broader Cape Cod storm response.',
     resourcesCommitted: 'Chatham DPW (2 crews), MassDOT District 5 liaison officer',
-    businessUnit: 'BP Business Unit — New England',
+    businessUnit: 'USCG District 1 — Northeast',
     creationKind: 'threshold',
     createdByUser: null,
     thresholdDescription: 'Coastal erosion monitoring threshold reached for Cape Cod shoreline',
@@ -958,7 +1053,7 @@ const DEFAULT_EVENT_LIST: EventListItem[] = (
     type: 'Infrastructure / Power',
     status: 'Active',
     severity: 'Low',
-    region: 'BP Business Unit — Southeast',
+    region: 'USCG District 7 — Southeast',
     location: [-81.3792, 28.5383],
     lead: 'FDOT District 5 · TMC Operator',
     startedAt: '2026-05-09 07:10 EST',
@@ -966,7 +1061,7 @@ const DEFAULT_EVENT_LIST: EventListItem[] = (
     summary:
       'Brief power blip caused 4 interconnected signals to fail on Colonial Drive corridor. Flashing red ops in effect; Duke Energy ETA 45 minutes. Localized impact, not unified command.',
     resourcesCommitted: 'FDOT signal tech team, Orlando Police traffic unit, Duke Energy line crew',
-    businessUnit: 'BP Business Unit — Southeast',
+    businessUnit: 'USCG District 7 — Southeast',
     creationKind: 'threshold',
     createdByUser: null,
     thresholdDescription: 'Traffic signal outage cluster threshold reached on Colonial Drive corridor',
@@ -997,7 +1092,7 @@ const DEFAULT_EVENT_LIST: EventListItem[] = (
     type: 'Winter Weather',
     status: 'Monitoring',
     severity: 'Low',
-    region: 'BP Business Unit — New England',
+    region: 'USCG District 1 — Northeast',
     location: [-70.2553, 43.6591],
     lead: 'NWS Gray · Maine DOT Liaison',
     startedAt: '2026-05-07 12:00 EST',
@@ -1005,7 +1100,7 @@ const DEFAULT_EVENT_LIST: EventListItem[] = (
     summary:
       'Late-season coastal storm watch for Downeast Maine. MaineDOT pre-treating US-1 bridges; no travel restrictions. Standard seasonal watch posture.',
     resourcesCommitted: 'MaineDOT pre-treat crews (4), NWS Gray forecast desk',
-    businessUnit: 'BP Business Unit — New England',
+    businessUnit: 'USCG District 1 — Northeast',
     creationKind: 'threshold',
     createdByUser: null,
     thresholdDescription: 'Winter storm watch threshold reached for Downeast Maine coast',
@@ -1016,7 +1111,7 @@ const DEFAULT_EVENT_LIST: EventListItem[] = (
     type: 'Hazmat Support / Perimeter',
     status: 'Monitoring',
     severity: 'Medium',
-    region: 'BP Business Unit — South Central',
+    region: 'USCG District 8 — Gulf',
     location: [-96.8717, 32.9067],
     lead: 'EPA Region 6 · Air Monitoring Lead',
     startedAt: '2026-05-09 05:30 CST',
@@ -1025,7 +1120,7 @@ const DEFAULT_EVENT_LIST: EventListItem[] = (
       'Downwind air monitoring at 1.5-mile perimeter for anhydrous ammonia release. Readings below action levels; shelter-in-place remains per unified command. Support event to active hazmat incident.',
     resourcesCommitted:
       'EPA Region 6 air monitoring team, Dallas Fire-Rescue hazmat techs, 2 fixed-site sensors',
-    businessUnit: 'BP Business Unit — South Central',
+    businessUnit: 'USCG District 8 — Gulf',
     creationKind: 'threshold',
     createdByUser: null,
     thresholdDescription: 'Perimeter air monitoring watch threshold reached for hazmat support zone',
@@ -1036,7 +1131,7 @@ const DEFAULT_EVENT_LIST: EventListItem[] = (
     type: 'Industrial Fire / Refinery Operations',
     status: 'Active',
     severity: 'High',
-    region: 'BP Business Unit — Northwest',
+    region: 'USCG District 13 — Pacific Northwest',
     location: [-122.7589, 48.862],
     lead: 'BP Cherry Point Unified Command · Whatcom County OEM Liaison',
     startedAt: '2026-05-09 09:45 PST',
@@ -1077,7 +1172,7 @@ const DEFAULT_EVENT_LIST: EventListItem[] = (
     type: 'Industrial Explosion / Refinery Operations',
     status: 'Active',
     severity: 'High',
-    region: 'BP Business Unit — West Africa',
+    region: 'USCG District 17 — West Africa',
     location: [-17.439, 14.739],
     lead: 'BP SAR Refinery Unified Command · Ministry of Petroleum and Mines Liaison',
     startedAt: '2026-05-09 10:15 GMT',
@@ -1452,7 +1547,7 @@ const getAnalyticsRecordSpendDollars = (
   seed: number
 ) => {
   const regionMultiplier =
-    region === 'GOM Offshore' ? 1.35 : region.startsWith('BP Business Unit — Southeast') ? 1.15 : 1
+    region === 'GOM Offshore' ? 1.35 : region.startsWith('USCG District 7 — Southeast') ? 1.15 : 1
   const base = ANALYTICS_CATEGORY_SPEND_BASE[resolutionCategory] ?? 320000
   const kindMultiplier = kind === 'incident' ? 1 : 0.42
 
@@ -2055,9 +2150,10 @@ const SITREP_ONGOING_INCIDENTS: IncidentListItem[] = [
     id: 101,
     name: 'Cape Cod Coastal Storm Response',
     type: 'Coastal Storm / Nor\'easter',
+    category: 'Special Event',
     status: 'Active',
     severity: 'Medium',
-    region: 'BP Business Unit — New England',
+    region: 'USCG District 1 — Northeast',
     location: [-70.2962, 41.6688],
     lead: 'Massachusetts EMA · RA Boston, MA',
     startedAt: '2026-05-08 06:15 EST',
@@ -2072,9 +2168,10 @@ const SITREP_ONGOING_INCIDENTS: IncidentListItem[] = [
     id: 102,
     name: 'Boston Metro Water Main Break — I-93 Corridor',
     type: 'Infrastructure / Surface Transport',
+    category: 'Special Event',
     status: 'Active',
     severity: 'High',
-    region: 'BP Business Unit — New England',
+    region: 'USCG District 1 — Northeast',
     location: [-71.0589, 42.3601],
     lead: 'Boston OEM · MWRA On-Scene',
     startedAt: '2026-05-09 02:40 EST',
@@ -2089,9 +2186,10 @@ const SITREP_ONGOING_INCIDENTS: IncidentListItem[] = [
     id: 103,
     name: 'Connecticut River Ice Jam Watch',
     type: 'Riverine Flood / Ice Jam',
+    category: 'Special Event',
     status: 'Monitoring',
     severity: 'Low',
-    region: 'BP Business Unit — New England',
+    region: 'USCG District 1 — Northeast',
     location: [-72.6734, 41.7658],
     lead: 'Connecticut DEM · NWS WFO Hartford',
     startedAt: '2026-05-07 18:00 EST',
@@ -2424,9 +2522,6 @@ const isNonHumanSitrepAuthor = (name: string) => name.trim().toLowerCase() === '
 const getNotificationSourceDisplayName = (owner: string) =>
   owner.split('·')[0]?.trim() || owner
 
-const formatResourceAtRiskUpdatedLine = (timestamp: string, owner: string) =>
-  `${timestamp} by ${getNotificationSourceDisplayName(owner)}`
-
 const getHumanSitrepAuthorName = (
   version: { authorName: string; creatorName: string } | null | undefined
 ) => {
@@ -2488,11 +2583,11 @@ const GOM_CCMER_FACILITY_LOCATIONS = [
 ] as const
 
 const GOM_CCMER_ADVISORS = [
-  'Baccigalopi, Michael',
-  'Eugene Barlow',
-  'Landry, Carlton P',
-  'Montou, Quin R',
-  'Chris Bellavia',
+  'Whitmore, David R.',
+  'Chen, Sarah M.',
+  'Okafor, James A.',
+  'Santos, Maria L.',
+  'Sharma, Priya K.',
 ] as const
 
 const GOM_CCMER_ERP_SCENARIOS = [
@@ -2660,7 +2755,7 @@ const buildEventFromCcmerReport = (report: InitialIncidentReportState): EventLis
 
 type CreateIncidentFormSeed = {
   incidentName: string
-  incidentCategory: string[]
+  incidentCategory: string
   incidentWorkflow: string
   incidentTemplate: string
   incidentSituationReport: string
@@ -2685,43 +2780,39 @@ const parseEventStartedAtParts = (startedAt: string) => {
   }
 }
 
-const inferIncidentCategoriesFromEvent = (event: EventListItem) => {
+const inferIncidentCategoryFromEvent = (event: EventListItem): string => {
   const haystack = `${event.name} ${event.type} ${event.summary}`.toLowerCase()
-  const categories: string[] = []
 
-  if (haystack.includes('flood')) categories.push('Flood')
   if (
-    haystack.includes('hurricane') ||
-    haystack.includes('cyclone') ||
-    haystack.includes('tropical storm') ||
-    haystack.includes('storm surge')
+    haystack.includes('world cup') ||
+    haystack.includes('fifa') ||
+    haystack.includes('soccer')
   ) {
-    categories.push('Flood')
+    return 'World Cup 2026'
   }
-  if (haystack.includes('hazmat') || haystack.includes('ammonia')) categories.push('Hazmat')
-  if (haystack.includes('fire')) categories.push('Fire')
   if (
-    haystack.includes('oil') ||
-    haystack.includes('offshore') ||
-    haystack.includes('platform') ||
+    haystack.includes('drill') ||
+    haystack.includes('exercise') ||
+    haystack.includes('tabletop')
+  ) {
+    return 'Exercise'
+  }
+  if (
+    haystack.includes('hazmat') ||
+    haystack.includes('ammonia') ||
+    haystack.includes('fire') ||
+    haystack.includes('explosion') ||
+    haystack.includes('refinery') ||
+    haystack.includes('gas release') ||
     haystack.includes('spill')
   ) {
-    categories.push('Oil Spill')
+    return 'Hazardous Materials'
   }
-  if (categories.length === 0) categories.push('Other')
 
-  return [...new Set(categories)]
+  return 'Special Event'
 }
 
-const inferIncidentWorkflowFromEvent = (event: EventListItem) => {
-  const region = event.region.toLowerCase()
-  if (region.includes('gulf') || region.includes('offshore')) return 'bsee-ics'
-  if (region.includes('region 9') || region.includes('california')) return 'california-ics'
-  if (region.includes('washington')) return 'washington-ics'
-  if (region.includes('region 6') || region.includes('phmsa')) return 'phmsa-ics'
-  if (region.includes('epa') || event.summary.toLowerCase().includes('epa')) return 'epa-ics'
-  return 'uscg-ics'
-}
+const inferIncidentWorkflowFromEvent = (_event: EventListItem) => 'ipieca-ims'
 
 const inferIncidentTemplateFromEvent = (event: EventListItem) => {
   const haystack = `${event.type} ${event.summary}`.toLowerCase()
@@ -2855,13 +2946,13 @@ const buildCreateIncidentFormFromEvent = (
   const incidentAors =
     matchingAor != null
       ? [matchingAor]
-      : event.region.startsWith('BP Business Unit')
+      : event.region.startsWith('USCG District')
         ? [event.region]
         : []
 
   return {
     incidentName: event.name,
-    incidentCategory: inferIncidentCategoriesFromEvent(event),
+    incidentCategory: inferIncidentCategoryFromEvent(event),
     incidentWorkflow: inferIncidentWorkflowFromEvent(event),
     incidentTemplate: inferIncidentTemplateFromEvent(event),
     incidentSituationReport: event.summary,
@@ -3278,6 +3369,7 @@ type LeftTab =
   | 'aors'
   | 'fema-regions'
   | 'incident-list'
+  | 'roster'
   | 'exercises'
   | 'events'
   | 'analytics'
@@ -3492,16 +3584,25 @@ type Ics233TaskRow = {
   deadline: string
   status: 'Not Started' | 'In Progress' | 'Complete' | 'Cannot Complete'
 }
+type Ics201MapSketchVertex = {
+  longitude: number
+  latitude: number
+}
 type Ics201FormState = {
   incidentName: string
   incidentNumber: string
+  incidentLocation: string
+  dateInitiated: string
+  timeInitiated: string
   preparedDateTime: string
   operationalPeriodStart: string
   operationalPeriodEnd: string
   jurisdiction: string
   preparedBy: string
-  mapSketchDescription: string
-  mapSketchLegend: string
+  preparedByName: string
+  preparedByPositionTitle: string
+  preparedBySignature: string
+  mapSketchPolygon: Ics201MapSketchVertex[]
   currentSituationSummary: string
   weatherForecast: string
   projectedIncidentCourse: string
@@ -3519,6 +3620,18 @@ type Ics201FormState = {
   }
   resources: Ics201ResourceSummaryRow[]
   safetyAnalysis: Ics201SafetyRow[]
+}
+
+function cloneIcs201FormState(form: Ics201FormState): Ics201FormState {
+  return {
+    ...form,
+    mapSketchPolygon: form.mapSketchPolygon.map((vertex) => ({ ...vertex })),
+    objectives: [...form.objectives],
+    actions: form.actions.map((action) => ({ ...action })),
+    orgChart: { ...form.orgChart },
+    resources: form.resources.map((resource) => ({ ...resource })),
+    safetyAnalysis: form.safetyAnalysis.map((row) => ({ ...row })),
+  }
 }
 type SitrepActivityRow = {
   id: number
@@ -3902,6 +4015,10 @@ function downloadDocx(
   const blob = new Blob([zipBytes.buffer as ArrayBuffer], {
     type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   })
+  triggerBlobDownload(blob, filename)
+}
+
+function triggerBlobDownload(blob: Blob, filename: string): void {
   const url = URL.createObjectURL(blob)
   const anchor = document.createElement('a')
   anchor.href = url
@@ -3910,6 +4027,848 @@ function downloadDocx(
   anchor.click()
   document.body.removeChild(anchor)
   setTimeout(() => URL.revokeObjectURL(url), 0)
+}
+
+function sanitizeForPdf(text: string): string {
+  return text
+    .replace(/\r\n/g, '\n')
+    .replace(/[\u2018\u2019]/g, "'")
+    .replace(/[\u201C\u201D]/g, '"')
+    .replace(/[\u2013\u2014]/g, '-')
+    .replace(/\u00A0/g, ' ')
+    .replace(/\u2026/g, '...')
+    .replace(/\u2022/g, '\u0095')
+    .replace(/[^\x09\x0A\x20-\xFF]/g, '?')
+}
+
+function escapePdfString(text: string): string {
+  return text.replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)')
+}
+
+const PDF_HELVETICA_AVG_WIDTH = 0.5
+const PDF_HELVETICA_BOLD_AVG_WIDTH = 0.53
+
+function estimatePdfTextWidth(text: string, fontSize: number, bold: boolean): number {
+  const factor = bold ? PDF_HELVETICA_BOLD_AVG_WIDTH : PDF_HELVETICA_AVG_WIDTH
+  return text.length * fontSize * factor
+}
+
+function wrapPdfText(
+  text: string,
+  maxWidth: number,
+  fontSize: number,
+  bold: boolean
+): string[] {
+  const paragraphs = text.split('\n')
+  const lines: string[] = []
+  for (const paragraph of paragraphs) {
+    const tokens = paragraph.split(/\s+/).filter(Boolean)
+    if (tokens.length === 0) {
+      lines.push('')
+      continue
+    }
+    let current = ''
+    for (const word of tokens) {
+      const candidate = current ? `${current} ${word}` : word
+      if (estimatePdfTextWidth(candidate, fontSize, bold) <= maxWidth) {
+        current = candidate
+        continue
+      }
+      if (current) {
+        lines.push(current)
+        current = ''
+      }
+      if (estimatePdfTextWidth(word, fontSize, bold) > maxWidth) {
+        const factor = bold ? PDF_HELVETICA_BOLD_AVG_WIDTH : PDF_HELVETICA_AVG_WIDTH
+        const cutAt = Math.max(1, Math.floor(maxWidth / (fontSize * factor)))
+        let remaining = word
+        while (estimatePdfTextWidth(remaining, fontSize, bold) > maxWidth) {
+          lines.push(remaining.slice(0, cutAt))
+          remaining = remaining.slice(cutAt)
+        }
+        current = remaining
+      } else {
+        current = word
+      }
+    }
+    if (current) {
+      lines.push(current)
+    }
+  }
+  return lines
+}
+
+function stringToLatin1Bytes(text: string): Uint8Array {
+  const bytes = new Uint8Array(text.length)
+  for (let i = 0; i < text.length; i += 1) {
+    bytes[i] = text.charCodeAt(i) & 0xff
+  }
+  return bytes
+}
+
+function concatPdfChunks(chunks: Uint8Array[]): Uint8Array {
+  let total = 0
+  for (const chunk of chunks) total += chunk.length
+  const result = new Uint8Array(total)
+  let offset = 0
+  for (const chunk of chunks) {
+    result.set(chunk, offset)
+    offset += chunk.length
+  }
+  return result
+}
+
+type PdfLineSpec = {
+  text: string
+  font: 'F1' | 'F2'
+  size: number
+  x: number
+  y: number
+}
+
+type PdfBlockStyle = {
+  font: 'F1' | 'F2'
+  size: number
+  lineGap: number
+  beforeGap: number
+  afterGap: number
+  indent: number
+  bold: boolean
+  prefix: string
+}
+
+const PDF_BLOCK_STYLES: Record<DocxBlock['kind'], PdfBlockStyle> = {
+  title: {
+    font: 'F2',
+    size: 20,
+    lineGap: 1.2,
+    beforeGap: 0,
+    afterGap: 12,
+    indent: 0,
+    bold: true,
+    prefix: '',
+  },
+  subtitle: {
+    font: 'F1',
+    size: 11,
+    lineGap: 1.3,
+    beforeGap: 0,
+    afterGap: 16,
+    indent: 0,
+    bold: false,
+    prefix: '',
+  },
+  heading: {
+    font: 'F2',
+    size: 13,
+    lineGap: 1.3,
+    beforeGap: 14,
+    afterGap: 6,
+    indent: 0,
+    bold: true,
+    prefix: '',
+  },
+  paragraph: {
+    font: 'F1',
+    size: 10.5,
+    lineGap: 1.35,
+    beforeGap: 0,
+    afterGap: 6,
+    indent: 0,
+    bold: false,
+    prefix: '',
+  },
+  bullet: {
+    font: 'F1',
+    size: 10.5,
+    lineGap: 1.3,
+    beforeGap: 0,
+    afterGap: 4,
+    indent: 16,
+    bold: false,
+    prefix: '\u0095  ',
+  },
+}
+
+function buildPdfBoxOps(
+  data: DocxHeaderFooter,
+  leftX: number,
+  topY: number,
+  width: number
+): { ops: string; height: number } {
+  const padX = 6
+  const padTop = 6
+  const padBottom = 6
+  const topLineSize = 8.5
+  const topLineLead = 11
+  const dividerGap = 5
+  const labelSize = 6.5
+  const labelValueGap = 2
+  const valueSize = 8.5
+  const valueLead = 10.5
+  const cellTopPad = 5
+  const cellBottomPad = 5
+
+  const topLines = (data.topLines ?? []).map((line) => sanitizeForPdf(line))
+  const cells = data.cells
+  const nCells = Math.max(cells.length, 1)
+  const cellWidth = width / nCells
+  const valueMaxWidth = cellWidth - padX * 2
+
+  const wrappedValues = cells.map((cell) => {
+    const value = sanitizeForPdf((cell.value ?? '').trim())
+    return wrapPdfText(value.length > 0 ? value : ' ', valueMaxWidth, valueSize, false)
+  })
+  const maxValueLines = wrappedValues.reduce((max, lines) => Math.max(max, lines.length), 1)
+
+  const topBlockHeight =
+    topLines.length > 0 ? topLines.length * topLineLead + dividerGap : 0
+  const cellBlockHeight =
+    cells.length > 0
+      ? cellTopPad + labelSize + labelValueGap + maxValueLines * valueLead + cellBottomPad
+      : 0
+  const height = padTop + topBlockHeight + cellBlockHeight + padBottom
+
+  const bottomY = topY - height
+  const cellTop = topY - padTop - topBlockHeight
+
+  let ops = '0.75 w\n'
+  ops += `${leftX.toFixed(2)} ${bottomY.toFixed(2)} ${width.toFixed(2)} ${height.toFixed(2)} re S\n`
+
+  let y = topY - padTop
+  for (const line of topLines) {
+    const lineWidth = estimatePdfTextWidth(line, topLineSize, true)
+    const x = leftX + Math.max(0, (width - lineWidth) / 2)
+    const baseline = y - topLineSize
+    ops += `BT /F2 ${topLineSize} Tf ${x.toFixed(2)} ${baseline.toFixed(2)} Td (${escapePdfString(
+      line
+    )}) Tj ET\n`
+    y -= topLineLead
+  }
+
+  if (topLines.length > 0 && cells.length > 0) {
+    ops += `${leftX.toFixed(2)} ${cellTop.toFixed(2)} m ${(leftX + width).toFixed(2)} ${cellTop.toFixed(
+      2
+    )} l S\n`
+  }
+
+  if (cells.length > 0) {
+    for (let i = 1; i < nCells; i += 1) {
+      const vx = leftX + cellWidth * i
+      ops += `${vx.toFixed(2)} ${bottomY.toFixed(2)} m ${vx.toFixed(2)} ${cellTop.toFixed(2)} l S\n`
+    }
+    cells.forEach((cell, idx) => {
+      const cx = leftX + cellWidth * idx + padX
+      let cy = cellTop - cellTopPad - labelSize
+      const label = sanitizeForPdf(cell.label)
+      ops += `BT /F2 ${labelSize} Tf ${cx.toFixed(2)} ${cy.toFixed(2)} Td (${escapePdfString(
+        label
+      )}) Tj ET\n`
+      cy -= labelValueGap
+      for (const valueLine of wrappedValues[idx]) {
+        cy -= valueLead
+        const baseline = cy + valueLead - valueSize
+        ops += `BT /F1 ${valueSize} Tf ${cx.toFixed(2)} ${baseline.toFixed(2)} Td (${escapePdfString(
+          valueLine
+        )}) Tj ET\n`
+      }
+    })
+  }
+
+  return { ops, height }
+}
+
+function buildPdfBytes(blocks: DocxBlock[], options: DocxOptions = {}): Uint8Array {
+  const pageWidth = 612
+  const pageHeight = 792
+  const margin = 54
+  const contentWidth = pageWidth - margin * 2
+
+  const headerTopY = pageHeight - margin
+  const headerHeight = options.header
+    ? buildPdfBoxOps(options.header, margin, headerTopY, contentWidth).height
+    : 0
+  const footerHeight = options.footer
+    ? buildPdfBoxOps(options.footer, margin, 0, contentWidth).height
+    : 0
+  const headerGap = headerHeight > 0 ? 16 : 0
+  const footerGap = footerHeight > 0 ? 14 : 0
+  const contentTop = pageHeight - margin - headerHeight - headerGap
+  const contentBottom = margin + footerHeight + footerGap
+  const footerTopY = margin + footerHeight
+
+  const headerOps = options.header
+    ? buildPdfBoxOps(options.header, margin, headerTopY, contentWidth).ops
+    : ''
+  const footerOps = options.footer
+    ? buildPdfBoxOps(options.footer, margin, footerTopY, contentWidth).ops
+    : ''
+  const chromeOps = headerOps + footerOps
+
+  const pages: PdfLineSpec[][] = [[]]
+  let cursorY = contentTop
+
+  for (const block of blocks) {
+    const style = PDF_BLOCK_STYLES[block.kind]
+    const sanitized = sanitizeForPdf(block.text)
+    const wrapped = wrapPdfText(
+      sanitized,
+      contentWidth - style.indent,
+      style.size,
+      style.bold
+    )
+    const lineHeight = style.size * style.lineGap
+    const continuationPad = style.prefix ? ' '.repeat(style.prefix.length) : ''
+    const prefixedLines = wrapped.map((line, index) =>
+      index === 0 ? `${style.prefix}${line}` : `${continuationPad}${line}`
+    )
+    const blockHeight = style.beforeGap + prefixedLines.length * lineHeight + style.afterGap
+    const currentPage = pages[pages.length - 1]
+    if (currentPage.length > 0 && cursorY - blockHeight < contentBottom) {
+      pages.push([])
+      cursorY = contentTop
+    }
+    cursorY -= style.beforeGap
+    for (const lineText of prefixedLines) {
+      cursorY -= lineHeight
+      pages[pages.length - 1].push({
+        text: lineText,
+        font: style.font,
+        size: style.size,
+        x: style.indent,
+        y: cursorY,
+      })
+    }
+    cursorY -= style.afterGap
+  }
+
+  const contentStreams = pages.map((linesOnPage) => {
+    let body = chromeOps
+    body += 'BT\n'
+    let currentFont: string | null = null
+    let currentSize = 0
+    let prevX = 0
+    let prevY = 0
+    let placedFirst = false
+    for (const line of linesOnPage) {
+      if (currentFont !== line.font || currentSize !== line.size) {
+        body += `/${line.font} ${line.size} Tf\n`
+        currentFont = line.font
+        currentSize = line.size
+      }
+      const targetX = margin + line.x
+      const targetY = line.y
+      if (!placedFirst) {
+        body += `${targetX.toFixed(2)} ${targetY.toFixed(2)} Td\n`
+        placedFirst = true
+      } else {
+        const dx = targetX - prevX
+        const dy = targetY - prevY
+        body += `${dx.toFixed(2)} ${dy.toFixed(2)} Td\n`
+      }
+      body += `(${escapePdfString(line.text)}) Tj\n`
+      prevX = targetX
+      prevY = targetY
+    }
+    body += 'ET\n'
+    return body
+  })
+
+  const objects: Array<string | Uint8Array> = []
+  objects.push('<< /Type /Catalog /Pages 2 0 R >>')
+  objects.push('__pages_placeholder__')
+  objects.push(
+    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>'
+  )
+  objects.push(
+    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>'
+  )
+  const pageObjectNumbers: number[] = []
+  for (const stream of contentStreams) {
+    const pageObjNumber = objects.length + 1
+    const contentsObjNumber = pageObjNumber + 1
+    pageObjectNumbers.push(pageObjNumber)
+    objects.push(
+      `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageWidth} ${pageHeight}] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents ${contentsObjNumber} 0 R >>`
+    )
+    const streamBytes = stringToLatin1Bytes(stream)
+    const contentObject = concatPdfChunks([
+      stringToLatin1Bytes(`<< /Length ${streamBytes.length} >>\nstream\n`),
+      streamBytes,
+      stringToLatin1Bytes('\nendstream'),
+    ])
+    objects.push(contentObject)
+  }
+  const kids = pageObjectNumbers.map((number) => `${number} 0 R`).join(' ')
+  objects[1] = `<< /Type /Pages /Count ${pageObjectNumbers.length} /Kids [${kids}] >>`
+
+  const headerBytes = stringToLatin1Bytes('%PDF-1.4\n%\xE2\xE3\xCF\xD3\n')
+  const chunks: Uint8Array[] = [headerBytes]
+  const offsets: number[] = []
+  let totalOffset = headerBytes.length
+  for (let index = 0; index < objects.length; index += 1) {
+    offsets.push(totalOffset)
+    const objHeader = stringToLatin1Bytes(`${index + 1} 0 obj\n`)
+    chunks.push(objHeader)
+    totalOffset += objHeader.length
+    const content = objects[index]
+    const contentBytes =
+      typeof content === 'string' ? stringToLatin1Bytes(content) : content
+    chunks.push(contentBytes)
+    totalOffset += contentBytes.length
+    const objFooter = stringToLatin1Bytes('\nendobj\n')
+    chunks.push(objFooter)
+    totalOffset += objFooter.length
+  }
+  const xrefStart = totalOffset
+  let xref = `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`
+  for (const offset of offsets) {
+    xref += `${String(offset).padStart(10, '0')} 00000 n \n`
+  }
+  chunks.push(stringToLatin1Bytes(xref))
+  chunks.push(
+    stringToLatin1Bytes(
+      `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefStart}\n%%EOF\n`
+    )
+  )
+  return concatPdfChunks(chunks)
+}
+
+function downloadPdf(
+  filename: string,
+  blocks: DocxBlock[],
+  options: DocxOptions = {}
+): void {
+  const bytes = buildPdfBytes(blocks, options)
+  const blob = new Blob([bytes.buffer as ArrayBuffer], { type: 'application/pdf' })
+  triggerBlobDownload(blob, filename)
+}
+
+const ICS201_TEMPLATE_URL = `${import.meta.env.BASE_URL}ics-201-incident-briefing.pdf`
+const ICS201_PAGE_CHAR_LIMIT = 300
+const ICS201_TEMPLATE_PAGE_COUNT = 4
+const ICS201_MAP_SKETCH_FIELD =
+  '3 MapSketch include sketch showing the total area of operations the incident sitearea overflight results trajectories impacted shorelines or other graphics depicting situational and response statusRow1'
+const ICS201_CURRENT_SITUATION_FIELD = '4 Current SituationRow1'
+const ICS201_OBJECTIVES_FIELD = 'RESPONSE OBJECTIVESRow1_2'
+const ICS201_SAFETY_FIELD = 'SAFETY MESSAGERow1_2'
+const ICS201_CURRENT_ACTIONS_FIELD = 'CURRENT ACTIONS STRATEGIES and TACTICSRow1_2'
+
+type Ics201TemplatePaginatedSection = {
+  sourcePageIndex: number
+  fieldName: string
+  text: string
+}
+
+function splitIcs201TextIntoPageChunks(text: string, limit = ICS201_PAGE_CHAR_LIMIT): string[] {
+  const trimmed = text.trim()
+  if (trimmed.length === 0) return ['']
+  if (trimmed.length <= limit) return [trimmed]
+
+  const chunks: string[] = []
+  let start = 0
+  while (start < trimmed.length) {
+    let end = Math.min(start + limit, trimmed.length)
+    if (end < trimmed.length) {
+      const slice = trimmed.slice(start, end)
+      const newlineAt = slice.lastIndexOf('\n')
+      if (newlineAt >= limit - 120) {
+        end = start + newlineAt + 1
+      }
+    }
+    chunks.push(trimmed.slice(start, end))
+    start = end
+  }
+  return chunks
+}
+
+function wrapPdfLinesForWidth(
+  text: string,
+  font: PDFFont,
+  fontSize: number,
+  maxWidth: number
+): string[] {
+  const lines: string[] = []
+  const paragraphs = text.split('\n')
+  for (const paragraph of paragraphs) {
+    const words = paragraph.split(/\s+/).filter(Boolean)
+    if (words.length === 0) {
+      lines.push('')
+      continue
+    }
+    let current = ''
+    for (const word of words) {
+      const candidate = current ? `${current} ${word}` : word
+      if (font.widthOfTextAtSize(candidate, fontSize) <= maxWidth) {
+        current = candidate
+        continue
+      }
+      if (current) {
+        lines.push(current)
+        current = ''
+      }
+      if (font.widthOfTextAtSize(word, fontSize) <= maxWidth) {
+        current = word
+        continue
+      }
+      let remaining = word
+      while (remaining.length > 0) {
+        let cut = remaining.length
+        while (
+          cut > 1 &&
+          font.widthOfTextAtSize(remaining.slice(0, cut), fontSize) > maxWidth
+        ) {
+          cut -= 1
+        }
+        lines.push(remaining.slice(0, cut))
+        remaining = remaining.slice(cut)
+      }
+    }
+    if (current) {
+      lines.push(current)
+    }
+  }
+  return lines
+}
+
+function drawTextInWidgetRect(
+  page: PDFPage,
+  font: PDFFont,
+  rect: { x: number; y: number; width: number; height: number },
+  text: string,
+  options: { fontSize?: number; lineHeight?: number; maskBackground?: boolean } = {}
+): void {
+  const fontSize = options.fontSize ?? 9
+  const lineHeight = options.lineHeight ?? 11
+  const padding = 4
+
+  if (options.maskBackground) {
+    page.drawRectangle({
+      x: rect.x,
+      y: rect.y,
+      width: rect.width,
+      height: rect.height,
+      color: rgb(1, 1, 1),
+      borderWidth: 0,
+    })
+  }
+
+  const maxWidth = Math.max(1, rect.width - padding * 2)
+  const lines = wrapPdfLinesForWidth(text, font, fontSize, maxWidth)
+  let y = rect.y + rect.height - padding - fontSize
+  const minY = rect.y + padding
+  for (const line of lines) {
+    if (y < minY) break
+    page.drawText(line, {
+      x: rect.x + padding,
+      y,
+      size: fontSize,
+      font,
+      color: rgb(0, 0, 0),
+    })
+    y -= lineHeight
+  }
+}
+
+function getPdfTextFieldWidgetRect(
+  pdfForm: ReturnType<PDFDocument['getForm']>,
+  fieldName: string
+): { x: number; y: number; width: number; height: number } | null {
+  try {
+    const widget = pdfForm.getTextField(fieldName).acroField.getWidgets()[0]
+    return widget.getRectangle()
+  } catch {
+    return null
+  }
+}
+
+async function fillIcs201TemplatePdf(
+  form: Ics201FormState,
+  paginated: boolean
+): Promise<Uint8Array> {
+  const response = await fetch(ICS201_TEMPLATE_URL)
+  if (!response.ok) {
+    throw new Error(`Unable to load ICS-201 template (${response.status})`)
+  }
+  const templateBytes = await response.arrayBuffer()
+  const blankTemplate = paginated ? await PDFDocument.load(templateBytes) : null
+  const pdfDoc = await PDFDocument.load(templateBytes)
+  const pdfForm = pdfDoc.getForm()
+  const fieldNames = new Set(pdfForm.getFields().map((field) => field.getName()))
+
+  const setText = (name: string, value: string) => {
+    if (!fieldNames.has(name)) return
+    try {
+      const field = pdfForm.getTextField(name)
+      // Most fields in this template are rich-text; disabling rich formatting
+      // lets us write plain values and avoids pdf-lib's rich-text read errors.
+      field.disableRichFormatting()
+      field.setText(value ?? '')
+    } catch {
+      // Field exists but is not a writable text field — skip rather than fail.
+    }
+  }
+
+  const clean = (value: string | undefined | null) => (value ?? '').trim()
+  const joinNonEmpty = (parts: Array<string | undefined | null>, separator: string) =>
+    parts.map((part) => clean(part)).filter((part) => part.length > 0).join(separator)
+
+  const operationalPeriod = joinNonEmpty(
+    [
+      form.operationalPeriodStart.replace('T', ' '),
+      form.operationalPeriodEnd ? `To: ${form.operationalPeriodEnd.replace('T', ' ')}` : '',
+    ],
+    '   '
+  )
+
+  const mapSketchText =
+    form.mapSketchPolygon.length > 0
+      ? 'Polygon vertices (lat, lon):\n' +
+        form.mapSketchPolygon
+          .map(
+            (vertex, index) =>
+              `${index + 1}. ${vertex.latitude.toFixed(5)}, ${vertex.longitude.toFixed(5)}`
+          )
+          .join('\n')
+      : ''
+
+  const currentSituation = clean(form.currentSituationSummary)
+
+  const objectivesText = form.objectives
+    .map((objective) => clean(objective))
+    .filter((objective) => objective.length > 0)
+    .map((objective, index) => `${index + 1}. ${objective}`)
+    .join('\n')
+
+  const safetyText = form.safetyAnalysis
+    .map((row, index) => {
+      const parts = joinNonEmpty(
+        [
+          row.hazard ? `Hazard: ${row.hazard}` : '',
+          row.mitigation ? `Mitigation: ${row.mitigation}` : '',
+          row.ppe ? `PPE: ${row.ppe}` : '',
+          row.medicalPlan ? `Medical: ${row.medicalPlan}` : '',
+        ],
+        ' | '
+      )
+      return parts.length > 0 ? `${index + 1}. ${parts}` : ''
+    })
+    .filter((line) => line.length > 0)
+    .join('\n')
+
+  const formatAction = (action: Ics201ActionRow) => {
+    const meta = joinNonEmpty(
+      [
+        action.owner ? `Owner: ${action.owner}` : '',
+        action.startTime ? `Start: ${action.startTime}` : '',
+        action.endTime ? `End: ${action.endTime}` : '',
+        action.status ? `Status: ${action.status}` : '',
+      ],
+      ' · '
+    )
+    const task = clean(action.task)
+    if (task.length === 0 && meta.length === 0) return ''
+    return meta.length > 0 ? `${task} (${meta})` : task
+  }
+
+  const currentActionsText = form.actions
+    .filter((action) => action.status !== 'Planned')
+    .map(formatAction)
+    .filter((line) => line.length > 0)
+    .join('\n')
+  const plannedActionsText = form.actions
+    .filter((action) => action.status === 'Planned')
+    .map(formatAction)
+    .filter((line) => line.length > 0)
+    .join('\n')
+
+  const templateSections: Ics201TemplatePaginatedSection[] = paginated
+    ? [
+        { sourcePageIndex: 0, fieldName: ICS201_MAP_SKETCH_FIELD, text: mapSketchText },
+        { sourcePageIndex: 1, fieldName: ICS201_OBJECTIVES_FIELD, text: objectivesText },
+        { sourcePageIndex: 1, fieldName: ICS201_SAFETY_FIELD, text: safetyText },
+      ]
+    : []
+
+  const writeSectionText = (fieldName: string, text: string) => {
+    if (!paginated) {
+      setText(fieldName, text)
+      return
+    }
+    const isPaginatedSection = templateSections.some(
+      (section) => section.fieldName === fieldName
+    )
+    if (!isPaginatedSection) {
+      setText(fieldName, text)
+      return
+    }
+    const chunks = splitIcs201TextIntoPageChunks(text)
+    setText(fieldName, chunks[0] ?? '')
+  }
+
+  const helvetica = await pdfDoc.embedFont(StandardFonts.Helvetica)
+  const situationRect = getPdfTextFieldWidgetRect(pdfForm, ICS201_CURRENT_SITUATION_FIELD)
+  const situationChunks = paginated
+    ? splitIcs201TextIntoPageChunks(currentSituation)
+    : [currentSituation]
+
+  // Draw Current Situation directly so stale rich-text appearances never leak demo/legacy text.
+  setText(ICS201_CURRENT_SITUATION_FIELD, '')
+  try {
+    const situationField = pdfForm.getTextField(ICS201_CURRENT_SITUATION_FIELD)
+    situationField.disableRichFormatting()
+    situationField.updateAppearances(helvetica)
+  } catch {
+    // Field may not support appearance refresh; drawn text below is authoritative.
+  }
+  if (situationRect) {
+    const page0 = pdfDoc.getPage(0)
+    const firstChunk = situationChunks[0] ?? ''
+    if (firstChunk.length > 0) {
+      drawTextInWidgetRect(page0, helvetica, situationRect, firstChunk, {
+        maskBackground: true,
+      })
+    } else {
+      drawTextInWidgetRect(page0, helvetica, situationRect, '', { maskBackground: true })
+    }
+  }
+
+  setText('1 Incident NameRow1', form.incidentName)
+  setText('From', operationalPeriod)
+  writeSectionText(ICS201_MAP_SKETCH_FIELD, mapSketchText)
+
+  writeSectionText(ICS201_OBJECTIVES_FIELD, objectivesText)
+  writeSectionText(ICS201_SAFETY_FIELD, safetyText)
+  const actionsBlock = joinNonEmpty(
+    [
+      currentActionsText ? `CURRENT ACTIONS, STRATEGIES, and TACTICS:\n${currentActionsText}` : '',
+      plannedActionsText ? `PLANNED ACTIONS:\n${plannedActionsText}` : '',
+    ],
+    '\n\n'
+  )
+  if (paginated) {
+    templateSections.push({
+      sourcePageIndex: 1,
+      fieldName: ICS201_CURRENT_ACTIONS_FIELD,
+      text: actionsBlock,
+    })
+  }
+  writeSectionText(ICS201_CURRENT_ACTIONS_FIELD, actionsBlock)
+  setText('Text1', plannedActionsText)
+
+  const actionRowNumbers = [1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23]
+  form.actions.forEach((action, index) => {
+    if (index >= actionRowNumbers.length) return
+    const rowNumber = actionRowNumbers[index]
+    setText(`TIMERow${rowNumber}`, clean(action.startTime))
+    setText(`ACTIONSRow${rowNumber}`, formatAction(action))
+  })
+
+  setText('Incident Commander', form.orgChart.incidentCommander)
+  setText('Safety Officer', form.orgChart.safetyOfficer)
+  setText('Liaison Officer', form.orgChart.liaisonOfficer)
+  setText('Public Information Officer', form.orgChart.publicInformationOfficer)
+  setText('Operations SectionRow1', form.orgChart.operationsSectionChief)
+  setText('Planning SectionRow1', form.orgChart.planningSectionChief)
+  setText('Logistics SectionRow1', form.orgChart.logisticsSectionChief)
+  setText('Finance SectionRow1', form.orgChart.financeSectionChief)
+
+  form.resources.forEach((resource, index) => {
+    const rowNumber = index + 1
+    if (rowNumber > 13) return
+    setText(
+      `Resource OrderedRow${rowNumber}`,
+      joinNonEmpty([resource.quantity, resource.category], ' ')
+    )
+    setText(`DescriptionIdentificationRow${rowNumber}`, resource.identifier)
+    setText(
+      `LocationAssignmentStatusRow${rowNumber}`,
+      joinNonEmpty(
+        [resource.assignment, resource.status ? `(${resource.status})` : ''],
+        ' '
+      )
+    )
+  })
+
+  setText(
+    'NamePosition',
+    joinNonEmpty([form.preparedByName || form.preparedBy, form.preparedByPositionTitle], ' / ')
+  )
+  setText(
+    'Date  TimeSignature',
+    joinNonEmpty(
+      [
+        form.preparedBySignature,
+        form.preparedDateTime ? `(${form.preparedDateTime})` : '',
+      ],
+      '  '
+    )
+  )
+
+  if (paginated && blankTemplate) {
+    const insertsAfterOriginalPage = Array.from(
+      { length: ICS201_TEMPLATE_PAGE_COUNT },
+      () => 0
+    )
+
+    if (situationChunks.length > 1 && situationRect) {
+      for (let chunkIndex = 1; chunkIndex < situationChunks.length; chunkIndex += 1) {
+        const [copiedPage] = await pdfDoc.copyPages(blankTemplate, [0])
+        const insertIndex = insertsAfterOriginalPage[0] + 1
+        pdfDoc.insertPage(insertIndex, copiedPage)
+        insertsAfterOriginalPage[0] += 1
+        for (let pageIndex = 1; pageIndex < insertsAfterOriginalPage.length; pageIndex += 1) {
+          insertsAfterOriginalPage[pageIndex] += 1
+        }
+        drawTextInWidgetRect(copiedPage, helvetica, situationRect, situationChunks[chunkIndex] ?? '', {
+          maskBackground: true,
+        })
+      }
+    }
+
+    for (const section of templateSections) {
+      const chunks = splitIcs201TextIntoPageChunks(section.text)
+      if (chunks.length <= 1) continue
+
+      const rect = getPdfTextFieldWidgetRect(pdfForm, section.fieldName)
+      if (!rect) continue
+
+      for (let chunkIndex = 1; chunkIndex < chunks.length; chunkIndex += 1) {
+        const [copiedPage] = await pdfDoc.copyPages(blankTemplate, [section.sourcePageIndex])
+        const insertIndex =
+          section.sourcePageIndex + insertsAfterOriginalPage[section.sourcePageIndex] + 1
+        pdfDoc.insertPage(insertIndex, copiedPage)
+        insertsAfterOriginalPage[section.sourcePageIndex] += 1
+        for (
+          let pageIndex = section.sourcePageIndex + 1;
+          pageIndex < insertsAfterOriginalPage.length;
+          pageIndex += 1
+        ) {
+          insertsAfterOriginalPage[pageIndex] += 1
+        }
+        drawTextInWidgetRect(copiedPage, helvetica, rect, chunks[chunkIndex] ?? '', {
+          maskBackground: true,
+        })
+      }
+    }
+  }
+
+  // Tell viewers to (re)generate field appearances from the written values.
+  // This template uses rich-text fields, so we skip pdf-lib's own appearance
+  // pass (which throws on rich-text) and rely on NeedAppearances instead.
+  pdfForm.acroForm.dict.set(PDFName.of('NeedAppearances'), PDFBool.True)
+
+  return pdfDoc.save({ updateFieldAppearances: false })
+}
+
+async function downloadIcs201TemplatePdf(
+  filename: string,
+  form: Ics201FormState,
+  paginated: boolean
+): Promise<void> {
+  const bytes = await fillIcs201TemplatePdf(form, paginated)
+  const blob = new Blob([bytes.buffer as ArrayBuffer], { type: 'application/pdf' })
+  triggerBlobDownload(blob, filename)
 }
 
 function buildIcs201DocxBlocks(form: Ics201FormState): DocxBlock[] {
@@ -3935,17 +4894,33 @@ function buildIcs201DocxBlocks(form: Ics201FormState): DocxBlock[] {
   pushHeading('Header')
   pushParagraph(form.incidentName && `Incident Name: ${form.incidentName}`)
   pushParagraph(form.incidentNumber && `Incident Number: ${form.incidentNumber}`)
+  pushParagraph(form.incidentLocation && `Incident Location: ${form.incidentLocation}`)
+  if (form.dateInitiated.trim() || form.timeInitiated.trim()) {
+    pushParagraph(
+      `Date/Time Initiated: ${form.dateInitiated.trim() || '—'} ${form.timeInitiated.trim()}`.trim()
+    )
+  }
   pushParagraph(form.preparedDateTime && `Date / Time Prepared: ${form.preparedDateTime}`)
   pushParagraph(form.preparedBy && `Prepared By: ${form.preparedBy}`)
   if (form.operationalPeriodStart.trim() || form.operationalPeriodEnd.trim()) {
-    pushParagraph(
-      `Operational Period: ${form.operationalPeriodStart.trim() || '—'} → ${form.operationalPeriodEnd.trim() || '—'}`
-    )
+    const opStart = form.operationalPeriodStart.trim().replace('T', ' ') || '—'
+    const opEnd = form.operationalPeriodEnd.trim().replace('T', ' ') || '—'
+    pushParagraph(`Operational Period: ${opStart} → ${opEnd}`)
   }
   pushParagraph(form.jurisdiction && `Jurisdiction / Agency: ${form.jurisdiction}`)
   pushHeading('Map Sketch')
-  pushParagraph(form.mapSketchDescription)
-  pushParagraph(form.mapSketchLegend)
+  if (form.mapSketchPolygon.length === 0) {
+    pushParagraph('No incident perimeter drawn yet.')
+  } else {
+    pushParagraph(
+      `Incident perimeter polygon — ${form.mapSketchPolygon.length} vertices (WGS84):`
+    )
+    form.mapSketchPolygon.forEach((vertex, index) => {
+      pushBullet(
+        `Vertex ${index + 1}: ${vertex.latitude.toFixed(6)}, ${vertex.longitude.toFixed(6)}`
+      )
+    })
+  }
   pushHeading('Current Situation')
   pushParagraph(form.currentSituationSummary)
   if (form.weatherForecast.trim()) {
@@ -4028,6 +5003,47 @@ function buildIcs201DocxBlocks(form: Ics201FormState): DocxBlock[] {
     })
   }
   return blocks
+}
+
+function buildIcs201ExportOptions(form: Ics201FormState): DocxOptions {
+  const dateTimeInitiated = [form.dateInitiated.trim(), form.timeInitiated.trim()]
+    .filter(Boolean)
+    .join(' ')
+  return {
+    header: {
+      topLines: [
+        'DEPARTMENT OF HOMELAND SECURITY',
+        'U.S. COAST GUARD',
+        'INCIDENT BRIEFING (ICS 201-CG)',
+      ],
+      cells: [
+        { label: '1. Incident Name:', value: form.incidentName },
+        { label: '2. Incident Location:', value: form.incidentLocation },
+        { label: '3. Date / Time Initiated:', value: dateTimeInitiated },
+      ],
+    },
+    footer: {
+      topLines: ['Prepared by:'],
+      cells: [
+        {
+          label: 'Name:',
+          value: form.preparedByName || form.preparedBy,
+        },
+        {
+          label: 'Position/Title:',
+          value: form.preparedByPositionTitle,
+        },
+        {
+          label: 'Signature:',
+          value: form.preparedBySignature,
+        },
+        {
+          label: 'Date/Time:',
+          value: form.preparedDateTime,
+        },
+      ],
+    },
+  }
 }
 
 function buildIcs209DocxBlocks(
@@ -4639,13 +5655,15 @@ const INCIDENT_FILE_FOLDERS: IncidentFileFolder[] = [
 type Ics201FormStateForGenerator = {
   incidentName: string
   incidentNumber: string
+  incidentLocation: string
+  dateInitiated: string
+  timeInitiated: string
   preparedDateTime: string
   operationalPeriodStart: string
   operationalPeriodEnd: string
   jurisdiction: string
   preparedBy: string
-  mapSketchDescription: string
-  mapSketchLegend: string
+  mapSketchPolygon: Ics201MapSketchVertex[]
   currentSituationSummary: string
   weatherForecast: string
   projectedIncidentCourse: string
@@ -4686,18 +5704,23 @@ type Ics201FormStateForGenerator = {
 }
 
 function buildIcs201Baseline(preparedBy?: string): Ics201FormStateForGenerator {
-  const nowIso = new Date().toISOString().slice(0, 16).replace('T', ' ') + ' UTC'
+  const now = new Date()
+  const nowIso = now.toISOString().slice(0, 16).replace('T', ' ') + ' UTC'
+  const initiatedDateIso = now.toISOString().slice(0, 10)
+  const initiatedTimeIso = now.toISOString().slice(11, 16)
   return {
     incidentName: 'Incident Alpha',
     incidentNumber: 'ALPHA-2026-001',
+    incidentLocation: 'Pier 33, San Francisco, CA',
+    dateInitiated: initiatedDateIso,
+    timeInitiated: initiatedTimeIso,
     preparedDateTime: nowIso,
-    operationalPeriodStart: '2026-05-14 06:00 PT',
-    operationalPeriodEnd: '2026-05-14 18:00 PT',
+    operationalPeriodStart: '2026-05-14T06:00',
+    operationalPeriodEnd: '2026-05-14T18:00',
     jurisdiction: 'USCG Sector San Francisco',
     preparedBy:
       preparedBy ?? 'Planning Section Chief You (autogenerated baseline draft)',
-    mapSketchDescription: BASELINE_MAP_SKETCH_DESCRIPTION,
-    mapSketchLegend: BASELINE_MAP_SKETCH_LEGEND,
+    mapSketchPolygon: BASELINE_MAP_SKETCH_POLYGON.map((vertex) => ({ ...vertex })),
     currentSituationSummary: BASELINE_CURRENT_SITUATION_SUMMARY,
     weatherForecast: BASELINE_WEATHER_FORECAST,
     projectedIncidentCourse: BASELINE_PROJECTED_COURSE,
@@ -4709,11 +5732,12 @@ function buildIcs201Baseline(preparedBy?: string): Ics201FormStateForGenerator {
   }
 }
 
-const BASELINE_MAP_SKETCH_DESCRIPTION =
-  'Map sketch depicts incident perimeter at Pier 33, branch/division boundaries across Sectors A and B, staging area at Ft. Mason, access control points at Embarcadero entry corridors, and evacuation routes inland to designated shelters.'
-
-const BASELINE_MAP_SKETCH_LEGEND =
-  'Legend: Red = active incident area, Orange = control lines, Blue = staging, Green = shelter/resource hubs, Yellow = evacuation routes.'
+const BASELINE_MAP_SKETCH_POLYGON: Ics201MapSketchVertex[] = [
+  { longitude: -122.4115, latitude: 37.8096 },
+  { longitude: -122.4071, latitude: 37.8096 },
+  { longitude: -122.4071, latitude: 37.8074 },
+  { longitude: -122.4115, latitude: 37.8074 },
+]
 
 const BASELINE_CURRENT_SITUATION_SUMMARY =
   'Operations remain in the life-safety phase following vessel grounding and resulting structural damage at Pier 33. Evacuation orders active for Sectors A and B. Mutual-aid response continues with Alameda County OES and CAL FIRE.'
@@ -4903,11 +5927,10 @@ function buildIcs201BaseFromFile(
       },
     ]
   } else if (folderId === 'maps-imagery') {
-    base.mapSketchDescription = `Map sketch sourced from ${file.name}. Depicts current incident perimeter at Pier 33, branch/division boundaries across Sectors A and B, staging at Ft. Mason, access control points at Embarcadero, and evacuation routes inland.`
-    base.mapSketchLegend = `Legend imported from ${file.name}: Red = active incident area, Orange = control lines, Blue = staging, Green = shelter/resource hubs, Yellow = evacuation routes, Purple = mutual-aid staging.`
+    base.mapSketchPolygon = BASELINE_MAP_SKETCH_POLYGON.map((vertex) => ({ ...vertex }))
     base.currentSituationSummary = `Geospatial overlay reflects active perimeter and evacuation zones. Reference layer: ${file.name}. Continued life-safety phase with two evacuation orders.`
   } else if (folderId === 'photos') {
-    base.mapSketchDescription = `Field photography (${file.name}) confirms structural damage at Pier 33 with debris in adjacent waterway. Pier surface compromised at Berths 31-33; landside access restricted to ICP traffic only.`
+    base.mapSketchPolygon = BASELINE_MAP_SKETCH_POLYGON.map((vertex) => ({ ...vertex }))
     base.currentSituationSummary = `Visual confirmation of pier damage per ${file.name}. Damage limited to Berths 31-33; adjacent structures appear intact pending engineering assessment.`
   } else if (folderId === 'briefings') {
     base.currentSituationSummary = `Briefing deck (${file.name}) outlines OP3 operational picture: life-safety phase active, evacuation orders in effect for Sectors A and B, mutual-aid response with Alameda County OES coordinated.`
@@ -5060,6 +6083,14 @@ const buildRegion1DotExecutiveSummary = (scopeLabel: string): string => {
 }
 
 function App() {
+  const {
+    isSupabaseEnabled,
+    profileEmail,
+    isOrgAdmin,
+    canAccessWorkspace,
+    getAccessToken,
+    signOut,
+  } = useAuth()
   const mapContainerRef = useRef<HTMLDivElement | null>(null)
   const leftPanelRef = useRef<HTMLDivElement | null>(null)
   const searchComponentRef = useRef<HTMLDivElement | null>(null)
@@ -5090,6 +6121,9 @@ function App() {
   const createIncidentMapViewRef = useRef<MapView | null>(null)
   const createIncidentDrawLayerRef = useRef<GraphicsLayer | null>(null)
   const createIncidentSketchViewModelRef = useRef<SketchViewModel | null>(null)
+  const ics201SketchLayerRef = useRef<GraphicsLayer | null>(null)
+  const ics201SketchViewModelRef = useRef<SketchViewModel | null>(null)
+  const [isDrawingIcs201Polygon, setIsDrawingIcs201Polygon] = useState(false)
   const preserveIncidentGeometryRef = useRef(false)
   const [isObjectivesOpen, setIsObjectivesOpen] = useState(true)
   const [panelWidthMode, setPanelWidthMode] = useState<'one-third' | 'one-half'>(
@@ -5109,7 +6143,7 @@ function App() {
   const [createIncidentStep, setCreateIncidentStep] = useState(0)
   const [incidentName, setIncidentName] = useState('')
   const [incidentLocation, setIncidentLocation] = useState('')
-  const [incidentCategory, setIncidentCategory] = useState<string[]>([])
+  const [incidentCategory, setIncidentCategory] = useState('')
   const [incidentWorkflow, setIncidentWorkflow] = useState('ipieca-ims')
   const [incidentComplexity, setIncidentComplexity] = useState('tier-1')
   const [incidentTemplate, setIncidentTemplate] = useState('')
@@ -5204,16 +6238,7 @@ function App() {
   const [expandedExerciseMselInjectId, setExpandedExerciseMselInjectId] = useState<number | null>(
     1
   )
-  const incidentCategoryOptions = [
-    'Power',
-    'Fire',
-    'Hazmat',
-    'Flood',
-    'Oil Spill',
-    'Terrorism',
-    'UAS Event',
-    'Other',
-  ] as const
+  const incidentCategoryOptions = INCIDENT_CATEGORY_OPTIONS
   const incidentWorkflowOptions = [
     { value: 'ipieca-ims', label: 'IPIECA IMS' },
     { value: 'uscg-ics', label: 'United States Coast Guard ICS' },
@@ -5256,7 +6281,7 @@ function App() {
     setCreateIncidentStep(0)
     setIncidentName('')
     setIncidentLocation('')
-    setIncidentCategory([])
+    setIncidentCategory('')
     setIncidentWorkflow('ipieca-ims')
     setIncidentComplexity('tier-1')
     setIncidentTemplate('')
@@ -5314,7 +6339,7 @@ function App() {
       (option) => option.id === incidentTemplate
     )?.label
     const typeParts = [
-      incidentCategory.length > 0 ? incidentCategory.join(' / ') : null,
+      incidentCategory.trim().length > 0 ? incidentCategory : null,
       templateLabel ?? null,
     ].filter((entry): entry is string => Boolean(entry))
     const exerciseType = typeParts.length > 0 ? typeParts.join(' · ') : 'Exercise'
@@ -5373,6 +6398,7 @@ function App() {
       id: Date.now(),
       name: displayName,
       type: exerciseType,
+      category: incidentCategory.trim() || 'Special Event',
       status: 'Active',
       severity: 'Medium',
       region,
@@ -5412,7 +6438,7 @@ function App() {
       (option) => option.id === incidentTemplate
     )?.label
     const typeParts = [
-      incidentCategory.length > 0 ? incidentCategory.join(' / ') : null,
+      incidentCategory.trim().length > 0 ? incidentCategory : null,
       templateLabel ?? null,
     ].filter((entry): entry is string => Boolean(entry))
     const incidentType = typeParts.length > 0 ? typeParts.join(' · ') : 'New Incident'
@@ -5467,6 +6493,7 @@ function App() {
       id: Date.now(),
       name: displayName,
       type: incidentType,
+      category: incidentCategory.trim() || 'Special Event',
       status: 'Active',
       severity: 'Medium',
       region,
@@ -5573,8 +6600,61 @@ function App() {
     null
   )
   const [pratusAiIntent, setPratusAiIntent] = useState<
-    'default' | 'ics201-generation' | 'sitrep-generation' | 'event-rule-generation' | 'notification-rule-generation'
+    | 'default'
+    | 'ics201-generation'
+    | 'sitrep-generation'
+    | 'ics201-section-generation'
+    | 'event-rule-generation'
+    | 'notification-rule-generation'
   >('default')
+  type Ics201SectionId =
+    | 'report-info'
+    | 'incident-briefing'
+    | 'map-sketch'
+    | 'current-situation'
+    | 'objectives'
+    | 'actions'
+    | 'org-chart'
+    | 'resources'
+    | 'safety-analysis'
+  const ICS201_SECTION_LABELS: Record<Ics201SectionId, string> = {
+    'report-info': 'Report Identification',
+    'incident-briefing': 'ICS-201 Incident Briefing',
+    'map-sketch': 'Map Sketch',
+    'current-situation': 'Current Situation',
+    objectives: 'Objectives',
+    actions: 'Actions',
+    'org-chart': 'Organization Chart',
+    resources: 'Resources Summary',
+    'safety-analysis': 'Safety Analysis',
+  }
+  const ICS201_SECTION_PROMPTS: Record<Ics201SectionId, string> = {
+    'report-info':
+      'Draft the Report Identification fields for the current ICS-201 (Incident Name, Incident Location, and Date/Time Initiated) using the latest incident data, current operational period, and prior versions for continuity.',
+    'incident-briefing':
+      'Draft the ICS-201 Incident Briefing header fields (Incident Name, Incident Number, Date/Time Prepared, Prepared By, Operational Period start/end, and Jurisdiction/Agency) using the latest incident metadata and the current operational period.',
+    'map-sketch':
+      'Propose a tightened incident perimeter polygon (5–8 vertices, WGS84 lat/lon) around the current area of operations using the latest situation summary, mapped resources, and any prior ICS-201 perimeter for reference.',
+    'current-situation':
+      'Write a concise Current Situation summary for the ICS-201 that reflects the latest incident posture, weather, status of life-safety operations, and impacts to the area of operations. Keep it within the 1,000-character strict-structure limit and avoid duplicating other sections.',
+    objectives:
+      'Draft a numbered set of SMART operational-period objectives for the ICS-201, aligned to the current Incident Commander priorities. Cover life safety, incident stabilization, property/environmental protection, and continuity of operations. Keep the combined text within the strict-structure character limit.',
+    actions:
+      'Draft a set of priority actions for the current operational period with task, owner (ICS role), start time, and end time. Align each action to one of the ICS-201 objectives and the current operational tempo.',
+    'org-chart':
+      'Populate the ICS-201 Organization Chart (Incident Commander, Operations, Planning, Logistics, Finance/Admin Section Chiefs, Public Information Officer, Safety Officer, Liaison Officer) using the current roster and the latest staffing assignments.',
+    resources:
+      'Draft a Resources Summary for the ICS-201 (category, identifier, quantity, status, assignment) drawn from the resources currently checked in or ordered for this incident.',
+    'safety-analysis':
+      'Draft the ICS-201 Safety Analysis (hazard, mitigation, PPE, medical plan) covering the top operational hazards for the current operational period, drawing from the situation summary, weather, and any prior safety analyses.',
+  }
+  const [pratusAiIcs201Section, setPratusAiIcs201Section] = useState<Ics201SectionId | null>(null)
+  const openIcs201SectionGeneration = (section: Ics201SectionId) => {
+    setPratusAiIntent('ics201-section-generation')
+    setPratusAiIcs201Section(section)
+    setPratusAiDraftMessage(ICS201_SECTION_PROMPTS[section])
+    setIsPratusAiDrawerOpen(true)
+  }
   const [expandedItemId, setExpandedItemId] = useState<string | null>(null)
   const [expandedThreats, setExpandedThreats] = useState<Set<string>>(new Set())
   const [completedResponseActions, setCompletedResponseActions] = useState<Set<string>>(
@@ -5631,17 +6711,19 @@ function App() {
   const INITIAL_ICS201_FORM: Ics201FormState = {
     incidentName: 'Incident Alpha',
     incidentNumber: 'ALPHA-2026-001',
+    incidentLocation: 'Pier 33, San Francisco, CA',
+    dateInitiated: '2026-04-25',
+    timeInitiated: '16:00',
     preparedDateTime: '2026-04-25 16:00 UTC',
-    operationalPeriodStart: '2026-04-25 12:00 UTC',
-    operationalPeriodEnd: '2026-04-26 00:00 UTC',
+    operationalPeriodStart: '2026-04-25T12:00',
+    operationalPeriodEnd: '2026-04-26T00:00',
     jurisdiction: 'State Emergency Operations Center',
     preparedBy: 'Planning Section Chief',
-    mapSketchDescription:
-      'Map sketch should depict current incident perimeter, branch/division boundaries, staging areas, access control points, evacuation routes, and shelter locations.',
-    mapSketchLegend:
-      'Legend: Red = active incident area, Orange = control lines, Blue = staging, Green = shelter/resource hubs.',
-    currentSituationSummary:
-      'Severe weather impacts continue across multiple districts. Road closures and utility disruptions are driving shelter demand and dynamic resource allocation.',
+    preparedByName: 'A. Rivera',
+    preparedByPositionTitle: 'Planning Section Chief',
+    preparedBySignature: 'A. Rivera',
+    mapSketchPolygon: BASELINE_MAP_SKETCH_POLYGON.map((vertex) => ({ ...vertex })),
+    currentSituationSummary: '',
     weatherForecast:
       'Next 12 hours: scattered thunderstorms, wind gusts 25-35 mph, localized flash-flood risk in low-lying corridors.',
     projectedIncidentCourse:
@@ -5714,7 +6796,98 @@ function App() {
       },
     ],
   }
-  const [ics201Form, setIcs201Form] = useState<Ics201FormState>(INITIAL_ICS201_FORM)
+  const [ics201Form, setIcs201Form] = useState<Ics201FormState>(() =>
+    cloneIcs201FormState(INITIAL_ICS201_FORM)
+  )
+  const [ics201EditingReportInfo, setIcs201EditingReportInfo] = useState(false)
+  const [ics201ReportInfoDraft, setIcs201ReportInfoDraft] = useState<{
+    incidentName: string
+    incidentLocation: string
+    dateInitiated: string
+    timeInitiated: string
+    preparedByName: string
+    preparedByPositionTitle: string
+    preparedBySignature: string
+    preparedDateTime: string
+  }>({
+    incidentName: '',
+    incidentLocation: '',
+    dateInitiated: '',
+    timeInitiated: '',
+    preparedByName: '',
+    preparedByPositionTitle: '',
+    preparedBySignature: '',
+    preparedDateTime: '',
+  })
+  const [ics201EditingIncidentBriefing, setIcs201EditingIncidentBriefing] = useState(false)
+  const [ics201IncidentBriefingDraft, setIcs201IncidentBriefingDraft] = useState({
+    incidentName: '',
+    incidentNumber: '',
+    preparedDateTime: '',
+    preparedBy: '',
+    operationalPeriodStart: '',
+    operationalPeriodEnd: '',
+    jurisdiction: '',
+  })
+  const [ics201EditingMapSketch, setIcs201EditingMapSketch] = useState(false)
+  const [ics201MapSketchDraft, setIcs201MapSketchDraft] = useState<Ics201MapSketchVertex[]>([])
+  const ics201EditingMapSketchRef = useRef(false)
+  const [ics201EditingCurrentSituation, setIcs201EditingCurrentSituation] = useState(false)
+  const [ics201CurrentSituationDraft, setIcs201CurrentSituationDraft] = useState('')
+  const [ics201StructureMode, setIcs201StructureMode] = useState<
+    'flexible' | 'paginated' | 'strict'
+  >('strict')
+  const ICS201_STRICT_CHAR_LIMIT = 1000
+  const ics201EnforcesCharLimit = ics201StructureMode === 'strict'
+  const ics201UsesOfficialTemplatePdf =
+    ics201StructureMode === 'strict' || ics201StructureMode === 'paginated'
+  const [isIcs201PreviewOpen, setIsIcs201PreviewOpen] = useState(false)
+  const [ics201PreviewBlocks, setIcs201PreviewBlocks] = useState<DocxBlock[]>([])
+  const [ics201PreviewTitle, setIcs201PreviewTitle] = useState('ICS-201 Preview')
+  const exportIcs201Pdf = (filename: string, form: Ics201FormState) => {
+    const exportForm = cloneIcs201FormState(form)
+    if (ics201UsesOfficialTemplatePdf) {
+      void downloadIcs201TemplatePdf(
+        filename,
+        exportForm,
+        ics201StructureMode === 'paginated'
+      ).catch(() => {
+        toast.error(
+          'Could not write to the official ICS-201 form. Exported the standard PDF layout instead.'
+        )
+        downloadPdf(
+          filename,
+          buildIcs201DocxBlocks(exportForm),
+          buildIcs201ExportOptions(exportForm)
+        )
+      })
+      return
+    }
+    downloadPdf(
+      filename,
+      buildIcs201DocxBlocks(exportForm),
+      buildIcs201ExportOptions(exportForm)
+    )
+  }
+  const [ics201EditingObjectives, setIcs201EditingObjectives] = useState(false)
+  const [ics201ObjectivesDraft, setIcs201ObjectivesDraft] = useState<string[]>([])
+  const [ics201EditingActions, setIcs201EditingActions] = useState(false)
+  const [ics201ActionsDraft, setIcs201ActionsDraft] = useState<Ics201ActionRow[]>([])
+  const [ics201EditingOrgChart, setIcs201EditingOrgChart] = useState(false)
+  const [ics201OrgChartDraft, setIcs201OrgChartDraft] = useState<Ics201FormState['orgChart']>({
+    incidentCommander: '',
+    operationsSectionChief: '',
+    planningSectionChief: '',
+    logisticsSectionChief: '',
+    financeSectionChief: '',
+    publicInformationOfficer: '',
+    safetyOfficer: '',
+    liaisonOfficer: '',
+  })
+  const [ics201EditingResources, setIcs201EditingResources] = useState(false)
+  const [ics201ResourcesDraft, setIcs201ResourcesDraft] = useState<Ics201ResourceSummaryRow[]>([])
+  const [ics201EditingSafetyAnalysis, setIcs201EditingSafetyAnalysis] = useState(false)
+  const [ics201SafetyAnalysisDraft, setIcs201SafetyAnalysisDraft] = useState<Ics201SafetyRow[]>([])
   const INITIAL_ICS209_FORM: Ics209FormState = {
     reportVersion: 'Initial',
     incidentTypes: ['Oil/Petroleum', 'Other'],
@@ -6335,9 +7508,21 @@ function App() {
     setIcs209EquipmentTypesDialogOpen(false)
   }
   const ics201Collaborators = [
-    { id: 'maya', name: 'Maya Chen', initials: 'MC', color: '#ef4444' },
-    { id: 'diego', name: 'Diego Alvarez', initials: 'DA', color: '#3b82f6' },
-  ] as const
+    {
+      id: 'maya',
+      name: 'Maya Chen',
+      initials: 'MC',
+      color: '#ef4444',
+      position: 'Planning Section Chief',
+    },
+    {
+      id: 'diego',
+      name: 'Diego Alvarez',
+      initials: 'DA',
+      color: '#3b82f6',
+      position: 'Operations Section Chief',
+    },
+  ]
   type Ics201VersionSignature = {
     name: string
     role: string
@@ -6388,7 +7573,7 @@ function App() {
         createdAt,
         authorName: author.name,
         authorColor: author.color,
-        snapshot: INITIAL_ICS201_FORM,
+        snapshot: cloneIcs201FormState(INITIAL_ICS201_FORM),
         signatures,
       }
     })
@@ -7430,29 +8615,33 @@ function App() {
       location: [-122.7589, 48.862],
       relatedEventId: 11,
       regionalThreats: {
-        region: 'BP Business Unit — Northwest',
+        region: 'USCG District 13 — Pacific Northwest',
         description:
           'Active refinery fire, thermal plume, and product transfer disruptions place the following BP assets and adjacent receptors at elevated risk:',
         threats: [
           {
+            id: 'CP-REF-CPU-001',
             resource: 'BP Cherry Point Refinery — Crude Processing Unit',
             risk: 'Confirmed fire in crude processing unit requires full unit isolation, foam application, and perimeter cooling; adjacent units on controlled shutdown with potential cascade impact to alkylation and reformer trains.',
             location: [-122.7589, 48.862],
             operationalStatus: 'Partially Operational',
           },
           {
+            id: 'CP-MT-002',
             resource: 'Cherry Point Marine Terminal',
             risk: 'Tanker loading and berthing suspended; vapor recovery and firewater supply prioritized to protect dock manifold and export tanks from radiant heat exposure.',
             location: [-122.745, 48.855],
             operationalStatus: 'Not Operational',
           },
           {
+            id: 'CP-TF-NB-003',
             resource: 'Refinery Tank Farm — North Battery',
             risk: 'Elevated thermal radiation and smoke plume require fixed monitor activation, foam stock drawdown tracking, and secondary containment inspection on gasoline and diesel storage.',
             location: [-122.752, 48.868],
             operationalStatus: 'Partially Operational',
           },
           {
+            id: 'CP-DC-004',
             resource: 'Ferndale / Blaine Downwind Community Corridor',
             risk: 'Modeled downwind particulate and VOC plume may require public shelter-in-place messaging, road closures on Grandview Rd, and continuous air monitoring at school and hospital receptors.',
             location: [-122.591, 48.846],
@@ -7486,29 +8675,33 @@ function App() {
       location: [-17.439, 14.739],
       relatedEventId: 12,
       regionalThreats: {
-        region: 'BP Business Unit — West Africa',
+        region: 'USCG District 17 — West Africa',
         description:
           'Active refinery explosion, blast overpressure, and product transfer disruptions place the following BP assets and adjacent receptors at elevated risk:',
         threats: [
           {
+            id: 'SN-REF-CCU-001',
             resource: 'BP SAR Refinery — Mbao Cracking Unit',
             risk: 'Confirmed explosion in the cracking unit requires full plant isolation, foam and cooling application on adjacent columns, and structural assessment before re-entry; potential cascade impact to reformer and LPG recovery trains.',
             location: [-17.439, 14.739],
             operationalStatus: 'Partially Operational',
           },
           {
+            id: 'SN-MT-002',
             resource: 'Dakar Marine Terminal — SAR Berth',
             risk: 'Tanker loading and bunkering suspended; firewater and vapor recovery prioritized to protect dock manifold and export tanks from secondary ignition and radiant heat exposure.',
             location: [-17.42, 14.695],
             operationalStatus: 'Not Operational',
           },
           {
+            id: 'SN-LPG-003',
             resource: 'Refinery LPG Sphere Farm — East Battery',
             risk: 'Blast overpressure and fire impingement require deluge system activation, foam stock drawdown tracking, and BLEVE watch on propane storage spheres.',
             location: [-17.435, 14.732],
             operationalStatus: 'Partially Operational',
           },
           {
+            id: 'SN-DC-004',
             resource: 'Mbao / Guédiawaye Downwind Community Corridor',
             risk: 'Modeled downwind particulate, SO₂, and VOC plume may require public shelter-in-place messaging, N1 corridor closures, and continuous air monitoring at clinic and school receptors.',
             location: [-17.41, 14.78],
@@ -7534,7 +8727,7 @@ function App() {
       status: 'Acknowledged',
       category: 'Transport',
       timestamp: '2026-03-28 08:27',
-      owner: 'Traffic Ops',
+      owner: 'Marcus Webb · marcus.webb@bp.com',
       summary: 'Closure now includes eastbound lanes due to debris and utility hazards.',
       impact: '6-mile diversion and 42-minute delay',
       location: [-97.7431, 30.2672],
@@ -7546,7 +8739,7 @@ function App() {
       status: 'Resolved',
       category: 'Shelter',
       timestamp: '2026-03-28 08:45',
-      owner: 'Mass Care',
+      owner: 'Jennifer Hart · jennifer.hart@bp.com',
       summary: 'Shelter capacity increased and overflow queue cleared.',
       impact: '312 residents reallocated safely',
       location: [-95.3698, 29.7604],
@@ -7639,7 +8832,7 @@ function App() {
       opcon: 'BP CCMER Program',
       tacon: 'BP Cherry Point Unified Command',
       pointOfContact: 'BP CCMER Advisor on Duty',
-      owningOrganization: 'British Petroleum',
+      owningOrganization: 'United States Coast Guard',
       quantity: 1,
       unit: 'team',
       hullTailNumber: '---',
@@ -7680,9 +8873,10 @@ function App() {
       id: 1,
       name: 'Cherry Point Refinery Fire — Process Unit Response',
       type: 'Industrial Fire / Refinery Operations',
+      category: 'Hazardous Materials',
       status: 'Active',
       severity: 'High',
-      region: 'BP Business Unit — Northwest',
+      region: 'USCG District 13 — Pacific Northwest',
       location: [-122.7589, 48.862],
       lead: 'BP Cherry Point Unified Command · IC Hartman',
       startedAt: '2026-05-09 07:00 PST',
@@ -7697,9 +8891,10 @@ function App() {
       id: 2,
       name: 'BP Mad Dog Process Area Gas Release',
       type: 'Offshore Process Safety / Gas Release',
+      category: 'Hazardous Materials',
       status: 'Active',
       severity: 'High',
-      region: 'Gulf of Mexico — Offshore',
+      region: 'USCG District 8 — Gulf',
       location: [-90.78, 27.53],
       lead: 'Mad Dog OIM · BP CCMER Advisor Landry',
       startedAt: '2026-05-09 05:30 CST',
@@ -7712,26 +8907,42 @@ function App() {
     },
     {
       id: 3,
-      name: 'BP NaKika Production Curtailment Watch',
-      type: 'Offshore Production / Weather Watch',
-      status: 'Monitoring',
-      severity: 'Medium',
-      region: 'Gulf of Mexico — Offshore',
-      location: [-88.5, 28.3],
-      lead: 'NaKika Facility Manager · BP Operations',
-      startedAt: '2026-05-09 06:15 CST',
-      lastUpdate: '2026-05-09 09:20 CST',
+      name: 'FIFA World Cup 2026 — MetLife Stadium Security Coordination',
+      type: 'World Cup Security / Venue Operations',
+      category: 'World Cup 2026',
+      status: 'Active',
+      severity: 'High',
+      region: 'USCG District 5 — Mid-Atlantic',
+      location: [-74.074, 40.814],
+      lead: 'FIFA Venue Security Liaison · BP Special Events Command',
+      startedAt: '2026-06-15 08:00 EST',
+      lastUpdate: '2026-06-15 10:30 EST',
       summary:
-        'Eastern Gulf swell and tropical-storm wind radii from EDGAR prompting export curtailment planning at NaKika. Tanker loading suspended; compression margins reviewed with Houston trading desk.',
+        'World Cup 2026 match-day security coordination at MetLife Stadium. BP special events team supporting credentialing, perimeter access control, and emergency medical staging for Argentina vs. Germany group-stage fixture.',
       resourcesCommitted:
-        'NaKika operations team, marine logistics coordinator, offshore weather analyst, export scheduling cell',
-      relatedEventIds: [8],
+        'BP special events security cell, stadium operations liaison, regional EMS staging team, transit corridor monitors',
+      relatedEventIds: [],
     },
   ])
   const [incidentEventFilters, setIncidentEventFilters] = useState<number[]>([])
+  const [incidentCategoryFilters, setIncidentCategoryFilters] = useState<string[]>([])
   const [exerciseList, setExerciseList] = useState<ExerciseListItem[]>(DEFAULT_EXERCISE_LIST)
   const [activeIncidentWorkspaceId, setActiveIncidentWorkspaceId] = useState<number | null>(null)
   const [activeExerciseWorkspaceId, setActiveExerciseWorkspaceId] = useState<number | null>(null)
+  const [localWorkspaceRostersByKey, setLocalWorkspaceRostersByKey] = useState<
+    Record<string, WorkspaceRosterMember[]>
+  >({})
+  const [supabaseWorkspaceRoster, setSupabaseWorkspaceRoster] = useState<WorkspaceRosterMember[]>(
+    []
+  )
+  const [activeWorkspaceSupabaseId, setActiveWorkspaceSupabaseId] = useState<string | null>(null)
+  const [isRosterLoading, setIsRosterLoading] = useState(false)
+  const [isInvitingRosterMember, setIsInvitingRosterMember] = useState(false)
+  const [isAddRosterMemberOpen, setIsAddRosterMemberOpen] = useState(false)
+  const [rosterMemberEmailDraft, setRosterMemberEmailDraft] = useState('')
+  const [rosterMemberPositionDraft, setRosterMemberPositionDraft] = useState<string>(
+    ICS_ROSTER_POSITION_OPTIONS[0]
+  )
   const [eventList, setEventList] = useState<EventListItem[]>(DEFAULT_EVENT_LIST)
   const [eventSeverityFilters, setEventSeverityFilters] = useState<EventListItem['severity'][]>([])
   const [eventBusinessUnitFilters, setEventBusinessUnitFilters] = useState<string[]>([])
@@ -7754,8 +8965,8 @@ function App() {
   const [femaAors] = useState<FemaAorItem[]>([
     {
       id: 1,
-      name: 'BP Business Unit — New England',
-      lead: 'BU Lead — Boston, MA',
+      name: 'USCG District 1 — Northeast',
+      lead: 'District Commander — Boston, MA',
       incidents: 0,
       priority: 'Low',
       population: '14.8M',
@@ -7764,7 +8975,7 @@ function App() {
       notes: 'CT, ME, MA, NH, RI, VT — steady-state DOT operations.',
       sitrep:
         'Steady-state DOT operations across CT, ME, MA, NH, RI, VT. NWS marine forecasts stable; no active surface-transport disruptions reported.',
-      sitrepUpdatedBy: 'BU Lead Boston, MA',
+      sitrepUpdatedBy: 'District Commander Boston, MA',
       sitrepSources: [
         'NWS Marine Forecast (WFO Boston, Caribou, Gray)',
         'Mass511 / 511CT / 511NH traffic feeds',
@@ -7775,8 +8986,8 @@ function App() {
     },
     {
       id: 2,
-      name: 'BP Business Unit — NY/NJ/PR/USVI',
-      lead: 'BU Lead — New York, NY',
+      name: 'USCG District 1 — New York',
+      lead: 'District Commander — New York, NY',
       incidents: 0,
       priority: 'Low',
       population: '31.5M',
@@ -7785,7 +8996,7 @@ function App() {
       notes: 'NJ, NY, PR, USVI — monitoring downstream coastal impacts.',
       sitrep:
         'Monitoring downstream coastal swell from Atlantic system. Port of NY/NJ traffic normal; PR/USVI EOC reports no DOT impacts at this time.',
-      sitrepUpdatedBy: 'BU Lead New York, NY',
+      sitrepUpdatedBy: 'District Commander New York, NY',
       sitrepSources: [
         'NHC Atlantic basin swell guidance',
         'PANYNJ TRANSCOM port traffic feed',
@@ -7797,8 +9008,8 @@ function App() {
     },
     {
       id: 3,
-      name: 'BP Business Unit — Mid-Atlantic',
-      lead: 'BU Lead — Philadelphia, PA',
+      name: 'USCG District 5 — Mid-Atlantic',
+      lead: 'District Commander — Philadelphia, PA',
       incidents: 0,
       priority: 'Medium',
       population: '32.1M',
@@ -7807,11 +9018,11 @@ function App() {
       notes: 'DE, DC, MD, PA, VA, WV — staging ESF-1 backfill assets for Region 4.',
       sitrep:
         'ESF-1 backfill assets staged at Richmond and Petersburg in support of Region 4. I-95 corridor flowing southbound; contraflow plans on standby pending FDOT request.',
-      sitrepUpdatedBy: 'BU Lead Philadelphia, PA',
+      sitrepUpdatedBy: 'District Commander Philadelphia, PA',
       sitrepSources: [
         'FHWA ESF-1 staging tracker',
         'VDOT 511 / Maryland CHART probe data',
-        'BP Business Unit — Mid-Atlantic operations center',
+        'USCG District 5 — Mid-Atlantic operations center',
         'I-95 Corridor Coalition contraflow plan',
         'PennDOT 511 / DelDOT DelTrac',
       ],
@@ -7819,8 +9030,8 @@ function App() {
     },
     {
       id: 4,
-      name: 'BP Business Unit — Southeast',
-      lead: 'BU Lead — Atlanta, GA',
+      name: 'USCG District 7 — Southeast',
+      lead: 'District Commander — Atlanta, GA',
       incidents: 8,
       priority: 'High',
       population: '67.2M',
@@ -7830,7 +9041,7 @@ function App() {
         'AL, FL, GA, KY, MS, NC, SC, TN — major hurricane response, multi-state contraflow active.',
       sitrep:
         'Multi-state contraflow active on I-75/I-95; FDOT TMC managing Wildwood gridlock. 8 active DOT incidents; FEMA airlift staging at MCO holding through current ground stop.',
-      sitrepUpdatedBy: 'BU Lead Atlanta, GA',
+      sitrepUpdatedBy: 'District Commander Atlanta, GA',
       sitrepSources: [
         'FDOT SunGuide TMC live traffic feed',
         'FAA NAS Status / OIS — MCO ground stop',
@@ -7843,8 +9054,8 @@ function App() {
     },
     {
       id: 5,
-      name: 'BP Business Unit — Great Lakes',
-      lead: 'BU Lead — Chicago, IL',
+      name: 'USCG District 9 — Great Lakes',
+      lead: 'District Commander — Chicago, IL',
       incidents: 0,
       priority: 'Low',
       population: '52.6M',
@@ -7853,7 +9064,7 @@ function App() {
       notes: 'IL, IN, MI, MN, OH, WI — steady-state DOT operations.',
       sitrep:
         'Steady-state DOT operations across IL, IN, MI, MN, OH, WI. Lake-effect bands forecast for upper MI; salt brine staged but no closures in effect.',
-      sitrepUpdatedBy: 'BU Lead Chicago, IL',
+      sitrepUpdatedBy: 'District Commander Chicago, IL',
       sitrepSources: [
         'NWS WFO Marquette / Gaylord / Milwaukee',
         'MDOT / MnDOT / WisDOT 511 winter ops',
@@ -7864,8 +9075,8 @@ function App() {
     },
     {
       id: 6,
-      name: 'BP Business Unit — South Central',
-      lead: 'BU Lead — Denton, TX',
+      name: 'USCG District 8 — Gulf',
+      lead: 'District Commander — Denton, TX',
       incidents: 3,
       priority: 'High',
       population: '41.0M',
@@ -7875,7 +9086,7 @@ function App() {
         'AR, LA, NM, OK, TX — multiple active surface-transport incidents under DOT response.',
       sitrep:
         '3 active surface-transport incidents in TX. PHMSA on-scene at LBJ Express hazmat; AUS runway closure expected to lift this afternoon. NWS flash-flood watch over Houston metro.',
-      sitrepUpdatedBy: 'BU Lead Denton, TX',
+      sitrepUpdatedBy: 'District Commander Denton, TX',
       sitrepSources: [
         'TxDOT Lone Star ITS / DriveTexas feed',
         'PHMSA NRC hazmat incident log',
@@ -7887,8 +9098,8 @@ function App() {
     },
     {
       id: 7,
-      name: 'BP Business Unit — Heartland',
-      lead: 'BU Lead — Kansas City, MO',
+      name: 'USCG District 8 — Inland',
+      lead: 'District Commander — Kansas City, MO',
       incidents: 0,
       priority: 'Low',
       population: '14.3M',
@@ -7897,7 +9108,7 @@ function App() {
       notes: 'IA, KS, MO, NE — steady-state DOT operations.',
       sitrep:
         'Steady-state DOT operations across IA, KS, MO, NE. NWS severe weather outlook marginal; FRA monitoring elevated grain-train activity but no incidents reported.',
-      sitrepUpdatedBy: 'BU Lead Kansas City, MO',
+      sitrepUpdatedBy: 'District Commander Kansas City, MO',
       sitrepSources: [
         'NWS SPC Day-1 Convective Outlook',
         'FRA Office of Safety incident database',
@@ -7908,8 +9119,8 @@ function App() {
     },
     {
       id: 8,
-      name: 'BP Business Unit — Mountain',
-      lead: 'BU Lead — Denver, CO',
+      name: 'USCG District 11 — Southwest',
+      lead: 'District Commander — Denver, CO',
       incidents: 0,
       priority: 'Low',
       population: '12.5M',
@@ -7918,7 +9129,7 @@ function App() {
       notes: 'CO, MT, ND, SD, UT, WY — steady-state DOT operations.',
       sitrep:
         'Steady-state DOT operations across CO, MT, ND, SD, UT, WY. CDOT chain laws stood down; mountain pass forecasts clear through next 48 hours.',
-      sitrepUpdatedBy: 'BU Lead Denver, CO',
+      sitrepUpdatedBy: 'District Commander Denver, CO',
       sitrepSources: [
         'CDOT / WYDOT / MDT 511 mountain-pass APIs',
         'NWS WFO Boulder / Salt Lake / Riverton',
@@ -7929,8 +9140,8 @@ function App() {
     },
     {
       id: 9,
-      name: 'BP Business Unit — Pacific',
-      lead: 'BU Lead — Oakland, CA',
+      name: 'USCG District 11 — Pacific',
+      lead: 'District Commander — Oakland, CA',
       incidents: 0,
       priority: 'Medium',
       population: '50.5M',
@@ -7939,7 +9150,7 @@ function App() {
       notes: 'AZ, CA, HI, NV, Pacific Territories — wildfire watch, otherwise steady-state.',
       sitrep:
         'CAL FIRE Red Flag Warning posted for inland CA; Caltrans staging detour resources along SR-1. Pacific territories nominal; HI DOT reports normal ops.',
-      sitrepUpdatedBy: 'BU Lead Oakland, CA',
+      sitrepUpdatedBy: 'District Commander Oakland, CA',
       sitrepSources: [
         'CAL FIRE Incident Information feed',
         'NWS WFO Hanford / LA / San Diego Red Flag warnings',
@@ -7951,8 +9162,8 @@ function App() {
     },
     {
       id: 10,
-      name: 'BP Business Unit — Northwest',
-      lead: 'BU Lead — Bothell, WA',
+      name: 'USCG District 13 — Pacific Northwest',
+      lead: 'District Commander — Bothell, WA',
       incidents: 1,
       priority: 'High',
       population: '14.4M',
@@ -7961,7 +9172,7 @@ function App() {
       notes: 'AK, ID, OR, WA — BP Cherry Point refinery fire response active in Whatcom County.',
       sitrep:
         'BP Cherry Point refinery fire in Ferndale, WA driving partial unit shutdown and marine terminal suspensions. Whatcom County OEM unified command active; WSDOT monitoring Grandview Rd corridor closures; no state highway contraflow required.',
-      sitrepUpdatedBy: 'BU Lead Bothell, WA',
+      sitrepUpdatedBy: 'District Commander Bothell, WA',
       sitrepSources: [
         'Whatcom County OEM incident status board',
         'WA Department of Ecology spill and air monitoring feed',
@@ -8509,6 +9720,13 @@ function App() {
     if (!drawLocationLayerRef.current) {
       drawLocationLayerRef.current = new GraphicsLayer()
     }
+    if (!ics201SketchLayerRef.current) {
+      ics201SketchLayerRef.current = new GraphicsLayer({
+        id: 'ics201-map-sketch-layer',
+        title: 'ICS-201 Map Sketch',
+        listMode: 'hide',
+      })
+    }
     const analyticsCategoryLayers = initializeAnalyticsCategoryLayers(
       analyticsCategoryLayersRef.current
     )
@@ -8518,7 +9736,7 @@ function App() {
     if (!femaRegionsLayerRef.current) {
       const femaLayer = new GraphicsLayer({
         id: 'fema-regions-layer',
-        title: 'BP Business Units',
+        title: 'USCG AORs',
         listMode: 'hide',
       })
       femaRegionGraphicsRef.current = new globalThis.Map<number, Graphic>()
@@ -8571,12 +9789,9 @@ function App() {
         coordinates: threat.location,
         color: [234, 88, 12, 0.95] as [number, number, number, number],
         status: notification.severity,
-        owner: notification.owner,
-        updatedByLine: formatResourceAtRiskUpdatedLine(
-          notification.timestamp,
-          notification.owner
-        ),
-        report: threat.risk,
+        assetId: threat.id,
+        updatedAt: notification.timestamp,
+        description: threat.risk,
         isResourceAtRisk: true as const,
       }))
     )
@@ -8684,37 +9899,42 @@ function App() {
             width: 1.2,
           },
         },
-        attributes: {
-          mapKey: item.mapKey,
-          title: item.title,
-          kind: item.kind,
-          status: item.status,
-          owner: item.owner,
-          ...(isResourceAtRisk
-            ? {
-                updatedByLine: item.updatedByLine,
-                report: item.report,
-              }
-            : isEvent
-              ? {
-                  creationLabel: item.creationLabel,
-                  updatedByLine: item.updatedByLine,
-                  eventReport: item.eventReport,
-                }
-              : usesExecutiveSummary
+        attributes: isResourceAtRisk
+          ? {
+              mapKey: item.mapKey,
+              title: item.title,
+              kind: item.kind,
+              status: item.status,
+              assetId: item.assetId,
+              updatedAt: item.updatedAt,
+              description: item.description,
+            }
+          : {
+              mapKey: item.mapKey,
+              title: item.title,
+              kind: item.kind,
+              status: item.status,
+              owner: 'owner' in item ? item.owner : '',
+              ...(isEvent
                 ? {
-                    executiveSummary: item.executiveSummary,
+                    creationLabel: item.creationLabel,
                     updatedByLine: item.updatedByLine,
+                    eventReport: item.eventReport,
                   }
-                : {
-                    timestamp: 'timestamp' in item ? item.timestamp : '',
-                    impact: 'impact' in item ? item.impact : '',
-                  }),
-        },
+                : usesExecutiveSummary
+                  ? {
+                      executiveSummary: item.executiveSummary,
+                      updatedByLine: item.updatedByLine,
+                    }
+                  : {
+                      timestamp: 'timestamp' in item ? item.timestamp : '',
+                      impact: 'impact' in item ? item.impact : '',
+                    }),
+            },
         popupTemplate: {
           title: '{title}',
           content: isResourceAtRisk
-            ? '<b>Type:</b> {kind}<br/><b>Status:</b> {status}<br/><b>Source:</b> {owner}<br/><b>Updated:</b> {updatedByLine}<br/><b>Report:</b> {report}'
+            ? '<b>Type:</b> {kind}<br/><b>Status:</b> {status}<br/><b>ID:</b> {assetId}<br/><b>Updated:</b> {updatedAt}<br/><b>Description:</b> {description}'
             : isEvent
               ? '<b>Type:</b> {kind}<br/><b>Status:</b> {status}<br/><b>Created:</b> {creationLabel}<br/><b>Updated:</b> {updatedByLine}<br/><b>Event Report:</b> {eventReport}'
               : usesExecutiveSummary
@@ -8816,7 +10036,60 @@ function App() {
 
       return { mapKey: `incident-${item.id}`, graphic }
     })
-    const allGraphics = [...pointGraphics, ...aorPolygonGraphics, ...rosterPolygonGraphics]
+    const incidentPolygonGraphics = incidentList.map((item) => {
+      const primaryCategory = getIncidentPrimaryCategory(item)
+      const [red, green, blue] = getIncidentCategoryRgb(primaryCategory)
+      const [longitude, latitude] = item.location
+      const lonOffset = 0.12
+      const latOffset = 0.09
+
+      const graphic = new Graphic({
+        geometry: {
+          type: 'polygon',
+          rings: [
+            [
+              [longitude - lonOffset, latitude - latOffset],
+              [longitude + lonOffset, latitude - latOffset],
+              [longitude + lonOffset, latitude + latOffset],
+              [longitude - lonOffset, latitude + latOffset],
+              [longitude - lonOffset, latitude - latOffset],
+            ],
+          ],
+        },
+        symbol: {
+          type: 'simple-fill',
+          color: getIncidentCategoryFillColor(primaryCategory),
+          outline: {
+            color: [red, green, blue, 0.95],
+            width: 2,
+          },
+        },
+        attributes: {
+          mapKey: `incident-list-${item.id}`,
+          title: item.name,
+          kind: 'Incident',
+          status: item.status,
+          category: item.category,
+          owner: item.lead,
+          region: item.region,
+          timestamp: item.lastUpdate,
+          summary: item.summary,
+        },
+        popupTemplate: {
+          title: '{title}',
+          content:
+            '<b>Type:</b> {kind}<br/><b>Category:</b> {category}<br/><b>Status:</b> {status}<br/><b>AOR:</b> {region}<br/><b>Lead:</b> {owner}<br/><b>Updated:</b> {timestamp}<br/><b>Summary:</b> {summary}',
+        },
+      })
+
+      return { mapKey: `incident-list-${item.id}`, graphic }
+    })
+    const allGraphics = [
+      ...pointGraphics,
+      ...aorPolygonGraphics,
+      ...rosterPolygonGraphics,
+      ...incidentPolygonGraphics,
+    ]
     mapGraphicsRef.current = new globalThis.Map(
       allGraphics.map((entry) => [entry.mapKey, entry.graphic])
     )
@@ -8828,22 +10101,24 @@ function App() {
 
     if (!mapViewRef.current) {
       const femaLayer = femaRegionsLayerRef.current
+      const sketchLayer = ics201SketchLayerRef.current
+      const baseLayers = femaLayer
+        ? [
+            femaLayer,
+            graphicsLayer,
+            ...analyticsCategoryLayers,
+            ...analyticsResolutionLayers,
+            drawLocationLayerRef.current,
+          ]
+        : [
+            graphicsLayer,
+            ...analyticsCategoryLayers,
+            ...analyticsResolutionLayers,
+            drawLocationLayerRef.current,
+          ]
       const map = new ArcGISMap({
         basemap: 'streets-navigation-vector',
-        layers: femaLayer
-          ? [
-              femaLayer,
-              graphicsLayer,
-              ...analyticsCategoryLayers,
-              ...analyticsResolutionLayers,
-              drawLocationLayerRef.current,
-            ]
-          : [
-              graphicsLayer,
-              ...analyticsCategoryLayers,
-              ...analyticsResolutionLayers,
-              drawLocationLayerRef.current,
-            ],
+        layers: sketchLayer ? [...baseLayers, sketchLayer] : baseLayers,
       })
 
       const view = new MapView({
@@ -8897,6 +10172,7 @@ function App() {
     eventList,
     femaAors,
     incidentBriefings,
+    incidentList,
     calendarItems,
     notifications,
     resources,
@@ -8906,6 +10182,14 @@ function App() {
 
   useEffect(() => {
     return () => {
+      if (ics201SketchViewModelRef.current) {
+        try {
+          ics201SketchViewModelRef.current.destroy()
+        } catch {
+          /* ignore */
+        }
+        ics201SketchViewModelRef.current = null
+      }
       mapViewRef.current?.destroy()
       mapViewRef.current = null
       mapGraphicsRef.current = new globalThis.Map()
@@ -8914,6 +10198,7 @@ function App() {
       femaRegionGraphicsRef.current = new globalThis.Map()
       drawLocationLayerRef.current = null
       drawLocationGraphicRef.current = null
+      ics201SketchLayerRef.current = null
       analyticsCategoryLayersRef.current = new globalThis.Map()
       analyticsResolutionLayersRef.current = new globalThis.Map()
       analyticsLayerZoomTargetRef.current = null
@@ -8921,6 +10206,136 @@ function App() {
       analyticsResolutionBulkZoomRecordsRef.current = null
     }
   }, [])
+
+  useEffect(() => {
+    const layer = ics201SketchLayerRef.current
+    if (!layer) {
+      return
+    }
+    if (isDrawingIcs201Polygon) {
+      return
+    }
+    layer.removeAll()
+    const vertices = ics201EditingMapSketch ? ics201MapSketchDraft : ics201Form.mapSketchPolygon
+    if (vertices.length < 3) {
+      return
+    }
+    const ring = vertices.map((vertex) => [vertex.longitude, vertex.latitude])
+    const first = ring[0]
+    const last = ring[ring.length - 1]
+    if (first[0] !== last[0] || first[1] !== last[1]) {
+      ring.push([first[0], first[1]])
+    }
+    layer.add(
+      new Graphic({
+        geometry: {
+          type: 'polygon',
+          rings: [ring],
+        },
+        symbol: {
+          type: 'simple-fill',
+          color: [37, 99, 235, 0.18],
+          outline: {
+            color: [37, 99, 235, 1],
+            width: 2,
+          },
+        },
+        attributes: {
+          mapKey: 'ics201-map-sketch',
+          kind: 'ICS-201 Map Sketch',
+        },
+      })
+    )
+  }, [ics201Form.mapSketchPolygon, ics201MapSketchDraft, ics201EditingMapSketch, isDrawingIcs201Polygon])
+
+  useEffect(() => {
+    ics201EditingMapSketchRef.current = ics201EditingMapSketch
+  }, [ics201EditingMapSketch])
+
+  useEffect(() => {
+    if (!isDrawingIcs201Polygon) {
+      return
+    }
+    const view = mapViewRef.current
+    const layer = ics201SketchLayerRef.current
+    if (!view || !layer) {
+      setIsDrawingIcs201Polygon(false)
+      return
+    }
+    let cancelled = false
+    let svm: SketchViewModel | null = null
+    const start = async () => {
+      try {
+        await view.when()
+      } catch {
+        return
+      }
+      if (cancelled) {
+        return
+      }
+      svm = new SketchViewModel({
+        view,
+        layer,
+      })
+      ics201SketchViewModelRef.current = svm
+      svm.on('create', (event) => {
+        if (event.state === 'cancel') {
+          setIsDrawingIcs201Polygon(false)
+          return
+        }
+        if (event.state !== 'complete' || !event.graphic?.geometry) {
+          return
+        }
+        const geometry = event.graphic.geometry
+        if (geometry.type !== 'polygon') {
+          return
+        }
+        const polygon = geometry as Polygon
+        const projected = polygon.spatialReference?.isWebMercator
+          ? (webMercatorUtils.webMercatorToGeographic(polygon) as Polygon)
+          : polygon
+        const sourceRing = projected.rings[0] ?? []
+        const trimmed =
+          sourceRing.length >= 2 &&
+          sourceRing[0][0] === sourceRing[sourceRing.length - 1][0] &&
+          sourceRing[0][1] === sourceRing[sourceRing.length - 1][1]
+            ? sourceRing.slice(0, -1)
+            : sourceRing
+        const nextVertices: Ics201MapSketchVertex[] = trimmed.map((point) => ({
+          longitude: Number((point[0] ?? 0).toFixed(6)),
+          latitude: Number((point[1] ?? 0).toFixed(6)),
+        }))
+        layer.remove(event.graphic)
+        if (ics201EditingMapSketchRef.current) {
+          setIcs201MapSketchDraft(nextVertices.map((vertex) => ({ ...vertex })))
+        } else {
+          updateIcs201Field('mapSketchPolygon', nextVertices)
+        }
+        setIsDrawingIcs201Polygon(false)
+      })
+      layer.removeAll()
+      svm.create('polygon')
+    }
+    void start()
+    return () => {
+      cancelled = true
+      if (svm) {
+        try {
+          svm.cancel()
+        } catch {
+          /* ignore */
+        }
+        try {
+          svm.destroy()
+        } catch {
+          /* ignore */
+        }
+      }
+      if (ics201SketchViewModelRef.current === svm) {
+        ics201SketchViewModelRef.current = null
+      }
+    }
+  }, [isDrawingIcs201Polygon])
 
   useEffect(() => {
     const shouldShowModalMap =
@@ -9278,8 +10693,9 @@ function App() {
     if (tab === 'notifications') return 'Notifications'
     if (tab === 'resources') return 'Assets'
     if (tab === 'aors') return 'Objectives & Actions'
-    if (tab === 'fema-regions') return 'BP Business Units'
+    if (tab === 'fema-regions') return 'USCG AORs'
     if (tab === 'incident-list') return 'Incidents'
+    if (tab === 'roster') return 'Roster'
     if (tab === 'exercises') return 'Exercises'
     if (tab === 'events') return 'Events'
     if (tab === 'analytics') return 'Analytics'
@@ -10075,6 +11491,14 @@ function App() {
   const getDerivedActionStatus = (item: AorItem) =>
     item.itemType === 'Action' ? (item.assignee ? 'Assigned' : 'Unassigned') : ''
   const cardFilteredIncidentList = incidentList.filter((item) => {
+    if (isSupabaseEnabled && !canAccessWorkspace('incident', item.id)) {
+      return false
+    }
+
+    if (!matchesIncidentCategoryFilters(item, incidentCategoryFilters)) {
+      return false
+    }
+
     if (
       incidentEventFilters.length > 0 &&
       !incidentEventFilters.some((eventId) => item.relatedEventIds.includes(eventId))
@@ -10089,6 +11513,7 @@ function App() {
     return [
       item.name,
       item.type,
+      item.category,
       item.status,
       item.severity,
       item.region,
@@ -10102,6 +11527,10 @@ function App() {
       .includes(activePanelSearchQuery)
   })
   const cardFilteredExerciseList = exerciseList.filter((item) => {
+    if (isSupabaseEnabled && !canAccessWorkspace('exercise', item.id)) {
+      return false
+    }
+
     if (!activePanelSearchQuery) {
       return true
     }
@@ -10156,6 +11585,180 @@ function App() {
   }, [incidentList, activeIncidentWorkspaceId])
   const isInExerciseWorkspace = activeExerciseWorkspace !== null
   const isInIncidentWorkspace = activeIncidentWorkspace !== null
+  const activeWorkspaceRosterKey =
+    activeIncidentWorkspace !== null
+      ? `incident-${activeIncidentWorkspace.id}`
+      : activeExerciseWorkspace !== null
+        ? `exercise-${activeExerciseWorkspace.id}`
+        : null
+  const activeWorkspaceRoster = isSupabaseEnabled
+    ? supabaseWorkspaceRoster
+    : activeWorkspaceRosterKey !== null
+      ? (localWorkspaceRostersByKey[activeWorkspaceRosterKey] ?? [])
+      : []
+  const activeWorkspaceRosterLabel =
+    activeIncidentWorkspace?.name ?? activeExerciseWorkspace?.name ?? 'Workspace'
+  const isValidRosterEmail = (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())
+  const resetAddRosterMemberDraft = () => {
+    setRosterMemberEmailDraft('')
+    setRosterMemberPositionDraft(ICS_ROSTER_POSITION_OPTIONS[0])
+  }
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadSupabaseRoster() {
+      if (!isSupabaseEnabled) {
+        setActiveWorkspaceSupabaseId(null)
+        setSupabaseWorkspaceRoster([])
+        return
+      }
+
+      const kind = activeIncidentWorkspace
+        ? ('incident' as const)
+        : activeExerciseWorkspace
+          ? ('exercise' as const)
+          : null
+      const legacyId = activeIncidentWorkspace?.id ?? activeExerciseWorkspace?.id ?? null
+
+      if (!kind || legacyId === null) {
+        setActiveWorkspaceSupabaseId(null)
+        setSupabaseWorkspaceRoster([])
+        return
+      }
+
+      setIsRosterLoading(true)
+      const workspaceId = await resolveWorkspaceId(kind, legacyId)
+      if (cancelled) return
+
+      setActiveWorkspaceSupabaseId(workspaceId)
+      if (!workspaceId) {
+        setSupabaseWorkspaceRoster([])
+        setIsRosterLoading(false)
+        return
+      }
+
+      const roster = await fetchWorkspaceRoster(workspaceId)
+      if (cancelled) return
+      setSupabaseWorkspaceRoster(roster)
+      setIsRosterLoading(false)
+    }
+
+    void loadSupabaseRoster()
+
+    return () => {
+      cancelled = true
+    }
+  }, [
+    isSupabaseEnabled,
+    activeIncidentWorkspace?.id,
+    activeExerciseWorkspace?.id,
+    isAddRosterMemberOpen,
+  ])
+  const addWorkspaceRosterMember = async () => {
+    if (activeWorkspaceRosterKey === null) return
+    const email = rosterMemberEmailDraft.trim().toLowerCase()
+    if (!isValidRosterEmail(email)) {
+      toast.error('Enter a valid email address.')
+      return
+    }
+    const position = rosterMemberPositionDraft.trim()
+    if (position.length === 0) {
+      toast.error('Select an ICS position.')
+      return
+    }
+    const existingMembers = activeWorkspaceRoster
+    if (existingMembers.some((member) => member.email === email)) {
+      toast.error('That email is already on the roster.')
+      return
+    }
+
+    if (isSupabaseEnabled) {
+      if (!activeWorkspaceSupabaseId) {
+        toast.error('This workspace is not synced to Supabase yet.')
+        return
+      }
+      setIsInvitingRosterMember(true)
+      const accessToken = await getAccessToken()
+      if (!accessToken) {
+        setIsInvitingRosterMember(false)
+        toast.error('Sign in again to invite roster members.')
+        return
+      }
+      const result = await inviteWorkspaceMember({
+        accessToken,
+        workspaceId: activeWorkspaceSupabaseId,
+        email,
+        icsPosition: position,
+      })
+      setIsInvitingRosterMember(false)
+      if (!result.ok) {
+        toast.error(result.message)
+        return
+      }
+      const roster = await fetchWorkspaceRoster(activeWorkspaceSupabaseId)
+      setSupabaseWorkspaceRoster(roster)
+      resetAddRosterMemberDraft()
+      setIsAddRosterMemberOpen(false)
+      toast.success(`Invitation sent to ${email} as ${position}.`)
+      return
+    }
+
+    const localMembers = localWorkspaceRostersByKey[activeWorkspaceRosterKey] ?? []
+    const nextMember: WorkspaceRosterMember = {
+      id: `local-${localMembers.length === 0 ? 1 : localMembers.length + 1}`,
+      email,
+      icsPosition: position,
+      status: 'active',
+      userId: null,
+      addedAt: new Date().toLocaleString([], {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+      }),
+    }
+    setLocalWorkspaceRostersByKey((previous) => ({
+      ...previous,
+      [activeWorkspaceRosterKey]: [...localMembers, nextMember],
+    }))
+    resetAddRosterMemberDraft()
+    setIsAddRosterMemberOpen(false)
+    toast.success(`Added ${email} as ${position}.`)
+  }
+  const removeWorkspaceRosterMember = async (memberId: string) => {
+    if (activeWorkspaceRosterKey === null) return
+
+    if (isSupabaseEnabled) {
+      const removed = await removeWorkspaceRosterMemberFromDb(memberId)
+      if (!removed) {
+        toast.error('Could not remove roster member.')
+        return
+      }
+      if (activeWorkspaceSupabaseId) {
+        const roster = await fetchWorkspaceRoster(activeWorkspaceSupabaseId)
+        setSupabaseWorkspaceRoster(roster)
+      }
+      toast.success('Roster member removed.')
+      return
+    }
+
+    setLocalWorkspaceRostersByKey((previous) => ({
+      ...previous,
+      [activeWorkspaceRosterKey]: (previous[activeWorkspaceRosterKey] ?? []).filter(
+        (member) => member.id !== memberId
+      ),
+    }))
+  }
+  const cardFilteredWorkspaceRoster = activeWorkspaceRoster.filter((member) => {
+    if (!activePanelSearchQuery) {
+      return true
+    }
+    return [member.email, member.icsPosition, member.status, member.addedAt]
+      .join(' ')
+      .toLowerCase()
+      .includes(activePanelSearchQuery)
+  })
   const activeNavigationDestination = useMemo(() => {
     if (isInExerciseWorkspace) return 'exercise-workspace' as const
     if (isInIncidentWorkspace) return 'incident-workspace' as const
@@ -10174,48 +11777,88 @@ function App() {
   }, [incidentList])
   const filteredIncidentWorkspaceOptions = useMemo(
     () =>
-      allIncidentsForWorkspace.filter((incident) =>
-        matchesWorkspaceNavSearch(incident, incidentWorkspaceNavQuery)
+      allIncidentsForWorkspace.filter(
+        (incident) =>
+          (!isSupabaseEnabled || canAccessWorkspace('incident', incident.id)) &&
+          matchesWorkspaceNavSearch(incident, incidentWorkspaceNavQuery)
       ),
-    [allIncidentsForWorkspace, incidentWorkspaceNavQuery]
+    [allIncidentsForWorkspace, incidentWorkspaceNavQuery, isSupabaseEnabled, canAccessWorkspace]
   )
   const filteredExerciseWorkspaceOptions = useMemo(
     () =>
       sortIncidentsBySeverity(
-        exerciseList.filter((exercise) => matchesWorkspaceNavSearch(exercise, exerciseWorkspaceNavQuery))
+        exerciseList.filter(
+          (exercise) =>
+            (!isSupabaseEnabled || canAccessWorkspace('exercise', exercise.id)) &&
+            matchesWorkspaceNavSearch(exercise, exerciseWorkspaceNavQuery)
+        )
       ),
-    [exerciseList, exerciseWorkspaceNavQuery]
+    [exerciseList, exerciseWorkspaceNavQuery, isSupabaseEnabled, canAccessWorkspace]
   )
   const enterIncidentWorkspace = (incident: IncidentListItem) => {
+    if (isSupabaseEnabled && !canAccessWorkspace('incident', incident.id)) {
+      toast.error('You are not on the roster for this incident workspace.')
+      return
+    }
     setActiveExerciseWorkspaceId(null)
     setActiveIncidentWorkspaceId(incident.id)
     setIsObjectivesOpen(true)
     setIsMapVisible(true)
     setActiveTab('sitreps')
-    setIcs201Form((previous) => ({
-      ...previous,
-      incidentName: incident.name,
-      currentSituationSummary: incident.summary,
-      preparedBy: incident.lead,
-      jurisdiction: incident.region,
-    }))
+    setIcs201Form(
+      cloneIcs201FormState({
+        ...INITIAL_ICS201_FORM,
+        incidentName: incident.name,
+        currentSituationSummary: incident.summary,
+        preparedBy: incident.lead,
+        jurisdiction: incident.region,
+      })
+    )
     liveIcs201FormRef.current = null
   }
   const enterExerciseWorkspace = (exercise: ExerciseListItem) => {
+    if (isSupabaseEnabled && !canAccessWorkspace('exercise', exercise.id)) {
+      toast.error('You are not on the roster for this exercise workspace.')
+      return
+    }
     setActiveIncidentWorkspaceId(null)
     setActiveExerciseWorkspaceId(exercise.id)
     setIsObjectivesOpen(true)
     setIsMapVisible(true)
     setActiveTab('briefing')
-    setIcs201Form((previous) => ({
-      ...previous,
-      incidentName: exercise.name,
-      currentSituationSummary: exercise.summary,
-      preparedBy: exercise.lead,
-      jurisdiction: exercise.region,
-    }))
+    setIcs201Form(
+      cloneIcs201FormState({
+        ...INITIAL_ICS201_FORM,
+        incidentName: exercise.name,
+        currentSituationSummary: exercise.summary,
+        preparedBy: exercise.lead,
+        jurisdiction: exercise.region,
+      })
+    )
     liveIcs201FormRef.current = null
   }
+  useEffect(() => {
+    if (!isSupabaseEnabled) return
+    if (
+      activeIncidentWorkspace &&
+      !canAccessWorkspace('incident', activeIncidentWorkspace.id)
+    ) {
+      setActiveIncidentWorkspaceId(null)
+      toast.error('You do not have access to this incident workspace.')
+    }
+    if (
+      activeExerciseWorkspace &&
+      !canAccessWorkspace('exercise', activeExerciseWorkspace.id)
+    ) {
+      setActiveExerciseWorkspaceId(null)
+      toast.error('You do not have access to this exercise workspace.')
+    }
+  }, [
+    isSupabaseEnabled,
+    activeIncidentWorkspace,
+    activeExerciseWorkspace,
+    canAccessWorkspace,
+  ])
   const navigateToHub = () => {
     setActiveIncidentWorkspaceId(null)
     setActiveExerciseWorkspaceId(null)
@@ -10281,7 +11924,7 @@ function App() {
     setCreateExerciseStep(0)
     setIncidentName(seed.incidentName)
     setIncidentCategory(seed.incidentCategory)
-    setIncidentWorkflow(seed.incidentWorkflow)
+    setIncidentWorkflow('ipieca-ims')
     setIncidentComplexity('tier-1')
     setIncidentTemplate(seed.incidentTemplate)
     setPreviewTemplateId(null)
@@ -12658,6 +14301,324 @@ function App() {
     if (!trimmedMessage) {
       return
     }
+    if (pratusAiIntent === 'ics201-section-generation' && pratusAiIcs201Section) {
+      const section = pratusAiIcs201Section
+      const sectionLabel = ICS201_SECTION_LABELS[section]
+      const enterSectionEdit = () => {
+        switch (section) {
+          case 'report-info':
+            setIcs201ReportInfoDraft({
+              incidentName: ics201Form.incidentName,
+              incidentLocation: ics201Form.incidentLocation,
+              dateInitiated: ics201Form.dateInitiated,
+              timeInitiated: ics201Form.timeInitiated,
+              preparedByName: ics201Form.preparedByName,
+              preparedByPositionTitle: ics201Form.preparedByPositionTitle,
+              preparedBySignature: ics201Form.preparedBySignature,
+              preparedDateTime: ics201Form.preparedDateTime,
+            })
+            setIcs201EditingReportInfo(true)
+            break
+          case 'incident-briefing':
+            setIcs201IncidentBriefingDraft({
+              incidentName: ics201Form.incidentName,
+              incidentNumber: ics201Form.incidentNumber,
+              preparedDateTime: ics201Form.preparedDateTime,
+              preparedBy: ics201Form.preparedBy,
+              operationalPeriodStart: ics201Form.operationalPeriodStart,
+              operationalPeriodEnd: ics201Form.operationalPeriodEnd,
+              jurisdiction: ics201Form.jurisdiction,
+            })
+            setIcs201EditingIncidentBriefing(true)
+            break
+          case 'map-sketch':
+            setIcs201MapSketchDraft(
+              ics201Form.mapSketchPolygon.map((vertex) => ({ ...vertex }))
+            )
+            setIcs201EditingMapSketch(true)
+            break
+          case 'current-situation':
+            setIcs201CurrentSituationDraft(ics201Form.currentSituationSummary)
+            setIcs201EditingCurrentSituation(true)
+            break
+          case 'objectives':
+            setIcs201ObjectivesDraft([...ics201Form.objectives])
+            setIcs201EditingObjectives(true)
+            break
+          case 'actions':
+            setIcs201ActionsDraft(ics201Form.actions.map((action) => ({ ...action })))
+            setIcs201EditingActions(true)
+            break
+          case 'org-chart':
+            setIcs201OrgChartDraft({ ...ics201Form.orgChart })
+            setIcs201EditingOrgChart(true)
+            break
+          case 'resources':
+            setIcs201ResourcesDraft(
+              ics201Form.resources.map((resource) => ({ ...resource }))
+            )
+            setIcs201EditingResources(true)
+            break
+          case 'safety-analysis':
+            setIcs201SafetyAnalysisDraft(
+              ics201Form.safetyAnalysis.map((row) => ({ ...row }))
+            )
+            setIcs201EditingSafetyAnalysis(true)
+            break
+          default:
+            break
+        }
+      }
+      enterSectionEdit()
+      setIsPratusAiDrawerOpen(false)
+      setPratusAiIntent('default')
+      setPratusAiIcs201Section(null)
+      setPratusAiDraftMessage('')
+      setIsPratusAiLoading(true)
+      if (pratusAiLoadingTimerRef.current) {
+        window.clearTimeout(pratusAiLoadingTimerRef.current)
+        pratusAiLoadingTimerRef.current = null
+      }
+      pratusAiLoadingTimerRef.current = window.setTimeout(() => {
+        const incidentName = ics201Form.incidentName || 'this incident'
+        const opStart =
+          ics201Form.operationalPeriodStart.replace('T', ' ') || 'current op period'
+        switch (section) {
+          case 'report-info':
+            setIcs201ReportInfoDraft({
+              incidentName: ics201Form.incidentName || 'Tall Ships New Orleans 250',
+              incidentLocation:
+                ics201Form.incidentLocation ||
+                'Lower Mississippi River, New Orleans, LA',
+              dateInitiated:
+                ics201Form.dateInitiated || new Date().toISOString().slice(0, 10),
+              timeInitiated: ics201Form.timeInitiated || '08:00',
+              preparedByName:
+                ics201Form.preparedByName || 'You (autogenerated by PRATUS AI)',
+              preparedByPositionTitle:
+                ics201Form.preparedByPositionTitle || 'Planning Section Chief',
+              preparedBySignature:
+                ics201Form.preparedBySignature || ics201Form.preparedByName || 'You',
+              preparedDateTime:
+                ics201Form.preparedDateTime ||
+                `${new Date().toISOString().slice(0, 10)} 08:00`,
+            })
+            break
+          case 'incident-briefing':
+            setIcs201IncidentBriefingDraft({
+              incidentName: ics201Form.incidentName || 'Tall Ships New Orleans 250',
+              incidentNumber: ics201Form.incidentNumber || 'IM-2026-0427',
+              preparedDateTime:
+                ics201Form.preparedDateTime ||
+                `${new Date().toISOString().slice(0, 10)} 08:00`,
+              preparedBy:
+                ics201Form.preparedBy ||
+                'Planning Section Chief You (autogenerated by PRATUS AI)',
+              operationalPeriodStart:
+                ics201Form.operationalPeriodStart || '2026-05-27T08:00',
+              operationalPeriodEnd:
+                ics201Form.operationalPeriodEnd || '2026-05-27T20:00',
+              jurisdiction:
+                ics201Form.jurisdiction ||
+                'USCG Sector New Orleans · LSP · NOPD · NOFD · Port of New Orleans',
+            })
+            break
+          case 'map-sketch': {
+            const center = ics201Form.mapSketchPolygon[0] ?? {
+              longitude: -90.0715,
+              latitude: 29.9511,
+            }
+            const baseLon = center.longitude
+            const baseLat = center.latitude
+            const radiusLon = 0.04
+            const radiusLat = 0.03
+            const vertexCount = 6
+            const vertices = Array.from({ length: vertexCount }, (_, index) => {
+              const angle = (index / vertexCount) * 2 * Math.PI
+              return {
+                longitude: Number((baseLon + radiusLon * Math.cos(angle)).toFixed(6)),
+                latitude: Number((baseLat + radiusLat * Math.sin(angle)).toFixed(6)),
+              }
+            })
+            setIcs201MapSketchDraft(vertices)
+            break
+          }
+          case 'current-situation': {
+            const generated =
+              `Operations across ${incidentName} remain in a stable, GREEN posture for the ` +
+              `${opStart} operational period. Life-safety patrols, perimeter security, and ` +
+              'critical-infrastructure monitoring are in steady state. Interagency coordination ' +
+              'with state, local, and federal partners continues at the planned tempo. ' +
+              'Weather is favorable with no METOC-driven changes to the operational plan. ' +
+              'No outstanding congressional inquiries; PIO is coordinating routine media engagement. ' +
+              'Logistics throughput, crew rest, and resource availability are tracked against the ' +
+              'next operational period.'
+            const clipped = ics201EnforcesCharLimit
+              ? generated.slice(0, ICS201_STRICT_CHAR_LIMIT)
+              : generated
+            setIcs201CurrentSituationDraft(clipped)
+            break
+          }
+          case 'objectives': {
+            const candidates = [
+              'Preserve life safety for responders, participants, and the public throughout the operational period.',
+              'Maintain perimeter security and enforce all standing security zones in accordance with current MSIB guidance.',
+              'Coordinate with interagency partners (USCG, LE, EMS, port operations) to sustain a unified command posture.',
+              'Protect critical infrastructure and the marine transportation system from disruption.',
+              'Sustain continuity of operations, including crew rest, logistics, and communications readiness for the next op period.',
+            ]
+            if (ics201EnforcesCharLimit) {
+              const selected: string[] = []
+              let total = 0
+              for (const candidate of candidates) {
+                if (total + candidate.length > ICS201_STRICT_CHAR_LIMIT) break
+                selected.push(candidate)
+                total += candidate.length
+              }
+              setIcs201ObjectivesDraft(selected.length > 0 ? selected : [candidates[0]])
+            } else {
+              setIcs201ObjectivesDraft(candidates)
+            }
+            break
+          }
+          case 'actions': {
+            const baseTimestamp = `${new Date().toISOString().slice(0, 10)}`
+            const generated: Ics201ActionRow[] = [
+              {
+                id: 1,
+                task: 'Conduct perimeter sweep across Divisions A and B.',
+                owner: 'Operations Section Chief',
+                startTime: `${baseTimestamp} 08:00`,
+                endTime: `${baseTimestamp} 12:00`,
+                status: 'In Progress',
+              },
+              {
+                id: 2,
+                task: 'Coordinate mutual-aid relief crews and confirm staging at Base Camp.',
+                owner: 'Logistics Section Chief',
+                startTime: `${baseTimestamp} 09:00`,
+                endTime: `${baseTimestamp} 11:30`,
+                status: 'Planned',
+              },
+              {
+                id: 3,
+                task: 'Publish updated SITREP and distribute to interagency partners.',
+                owner: 'Planning Section Chief',
+                startTime: `${baseTimestamp} 13:00`,
+                endTime: `${baseTimestamp} 14:00`,
+                status: 'Planned',
+              },
+              {
+                id: 4,
+                task: 'Brief next operational period assignments at the planning meeting.',
+                owner: 'Incident Commander',
+                startTime: `${baseTimestamp} 16:00`,
+                endTime: `${baseTimestamp} 17:00`,
+                status: 'Planned',
+              },
+            ]
+            setIcs201ActionsDraft(generated)
+            break
+          }
+          case 'org-chart':
+            setIcs201OrgChartDraft({
+              incidentCommander:
+                ics201Form.orgChart.incidentCommander || 'CDR M. Alvarez (USCG)',
+              operationsSectionChief:
+                ics201Form.orgChart.operationsSectionChief || 'LCDR R. Patel',
+              planningSectionChief:
+                ics201Form.orgChart.planningSectionChief || 'Maya Chen',
+              logisticsSectionChief:
+                ics201Form.orgChart.logisticsSectionChief || 'Diego Alvarez',
+              financeSectionChief:
+                ics201Form.orgChart.financeSectionChief || 'LT J. Nguyen',
+              publicInformationOfficer:
+                ics201Form.orgChart.publicInformationOfficer || 'LT K. Simmons',
+              safetyOfficer:
+                ics201Form.orgChart.safetyOfficer || 'CWO T. Hale',
+              liaisonOfficer:
+                ics201Form.orgChart.liaisonOfficer || 'CWO S. Brooks',
+            })
+            break
+          case 'resources': {
+            const generated: Ics201ResourceSummaryRow[] = [
+              {
+                id: 1,
+                category: 'Operations',
+                identifier: 'Urban Search Team Alpha',
+                quantity: '1',
+                status: 'Assigned',
+                assignment: 'Division A — Perimeter sweep',
+              },
+              {
+                id: 2,
+                category: 'Logistics',
+                identifier: 'Mobile Command Unit',
+                quantity: '1',
+                status: 'Staged',
+                assignment: 'Central Staging — Comms relay',
+              },
+              {
+                id: 3,
+                category: 'Medical',
+                identifier: 'Medical Strike Team',
+                quantity: '1',
+                status: 'Assigned',
+                assignment: 'Hot Zone Entry Point 2',
+              },
+              {
+                id: 4,
+                category: 'Aviation',
+                identifier: 'Helicopter — Type II',
+                quantity: '1',
+                status: 'Available',
+                assignment: 'Helibase 1 — Recon / bucket support',
+              },
+            ]
+            setIcs201ResourcesDraft(generated)
+            break
+          }
+          case 'safety-analysis': {
+            const generated: Ics201SafetyRow[] = [
+              {
+                id: 1,
+                hazard: 'Heat stress during extended outdoor operations.',
+                mitigation:
+                  'Enforce work/rest cycles; pre-stage water and shade at staging areas.',
+                ppe: 'Hi-vis vests, sun-protective uniforms, hydration packs.',
+                medicalPlan: 'EMS staged at Base Camp; nearest hospital coordinated.',
+              },
+              {
+                id: 2,
+                hazard: 'Vessel traffic interaction within enforced security zone.',
+                mitigation:
+                  'Maintain 500-yard standoff; coordinate with VTS for transit windows.',
+                ppe: 'PFDs, marine VHF radios, AIS-equipped small boats.',
+                medicalPlan: 'USCG Sector duty corpsman on call; medevac via local EMS.',
+              },
+              {
+                id: 3,
+                hazard: 'Crowd density and pedestrian movement near event venues.',
+                mitigation:
+                  'Coordinate with LE for crowd flow; establish cordon and signage.',
+                ppe: 'Hi-vis vests, body-cams (LE), comms earpieces.',
+                medicalPlan: 'Mobile aid stations at venue ingress/egress points.',
+              },
+            ]
+            setIcs201SafetyAnalysisDraft(generated)
+            break
+          }
+          default:
+            break
+        }
+        setIsPratusAiLoading(false)
+        pratusAiLoadingTimerRef.current = null
+        toast.success(
+          `PRATUS AI drafted ${sectionLabel}. Review and click Save to commit a new version.`
+        )
+      }, 1400)
+      return
+    }
     if (pratusAiIntent === 'ics201-generation') {
       const selected = pratusAiSelectedFiles
         .map((key) => {
@@ -12875,6 +14836,21 @@ function App() {
       ...previous,
       [field]: value,
     }))
+  }
+  const saveIcs201Section = (nextForm: Ics201FormState) => {
+    const savedForm = cloneIcs201FormState(nextForm)
+    setIcs201Form(savedForm)
+    setIcs201Versions((previous) => {
+      const newVersion: Ics201Version = {
+        id: `${Date.now()}-draft-${Math.random().toString(36).slice(2, 8)}`,
+        createdAt: Date.now(),
+        authorName: 'You',
+        authorColor: '#16a34a',
+        snapshot: cloneIcs201FormState(savedForm),
+        signatures: [],
+      }
+      return [...previous, newVersion].slice(-100)
+    })
   }
   const updateIcs201Objective = (index: number, value: string) => {
     setIcs201Form((previous) => ({
@@ -13480,7 +15456,7 @@ function App() {
                 ? `Exercise ${activeExerciseWorkspace.name}`
                 : isInIncidentWorkspace && activeIncidentWorkspace
                   ? activeIncidentWorkspace.name
-                  : 'British Petroleum'}
+                  : 'United States Coast Guard'}
             </span>
           </div>
           <div className="flex items-start gap-2">
@@ -13774,16 +15750,16 @@ function App() {
                           variant={isGlassMode ? 'outline' : activeTab === 'fema-regions' ? 'default' : 'outline'}
                           className={selectedGlassTabClasses(activeTab === 'fema-regions')}
                           onClick={() => setActiveTab('fema-regions')}
-                          aria-label="Open BP Business Units tab"
+                          aria-label="Open USCG AORs tab"
                           data-pratus-context-id="tab:fema-regions"
-                          data-pratus-context-label="BP Business Units"
+                          data-pratus-context-label="USCG AORs"
                         >
                           <MapPin className="h-4 w-4" />
                         </Button>
                       </TooltipTrigger>
-                      <TooltipContent side="bottom" sideOffset={6}>BP Business Units</TooltipContent>
+                      <TooltipContent side="bottom" sideOffset={6}>USCG AORs</TooltipContent>
                     </Tooltip>
-                    {!isInExerciseWorkspace && (
+                    {!isInExerciseWorkspace && !isInIncidentWorkspace && (
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <Button
@@ -13800,6 +15776,25 @@ function App() {
                           </Button>
                         </TooltipTrigger>
                         <TooltipContent side="bottom" sideOffset={6}>Incidents</TooltipContent>
+                      </Tooltip>
+                    )}
+                    {(isInIncidentWorkspace || isInExerciseWorkspace) && (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            type="button"
+                            size="icon"
+                            variant={isGlassMode ? 'outline' : activeTab === 'roster' ? 'default' : 'outline'}
+                            className={selectedGlassTabClasses(activeTab === 'roster')}
+                            onClick={() => setActiveTab('roster')}
+                            aria-label="Open Roster tab"
+                            data-pratus-context-id="tab:roster"
+                            data-pratus-context-label="Roster"
+                          >
+                            <Users className="h-4 w-4" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom" sideOffset={6}>Roster</TooltipContent>
                       </Tooltip>
                     )}
                     {!isInIncidentWorkspace && !isInExerciseWorkspace && (
@@ -13857,7 +15852,7 @@ function App() {
                       </TooltipTrigger>
                       <TooltipContent side="bottom" sideOffset={6}>Analytics</TooltipContent>
                     </Tooltip>
-                    {isInExerciseWorkspace && (
+                    {(isInIncidentWorkspace || isInExerciseWorkspace) && (
                       <>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
@@ -14162,6 +16157,23 @@ function App() {
                       <DropdownMenuItem onClick={() => setPanelWidthMode('one-third')}>
                         Panel width: 1/3
                       </DropdownMenuItem>
+                      {isSupabaseEnabled && profileEmail && (
+                        <>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuLabel className="truncate text-xs font-normal text-muted-foreground">
+                            {profileEmail}
+                            {isOrgAdmin ? ' · Org admin' : ''}
+                          </DropdownMenuLabel>
+                          <DropdownMenuItem
+                            onClick={() => {
+                              void signOut()
+                            }}
+                          >
+                            <LogOut className="mr-2 h-4 w-4" />
+                            Sign out
+                          </DropdownMenuItem>
+                        </>
+                      )}
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </div>
@@ -14199,6 +16211,7 @@ function App() {
                   (activeTab === 'aors' ||
                     activeTab === 'form-ICS-233' ||
                     activeTab === 'incident-list' ||
+                    activeTab === 'roster' ||
                     activeTab === 'exercises' ||
                     activeTab === 'events' ||
                     isEventsSettingsOpen ||
@@ -14230,8 +16243,9 @@ function App() {
                   {activeTab === 'resources' &&
                     (resourcesPanelView === 'resource-requests' ? 'Asset Requests' : 'Assets')}
                   {activeTab === 'aors' && 'Objectives & Actions'}
-                  {activeTab === 'fema-regions' && 'BP Business Units'}
+                  {activeTab === 'fema-regions' && 'USCG AORs'}
                   {activeTab === 'incident-list' && 'Incidents'}
+                  {activeTab === 'roster' && 'Roster'}
                   {activeTab === 'exercises' && 'Exercises'}
                   {activeTab === 'events' &&
                     (isEventsSettingsOpen ? (
@@ -14499,8 +16513,45 @@ function App() {
                     </Button>
                   </div>
                 )}
-                {activeTab === 'incident-list' && (
+                {activeTab === 'incident-list' && !isInIncidentWorkspace && !isInExerciseWorkspace && (
                   <div className="flex flex-wrap items-center justify-end gap-2">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button type="button" size="sm" variant="outline">
+                          <span className="max-w-[12rem] truncate">
+                            {incidentCategoryFilters.length > 0
+                              ? `Category: ${incidentCategoryFilters.length} selected`
+                              : 'Category: All'}
+                          </span>
+                          <ChevronDown className="ml-1 h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="max-h-72 overflow-y-auto">
+                        {INCIDENT_CATEGORY_OPTIONS.map((category) => (
+                          <DropdownMenuItem
+                            key={category}
+                            className="pr-2"
+                            onSelect={(selectEvent) => {
+                              selectEvent.preventDefault()
+                              setIncidentCategoryFilters((previous) =>
+                                previous.includes(category)
+                                  ? previous.filter((entry) => entry !== category)
+                                  : [...previous, category]
+                              )
+                            }}
+                          >
+                            <div className="flex items-center gap-2">
+                              <Checkbox
+                                checked={incidentCategoryFilters.includes(category)}
+                                className="pointer-events-none"
+                                aria-hidden="true"
+                              />
+                              <span>{category}</span>
+                            </div>
+                          </DropdownMenuItem>
+                        ))}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button type="button" size="sm" variant="outline">
@@ -14558,6 +16609,18 @@ function App() {
                       + Create Incident
                     </Button>
                   </div>
+                )}
+                {activeTab === 'roster' && (isInIncidentWorkspace || isInExerciseWorkspace) && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => {
+                      resetAddRosterMemberDraft()
+                      setIsAddRosterMemberOpen(true)
+                    }}
+                  >
+                    + Add Member
+                  </Button>
                 )}
                 {activeTab === 'exercises' && (
                   <Button
@@ -14640,8 +16703,8 @@ function App() {
                         <Button type="button" size="sm" variant="outline">
                           <span className="max-w-[12rem] truncate">
                             {eventBusinessUnitFilters.length > 0
-                              ? `BP Business Units: ${eventBusinessUnitFilters.length} selected`
-                              : 'BP Business Unit: All'}
+                              ? `USCG AORs: ${eventBusinessUnitFilters.length} selected`
+                              : 'USCG AOR: All'}
                           </span>
                           <ChevronDown className="ml-1 h-4 w-4" />
                         </Button>
@@ -14704,30 +16767,145 @@ function App() {
                     </DropdownMenu>
                   </div>
                 )}
-                {activeTab === 'briefing' && isInExerciseWorkspace && (
-                  <Button
-                    type="button"
-                    size="icon"
-                    variant="ghost"
-                    className="h-8 w-8"
-                    aria-label="Export ICS-201 as Word document"
-                    title="Export ICS-201 as Word document"
-                    onClick={() => {
-                      const safeIncident =
-                        ics201Form.incidentName.trim().replace(/[^a-zA-Z0-9-_]+/g, '_') ||
-                        'Exercise'
-                      const stamp = new Date()
-                        .toISOString()
-                        .slice(0, 16)
-                        .replace(/[:T]/g, '-')
-                      downloadDocx(
-                        `ICS-201_${safeIncident}_${stamp}.docx`,
-                        buildIcs201DocxBlocks(ics201Form)
-                      )
-                    }}
-                  >
-                    <DownloadIcon className="h-4 w-4" />
-                  </Button>
+                {activeTab === 'briefing' && (isInIncidentWorkspace || isInExerciseWorkspace) && (
+                  <div className="flex items-center gap-2">
+                    <TooltipProvider delayDuration={150}>
+                      <div className="flex items-center gap-1 rounded-md border bg-background/70 p-0.5">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant={ics201StructureMode === 'flexible' ? 'default' : 'ghost'}
+                          className="h-6 px-2 text-[11px]"
+                          onClick={() => setIcs201StructureMode('flexible')}
+                        >
+                          Flexible
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant={ics201StructureMode === 'paginated' ? 'default' : 'ghost'}
+                          className="h-6 px-2 text-[11px]"
+                          onClick={() => setIcs201StructureMode('paginated')}
+                        >
+                          Paginated
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant={ics201StructureMode === 'strict' ? 'default' : 'ghost'}
+                          className="h-6 px-2 text-[11px]"
+                          onClick={() => setIcs201StructureMode('strict')}
+                        >
+                          Strict
+                        </Button>
+                      </div>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            type="button"
+                            size="icon"
+                            variant="ghost"
+                            className="h-7 w-7 text-muted-foreground"
+                            aria-label="About Flexible, Paginated, and Strict Structure"
+                          >
+                            <Info className="h-4 w-4" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent
+                          side="bottom"
+                          className="!max-w-[25rem] flex-col items-start text-left text-xs"
+                        >
+                          <p>
+                            <span className="font-semibold">Flexible Structure</span> removes
+                            character limits on sections and expands the height of the exported
+                            document. Some regulators may not accept the exported document because
+                            the height of sections has been altered.
+                          </p>
+                          <p className="mt-1.5">
+                            <span className="font-semibold">Paginated Structure</span> removes
+                            character limits while exporting the official ICS-201 PDF. When a
+                            section exceeds {ICS201_PAGE_CHAR_LIMIT.toLocaleString()} characters,
+                            the page containing that section is duplicated and overflow continues
+                            in the same section on the next page.
+                          </p>
+                          <p className="mt-1.5">
+                            <span className="font-semibold">Strict Structure</span> enforces a{' '}
+                            {ICS201_STRICT_CHAR_LIMIT.toLocaleString()}-character limit on the
+                            Current Situation and Objectives sections so the export matches the
+                            standard form layout.
+                          </p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="ghost"
+                          className="h-8 w-8"
+                          aria-label="Export ICS-201"
+                          title="Export ICS-201"
+                        >
+                          <DownloadIcon className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-48">
+                        <DropdownMenuLabel>Export ICS-201</DropdownMenuLabel>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          onSelect={() => {
+                            setIcs201PreviewBlocks(buildIcs201DocxBlocks(ics201Form))
+                            setIcs201PreviewTitle(
+                              `ICS-201 Preview — ${ics201Form.incidentName.trim() || 'Incident'}`
+                            )
+                            setIsIcs201PreviewOpen(true)
+                          }}
+                        >
+                          <Eye className="mr-2 h-4 w-4" />
+                          Preview
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          onSelect={() => {
+                            const safeIncident =
+                              ics201Form.incidentName.trim().replace(/[^a-zA-Z0-9-_]+/g, '_') ||
+                              'Incident'
+                            const stamp = new Date()
+                              .toISOString()
+                              .slice(0, 16)
+                              .replace(/[:T]/g, '-')
+                            downloadDocx(
+                              `ICS-201_${safeIncident}_${stamp}.docx`,
+                              buildIcs201DocxBlocks(ics201Form),
+                              buildIcs201ExportOptions(ics201Form)
+                            )
+                          }}
+                        >
+                          <FileText className="mr-2 h-4 w-4" />
+                          Word (.docx)
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onSelect={() => {
+                            const safeIncident =
+                              ics201Form.incidentName.trim().replace(/[^a-zA-Z0-9-_]+/g, '_') ||
+                              'Incident'
+                            const stamp = new Date()
+                              .toISOString()
+                              .slice(0, 16)
+                              .replace(/[:T]/g, '-')
+                            exportIcs201Pdf(
+                              `ICS-201_${safeIncident}_${stamp}.pdf`,
+                              ics201Form
+                            )
+                          }}
+                        >
+                          <FileText className="mr-2 h-4 w-4" />
+                          PDF (.pdf)
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
                 )}
               </CardHeader>
               <CardContent className="min-h-0 flex-1 space-y-2 overflow-y-auto [scrollbar-gutter:stable]">
@@ -14778,15 +16956,11 @@ function App() {
                             <ItemContent>
                               <ItemTitle>{item.title}</ItemTitle>
                               <ItemDescription>
-                                {item.regionalThreats ? (
-                                  <>
-                                    <span className="font-medium">Source:</span> {item.owner}
-                                    <span className="mx-1.5 opacity-50">·</span>
-                                    {item.timestamp}
-                                  </>
-                                ) : (
-                                  item.summary
-                                )}
+                                <>
+                                  <span className="font-medium">Source:</span> {item.owner}
+                                  <span className="mx-1.5 opacity-50">·</span>
+                                  {item.timestamp}
+                                </>
                               </ItemDescription>
                             </ItemContent>
                             <ItemActions>
@@ -14960,16 +17134,19 @@ function App() {
                                               <div className="space-y-1 border-t px-2.5 py-2 text-sm text-muted-foreground">
                                                 <p>
                                                   <span className="font-medium text-foreground">
-                                                    Updated:
+                                                    ID:
                                                   </span>{' '}
-                                                  {formatResourceAtRiskUpdatedLine(
-                                                    item.timestamp,
-                                                    item.owner
-                                                  )}
+                                                  {threat.id}
                                                 </p>
                                                 <p>
                                                   <span className="font-medium text-foreground">
-                                                    Report:
+                                                    Updated:
+                                                  </span>{' '}
+                                                  {item.timestamp}
+                                                </p>
+                                                <p>
+                                                  <span className="font-medium text-foreground">
+                                                    Description:
                                                   </span>{' '}
                                                   {threat.risk}
                                                 </p>
@@ -16993,7 +19170,7 @@ function App() {
                   cardFilteredFemaAors.length === 0 ? (
                     <Item variant="outline" className={glassItemBorderClasses}>
                       <ItemContent>
-                        <ItemTitle>No matching BP Business Units</ItemTitle>
+                        <ItemTitle>No matching USCG AORs</ItemTitle>
                         <ItemDescription>Try a broader search term.</ItemDescription>
                       </ItemContent>
                     </Item>
@@ -17100,12 +19277,119 @@ function App() {
                   )
                 )}
 
-                {activeTab === 'incident-list' && (
+                {activeTab === 'roster' && (isInIncidentWorkspace || isInExerciseWorkspace) && (
+                  isRosterLoading ? (
+                    <Item variant="outline" className={glassItemBorderClasses}>
+                      <ItemContent>
+                        <ItemTitle>Loading roster…</ItemTitle>
+                        <ItemDescription>Fetching workspace members from Supabase.</ItemDescription>
+                      </ItemContent>
+                    </Item>
+                  ) : cardFilteredWorkspaceRoster.length === 0 ? (
+                    <Item variant="outline" className={glassItemBorderClasses}>
+                      <ItemContent>
+                        <ItemTitle>No roster members yet</ItemTitle>
+                        <ItemDescription>
+                          Add team members by email and assign an ICS position for{' '}
+                          {activeWorkspaceRosterLabel}.
+                        </ItemDescription>
+                      </ItemContent>
+                    </Item>
+                  ) : (
+                    <div className="space-y-2 pt-px">
+                      {cardFilteredWorkspaceRoster.map((member) => {
+                        const key = `roster-${activeWorkspaceRosterKey}-${member.id}`
+                        const isOpen = expandedItemId === key
+                        return (
+                          <Item
+                            key={member.id}
+                            variant="outline"
+                            className={cn(
+                              'flex-col items-stretch p-0',
+                              glassItemBorderClasses,
+                              selectedPanelItemId === key && 'ring-2 ring-primary/60 bg-primary/5'
+                            )}
+                          >
+                            <Collapsible
+                              open={isOpen}
+                              onOpenChange={(open) => setExpandedItemId(open ? key : null)}
+                            >
+                              <div
+                                className="flex cursor-pointer items-center gap-2 px-3 py-2.5"
+                                onClick={() => toggleExpandedItem(key)}
+                              >
+                                <ItemContent>
+                                  <ItemTitle>{member.email}</ItemTitle>
+                                  <ItemDescription>{member.icsPosition}</ItemDescription>
+                                </ItemContent>
+                                <ItemActions>
+                                  <Badge variant="secondary">{member.icsPosition}</Badge>
+                                  {isSupabaseEnabled && (
+                                    <Badge
+                                      variant={member.status === 'active' ? 'default' : 'outline'}
+                                    >
+                                      {member.status === 'active' ? 'Active' : 'Invited'}
+                                    </Badge>
+                                  )}
+                                  <CollapsibleTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      aria-label="Toggle roster member details"
+                                      onClick={(event) => event.stopPropagation()}
+                                    >
+                                      <ChevronDown
+                                        className={cn(
+                                          'h-4 w-4 transition-transform',
+                                          isOpen && 'rotate-180'
+                                        )}
+                                      />
+                                    </Button>
+                                  </CollapsibleTrigger>
+                                </ItemActions>
+                              </div>
+                              <CollapsibleContent>
+                                <div className="border-t px-3 py-2 text-sm">
+                                  <div className="grid grid-cols-2 gap-2">
+                                    <p>
+                                      <span className="font-medium">Email:</span> {member.email}
+                                    </p>
+                                    <p>
+                                      <span className="font-medium">ICS Position:</span>{' '}
+                                      {member.icsPosition}
+                                    </p>
+                                  </div>
+                                  <p className="mt-2">
+                                    <span className="font-medium">Added:</span> {member.addedAt}
+                                  </p>
+                                  <div className="mt-3 flex justify-end">
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      variant="outline"
+                                      className="h-7 gap-1 text-xs text-destructive hover:text-destructive"
+                                      onClick={() => removeWorkspaceRosterMember(member.id)}
+                                    >
+                                      <Trash2 className="h-3.5 w-3.5" />
+                                      Remove
+                                    </Button>
+                                  </div>
+                                </div>
+                              </CollapsibleContent>
+                            </Collapsible>
+                          </Item>
+                        )
+                      })}
+                    </div>
+                  )
+                )}
+
+                {activeTab === 'incident-list' && !isInIncidentWorkspace && !isInExerciseWorkspace && (
                   cardFilteredIncidentList.length === 0 ? (
                     <Item variant="outline" className={glassItemBorderClasses}>
                       <ItemContent>
                         <ItemTitle>No matching incidents</ItemTitle>
-                        <ItemDescription>Try a broader search term.</ItemDescription>
+                        <ItemDescription>Try a broader search term or adjust your filters.</ItemDescription>
                       </ItemContent>
                     </Item>
                   ) : (
@@ -17133,12 +19417,10 @@ function App() {
                             >
                               <ItemContent>
                                 <ItemTitle>{incident.name}</ItemTitle>
-                                <ItemDescription>
-                                  {incident.type} · {incident.region}
-                                </ItemDescription>
+                                <ItemDescription>{incident.region}</ItemDescription>
                               </ItemContent>
                               <ItemActions>
-                                <Badge variant="secondary">{incident.severity}</Badge>
+                                {renderIncidentCategoryBadge(incident.category)}
                                 <Button
                                   type="button"
                                   size="sm"
@@ -18252,291 +20534,2133 @@ function App() {
                   </div>
                 )}
 
-                {activeTab === 'briefing' && isInExerciseWorkspace && (
+                {activeTab === 'briefing' && (isInIncidentWorkspace || isInExerciseWorkspace) && (
                   <div className="space-y-3">
-                    <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border px-3 py-2">
-                      <div>
-                        <p className="text-sm font-medium">ICS-201 Incident Briefing</p>
-                        <p className="text-xs text-muted-foreground">
-                          Exercise workspace for {activeExerciseWorkspace?.name}
-                        </p>
+                    {ics201GeneratingFromFile && (
+                      <div className="flex items-center gap-2 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-800 dark:border-blue-800/60 dark:bg-blue-500/10 dark:text-blue-200">
+                        <img
+                          src={pratusLogo}
+                          alt="Pratus logo"
+                          className="h-[1em] w-auto animate-pulse object-contain"
+                        />
+                        <span>
+                          Pratus AI is generating an ICS-201 draft from{' '}
+                          <span className="font-semibold">{ics201GeneratingFromFile}</span>…
+                        </span>
+                        <div className="ml-2 flex flex-1 flex-col gap-1.5">
+                          {[12, 10, 8].map((width, index) => (
+                            <div
+                              key={index}
+                              className={cn(
+                                'h-1.5 rounded bg-blue-200/80 dark:bg-blue-700/60 animate-pulse',
+                                width === 12 ? 'w-full' : width === 10 ? 'w-10/12' : 'w-8/12'
+                              )}
+                              style={{ animationDelay: `${index * 120}ms` }}
+                            />
+                          ))}
+                        </div>
                       </div>
-                      <div className="flex flex-wrap items-center gap-2">
+                    )}
+                    <div className="sticky top-0 z-10 -mx-2 space-y-3 bg-card px-2 pb-2 pt-1">
+                    {viewingIcs201Version && (
+                      <div className="flex items-center justify-between rounded-md border border-amber-400 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-500 dark:bg-amber-500/10 dark:text-amber-200">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <History className="h-3.5 w-3.5" />
+                          <span>
+                            You are viewing a past version from{' '}
+                            <span className="font-semibold">
+                              {new Date(viewingIcs201Version.createdAt).toLocaleTimeString([], {
+                                hour: '2-digit',
+                                minute: '2-digit',
+                                second: '2-digit',
+                              })}
+                            </span>{' '}
+                            last edited by{' '}
+                            <span
+                              className="rounded px-1.5 py-0.5 text-[10px] font-semibold text-white"
+                              style={{ backgroundColor: viewingIcs201Version.authorColor }}
+                            >
+                              {viewingIcs201Version.authorName}
+                            </span>
+                            .
+                          </span>
+                          {(() => {
+                            const liveSignatures =
+                              ics201Versions.find((entry) => entry.id === viewingIcs201Version.id)
+                                ?.signatures ?? viewingIcs201Version.signatures
+                            if (liveSignatures.length === 0) {
+                              return null
+                            }
+                            return (
+                              <span
+                                className="flex items-center gap-1 rounded-full border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-800 dark:border-emerald-500/50 dark:bg-emerald-500/10 dark:text-emerald-300"
+                                title={liveSignatures
+                                  .map(
+                                    (signature) =>
+                                      `${signature.name} (${signature.role}) at ${new Date(
+                                        signature.signedAt
+                                      ).toLocaleTimeString([], {
+                                        hour: '2-digit',
+                                        minute: '2-digit',
+                                      })}`
+                                  )
+                                  .join(', ')}
+                              >
+                                <Check className="h-3 w-3" />
+                                Signed by{' '}
+                                {liveSignatures
+                                  .map((signature) => `${signature.name} (${signature.role})`)
+                                  .join(', ')}
+                              </span>
+                            )
+                          })()}
+                        </div>
                         <Button
                           type="button"
                           size="sm"
                           variant="outline"
+                          className="h-7 gap-1 text-xs"
+                          onClick={() => {
+                            if (liveIcs201FormRef.current) {
+                              setIcs201Form(liveIcs201FormRef.current)
+                              liveIcs201FormRef.current = null
+                            }
+                            setViewingIcs201Version(null)
+                          }}
+                        >
+                          <X className="h-3.5 w-3.5" />
+                          View latest
+                        </Button>
+                      </div>
+                    )}
+                    {!viewingIcs201Version && !isCreatingSignedIcs201Version && (
+                      <div className="flex flex-wrap items-center gap-2 rounded-md border border-emerald-400 bg-emerald-50 px-3 py-2 text-xs text-emerald-900 dark:border-emerald-500 dark:bg-emerald-500/10 dark:text-emerald-200">
+                        {(() => {
+                          const latest = ics201Versions[ics201Versions.length - 1]
+                          if (!latest) {
+                            return <span>You are viewing the latest <span className="font-semibold">draft</span> version.</span>
+                          }
+                          const versionType = latest.signatures.length > 0 ? 'signed' : 'draft'
+                          return (
+                            <span>
+                              You are viewing the latest <span className="font-semibold">{versionType}</span> version from{' '}
+                              <span className="font-semibold">
+                                {new Date(latest.createdAt).toLocaleTimeString([], {
+                                  hour: '2-digit',
+                                  minute: '2-digit',
+                                  second: '2-digit',
+                                })}
+                              </span>{' '}
+                              last edited by{' '}
+                              <span
+                                className="rounded px-1.5 py-0.5 text-[10px] font-semibold text-white"
+                                style={{ backgroundColor: latest.authorColor }}
+                              >
+                                {latest.authorName}
+                              </span>
+                              .
+                            </span>
+                          )
+                        })()}
+                      </div>
+                    )}
+                    {!isCreatingSignedIcs201Version && (() => {
+                      const latestVersion = ics201Versions[ics201Versions.length - 1]
+                      const isLatestSigned =
+                        !!latestVersion && latestVersion.signatures.length > 0
+                      return (
+                    <div className="flex items-center justify-between rounded-md border bg-background/70 px-3 py-2 text-xs">
+                      {isLatestSigned ? (
+                        <div className="flex items-center gap-2 text-muted-foreground">
+                          <Lock className="h-3.5 w-3.5" />
+                          <span>Signed versions cannot be edited.</span>
+                        </div>
+                      ) : (
+                        <TooltipProvider delayDuration={150}>
+                          <div className="flex items-center gap-2">
+                            <div className="flex -space-x-2">
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <div
+                                    className="flex h-6 w-6 cursor-default items-center justify-center rounded-full border-2 border-background text-[10px] font-semibold text-white"
+                                    style={{ backgroundColor: '#16a34a' }}
+                                  >
+                                    You
+                                  </div>
+                                </TooltipTrigger>
+                                <TooltipContent side="top" className="text-xs">
+                                  <div className="font-medium">Incident Commander</div>
+                                  <div className="opacity-80">You</div>
+                                </TooltipContent>
+                              </Tooltip>
+                              {ics201Collaborators.map((collaborator) => (
+                                <Tooltip key={collaborator.id}>
+                                  <TooltipTrigger asChild>
+                                    <div
+                                      className="flex h-6 w-6 cursor-default items-center justify-center rounded-full border-2 border-background text-[10px] font-semibold text-white"
+                                      style={{ backgroundColor: collaborator.color }}
+                                    >
+                                      {collaborator.initials}
+                                    </div>
+                                  </TooltipTrigger>
+                                  <TooltipContent side="top" className="text-xs">
+                                    <div className="font-medium">{collaborator.position}</div>
+                                    <div className="opacity-80">{collaborator.name}</div>
+                                  </TooltipContent>
+                                </Tooltip>
+                              ))}
+                            </div>
+                            <span className="text-muted-foreground">
+                              You and {ics201Collaborators.length} others are editing now.
+                            </span>
+                          </div>
+                        </TooltipProvider>
+                      )}
+                      <div className="flex items-center gap-2">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-7 gap-1 text-xs"
                           onClick={() => setIsIcs201VersionDialogOpen(true)}
                         >
-                          <History className="mr-1 h-3.5 w-3.5" />
+                          <History className="h-3.5 w-3.5" />
                           Version history
+                          <Badge variant="secondary" className="ml-1 h-4 px-1.5 text-[10px]">
+                            {ics201Versions.length}
+                          </Badge>
                         </Button>
+                        {(() => {
+                          const signedVersionsCount = ics201Versions.filter(
+                            (version) => version.signatures.length > 0
+                          ).length
+                          return (
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              disabled={signedVersionsCount === 0}
+                              className="h-7 gap-1 text-xs"
+                              onClick={() => setIsIcs201SignedVersionsDialogOpen(true)}
+                            >
+                              <Check className="h-3.5 w-3.5" />
+                              Signed Versions
+                              <Badge variant="secondary" className="ml-1 h-4 px-1.5 text-[10px]">
+                                {signedVersionsCount}
+                              </Badge>
+                            </Button>
+                          )
+                        })()}
+                      </div>
+                    </div>
+                      )
+                    })()}
+                    <div className="flex items-center justify-start gap-2">
+                      {(() => {
+                        const latest = ics201Versions[ics201Versions.length - 1]
+                        const isLatestSigned = !!latest && latest.signatures.length > 0
+                        return (
+                          <>
+                            {!isLatestSigned && (
+                              <Button
+                                type="button"
+                                size="sm"
+                                className="h-7 gap-1 bg-blue-600 text-xs text-white hover:bg-blue-700"
+                                disabled={
+                                  viewingIcs201Version !== null ||
+                                  isCreatingSignedIcs201Version ||
+                                  ics201GeneratingFromFile !== null
+                                }
+                                onClick={() => {
+                                  setPratusAiIntent('ics201-generation')
+                                  setPratusAiDraftMessage(
+                                    'Generate an ICS-201 draft for this incident using the selected sources. Populate every section — situation summary, weather/projected course, objectives, current actions, organization, resources, and safety analysis.'
+                                  )
+                                  setPratusAiDataSources((previous) => ({
+                                    ...previous,
+                                    files: true,
+                                    organizationData: true,
+                                    incidentData: true,
+                                  }))
+                                  setPratusAiSelectedFiles([])
+                                  setPratusAiSelectedContexts((previous) =>
+                                    previous.some(
+                                      (entry) => entry.id === 'tab:briefing'
+                                    )
+                                      ? previous
+                                      : [
+                                          ...previous,
+                                          {
+                                            id: 'tab:briefing',
+                                            label: 'Incident Briefing ICS-201',
+                                          },
+                                        ]
+                                  )
+                                  setIsPratusAiSelectingContext(false)
+                                  setIsPratusAiDrawerOpen(true)
+                                }}
+                              >
+                                <Sparkles className="h-3.5 w-3.5" />
+                                Generate Draft
+                              </Button>
+                            )}
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              className="h-7 gap-1 text-xs"
+                              disabled={
+                                viewingIcs201Version !== null || isCreatingSignedIcs201Version
+                              }
+                              onClick={() => {
+                                if (isLatestSigned) {
+                                  const newVersion: Ics201Version = {
+                                    id: `${Date.now()}-draft-${Math.random()
+                                      .toString(36)
+                                      .slice(2, 8)}`,
+                                    createdAt: Date.now(),
+                                    authorName: 'You',
+                                    authorColor: '#16a34a',
+                                    snapshot: ics201Form,
+                                    signatures: [],
+                                  }
+                                  setIcs201Versions((previous) =>
+                                    [...previous, newVersion].slice(-100)
+                                  )
+                                  return
+                                }
+                                setIsCreatingSignedIcs201Version(true)
+                              }}
+                            >
+                              <Plus className="h-3.5 w-3.5" />
+                              {isLatestSigned ? 'Create New Version' : 'Create New Signed Version'}
+                            </Button>
+                          </>
+                        )
+                      })()}
+                    </div>
+                    {isCreatingSignedIcs201Version && !viewingIcs201Version && (
+                      <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-sky-400 bg-sky-50 px-3 py-2 text-xs text-sky-900 dark:border-sky-500 dark:bg-sky-500/10 dark:text-sky-200">
+                        <div className="flex items-center gap-2">
+                          <FileText className="h-3.5 w-3.5" />
+                          <span>
+                            Only you can view and edit this version. Read through it and sign at
+                            the bottom. If you sign this version, everyone with permission to view
+                            the ICS-201 will see it.
+                          </span>
+                        </div>
                         <Button
                           type="button"
                           size="sm"
                           variant="outline"
-                          onClick={() => setIsIcs201SignedVersionsDialogOpen(true)}
+                          className="h-7 gap-1 text-xs"
+                          onClick={() => setIsCreatingSignedIcs201Version(false)}
                         >
-                          <Check className="mr-1 h-3.5 w-3.5" />
-                          Signed versions
+                          <X className="h-3.5 w-3.5" />
+                          Cancel
                         </Button>
                       </div>
+                    )}
                     </div>
-                    <div className="grid gap-3 md:grid-cols-2">
-                      <div className="grid gap-2">
-                        <Label htmlFor="ics201-incident-name">Exercise / Incident Name</Label>
-                        <Input
-                          id="ics201-incident-name"
-                          value={ics201Form.incidentName}
-                          onChange={(event) =>
-                            updateIcs201Field('incidentName', event.target.value)
-                          }
-                        />
-                      </div>
-                      <div className="grid gap-2">
-                        <Label htmlFor="ics201-incident-number">Incident Number</Label>
-                        <Input
-                          id="ics201-incident-number"
-                          value={ics201Form.incidentNumber}
-                          onChange={(event) =>
-                            updateIcs201Field('incidentNumber', event.target.value)
-                          }
-                        />
-                      </div>
-                      <div className="grid gap-2">
-                        <Label htmlFor="ics201-prepared-by">Prepared By</Label>
-                        <Input
-                          id="ics201-prepared-by"
-                          value={ics201Form.preparedBy}
-                          onChange={(event) =>
-                            updateIcs201Field('preparedBy', event.target.value)
-                          }
-                        />
-                      </div>
-                      <div className="grid gap-2">
-                        <Label htmlFor="ics201-jurisdiction">Jurisdiction / Region</Label>
-                        <Input
-                          id="ics201-jurisdiction"
-                          value={ics201Form.jurisdiction}
-                          onChange={(event) =>
-                            updateIcs201Field('jurisdiction', event.target.value)
-                          }
-                        />
-                      </div>
-                      <div className="grid gap-2">
-                        <Label htmlFor="ics201-op-start">Operational Period Start</Label>
-                        <Input
-                          id="ics201-op-start"
-                          value={ics201Form.operationalPeriodStart}
-                          onChange={(event) =>
-                            updateIcs201Field('operationalPeriodStart', event.target.value)
-                          }
-                        />
-                      </div>
-                      <div className="grid gap-2">
-                        <Label htmlFor="ics201-op-end">Operational Period End</Label>
-                        <Input
-                          id="ics201-op-end"
-                          value={ics201Form.operationalPeriodEnd}
-                          onChange={(event) =>
-                            updateIcs201Field('operationalPeriodEnd', event.target.value)
-                          }
-                        />
-                      </div>
-                    </div>
-                    <div className="grid gap-2">
-                      <Label htmlFor="ics201-current-situation">Current Situation Summary</Label>
-                      <Textarea
-                        id="ics201-current-situation"
-                        value={ics201Form.currentSituationSummary}
-                        onChange={(event) =>
-                          updateIcs201Field('currentSituationSummary', event.target.value)
-                        }
-                        className="min-h-28"
-                      />
-                    </div>
-                    <div className="grid gap-2 md:grid-cols-2">
-                      <div className="grid gap-2">
-                        <Label htmlFor="ics201-weather">Weather / Forecast</Label>
-                        <Textarea
-                          id="ics201-weather"
-                          value={ics201Form.weatherForecast}
-                          onChange={(event) =>
-                            updateIcs201Field('weatherForecast', event.target.value)
-                          }
-                          className="min-h-24"
-                        />
-                      </div>
-                      <div className="grid gap-2">
-                        <Label htmlFor="ics201-projected-course">Projected Incident Course</Label>
-                        <Textarea
-                          id="ics201-projected-course"
-                          value={ics201Form.projectedIncidentCourse}
-                          onChange={(event) =>
-                            updateIcs201Field('projectedIncidentCourse', event.target.value)
-                          }
-                          className="min-h-24"
-                        />
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <Label>Objectives</Label>
-                        <Button type="button" size="sm" variant="outline" onClick={addIcs201Objective}>
-                          <Plus className="mr-1 h-3.5 w-3.5" />
-                          Add objective
-                        </Button>
-                      </div>
-                      {ics201Form.objectives.map((objective, index) => (
-                        <Input
-                          key={`ics201-objective-${index}`}
-                          value={objective}
-                          onChange={(event) => updateIcs201Objective(index, event.target.value)}
-                          placeholder={`Objective ${index + 1}`}
-                        />
-                      ))}
-                    </div>
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <Label>Current Actions</Label>
-                        <Button type="button" size="sm" variant="outline" onClick={addIcs201Action}>
-                          <Plus className="mr-1 h-3.5 w-3.5" />
-                          Add action
-                        </Button>
-                      </div>
-                      {ics201Form.actions.map((action) => (
-                        <Item key={action.id} variant="outline" className="flex-col items-stretch p-3">
-                          <div className="grid gap-2 md:grid-cols-2">
-                            <Input
-                              value={action.task}
-                              onChange={(event) =>
-                                updateIcs201Action(action.id, 'task', event.target.value)
-                              }
-                              placeholder="Task"
-                            />
-                            <Input
-                              value={action.owner}
-                              onChange={(event) =>
-                                updateIcs201Action(action.id, 'owner', event.target.value)
-                              }
-                              placeholder="Owner"
-                            />
-                            <Input
-                              value={action.startTime}
-                              onChange={(event) =>
-                                updateIcs201Action(action.id, 'startTime', event.target.value)
-                              }
-                              placeholder="Start time"
-                            />
-                            <Input
-                              value={action.status}
-                              onChange={(event) =>
-                                updateIcs201Action(action.id, 'status', event.target.value)
-                              }
-                              placeholder="Status"
-                            />
-                          </div>
-                        </Item>
-                      ))}
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Organization Chart</Label>
-                      <div className="grid gap-2 md:grid-cols-2">
-                        {(
-                          Object.keys(ics201Form.orgChart) as Array<keyof Ics201FormState['orgChart']>
-                        ).map((field) => (
-                          <div key={field} className="grid gap-1">
-                            <Label htmlFor={`ics201-org-${field}`} className="text-xs capitalize">
-                              {field.replace(/([A-Z])/g, ' $1')}
+                    <div
+                      className={cn(
+                        'space-y-3',
+                        (viewingIcs201Version ||
+                          (!isCreatingSignedIcs201Version &&
+                            (ics201Versions[ics201Versions.length - 1]?.signatures.length ?? 0) >
+                              0)) &&
+                          'pointer-events-none opacity-70 select-none'
+                      )}
+                    >
+                    <Item
+                      variant="outline"
+                      className={cn('flex-col items-stretch p-0', glassItemBorderClasses)}
+                    >
+                      <div className="space-y-2 px-3 py-2.5">
+                        <div className="flex items-center justify-between gap-2">
+                          <Label className="text-xs font-semibold">Report Identification</Label>
+                          {!ics201EditingReportInfo && (
+                            <Button
+                              type="button"
+                              size="icon"
+                              variant="ghost"
+                              className="h-7 w-7 text-muted-foreground"
+                              aria-label="Edit report identification"
+                              onClick={() => {
+                                setIcs201ReportInfoDraft({
+                                  incidentName: ics201Form.incidentName,
+                                  incidentLocation: ics201Form.incidentLocation,
+                                  dateInitiated: ics201Form.dateInitiated,
+                                  timeInitiated: ics201Form.timeInitiated,
+                                  preparedByName: ics201Form.preparedByName,
+                                  preparedByPositionTitle: ics201Form.preparedByPositionTitle,
+                                  preparedBySignature: ics201Form.preparedBySignature,
+                                  preparedDateTime: ics201Form.preparedDateTime,
+                                })
+                                setIcs201EditingReportInfo(true)
+                              }}
+                            >
+                              <Pencil className="h-3.5 w-3.5" />
+                            </Button>
+                          )}
+                        </div>
+                        <p className="text-[11px] text-muted-foreground">
+                          These values appear in the header and footer boxes on every page of
+                          the exported ICS-201 Word or PDF document.
+                        </p>
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                          Header
+                        </p>
+                        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                          <div className="space-y-1">
+                            <Label className="text-[11px] font-medium text-muted-foreground">
+                              1. Incident Name
                             </Label>
-                            <Input
-                              id={`ics201-org-${field}`}
-                              value={ics201Form.orgChart[field]}
-                              onChange={(event) =>
-                                updateIcs201OrgChartField(field, event.target.value)
-                              }
-                            />
+                            {ics201EditingReportInfo ? (
+                              <input
+                                autoFocus
+                                value={ics201ReportInfoDraft.incidentName}
+                                onChange={(event) =>
+                                  setIcs201ReportInfoDraft((draft) => ({
+                                    ...draft,
+                                    incidentName: event.target.value,
+                                  }))
+                                }
+                                placeholder="Incident name"
+                                className="h-7 w-full rounded-md border bg-transparent px-2 text-xs outline-none"
+                              />
+                            ) : (
+                              <div className="rounded-md border border-dashed border-border/60 bg-muted/20 px-2.5 py-2 text-xs">
+                                {ics201Form.incidentName || (
+                                  <span className="text-muted-foreground">—</span>
+                                )}
+                              </div>
+                            )}
                           </div>
-                        ))}
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <Label>Resources</Label>
-                        <Button type="button" size="sm" variant="outline" onClick={addIcs201Resource}>
-                          <Plus className="mr-1 h-3.5 w-3.5" />
-                          Add resource
-                        </Button>
-                      </div>
-                      {ics201Form.resources.map((resource) => (
-                        <Item key={resource.id} variant="muted" size="sm" className="flex-col items-stretch p-3">
-                          <div className="grid gap-2 md:grid-cols-2">
-                            <Input
-                              value={resource.category}
-                              onChange={(event) =>
-                                updateIcs201Resource(resource.id, 'category', event.target.value)
-                              }
-                              placeholder="Category"
-                            />
-                            <Input
-                              value={resource.identifier}
-                              onChange={(event) =>
-                                updateIcs201Resource(resource.id, 'identifier', event.target.value)
-                              }
-                              placeholder="Identifier"
-                            />
-                            <Input
-                              value={resource.quantity}
-                              onChange={(event) =>
-                                updateIcs201Resource(resource.id, 'quantity', event.target.value)
-                              }
-                              placeholder="Quantity"
-                            />
-                            <Input
-                              value={resource.status}
-                              onChange={(event) =>
-                                updateIcs201Resource(resource.id, 'status', event.target.value)
-                              }
-                              placeholder="Status"
-                            />
+                          <div className="space-y-1">
+                            <Label className="text-[11px] font-medium text-muted-foreground">
+                              2. Incident Location
+                            </Label>
+                            {ics201EditingReportInfo ? (
+                              <input
+                                value={ics201ReportInfoDraft.incidentLocation}
+                                onChange={(event) =>
+                                  setIcs201ReportInfoDraft((draft) => ({
+                                    ...draft,
+                                    incidentLocation: event.target.value,
+                                  }))
+                                }
+                                placeholder="Incident location"
+                                className="h-7 w-full rounded-md border bg-transparent px-2 text-xs outline-none"
+                              />
+                            ) : (
+                              <div className="rounded-md border border-dashed border-border/60 bg-muted/20 px-2.5 py-2 text-xs">
+                                {ics201Form.incidentLocation || (
+                                  <span className="text-muted-foreground">—</span>
+                                )}
+                              </div>
+                            )}
                           </div>
-                        </Item>
-                      ))}
+                          <div className="space-y-1">
+                            <Label className="text-[11px] font-medium text-muted-foreground">
+                              3. Date/Time Initiated
+                            </Label>
+                            {ics201EditingReportInfo ? (
+                              <div className="flex items-center gap-1.5">
+                                <input
+                                  type="date"
+                                  value={ics201ReportInfoDraft.dateInitiated}
+                                  onChange={(event) =>
+                                    setIcs201ReportInfoDraft((draft) => ({
+                                      ...draft,
+                                      dateInitiated: event.target.value,
+                                    }))
+                                  }
+                                  className="h-7 w-full rounded-md border bg-transparent px-2 text-xs outline-none"
+                                />
+                                <input
+                                  type="time"
+                                  value={ics201ReportInfoDraft.timeInitiated}
+                                  onChange={(event) =>
+                                    setIcs201ReportInfoDraft((draft) => ({
+                                      ...draft,
+                                      timeInitiated: event.target.value,
+                                    }))
+                                  }
+                                  className="h-7 w-full rounded-md border bg-transparent px-2 text-xs outline-none"
+                                />
+                              </div>
+                            ) : (
+                              <div className="rounded-md border border-dashed border-border/60 bg-muted/20 px-2.5 py-2 text-xs">
+                                {ics201Form.dateInitiated || ics201Form.timeInitiated ? (
+                                  `${ics201Form.dateInitiated || '—'} ${ics201Form.timeInitiated || ''}`.trim()
+                                ) : (
+                                  <span className="text-muted-foreground">—</span>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                          Footer — Prepared by
+                        </p>
+                        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                          {(
+                            [
+                              {
+                                key: 'preparedByName',
+                                label: 'Name',
+                                placeholder: 'Prepared by name',
+                                display: ics201Form.preparedByName,
+                              },
+                              {
+                                key: 'preparedByPositionTitle',
+                                label: 'Position / Title',
+                                placeholder: 'Position or title',
+                                display: ics201Form.preparedByPositionTitle,
+                              },
+                              {
+                                key: 'preparedBySignature',
+                                label: 'Signature',
+                                placeholder: 'Signature',
+                                display: ics201Form.preparedBySignature,
+                              },
+                              {
+                                key: 'preparedDateTime',
+                                label: 'Date/Time',
+                                placeholder: 'Date / time prepared',
+                                display: ics201Form.preparedDateTime,
+                              },
+                            ] as const
+                          ).map((field) => (
+                            <div key={field.key} className="space-y-1">
+                              <Label className="text-[11px] font-medium text-muted-foreground">
+                                {field.label}
+                              </Label>
+                              {ics201EditingReportInfo ? (
+                                <input
+                                  value={ics201ReportInfoDraft[field.key]}
+                                  onChange={(event) =>
+                                    setIcs201ReportInfoDraft((draft) => ({
+                                      ...draft,
+                                      [field.key]: event.target.value,
+                                    }))
+                                  }
+                                  placeholder={field.placeholder}
+                                  className="h-7 w-full rounded-md border bg-transparent px-2 text-xs outline-none"
+                                />
+                              ) : (
+                                <div className="rounded-md border border-dashed border-border/60 bg-muted/20 px-2.5 py-2 text-xs">
+                                  {field.display || (
+                                    <span className="text-muted-foreground">—</span>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                        {ics201EditingReportInfo && (
+                          <div className="flex items-center justify-end gap-1.5">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              className="h-7 gap-1 text-xs"
+                              onClick={() => openIcs201SectionGeneration('report-info')}
+                            >
+                              <Sparkles className="h-3.5 w-3.5" />
+                              Generate Section Content
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 gap-1 text-xs"
+                              onClick={() => setIcs201EditingReportInfo(false)}
+                            >
+                              <X className="h-3.5 w-3.5" />
+                              Cancel
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              className="h-7 gap-1 bg-blue-600 text-xs text-white hover:bg-blue-700"
+                              onClick={() => {
+                                saveIcs201Section({
+                                  ...ics201Form,
+                                  incidentName: ics201ReportInfoDraft.incidentName,
+                                  incidentLocation: ics201ReportInfoDraft.incidentLocation,
+                                  dateInitiated: ics201ReportInfoDraft.dateInitiated,
+                                  timeInitiated: ics201ReportInfoDraft.timeInitiated,
+                                  preparedByName: ics201ReportInfoDraft.preparedByName,
+                                  preparedByPositionTitle:
+                                    ics201ReportInfoDraft.preparedByPositionTitle,
+                                  preparedBySignature: ics201ReportInfoDraft.preparedBySignature,
+                                  preparedDateTime: ics201ReportInfoDraft.preparedDateTime,
+                                })
+                                setIcs201EditingReportInfo(false)
+                              }}
+                            >
+                              <Check className="h-3.5 w-3.5" />
+                              Save
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    </Item>
+                    <Item variant="outline" className={cn('flex-col items-stretch p-0', glassItemBorderClasses)}>
+                      <div className="px-3 py-2.5">
+                        <ItemContent className="space-y-3">
+                          <div className="flex items-center justify-between gap-2">
+                            <ItemTitle>ICS-201 Incident Briefing</ItemTitle>
+                            {!ics201EditingIncidentBriefing && (
+                              <Button
+                                type="button"
+                                size="icon"
+                                variant="ghost"
+                                className="h-7 w-7 text-muted-foreground"
+                                aria-label="Edit incident briefing"
+                                onClick={() => {
+                                  setIcs201IncidentBriefingDraft({
+                                    incidentName: ics201Form.incidentName,
+                                    incidentNumber: ics201Form.incidentNumber,
+                                    preparedDateTime: ics201Form.preparedDateTime,
+                                    preparedBy: ics201Form.preparedBy,
+                                    operationalPeriodStart: ics201Form.operationalPeriodStart,
+                                    operationalPeriodEnd: ics201Form.operationalPeriodEnd,
+                                    jurisdiction: ics201Form.jurisdiction,
+                                  })
+                                  setIcs201EditingIncidentBriefing(true)
+                                }}
+                              >
+                                <Pencil className="h-3.5 w-3.5" />
+                              </Button>
+                            )}
+                          </div>
+                          {ics201EditingIncidentBriefing ? (
+                            <div className="grid grid-cols-2 gap-2">
+                              <input
+                                autoFocus
+                                value={ics201IncidentBriefingDraft.incidentName}
+                                onChange={(event) =>
+                                  setIcs201IncidentBriefingDraft((draft) => ({
+                                    ...draft,
+                                    incidentName: event.target.value,
+                                  }))
+                                }
+                                placeholder="Incident Name"
+                                className="h-8 rounded-md border bg-transparent px-2 text-xs outline-none"
+                              />
+                              <input
+                                value={ics201IncidentBriefingDraft.incidentNumber}
+                                onChange={(event) =>
+                                  setIcs201IncidentBriefingDraft((draft) => ({
+                                    ...draft,
+                                    incidentNumber: event.target.value,
+                                  }))
+                                }
+                                placeholder="Incident Number"
+                                className="h-8 rounded-md border bg-transparent px-2 text-xs outline-none"
+                              />
+                              <input
+                                value={ics201IncidentBriefingDraft.preparedDateTime}
+                                onChange={(event) =>
+                                  setIcs201IncidentBriefingDraft((draft) => ({
+                                    ...draft,
+                                    preparedDateTime: event.target.value,
+                                  }))
+                                }
+                                placeholder="Date / Time Prepared"
+                                className="h-8 rounded-md border bg-transparent px-2 text-xs outline-none"
+                              />
+                              <input
+                                value={ics201IncidentBriefingDraft.preparedBy}
+                                onChange={(event) =>
+                                  setIcs201IncidentBriefingDraft((draft) => ({
+                                    ...draft,
+                                    preparedBy: event.target.value,
+                                  }))
+                                }
+                                placeholder="Prepared By"
+                                className="h-8 rounded-md border bg-transparent px-2 text-xs outline-none"
+                              />
+                              <input
+                                type="datetime-local"
+                                value={ics201IncidentBriefingDraft.operationalPeriodStart}
+                                onChange={(event) =>
+                                  setIcs201IncidentBriefingDraft((draft) => ({
+                                    ...draft,
+                                    operationalPeriodStart: event.target.value,
+                                  }))
+                                }
+                                placeholder="Operational Period Start"
+                                className="h-8 rounded-md border bg-transparent px-2 text-xs outline-none"
+                              />
+                              <input
+                                type="datetime-local"
+                                value={ics201IncidentBriefingDraft.operationalPeriodEnd}
+                                onChange={(event) =>
+                                  setIcs201IncidentBriefingDraft((draft) => ({
+                                    ...draft,
+                                    operationalPeriodEnd: event.target.value,
+                                  }))
+                                }
+                                placeholder="Operational Period End"
+                                className="h-8 rounded-md border bg-transparent px-2 text-xs outline-none"
+                              />
+                              <input
+                                value={ics201IncidentBriefingDraft.jurisdiction}
+                                onChange={(event) =>
+                                  setIcs201IncidentBriefingDraft((draft) => ({
+                                    ...draft,
+                                    jurisdiction: event.target.value,
+                                  }))
+                                }
+                                placeholder="Jurisdiction / Agency"
+                                className="col-span-2 h-8 rounded-md border bg-transparent px-2 text-xs outline-none"
+                              />
+                            </div>
+                          ) : (
+                            <div className="grid grid-cols-2 gap-2">
+                              {[
+                                { label: 'Incident Name', value: ics201Form.incidentName },
+                                { label: 'Incident Number', value: ics201Form.incidentNumber },
+                                { label: 'Date / Time Prepared', value: ics201Form.preparedDateTime },
+                                { label: 'Prepared By', value: ics201Form.preparedBy },
+                                {
+                                  label: 'Operational Period Start',
+                                  value: ics201Form.operationalPeriodStart.replace('T', ' '),
+                                },
+                                {
+                                  label: 'Operational Period End',
+                                  value: ics201Form.operationalPeriodEnd.replace('T', ' '),
+                                },
+                                { label: 'Jurisdiction / Agency', value: ics201Form.jurisdiction, span: 2 },
+                              ].map((field) => (
+                                <div
+                                  key={field.label}
+                                  className={field.span === 2 ? 'col-span-2 space-y-1' : 'space-y-1'}
+                                >
+                                  <Label className="text-[11px] font-medium text-muted-foreground">
+                                    {field.label}
+                                  </Label>
+                                  <div className="rounded-md border border-dashed border-border/60 bg-muted/20 px-2.5 py-2 text-xs">
+                                    {field.value || (
+                                      <span className="text-muted-foreground">—</span>
+                                    )}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          {ics201EditingIncidentBriefing && (
+                            <div className="flex items-center justify-end gap-1.5">
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                className="h-7 gap-1 text-xs"
+                                onClick={() => openIcs201SectionGeneration('incident-briefing')}
+                              >
+                                <Sparkles className="h-3.5 w-3.5" />
+                                Generate Section Content
+                              </Button>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="ghost"
+                                className="h-7 gap-1 text-xs"
+                                onClick={() => setIcs201EditingIncidentBriefing(false)}
+                              >
+                                <X className="h-3.5 w-3.5" />
+                                Cancel
+                              </Button>
+                              <Button
+                                type="button"
+                                size="sm"
+                                className="h-7 gap-1 bg-blue-600 text-xs text-white hover:bg-blue-700"
+                                onClick={() => {
+                                  saveIcs201Section({
+                                    ...ics201Form,
+                                    ...ics201IncidentBriefingDraft,
+                                  })
+                                  setIcs201EditingIncidentBriefing(false)
+                                }}
+                              >
+                                <Check className="h-3.5 w-3.5" />
+                                Save
+                              </Button>
+                            </div>
+                          )}
+                        </ItemContent>
+                      </div>
+                    </Item>
+                    <Item variant="outline" className={cn('flex-col items-stretch p-0', glassItemBorderClasses)}>
+                      <div className="px-3 py-2.5">
+                        <ItemContent className="space-y-2">
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-1.5">
+                              <ItemTitle>Map Sketch</ItemTitle>
+                              <TooltipProvider delayDuration={150}>
+                                {(() => {
+                                  const collaborator = ics201Collaborators.find(
+                                    (entry) => entry.id === 'maya'
+                                  )
+                                  if (!collaborator) return null
+                                  return (
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <div
+                                          className="flex h-5 w-5 cursor-default items-center justify-center rounded-full border-2 border-background text-[9px] font-semibold text-white"
+                                          style={{ backgroundColor: collaborator.color }}
+                                          aria-label={`${collaborator.position} ${collaborator.name} is editing this section`}
+                                        >
+                                          {collaborator.initials}
+                                        </div>
+                                      </TooltipTrigger>
+                                      <TooltipContent side="top" className="text-xs">
+                                        <div className="font-medium">{collaborator.position}</div>
+                                        <div className="opacity-80">{collaborator.name}</div>
+                                        <div className="opacity-80">Editing this section</div>
+                                      </TooltipContent>
+                                    </Tooltip>
+                                  )
+                                })()}
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      type="button"
+                                      size="icon"
+                                      variant="ghost"
+                                      aria-label="Zoom to polygon on map"
+                                      className="h-6 w-6 text-foreground hover:text-foreground"
+                                      disabled={
+                                        (ics201EditingMapSketch
+                                          ? ics201MapSketchDraft
+                                          : ics201Form.mapSketchPolygon
+                                        ).length < 3
+                                      }
+                                      onClick={() => {
+                                        const view = mapViewRef.current
+                                        const vertices = ics201EditingMapSketch
+                                          ? ics201MapSketchDraft
+                                          : ics201Form.mapSketchPolygon
+                                        if (!view || vertices.length < 3) {
+                                          return
+                                        }
+                                        const ring = vertices.map((vertex) => [
+                                          vertex.longitude,
+                                          vertex.latitude,
+                                        ])
+                                        const first = ring[0]
+                                        const last = ring[ring.length - 1]
+                                        if (first[0] !== last[0] || first[1] !== last[1]) {
+                                          ring.push([first[0], first[1]])
+                                        }
+                                        const target = new Graphic({
+                                          geometry: {
+                                            type: 'polygon',
+                                            rings: [ring],
+                                          },
+                                        } as ConstructorParameters<typeof Graphic>[0])
+                                        const leftPanelWidth =
+                                          leftPanelRef.current?.getBoundingClientRect().width ?? 0
+                                        const previousPadding = view.padding
+                                        view.padding = {
+                                          ...previousPadding,
+                                          left: Math.max(
+                                            leftPanelWidth,
+                                            previousPadding?.left ?? 0
+                                          ),
+                                        }
+                                        void view
+                                          .goTo(target, { duration: 600 })
+                                          .catch(() => {
+                                            // Ignore interrupted goTo calls.
+                                          })
+                                      }}
+                                    >
+                                      <MapIcon className="h-3.5 w-3.5" />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent side="top" className="text-xs">
+                                    Zoom to polygon on map
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            </div>
+                            {!ics201EditingMapSketch && (
+                              <Button
+                                type="button"
+                                size="icon"
+                                variant="ghost"
+                                className="h-7 w-7 text-muted-foreground"
+                                aria-label="Edit map sketch"
+                                onClick={() => {
+                                  setIcs201MapSketchDraft(
+                                    ics201Form.mapSketchPolygon.map((vertex) => ({ ...vertex }))
+                                  )
+                                  setIcs201EditingMapSketch(true)
+                                }}
+                              >
+                                <Pencil className="h-3.5 w-3.5" />
+                              </Button>
+                            )}
+                          </div>
+                          <ItemDescription>
+                            Draw the incident perimeter on the ArcGIS map to the right or enter coordinates manually.
+                          </ItemDescription>
+                          {ics201EditingMapSketch ? (
+                            <>
+                              <div className="flex flex-wrap items-center gap-2 pt-1">
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant={isDrawingIcs201Polygon ? 'default' : 'outline'}
+                                  className="h-7 gap-1 text-xs"
+                                  onClick={() => setIsDrawingIcs201Polygon((current) => !current)}
+                                >
+                                  <Pencil className="h-3.5 w-3.5" />
+                                  {isDrawingIcs201Polygon ? 'Cancel drawing' : 'Draw polygon'}
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-7 gap-1 text-xs"
+                                  disabled={ics201MapSketchDraft.length === 0}
+                                  onClick={() => {
+                                    if (isDrawingIcs201Polygon) {
+                                      setIsDrawingIcs201Polygon(false)
+                                    }
+                                    setIcs201MapSketchDraft([])
+                                  }}
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                  Clear
+                                </Button>
+                                <span className="text-[11px] text-muted-foreground">
+                                  {ics201MapSketchDraft.length}{' '}
+                                  {ics201MapSketchDraft.length === 1 ? 'vertex' : 'vertices'}
+                                  {ics201MapSketchDraft.length > 0 &&
+                                    ics201MapSketchDraft.length < 3 &&
+                                    ' (need at least 3 to form a polygon)'}
+                                </span>
+                              </div>
+                              {isDrawingIcs201Polygon && (
+                                <p className="text-[11px] font-medium text-blue-700 dark:text-blue-300">
+                                  Click on the map to add vertices. Double-click the last vertex to finish.
+                                </p>
+                              )}
+                              <div className="space-y-1.5">
+                                <div className="grid grid-cols-[1.5rem_1fr_1fr_1.75rem] items-center gap-2 px-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                                  <span>#</span>
+                                  <span>Latitude</span>
+                                  <span>Longitude</span>
+                                  <span className="sr-only">Actions</span>
+                                </div>
+                                {ics201MapSketchDraft.length === 0 ? (
+                                  <div className="rounded-md border border-dashed border-border/60 bg-muted/20 px-2.5 py-3 text-center text-[11px] text-muted-foreground">
+                                    No vertices yet. Use Draw polygon or Add vertex to start.
+                                  </div>
+                                ) : (
+                                  ics201MapSketchDraft.map((vertex, index) => (
+                                    <div
+                                      key={index}
+                                      className="grid grid-cols-[1.5rem_1fr_1fr_1.75rem] items-center gap-2"
+                                    >
+                                      <span className="text-[10px] font-medium text-muted-foreground">
+                                        {index + 1}
+                                      </span>
+                                      <input
+                                        type="number"
+                                        step="any"
+                                        value={
+                                          Number.isFinite(vertex.latitude) ? vertex.latitude : ''
+                                        }
+                                        onChange={(event) => {
+                                          const raw = event.target.value
+                                          const parsed = raw === '' ? 0 : Number(raw)
+                                          setIcs201MapSketchDraft((draft) =>
+                                            draft.map((entry, entryIndex) =>
+                                              entryIndex === index
+                                                ? {
+                                                    ...entry,
+                                                    latitude: Number.isFinite(parsed)
+                                                      ? parsed
+                                                      : 0,
+                                                  }
+                                                : entry
+                                            )
+                                          )
+                                        }}
+                                        aria-label={`Latitude for vertex ${index + 1}`}
+                                        placeholder="Latitude"
+                                        className="h-8 rounded-md border bg-transparent px-2 text-xs outline-none focus:ring-1 focus:ring-primary/40"
+                                      />
+                                      <input
+                                        type="number"
+                                        step="any"
+                                        value={
+                                          Number.isFinite(vertex.longitude) ? vertex.longitude : ''
+                                        }
+                                        onChange={(event) => {
+                                          const raw = event.target.value
+                                          const parsed = raw === '' ? 0 : Number(raw)
+                                          setIcs201MapSketchDraft((draft) =>
+                                            draft.map((entry, entryIndex) =>
+                                              entryIndex === index
+                                                ? {
+                                                    ...entry,
+                                                    longitude: Number.isFinite(parsed)
+                                                      ? parsed
+                                                      : 0,
+                                                  }
+                                                : entry
+                                            )
+                                          )
+                                        }}
+                                        aria-label={`Longitude for vertex ${index + 1}`}
+                                        placeholder="Longitude"
+                                        className="h-8 rounded-md border bg-transparent px-2 text-xs outline-none focus:ring-1 focus:ring-primary/40"
+                                      />
+                                      <Button
+                                        type="button"
+                                        size="icon"
+                                        variant="ghost"
+                                        className="h-7 w-7"
+                                        aria-label={`Remove vertex ${index + 1}`}
+                                        onClick={() =>
+                                          setIcs201MapSketchDraft((draft) =>
+                                            draft.filter((_, entryIndex) => entryIndex !== index)
+                                          )
+                                        }
+                                      >
+                                        <X className="h-3.5 w-3.5" />
+                                      </Button>
+                                    </div>
+                                  ))
+                                )}
+                              </div>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                className="h-7 w-fit gap-1 text-xs"
+                                onClick={() => {
+                                  const polygon = ics201MapSketchDraft
+                                  const lastVertex = polygon[polygon.length - 1]
+                                  const nextVertex: Ics201MapSketchVertex = lastVertex
+                                    ? {
+                                        longitude: Number(
+                                          (lastVertex.longitude + 0.001).toFixed(6)
+                                        ),
+                                        latitude: lastVertex.latitude,
+                                      }
+                                    : { longitude: 0, latitude: 0 }
+                                  setIcs201MapSketchDraft([...polygon, nextVertex])
+                                }}
+                              >
+                                <Plus className="h-3.5 w-3.5" />
+                                Add vertex
+                              </Button>
+                              <div className="flex items-center justify-end gap-1.5">
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-7 gap-1 text-xs"
+                                  onClick={() => openIcs201SectionGeneration('map-sketch')}
+                                >
+                                  <Sparkles className="h-3.5 w-3.5" />
+                                  Generate Section Content
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-7 gap-1 text-xs"
+                                  onClick={() => {
+                                    if (isDrawingIcs201Polygon) {
+                                      setIsDrawingIcs201Polygon(false)
+                                    }
+                                    setIcs201EditingMapSketch(false)
+                                  }}
+                                >
+                                  <X className="h-3.5 w-3.5" />
+                                  Cancel
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  className="h-7 gap-1 bg-blue-600 text-xs text-white hover:bg-blue-700"
+                                  onClick={() => {
+                                    if (isDrawingIcs201Polygon) {
+                                      setIsDrawingIcs201Polygon(false)
+                                    }
+                                    saveIcs201Section({
+                                      ...ics201Form,
+                                      mapSketchPolygon: ics201MapSketchDraft.map((vertex) => ({
+                                        ...vertex,
+                                      })),
+                                    })
+                                    setIcs201EditingMapSketch(false)
+                                  }}
+                                >
+                                  <Check className="h-3.5 w-3.5" />
+                                  Save
+                                </Button>
+                              </div>
+                            </>
+                          ) : (
+                            <div className="space-y-1.5">
+                              <span className="text-[11px] text-muted-foreground">
+                                {ics201Form.mapSketchPolygon.length}{' '}
+                                {ics201Form.mapSketchPolygon.length === 1 ? 'vertex' : 'vertices'}
+                              </span>
+                              {ics201Form.mapSketchPolygon.length === 0 ? (
+                                <div className="rounded-md border border-dashed border-border/60 bg-muted/20 px-2.5 py-3 text-center text-[11px] text-muted-foreground">
+                                  No polygon defined.
+                                </div>
+                              ) : (
+                                ics201Form.mapSketchPolygon.map((vertex, index) => (
+                                  <div
+                                    key={index}
+                                    className="rounded-md border border-dashed border-border/60 bg-muted/20 px-2.5 py-2 text-xs"
+                                  >
+                                    <span className="text-[10px] font-medium text-muted-foreground">
+                                      Vertex {index + 1}:{' '}
+                                    </span>
+                                    {vertex.latitude}, {vertex.longitude}
+                                  </div>
+                                ))
+                              )}
+                            </div>
+                          )}
+                        </ItemContent>
+                      </div>
+                    </Item>
+                    <Item variant="outline" className={cn('flex-col items-stretch p-0', glassItemBorderClasses)}>
+                      <div className="px-3 py-2.5">
+                        <ItemContent className="space-y-2">
+                          <div className="flex items-center justify-between gap-2">
+                            <ItemTitle>Current Situation</ItemTitle>
+                            {!ics201EditingCurrentSituation && (
+                              <Button
+                                type="button"
+                                size="icon"
+                                variant="ghost"
+                                className="h-7 w-7 text-muted-foreground"
+                                aria-label="Edit current situation"
+                                onClick={() => {
+                                  setIcs201CurrentSituationDraft(ics201Form.currentSituationSummary)
+                                  setIcs201EditingCurrentSituation(true)
+                                }}
+                              >
+                                <Pencil className="h-3.5 w-3.5" />
+                              </Button>
+                            )}
+                          </div>
+                          {ics201EditingCurrentSituation ? (
+                            <>
+                              <Textarea
+                                autoFocus
+                                value={ics201CurrentSituationDraft}
+                                onChange={(event) => {
+                                  const next = ics201EnforcesCharLimit
+                                    ? event.target.value.slice(0, ICS201_STRICT_CHAR_LIMIT)
+                                    : event.target.value
+                                  setIcs201CurrentSituationDraft(next)
+                                }}
+                                maxLength={
+                                  ics201EnforcesCharLimit ? ICS201_STRICT_CHAR_LIMIT : undefined
+                                }
+                                className="min-h-24 text-xs"
+                                placeholder="Current situation summary"
+                              />
+                              <div
+                                className={cn(
+                                  'flex justify-end text-[10px]',
+                                  ics201EnforcesCharLimit &&
+                                    ics201CurrentSituationDraft.length >= ICS201_STRICT_CHAR_LIMIT
+                                    ? 'text-amber-600 dark:text-amber-400'
+                                    : 'text-muted-foreground'
+                                )}
+                              >
+                                {ics201CurrentSituationDraft.length.toLocaleString()}
+                                {ics201EnforcesCharLimit
+                                  ? ` / ${ICS201_STRICT_CHAR_LIMIT.toLocaleString()} characters`
+                                  : ics201StructureMode === 'paginated'
+                                    ? ' characters (Paginated Structure)'
+                                    : ' characters (Flexible Structure)'}
+                              </div>
+                            </>
+                          ) : (
+                            <div className="min-h-24 whitespace-pre-wrap rounded-md border border-dashed border-border/60 bg-muted/20 px-2.5 py-2 text-xs">
+                              {ics201Form.currentSituationSummary || (
+                                <span className="text-muted-foreground">—</span>
+                              )}
+                            </div>
+                          )}
+                          {ics201EditingCurrentSituation && (
+                            <div className="flex items-center justify-end gap-1.5">
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                className="h-7 gap-1 text-xs"
+                                onClick={() => openIcs201SectionGeneration('current-situation')}
+                              >
+                                <Sparkles className="h-3.5 w-3.5" />
+                                Generate Section Content
+                              </Button>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="ghost"
+                                className="h-7 gap-1 text-xs"
+                                onClick={() => setIcs201EditingCurrentSituation(false)}
+                              >
+                                <X className="h-3.5 w-3.5" />
+                                Cancel
+                              </Button>
+                              <Button
+                                type="button"
+                                size="sm"
+                                className="h-7 gap-1 bg-blue-600 text-xs text-white hover:bg-blue-700"
+                                disabled={
+                                  ics201EnforcesCharLimit &&
+                                  ics201CurrentSituationDraft.length > ICS201_STRICT_CHAR_LIMIT
+                                }
+                                onClick={() => {
+                                  saveIcs201Section({
+                                    ...ics201Form,
+                                    currentSituationSummary: ics201CurrentSituationDraft,
+                                  })
+                                  setIcs201EditingCurrentSituation(false)
+                                }}
+                              >
+                                <Check className="h-3.5 w-3.5" />
+                                Save
+                              </Button>
+                            </div>
+                          )}
+                        </ItemContent>
+                      </div>
+                    </Item>
+                    <Item variant="outline" className={cn('flex-col items-stretch p-0', glassItemBorderClasses)}>
+                      <div className="px-3 py-2.5">
+                        <ItemContent className="space-y-3">
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-1.5">
+                              <ItemTitle>Objectives</ItemTitle>
+                              <TooltipProvider delayDuration={150}>
+                                {(() => {
+                                  const collaborator = ics201Collaborators.find(
+                                    (entry) => entry.id === 'diego'
+                                  )
+                                  if (!collaborator) return null
+                                  return (
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <div
+                                          className="flex h-5 w-5 cursor-default items-center justify-center rounded-full border-2 border-background text-[9px] font-semibold text-white"
+                                          style={{ backgroundColor: collaborator.color }}
+                                          aria-label={`${collaborator.position} ${collaborator.name} is editing this section`}
+                                        >
+                                          {collaborator.initials}
+                                        </div>
+                                      </TooltipTrigger>
+                                      <TooltipContent side="top" className="text-xs">
+                                        <div className="font-medium">{collaborator.position}</div>
+                                        <div className="opacity-80">{collaborator.name}</div>
+                                        <div className="opacity-80">Editing this section</div>
+                                      </TooltipContent>
+                                    </Tooltip>
+                                  )
+                                })()}
+                              </TooltipProvider>
+                            </div>
+                            {!ics201EditingObjectives ? (
+                              <Button
+                                type="button"
+                                size="icon"
+                                variant="ghost"
+                                className="h-7 w-7 text-muted-foreground"
+                                aria-label="Edit objectives"
+                                onClick={() => {
+                                  setIcs201ObjectivesDraft([...ics201Form.objectives])
+                                  setIcs201EditingObjectives(true)
+                                }}
+                              >
+                                <Pencil className="h-3.5 w-3.5" />
+                              </Button>
+                            ) : (
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                onClick={() =>
+                                  setIcs201ObjectivesDraft((draft) => [...draft, ''])
+                                }
+                              >
+                                + Add Objective
+                              </Button>
+                            )}
+                          </div>
+                          {ics201EditingObjectives ? (
+                            (() => {
+                              const totalObjectivesLength = ics201ObjectivesDraft.reduce(
+                                (sum, entry) => sum + entry.length,
+                                0
+                              )
+                              const objectivesOverLimit =
+                                ics201EnforcesCharLimit &&
+                                totalObjectivesLength > ICS201_STRICT_CHAR_LIMIT
+                              return (
+                                <>
+                                  {ics201ObjectivesDraft.map((objective, index) => (
+                                    <input
+                                      key={`ics-objective-draft-${index}`}
+                                      value={objective}
+                                      onChange={(event) => {
+                                        const rawValue = event.target.value
+                                        setIcs201ObjectivesDraft((draft) => {
+                                          if (ics201EnforcesCharLimit) {
+                                            const otherTotal = draft.reduce(
+                                              (sum, entry, entryIndex) =>
+                                                entryIndex === index
+                                                  ? sum
+                                                  : sum + entry.length,
+                                              0
+                                            )
+                                            const remaining = Math.max(
+                                              0,
+                                              ICS201_STRICT_CHAR_LIMIT - otherTotal
+                                            )
+                                            const clipped = rawValue.slice(0, remaining)
+                                            return draft.map((entry, entryIndex) =>
+                                              entryIndex === index ? clipped : entry
+                                            )
+                                          }
+                                          return draft.map((entry, entryIndex) =>
+                                            entryIndex === index ? rawValue : entry
+                                          )
+                                        })
+                                      }}
+                                      placeholder={`Objective ${index + 1}`}
+                                      className="h-8 w-full rounded-md border bg-transparent px-2 text-xs outline-none"
+                                    />
+                                  ))}
+                                  <div
+                                    className={cn(
+                                      'flex justify-end text-[10px]',
+                                      objectivesOverLimit ||
+                                        (ics201EnforcesCharLimit &&
+                                          totalObjectivesLength >= ICS201_STRICT_CHAR_LIMIT)
+                                        ? 'text-amber-600 dark:text-amber-400'
+                                        : 'text-muted-foreground'
+                                    )}
+                                  >
+                                    {totalObjectivesLength.toLocaleString()}
+                                    {ics201EnforcesCharLimit
+                                      ? ` / ${ICS201_STRICT_CHAR_LIMIT.toLocaleString()} characters across objectives`
+                                      : ics201StructureMode === 'paginated'
+                                        ? ' characters across objectives (Paginated Structure)'
+                                        : ' characters across objectives (Flexible Structure)'}
+                                  </div>
+                                  <div className="flex items-center justify-end gap-1.5">
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      variant="outline"
+                                      className="h-7 gap-1 text-xs"
+                                      onClick={() => openIcs201SectionGeneration('objectives')}
+                                    >
+                                      <Sparkles className="h-3.5 w-3.5" />
+                                      Generate Section Content
+                                    </Button>
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      variant="ghost"
+                                      className="h-7 gap-1 text-xs"
+                                      onClick={() => setIcs201EditingObjectives(false)}
+                                    >
+                                      <X className="h-3.5 w-3.5" />
+                                      Cancel
+                                    </Button>
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      className="h-7 gap-1 bg-blue-600 text-xs text-white hover:bg-blue-700"
+                                      disabled={objectivesOverLimit}
+                                      onClick={() => {
+                                        saveIcs201Section({
+                                          ...ics201Form,
+                                          objectives: [...ics201ObjectivesDraft],
+                                        })
+                                        setIcs201EditingObjectives(false)
+                                      }}
+                                    >
+                                      <Check className="h-3.5 w-3.5" />
+                                      Save
+                                    </Button>
+                                  </div>
+                                </>
+                              )
+                            })()
+                          ) : ics201Form.objectives.length === 0 ? (
+                            <div className="rounded-md border border-dashed border-border/60 bg-muted/20 px-2.5 py-2 text-xs text-muted-foreground">
+                              No objectives recorded.
+                            </div>
+                          ) : (
+                            ics201Form.objectives.map((objective, index) => (
+                              <div
+                                key={`ics-objective-${index}`}
+                                className="rounded-md border border-dashed border-border/60 bg-muted/20 px-2.5 py-2 text-xs"
+                              >
+                                <span className="text-[10px] font-medium text-muted-foreground">
+                                  {index + 1}.{' '}
+                                </span>
+                                {objective || <span className="text-muted-foreground">—</span>}
+                              </div>
+                            ))
+                          )}
+                        </ItemContent>
+                      </div>
+                    </Item>
+                    <Item variant="outline" className={cn('flex-col items-stretch p-0', glassItemBorderClasses)}>
+                      <div className="px-3 py-2.5">
+                        <ItemContent className="space-y-3">
+                          <div className="flex items-center justify-between gap-2">
+                            <ItemTitle>Actions</ItemTitle>
+                            {!ics201EditingActions ? (
+                              <Button
+                                type="button"
+                                size="icon"
+                                variant="ghost"
+                                className="h-7 w-7 text-muted-foreground"
+                                aria-label="Edit actions"
+                                onClick={() => {
+                                  setIcs201ActionsDraft(
+                                    ics201Form.actions.map((action) => ({ ...action }))
+                                  )
+                                  setIcs201EditingActions(true)
+                                }}
+                              >
+                                <Pencil className="h-3.5 w-3.5" />
+                              </Button>
+                            ) : (
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                onClick={() =>
+                                  setIcs201ActionsDraft((draft) => [
+                                    ...draft,
+                                    {
+                                      id:
+                                        draft.length === 0
+                                          ? 1
+                                          : Math.max(...draft.map((item) => item.id)) + 1,
+                                      task: '',
+                                      owner: '',
+                                      startTime: '',
+                                      endTime: '',
+                                      status: 'Planned',
+                                    },
+                                  ])
+                                }
+                              >
+                                + Add Action
+                              </Button>
+                            )}
+                          </div>
+                          {ics201EditingActions ? (
+                            <>
+                              {ics201ActionsDraft.map((action) => (
+                                <div key={action.id} className="grid grid-cols-5 gap-2">
+                                  <input
+                                    value={action.task}
+                                    onChange={(event) =>
+                                      setIcs201ActionsDraft((draft) =>
+                                        draft.map((entry) =>
+                                          entry.id === action.id
+                                            ? { ...entry, task: event.target.value }
+                                            : entry
+                                        )
+                                      )
+                                    }
+                                    placeholder="Action"
+                                    className="col-span-2 h-8 rounded-md border bg-transparent px-2 text-xs outline-none"
+                                  />
+                                  <input
+                                    value={action.owner}
+                                    onChange={(event) =>
+                                      setIcs201ActionsDraft((draft) =>
+                                        draft.map((entry) =>
+                                          entry.id === action.id
+                                            ? { ...entry, owner: event.target.value }
+                                            : entry
+                                        )
+                                      )
+                                    }
+                                    placeholder="Owner"
+                                    className="h-8 rounded-md border bg-transparent px-2 text-xs outline-none"
+                                  />
+                                  <input
+                                    value={action.startTime}
+                                    onChange={(event) =>
+                                      setIcs201ActionsDraft((draft) =>
+                                        draft.map((entry) =>
+                                          entry.id === action.id
+                                            ? { ...entry, startTime: event.target.value }
+                                            : entry
+                                        )
+                                      )
+                                    }
+                                    placeholder="Start"
+                                    className="h-8 rounded-md border bg-transparent px-2 text-xs outline-none"
+                                  />
+                                  <input
+                                    value={action.endTime}
+                                    onChange={(event) =>
+                                      setIcs201ActionsDraft((draft) =>
+                                        draft.map((entry) =>
+                                          entry.id === action.id
+                                            ? { ...entry, endTime: event.target.value }
+                                            : entry
+                                        )
+                                      )
+                                    }
+                                    placeholder="End"
+                                    className="h-8 rounded-md border bg-transparent px-2 text-xs outline-none"
+                                  />
+                                </div>
+                              ))}
+                              <div className="flex items-center justify-end gap-1.5">
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-7 gap-1 text-xs"
+                                  onClick={() => openIcs201SectionGeneration('actions')}
+                                >
+                                  <Sparkles className="h-3.5 w-3.5" />
+                                  Generate Section Content
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-7 gap-1 text-xs"
+                                  onClick={() => setIcs201EditingActions(false)}
+                                >
+                                  <X className="h-3.5 w-3.5" />
+                                  Cancel
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  className="h-7 gap-1 bg-blue-600 text-xs text-white hover:bg-blue-700"
+                                  onClick={() => {
+                                    saveIcs201Section({
+                                      ...ics201Form,
+                                      actions: ics201ActionsDraft.map((action) => ({ ...action })),
+                                    })
+                                    setIcs201EditingActions(false)
+                                  }}
+                                >
+                                  <Check className="h-3.5 w-3.5" />
+                                  Save
+                                </Button>
+                              </div>
+                            </>
+                          ) : ics201Form.actions.length === 0 ? (
+                            <div className="rounded-md border border-dashed border-border/60 bg-muted/20 px-2.5 py-2 text-xs text-muted-foreground">
+                              No actions recorded.
+                            </div>
+                          ) : (
+                            ics201Form.actions.map((action) => (
+                              <div
+                                key={action.id}
+                                className="rounded-md border border-dashed border-border/60 bg-muted/20 px-2.5 py-2 text-xs"
+                              >
+                                <div className="font-medium">{action.task || '—'}</div>
+                                <div className="mt-1 text-[11px] text-muted-foreground">
+                                  Owner: {action.owner || '—'} · Start: {action.startTime || '—'} ·
+                                  End: {action.endTime || '—'}
+                                </div>
+                              </div>
+                            ))
+                          )}
+                        </ItemContent>
+                      </div>
+                    </Item>
+                    <Item variant="outline" className={cn('flex-col items-stretch p-0', glassItemBorderClasses)}>
+                      <div className="px-3 py-2.5">
+                        <ItemContent className="space-y-2">
+                          <div className="flex items-center justify-between gap-2">
+                            <ItemTitle>Organization Chart</ItemTitle>
+                            {!ics201EditingOrgChart && (
+                              <Button
+                                type="button"
+                                size="icon"
+                                variant="ghost"
+                                className="h-7 w-7 text-muted-foreground"
+                                aria-label="Edit organization chart"
+                                onClick={() => {
+                                  setIcs201OrgChartDraft({ ...ics201Form.orgChart })
+                                  setIcs201EditingOrgChart(true)
+                                }}
+                              >
+                                <Pencil className="h-3.5 w-3.5" />
+                              </Button>
+                            )}
+                          </div>
+                          {ics201EditingOrgChart ? (
+                            <>
+                              <div className="grid grid-cols-2 gap-2">
+                                {(
+                                  [
+                                    ['incidentCommander', 'Incident Commander'],
+                                    ['operationsSectionChief', 'Operations Section Chief'],
+                                    ['planningSectionChief', 'Planning Section Chief'],
+                                    ['logisticsSectionChief', 'Logistics Section Chief'],
+                                    ['financeSectionChief', 'Finance/Admin Section Chief'],
+                                    ['publicInformationOfficer', 'Public Information Officer'],
+                                    ['safetyOfficer', 'Safety Officer'],
+                                    ['liaisonOfficer', 'Liaison Officer'],
+                                  ] as const
+                                ).map(([field, placeholder]) => (
+                                  <input
+                                    key={field}
+                                    value={ics201OrgChartDraft[field]}
+                                    onChange={(event) =>
+                                      setIcs201OrgChartDraft((draft) => ({
+                                        ...draft,
+                                        [field]: event.target.value,
+                                      }))
+                                    }
+                                    placeholder={placeholder}
+                                    className="h-8 rounded-md border bg-transparent px-2 text-xs outline-none"
+                                  />
+                                ))}
+                              </div>
+                              <div className="flex items-center justify-end gap-1.5">
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-7 gap-1 text-xs"
+                                  onClick={() => openIcs201SectionGeneration('org-chart')}
+                                >
+                                  <Sparkles className="h-3.5 w-3.5" />
+                                  Generate Section Content
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-7 gap-1 text-xs"
+                                  onClick={() => setIcs201EditingOrgChart(false)}
+                                >
+                                  <X className="h-3.5 w-3.5" />
+                                  Cancel
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  className="h-7 gap-1 bg-blue-600 text-xs text-white hover:bg-blue-700"
+                                  onClick={() => {
+                                    saveIcs201Section({
+                                      ...ics201Form,
+                                      orgChart: { ...ics201OrgChartDraft },
+                                    })
+                                    setIcs201EditingOrgChart(false)
+                                  }}
+                                >
+                                  <Check className="h-3.5 w-3.5" />
+                                  Save
+                                </Button>
+                              </div>
+                            </>
+                          ) : (
+                            <div className="grid grid-cols-2 gap-2">
+                              {(
+                                [
+                                  ['Incident Commander', ics201Form.orgChart.incidentCommander],
+                                  [
+                                    'Operations Section Chief',
+                                    ics201Form.orgChart.operationsSectionChief,
+                                  ],
+                                  [
+                                    'Planning Section Chief',
+                                    ics201Form.orgChart.planningSectionChief,
+                                  ],
+                                  [
+                                    'Logistics Section Chief',
+                                    ics201Form.orgChart.logisticsSectionChief,
+                                  ],
+                                  [
+                                    'Finance/Admin Section Chief',
+                                    ics201Form.orgChart.financeSectionChief,
+                                  ],
+                                  [
+                                    'Public Information Officer',
+                                    ics201Form.orgChart.publicInformationOfficer,
+                                  ],
+                                  ['Safety Officer', ics201Form.orgChart.safetyOfficer],
+                                  ['Liaison Officer', ics201Form.orgChart.liaisonOfficer],
+                                ] as const
+                              ).map(([label, value]) => (
+                                <div key={label} className="space-y-1">
+                                  <Label className="text-[11px] font-medium text-muted-foreground">
+                                    {label}
+                                  </Label>
+                                  <div className="rounded-md border border-dashed border-border/60 bg-muted/20 px-2.5 py-2 text-xs">
+                                    {value || <span className="text-muted-foreground">—</span>}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </ItemContent>
+                      </div>
+                    </Item>
+                    <Item variant="outline" className={cn('flex-col items-stretch p-0', glassItemBorderClasses)}>
+                      <div className="px-3 py-2.5">
+                        <ItemContent className="space-y-3">
+                          <div className="flex items-center justify-between gap-2">
+                            <ItemTitle>Resources Summary</ItemTitle>
+                            {!ics201EditingResources ? (
+                              <Button
+                                type="button"
+                                size="icon"
+                                variant="ghost"
+                                className="h-7 w-7 text-muted-foreground"
+                                aria-label="Edit resources summary"
+                                onClick={() => {
+                                  setIcs201ResourcesDraft(
+                                    ics201Form.resources.map((resource) => ({ ...resource }))
+                                  )
+                                  setIcs201EditingResources(true)
+                                }}
+                              >
+                                <Pencil className="h-3.5 w-3.5" />
+                              </Button>
+                            ) : (
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                onClick={() =>
+                                  setIcs201ResourcesDraft((draft) => [
+                                    ...draft,
+                                    {
+                                      id:
+                                        draft.length === 0
+                                          ? 1
+                                          : Math.max(...draft.map((item) => item.id)) + 1,
+                                      category: '',
+                                      identifier: '',
+                                      quantity: '',
+                                      status: '',
+                                      assignment: '',
+                                    },
+                                  ])
+                                }
+                              >
+                                + Add Resource
+                              </Button>
+                            )}
+                          </div>
+                          {ics201EditingResources ? (
+                            <>
+                              {ics201ResourcesDraft.map((resource) => (
+                                <div key={resource.id} className="grid grid-cols-5 gap-2">
+                                  <input
+                                    value={resource.category}
+                                    onChange={(event) =>
+                                      setIcs201ResourcesDraft((draft) =>
+                                        draft.map((entry) =>
+                                          entry.id === resource.id
+                                            ? { ...entry, category: event.target.value }
+                                            : entry
+                                        )
+                                      )
+                                    }
+                                    placeholder="Category"
+                                    className="h-8 rounded-md border bg-transparent px-2 text-xs outline-none"
+                                  />
+                                  <input
+                                    value={resource.identifier}
+                                    onChange={(event) =>
+                                      setIcs201ResourcesDraft((draft) =>
+                                        draft.map((entry) =>
+                                          entry.id === resource.id
+                                            ? { ...entry, identifier: event.target.value }
+                                            : entry
+                                        )
+                                      )
+                                    }
+                                    placeholder="Identifier"
+                                    className="h-8 rounded-md border bg-transparent px-2 text-xs outline-none"
+                                  />
+                                  <input
+                                    value={resource.quantity}
+                                    onChange={(event) =>
+                                      setIcs201ResourcesDraft((draft) =>
+                                        draft.map((entry) =>
+                                          entry.id === resource.id
+                                            ? { ...entry, quantity: event.target.value }
+                                            : entry
+                                        )
+                                      )
+                                    }
+                                    placeholder="Qty"
+                                    className="h-8 rounded-md border bg-transparent px-2 text-xs outline-none"
+                                  />
+                                  <input
+                                    value={resource.status}
+                                    onChange={(event) =>
+                                      setIcs201ResourcesDraft((draft) =>
+                                        draft.map((entry) =>
+                                          entry.id === resource.id
+                                            ? { ...entry, status: event.target.value }
+                                            : entry
+                                        )
+                                      )
+                                    }
+                                    placeholder="Status"
+                                    className="h-8 rounded-md border bg-transparent px-2 text-xs outline-none"
+                                  />
+                                  <input
+                                    value={resource.assignment}
+                                    onChange={(event) =>
+                                      setIcs201ResourcesDraft((draft) =>
+                                        draft.map((entry) =>
+                                          entry.id === resource.id
+                                            ? { ...entry, assignment: event.target.value }
+                                            : entry
+                                        )
+                                      )
+                                    }
+                                    placeholder="Assignment"
+                                    className="h-8 rounded-md border bg-transparent px-2 text-xs outline-none"
+                                  />
+                                </div>
+                              ))}
+                              <div className="flex items-center justify-end gap-1.5">
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-7 gap-1 text-xs"
+                                  onClick={() => openIcs201SectionGeneration('resources')}
+                                >
+                                  <Sparkles className="h-3.5 w-3.5" />
+                                  Generate Section Content
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-7 gap-1 text-xs"
+                                  onClick={() => setIcs201EditingResources(false)}
+                                >
+                                  <X className="h-3.5 w-3.5" />
+                                  Cancel
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  className="h-7 gap-1 bg-blue-600 text-xs text-white hover:bg-blue-700"
+                                  onClick={() => {
+                                    saveIcs201Section({
+                                      ...ics201Form,
+                                      resources: ics201ResourcesDraft.map((resource) => ({
+                                        ...resource,
+                                      })),
+                                    })
+                                    setIcs201EditingResources(false)
+                                  }}
+                                >
+                                  <Check className="h-3.5 w-3.5" />
+                                  Save
+                                </Button>
+                              </div>
+                            </>
+                          ) : ics201Form.resources.length === 0 ? (
+                            <div className="rounded-md border border-dashed border-border/60 bg-muted/20 px-2.5 py-2 text-xs text-muted-foreground">
+                              No resources recorded.
+                            </div>
+                          ) : (
+                            ics201Form.resources.map((resource) => (
+                              <div
+                                key={resource.id}
+                                className="rounded-md border border-dashed border-border/60 bg-muted/20 px-2.5 py-2 text-xs"
+                              >
+                                <div className="font-medium">
+                                  {resource.category || '—'} · {resource.identifier || '—'}
+                                </div>
+                                <div className="mt-1 text-[11px] text-muted-foreground">
+                                  Qty: {resource.quantity || '—'} · Status:{' '}
+                                  {resource.status || '—'} · Assignment:{' '}
+                                  {resource.assignment || '—'}
+                                </div>
+                              </div>
+                            ))
+                          )}
+                        </ItemContent>
+                      </div>
+                    </Item>
+                    <Item variant="outline" className={cn('flex-col items-stretch p-0', glassItemBorderClasses)}>
+                      <div className="px-3 py-2.5">
+                        <ItemContent className="space-y-3">
+                          <div className="flex items-center justify-between gap-2">
+                            <ItemTitle>Safety Analysis</ItemTitle>
+                            {!ics201EditingSafetyAnalysis ? (
+                              <Button
+                                type="button"
+                                size="icon"
+                                variant="ghost"
+                                className="h-7 w-7 text-muted-foreground"
+                                aria-label="Edit safety analysis"
+                                onClick={() => {
+                                  setIcs201SafetyAnalysisDraft(
+                                    ics201Form.safetyAnalysis.map((row) => ({ ...row }))
+                                  )
+                                  setIcs201EditingSafetyAnalysis(true)
+                                }}
+                              >
+                                <Pencil className="h-3.5 w-3.5" />
+                              </Button>
+                            ) : (
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                onClick={() =>
+                                  setIcs201SafetyAnalysisDraft((draft) => [
+                                    ...draft,
+                                    {
+                                      id:
+                                        draft.length === 0
+                                          ? 1
+                                          : Math.max(...draft.map((item) => item.id)) + 1,
+                                      hazard: '',
+                                      mitigation: '',
+                                      ppe: '',
+                                      medicalPlan: '',
+                                    },
+                                  ])
+                                }
+                              >
+                                + Add Safety Item
+                              </Button>
+                            )}
+                          </div>
+                          {ics201EditingSafetyAnalysis ? (
+                            <>
+                              {ics201SafetyAnalysisDraft.map((safetyRow) => (
+                                <div key={safetyRow.id} className="grid grid-cols-2 gap-2">
+                                  <Textarea
+                                    value={safetyRow.hazard}
+                                    onChange={(event) =>
+                                      setIcs201SafetyAnalysisDraft((draft) =>
+                                        draft.map((entry) =>
+                                          entry.id === safetyRow.id
+                                            ? { ...entry, hazard: event.target.value }
+                                            : entry
+                                        )
+                                      )
+                                    }
+                                    className="min-h-16 text-xs"
+                                    placeholder="Hazard"
+                                  />
+                                  <Textarea
+                                    value={safetyRow.mitigation}
+                                    onChange={(event) =>
+                                      setIcs201SafetyAnalysisDraft((draft) =>
+                                        draft.map((entry) =>
+                                          entry.id === safetyRow.id
+                                            ? { ...entry, mitigation: event.target.value }
+                                            : entry
+                                        )
+                                      )
+                                    }
+                                    className="min-h-16 text-xs"
+                                    placeholder="Mitigation"
+                                  />
+                                  <input
+                                    value={safetyRow.ppe}
+                                    onChange={(event) =>
+                                      setIcs201SafetyAnalysisDraft((draft) =>
+                                        draft.map((entry) =>
+                                          entry.id === safetyRow.id
+                                            ? { ...entry, ppe: event.target.value }
+                                            : entry
+                                        )
+                                      )
+                                    }
+                                    className="h-8 rounded-md border bg-transparent px-2 text-xs outline-none"
+                                    placeholder="PPE"
+                                  />
+                                  <input
+                                    value={safetyRow.medicalPlan}
+                                    onChange={(event) =>
+                                      setIcs201SafetyAnalysisDraft((draft) =>
+                                        draft.map((entry) =>
+                                          entry.id === safetyRow.id
+                                            ? { ...entry, medicalPlan: event.target.value }
+                                            : entry
+                                        )
+                                      )
+                                    }
+                                    className="h-8 rounded-md border bg-transparent px-2 text-xs outline-none"
+                                    placeholder="Medical Plan"
+                                  />
+                                </div>
+                              ))}
+                              <div className="flex items-center justify-end gap-1.5">
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-7 gap-1 text-xs"
+                                  onClick={() => openIcs201SectionGeneration('safety-analysis')}
+                                >
+                                  <Sparkles className="h-3.5 w-3.5" />
+                                  Generate Section Content
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-7 gap-1 text-xs"
+                                  onClick={() => setIcs201EditingSafetyAnalysis(false)}
+                                >
+                                  <X className="h-3.5 w-3.5" />
+                                  Cancel
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  className="h-7 gap-1 bg-blue-600 text-xs text-white hover:bg-blue-700"
+                                  onClick={() => {
+                                    saveIcs201Section({
+                                      ...ics201Form,
+                                      safetyAnalysis: ics201SafetyAnalysisDraft.map((row) => ({
+                                        ...row,
+                                      })),
+                                    })
+                                    setIcs201EditingSafetyAnalysis(false)
+                                  }}
+                                >
+                                  <Check className="h-3.5 w-3.5" />
+                                  Save
+                                </Button>
+                              </div>
+                            </>
+                          ) : ics201Form.safetyAnalysis.length === 0 ? (
+                            <div className="rounded-md border border-dashed border-border/60 bg-muted/20 px-2.5 py-2 text-xs text-muted-foreground">
+                              No safety items recorded.
+                            </div>
+                          ) : (
+                            ics201Form.safetyAnalysis.map((safetyRow) => (
+                              <div
+                                key={safetyRow.id}
+                                className="rounded-md border border-dashed border-border/60 bg-muted/20 px-2.5 py-2 text-xs"
+                              >
+                                <div className="font-medium">Hazard: {safetyRow.hazard || '—'}</div>
+                                <div className="mt-1">Mitigation: {safetyRow.mitigation || '—'}</div>
+                                <div className="mt-1 text-[11px] text-muted-foreground">
+                                  PPE: {safetyRow.ppe || '—'} · Medical Plan:{' '}
+                                  {safetyRow.medicalPlan || '—'}
+                                </div>
+                              </div>
+                            ))
+                          )}
+                        </ItemContent>
+                      </div>
+                    </Item>
+                    {!viewingIcs201Version &&
+                      !isCreatingSignedIcs201Version &&
+                      (() => {
+                        const latest = ics201Versions[ics201Versions.length - 1]
+                        const signature = latest?.signatures[0]
+                        if (!signature) {
+                          return null
+                        }
+                        const signedAt = new Date(signature.signedAt)
+                        return (
+                          <Item
+                            variant="outline"
+                            className={cn('flex-col items-stretch p-0', glassItemBorderClasses)}
+                          >
+                            <div className="px-3 py-2.5">
+                              <ItemContent className="space-y-2">
+                                <ItemTitle>Approval</ItemTitle>
+                                <div className="grid grid-cols-4 gap-3 text-xs">
+                                  <div className="flex flex-col gap-0.5">
+                                    <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                                      Name
+                                    </span>
+                                    <span>{signature.name}</span>
+                                  </div>
+                                  <div className="flex flex-col gap-0.5">
+                                    <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                                      Position Title
+                                    </span>
+                                    <span>{signature.role}</span>
+                                  </div>
+                                  <div className="flex flex-col gap-0.5">
+                                    <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                                      Signature
+                                    </span>
+                                    <span className="font-serif text-base italic">
+                                      {signature.name}
+                                    </span>
+                                  </div>
+                                  <div className="flex flex-col gap-0.5">
+                                    <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                                      Date/Time
+                                    </span>
+                                    <span>
+                                      {signedAt.toLocaleString([], {
+                                        year: 'numeric',
+                                        month: '2-digit',
+                                        day: '2-digit',
+                                        hour: '2-digit',
+                                        minute: '2-digit',
+                                      })}
+                                    </span>
+                                  </div>
+                                </div>
+                              </ItemContent>
+                            </div>
+                          </Item>
+                        )
+                      })()}
                     </div>
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <Label>Safety Analysis</Label>
+                    {isCreatingSignedIcs201Version && !viewingIcs201Version && (
+                      <div className="flex items-center justify-end rounded-md border border-sky-400 bg-sky-50/60 px-3 py-2 dark:border-sky-500 dark:bg-sky-500/10">
                         <Button
                           type="button"
                           size="sm"
-                          variant="outline"
-                          onClick={addIcs201SafetyAnalysis}
+                          className="h-8 gap-1 bg-emerald-600 text-xs text-white hover:bg-emerald-700"
+                          onClick={() => {
+                            setIcs201SignNameInput('You')
+                            setIsIcs201SignNameDialogOpen(true)
+                          }}
                         >
-                          <Plus className="mr-1 h-3.5 w-3.5" />
-                          Add safety row
+                          <Check className="h-3.5 w-3.5" />
+                          Sign this version
                         </Button>
                       </div>
-                      {ics201Form.safetyAnalysis.map((row) => (
-                        <Item key={row.id} variant="muted" size="sm" className="flex-col items-stretch p-3">
-                          <div className="grid gap-2 md:grid-cols-2">
-                            <Input
-                              value={row.hazard}
-                              onChange={(event) =>
-                                updateIcs201SafetyAnalysis(row.id, 'hazard', event.target.value)
-                              }
-                              placeholder="Hazard"
-                            />
-                            <Input
-                              value={row.mitigation}
-                              onChange={(event) =>
-                                updateIcs201SafetyAnalysis(row.id, 'mitigation', event.target.value)
-                              }
-                              placeholder="Mitigation"
-                            />
-                          </div>
-                        </Item>
-                      ))}
-                    </div>
+                    )}
                   </div>
                 )}
 
@@ -22609,6 +26733,7 @@ function App() {
                   setIsPratusAiDrawerOpen(false)
                   if (
                     pratusAiIntent === 'ics201-generation' ||
+                    pratusAiIntent === 'ics201-section-generation' ||
                     pratusAiIntent === 'sitrep-generation' ||
                     pratusAiIntent === 'event-rule-generation' ||
                     pratusAiIntent === 'notification-rule-generation'
@@ -23609,6 +27734,146 @@ function App() {
           )}
         </DialogContent>
       </Dialog>
+      <Dialog open={isIcs201PreviewOpen} onOpenChange={setIsIcs201PreviewOpen}>
+        <DialogContent className="!w-[70vw] !max-w-[70vw] sm:!max-w-[70vw]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-sm font-semibold">
+              <Eye className="h-4 w-4" />
+              {ics201PreviewTitle}
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              Placeholder rendering of the ICS-201 export. Layout, fonts, and pagination
+              will differ in the final Word or PDF file.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="max-h-[70vh] overflow-y-auto">
+            <div className="mx-auto w-full max-w-3xl rounded-md border bg-white p-8 text-[13px] leading-relaxed text-zinc-900 shadow-sm dark:bg-zinc-100">
+              <div className="mb-4 border-b border-dashed border-zinc-300 pb-2 text-center text-[10px] uppercase tracking-[0.2em] text-zinc-500">
+                Document preview ·{' '}
+                {ics201StructureMode === 'strict'
+                  ? 'Strict'
+                  : ics201StructureMode === 'paginated'
+                    ? 'Paginated'
+                    : 'Flexible'}{' '}
+                Structure
+              </div>
+              {ics201PreviewBlocks.length === 0 ? (
+                <div className="py-8 text-center text-sm text-zinc-500">
+                  Nothing to preview yet.
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {ics201PreviewBlocks.map((block, index) => {
+                    if (block.kind === 'title') {
+                      return (
+                        <h1
+                          key={`preview-${index}`}
+                          className="border-b border-zinc-300 pb-2 text-center text-xl font-bold"
+                        >
+                          {block.text}
+                        </h1>
+                      )
+                    }
+                    if (block.kind === 'subtitle') {
+                      return (
+                        <p
+                          key={`preview-${index}`}
+                          className="pb-3 text-center text-sm italic text-zinc-600"
+                        >
+                          {block.text}
+                        </p>
+                      )
+                    }
+                    if (block.kind === 'heading') {
+                      return (
+                        <h2
+                          key={`preview-${index}`}
+                          className="mt-5 border-b border-zinc-200 pb-1 text-sm font-semibold uppercase tracking-wide text-zinc-700"
+                        >
+                          {block.text}
+                        </h2>
+                      )
+                    }
+                    if (block.kind === 'bullet') {
+                      return (
+                        <div
+                          key={`preview-${index}`}
+                          className="flex gap-2 pl-3 text-[13px] leading-snug"
+                        >
+                          <span aria-hidden="true">•</span>
+                          <span className="whitespace-pre-wrap">{block.text}</span>
+                        </div>
+                      )
+                    }
+                    return (
+                      <p
+                        key={`preview-${index}`}
+                        className="whitespace-pre-wrap text-[13px] leading-snug"
+                      >
+                        {block.text}
+                      </p>
+                    )
+                  })}
+                </div>
+              )}
+              <div className="mt-6 border-t border-dashed border-zinc-300 pt-2 text-center text-[10px] uppercase tracking-[0.2em] text-zinc-400">
+                End of preview placeholder
+              </div>
+            </div>
+          </div>
+          <DialogFooter className="flex flex-row items-center justify-end gap-2 sm:justify-end">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-8 gap-1 text-xs"
+              onClick={() => setIsIcs201PreviewOpen(false)}
+            >
+              <X className="h-3.5 w-3.5" />
+              Close
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-8 gap-1 text-xs"
+              onClick={() => {
+                const safeIncident =
+                  ics201Form.incidentName.trim().replace(/[^a-zA-Z0-9-_]+/g, '_') || 'Incident'
+                const stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-')
+                downloadDocx(
+                  `ICS-201_${safeIncident}_${stamp}.docx`,
+                  ics201PreviewBlocks.length > 0
+                    ? ics201PreviewBlocks
+                    : buildIcs201DocxBlocks(ics201Form),
+                  buildIcs201ExportOptions(ics201Form)
+                )
+              }}
+            >
+              <FileText className="h-3.5 w-3.5" />
+              Export Word
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              className="h-8 gap-1 bg-blue-600 text-xs text-white hover:bg-blue-700"
+              onClick={() => {
+                const safeIncident =
+                  ics201Form.incidentName.trim().replace(/[^a-zA-Z0-9-_]+/g, '_') || 'Incident'
+                const stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-')
+                exportIcs201Pdf(
+                  `ICS-201_${safeIncident}_${stamp}.pdf`,
+                  ics201Form
+                )
+              }}
+            >
+              <FileText className="h-3.5 w-3.5" />
+              Export PDF
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={isIcs201VersionDialogOpen} onOpenChange={setIsIcs201VersionDialogOpen}>
         <DialogContent className="!w-[60vw] !max-w-[60vw] sm:!max-w-[60vw]">
           <div className="flex items-center gap-2 px-1 pb-2 text-sm font-semibold">
@@ -23890,6 +28155,89 @@ function App() {
               Sign
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={isAddRosterMemberOpen}
+        onOpenChange={(open) => {
+          setIsAddRosterMemberOpen(open)
+          if (!open) {
+            resetAddRosterMemberDraft()
+          }
+        }}
+      >
+        <DialogContent className="!w-[28rem] !max-w-[28rem] sm:!max-w-[28rem]">
+          <DialogHeader>
+            <DialogTitle>Add roster member</DialogTitle>
+            <DialogDescription>
+              {isSupabaseEnabled
+                ? `Send an email invitation and assign an ICS position for ${activeWorkspaceRosterLabel}. Invited users can sign in after accepting the link.`
+                : `Invite a team member by email and assign their ICS position for ${activeWorkspaceRosterLabel}.`}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-3 py-1">
+            <div className="grid gap-2">
+              <Label htmlFor="roster-member-email">Email</Label>
+              <Input
+                id="roster-member-email"
+                type="email"
+                autoFocus
+                value={rosterMemberEmailDraft}
+                onChange={(event) => setRosterMemberEmailDraft(event.target.value)}
+                placeholder="name@agency.gov"
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault()
+                    addWorkspaceRosterMember()
+                  }
+                }}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="roster-member-position">ICS Position</Label>
+              <Select
+                value={rosterMemberPositionDraft}
+                onValueChange={setRosterMemberPositionDraft}
+              >
+                <SelectTrigger id="roster-member-position">
+                  <SelectValue placeholder="Select ICS position" />
+                </SelectTrigger>
+                <SelectContent>
+                  {ICS_ROSTER_POSITION_OPTIONS.map((position) => (
+                    <SelectItem key={position} value={position}>
+                      {position}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setIsAddRosterMemberOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              disabled={
+                isInvitingRosterMember ||
+                !isValidRosterEmail(rosterMemberEmailDraft) ||
+                rosterMemberPositionDraft.trim().length === 0
+              }
+              onClick={() => {
+                void addWorkspaceRosterMember()
+              }}
+            >
+              {isInvitingRosterMember
+                ? 'Sending invite…'
+                : isSupabaseEnabled
+                  ? 'Send invite'
+                  : 'Add to roster'}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
       <Dialog
@@ -24577,7 +28925,7 @@ function App() {
         >
           <div className="flex h-full flex-col">
             <SheetHeader className="gap-1 border-b border-border bg-muted/40 px-4 py-4">
-              <SheetTitle className="text-base font-semibold">British Petroleum</SheetTitle>
+              <SheetTitle className="text-base font-semibold">United States Coast Guard</SheetTitle>
               <span className="text-xs text-muted-foreground">Navigation</span>
             </SheetHeader>
             <nav className="flex-1 overflow-y-auto px-2 py-3">
@@ -26673,9 +31021,7 @@ function App() {
                             className="w-full justify-between font-normal"
                           >
                             <span className="truncate text-left">
-                              {incidentCategory.length > 0
-                                ? incidentCategory.join(', ')
-                                : 'Select categories'}
+                              {incidentCategory || 'Select category'}
                             </span>
                             <ChevronDown className="h-4 w-4 text-muted-foreground" />
                           </Button>
@@ -26687,18 +31033,17 @@ function App() {
                               className="pr-2"
                               onSelect={(event) => {
                                 event.preventDefault()
-                                setIncidentCategory((previous) => {
-                                  if (previous.includes(category)) {
-                                    return previous.filter((item) => item !== category)
-                                  }
-
-                                  return [...previous, category]
-                                })
+                                setIncidentCategory(category)
                               }}
                             >
                               <div className="flex items-center gap-2">
+                                <span
+                                  className="inline-block h-2 w-2 shrink-0 rounded-full"
+                                  style={{ backgroundColor: getIncidentCategoryColorHex(category) }}
+                                  aria-hidden="true"
+                                />
                                 <Checkbox
-                                  checked={incidentCategory.includes(category)}
+                                  checked={incidentCategory === category}
                                   className="pointer-events-none"
                                   aria-hidden="true"
                                 />
