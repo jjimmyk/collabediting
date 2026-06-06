@@ -178,6 +178,7 @@ import { EventsSettingsPage } from '@/components/EventsSettingsPage'
 import { NotificationSettingsPage } from '@/components/NotificationSettingsPage'
 import pratusLogo from '@/assets/pratus-logo.png'
 import { Ics201SectionEditorBadges } from '@/features/ics201/Ics201SectionEditorBadges'
+import { Ics201TutorialWizard } from '@/features/ics201/Ics201TutorialWizard'
 import {
   BASELINE_MAP_SKETCH_POLYGON,
   createInitialIcs201Form,
@@ -7524,6 +7525,7 @@ function App() {
   const [isIcs201SignedVersionsDialogOpen, setIsIcs201SignedVersionsDialogOpen] = useState(false)
   const [isCreatingSignedIcs201Version, setIsCreatingSignedIcs201Version] = useState(false)
   const [isIcs201SignNameDialogOpen, setIsIcs201SignNameDialogOpen] = useState(false)
+  const [isIcs201TutorialOpen, setIsIcs201TutorialOpen] = useState(false)
   const [ics201SignNameInput, setIcs201SignNameInput] = useState('You')
   const [viewingIcs201Version, setViewingIcs201Version] = useState<Ics201Version | null>(null)
   const [currentSituationEdit, setCurrentSituationEdit] = useState<string | null>(null)
@@ -15809,13 +15811,39 @@ function App() {
             >
               <Menu className="h-4 w-4" />
             </Button>
-            <span className="font-semibold">
-              {isInExerciseWorkspace && activeExerciseWorkspace
-                ? `Exercise ${activeExerciseWorkspace.name}`
-                : isInIncidentWorkspace && activeIncidentWorkspace
-                  ? activeIncidentWorkspace.name
-                  : 'United States Coast Guard'}
-            </span>
+            <div className="flex items-center gap-0.5">
+              <span className="font-semibold">
+                {isInExerciseWorkspace && activeExerciseWorkspace
+                  ? `Exercise ${activeExerciseWorkspace.name}`
+                  : isInIncidentWorkspace && activeIncidentWorkspace
+                    ? activeIncidentWorkspace.name
+                    : 'United States Coast Guard'}
+              </span>
+              {(isInIncidentWorkspace || isInExerciseWorkspace) && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className={cn('h-7 w-7', glassIconButtonClasses)}
+                      aria-label="Workspace options"
+                    >
+                      <MoreVertical className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="w-48">
+                    <DropdownMenuItem
+                      onSelect={() => {
+                        setIsIcs201TutorialOpen(true)
+                      }}
+                    >
+                      Tutorial Wizard
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
+            </div>
           </div>
           <div className="flex items-start gap-2">
             {appliedFilterLabel && (
@@ -28490,6 +28518,17 @@ function App() {
           </div>
         </DialogContent>
       </Dialog>
+      {(isInIncidentWorkspace || isInExerciseWorkspace) && (
+        <Ics201TutorialWizard
+          open={isIcs201TutorialOpen}
+          onOpenChange={setIsIcs201TutorialOpen}
+          workspaceName={
+            activeExerciseWorkspace?.name ?? activeIncidentWorkspace?.name ?? 'Workspace'
+          }
+          workspaceKind={isInExerciseWorkspace ? 'exercise' : 'incident'}
+          onNavigateToIcs201={() => setActiveTab('briefing')}
+        />
+      )}
       <Dialog
         open={isAddRosterMemberOpen}
         onOpenChange={(open) => {
