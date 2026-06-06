@@ -1,17 +1,10 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { createClient } from '@supabase/supabase-js'
-import { getAppCallbackUrl, getInviteEmailFromAddress, sendInviteEmailViaResend } from './lib/invite-email'
+import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 
 const supabaseUrl =
   process.env.VITE_SUPABASE_URL ??
   process.env.NEXT_PUBLIC_SUPABASE_URL ??
   process.env.SUPABASE_URL
-const supabaseAnonKey =
-  process.env.VITE_SUPABASE_ANON_KEY ??
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ??
-  process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ??
-  process.env.SUPABASE_ANON_KEY ??
-  process.env.SUPABASE_PUBLISHABLE_KEY
 const supabaseServiceRoleKey =
   process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.SUPABASE_SECRET_KEY
 
@@ -28,67 +21,108 @@ type InviteBody = {
   redirectTo?: string
 }
 
-async function findUserIdByEmail(
-  admin: ReturnType<typeof createClient>,
-  email: string
-): Promise<string | null> {
-  let page = 1
-  const perPage = 200
+function getAppUrl(): string {
+  return (
+    process.env.VITE_APP_URL ??
+    process.env.APP_URL ??
+    (process.env.VERCEL_PROJECT_PRODUCTION_URL
+      ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+      : process.env.VERCEL_URL
+        ? `https://${process.env.VERCEL_URL}`
+        : 'https://thehub-6426.vercel.app')
+  ).replace(/\/$/, '')
+}
 
-  while (page <= 10) {
-    const { data, error } = await admin.auth.admin.listUsers({ page, perPage })
-    if (error) {
-      throw error
-    }
+function getAppCallbackUrl(workspaceId: string): string {
+  return `${getAppUrl()}/auth/callback?workspace=${encodeURIComponent(workspaceId)}`
+}
 
-    const match = data.users.find((user) => user.email?.toLowerCase() === email)
-    if (match) {
-      return match.id
+function parseInviteBody(req: VercelRequest): InviteBody {
+  if (typeof req.body === 'string') {
+    try {
+      return JSON.parse(req.body) as InviteBody
+    } catch {
+      return {}
     }
+  }
+  return (req.body ?? {}) as InviteBody
+}
 
-    if (data.users.length < perPage) {
-      break
-    }
-    page += 1
+async function sendInviteEmailViaResend(params: {
+  apiKey: string
+  fromAddress: string
+  to: string
+  subject: string
+  signInLink: string
+  intro: string
+}): Promise<{ ok: true } | { ok: false; details: string }> {
+  const emailResponse = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${params.apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      from: params.fromAddress,
+      to: [params.to],
+      subject: params.subject,
+      html: `
+        <p>${params.intro}</p>
+        <p>Click the link below to accept your invitation and create your password. This link expires in about one hour.</p>
+        <p><a href="${params.signInLink}">Accept invitation</a></p>
+        <p>If you did not expect this email, you can ignore it.</p>
+      `,
+    }),
+  })
+
+  if (!emailResponse.ok) {
+    const details = await emailResponse.text().catch(() => '')
+    return { ok: false, details: details.slice(0, 300) }
   }
 
-  return null
+  return { ok: true }
 }
 
 async function sendInviteEmail(params: {
-  admin: ReturnType<typeof createClient>
+  admin: SupabaseClient
   email: string
   redirectTo: string
   workspaceLabel?: string
 }): Promise<{ method: string; warning?: string }> {
   const { admin, email, redirectTo } = params
-  const existingUserId = await findUserIdByEmail(admin, email)
   const resendKey = process.env.RESEND_API_KEY
-  const fromAddress = getInviteEmailFromAddress()
+  const fromAddress = process.env.SIGN_IN_EMAIL_FROM ?? 'Pratus <onboarding@resend.dev>'
   const intro = params.workspaceLabel
     ? `You have been invited to join the ${params.workspaceLabel} workspace in Pratus.`
     : 'You have been invited to join a Pratus workspace.'
 
-  if (!existingUserId) {
-    const { error } = await admin.auth.admin.inviteUserByEmail(email, {
-      redirectTo,
-      data: { password_set: false },
-    })
-    if (error) {
-      throw error
-    }
+  const { error: inviteError } = await admin.auth.admin.inviteUserByEmail(email, {
+    redirectTo,
+    data: { password_set: false },
+  })
+
+  if (!inviteError) {
     return { method: 'supabase_invite' }
   }
 
-  const linkType = 'magiclink' as const
-  const { data, error } = await admin.auth.admin.generateLink({
-    type: linkType,
+  const inviteMessage = inviteError.message.toLowerCase()
+  const userAlreadyExists =
+    inviteMessage.includes('already') ||
+    inviteMessage.includes('registered') ||
+    inviteMessage.includes('exists')
+
+  if (!userAlreadyExists) {
+    throw inviteError
+  }
+
+  const { data, error: linkError } = await admin.auth.admin.generateLink({
+    type: 'magiclink',
     email,
     options: { redirectTo },
   })
 
-  if (error || !data.properties.action_link) {
-    throw error ?? new Error('Could not generate invitation link.')
+  if (linkError || !data.properties.action_link) {
+    throw linkError ?? new Error('Could not generate invitation link for an existing user.')
   }
 
   if (resendKey) {
@@ -106,133 +140,123 @@ async function sendInviteEmail(params: {
     return { method: 'resend_existing_user' }
   }
 
-  const { error: otpError } = await admin.auth.signInWithOtp({
-    email,
-    options: { emailRedirectTo: redirectTo },
-  })
-
-  if (otpError) {
-    return {
-      method: 'roster_only',
-      warning:
-        otpError.message ??
-        'Roster updated, but the invitation email could not be sent because of rate limits. Ask the member to sign in with email and password if they already have an account.',
-    }
+  return {
+    method: 'roster_only_existing_user',
+    warning:
+      'Roster updated. This person already has a Pratus account — share the workspace name and ask them to sign in with their email and password. To email existing users automatically, add RESEND_API_KEY in Vercel.',
   }
-
-  return { method: 'supabase_otp_existing_user' }
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' })
-  }
+  try {
+    if (req.method !== 'POST') {
+      return res.status(405).json({ error: 'Method not allowed' })
+    }
 
-  if (!supabaseUrl || !supabaseAnonKey || !supabaseServiceRoleKey) {
-    return res.status(500).json({ error: 'Supabase server environment is not configured.' })
-  }
+    if (!supabaseUrl || !supabaseServiceRoleKey) {
+      return res.status(503).json({ error: 'Supabase server environment is not configured.' })
+    }
 
-  const authHeader = req.headers.authorization
-  const accessToken = authHeader?.startsWith('Bearer ')
-    ? authHeader.slice('Bearer '.length)
-    : null
+    const authHeader = req.headers.authorization
+    const accessToken = authHeader?.startsWith('Bearer ')
+      ? authHeader.slice('Bearer '.length)
+      : null
 
-  if (!accessToken) {
-    return res.status(401).json({ error: 'Missing authorization token.' })
-  }
+    if (!accessToken) {
+      return res.status(401).json({ error: 'Missing authorization token.' })
+    }
 
-  const body = req.body as InviteBody
-  const workspaceId = body.workspaceId?.trim()
-  const email = body.email?.trim().toLowerCase()
-  const icsPosition = body.icsPosition?.trim()
+    const body = parseInviteBody(req)
+    const workspaceId = body.workspaceId?.trim()
+    const email = body.email?.trim().toLowerCase()
+    const icsPosition = body.icsPosition?.trim()
 
-  if (!workspaceId || !email || !icsPosition) {
-    return res.status(400).json({ error: 'workspaceId, email, and icsPosition are required.' })
-  }
+    if (!workspaceId || !email || !icsPosition) {
+      return res.status(400).json({ error: 'workspaceId, email, and icsPosition are required.' })
+    }
 
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    return res.status(400).json({ error: 'Invalid email address.' })
-  }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({ error: 'Invalid email address.' })
+    }
 
-  const userClient = createClient(supabaseUrl, supabaseAnonKey, {
-    global: { headers: { Authorization: `Bearer ${accessToken}` } },
-  })
+    const admin = createClient(supabaseUrl, supabaseServiceRoleKey)
 
-  const {
-    data: { user },
-    error: userError,
-  } = await userClient.auth.getUser()
+    const {
+      data: { user },
+      error: userError,
+    } = await admin.auth.getUser(accessToken)
 
-  if (userError || !user) {
-    return res.status(401).json({ error: 'Invalid or expired session.' })
-  }
+    if (userError || !user) {
+      return res.status(401).json({ error: 'Invalid or expired session.' })
+    }
 
-  const admin = createClient(supabaseUrl, supabaseServiceRoleKey)
-
-  const { data: profile } = await admin
-    .from('profiles')
-    .select('is_org_admin')
-    .eq('id', user.id)
-    .maybeSingle()
-
-  if (!profile?.is_org_admin) {
-    const { data: membership } = await admin
-      .from('workspace_members')
-      .select('ics_position, status')
-      .eq('workspace_id', workspaceId)
-      .eq('user_id', user.id)
-      .eq('status', 'active')
+    const { data: profile } = await admin
+      .from('profiles')
+      .select('is_org_admin')
+      .eq('id', user.id)
       .maybeSingle()
 
-    if (!membership || !ROSTER_MANAGER_POSITIONS.has(membership.ics_position)) {
-      return res.status(403).json({ error: 'You do not have permission to invite roster members.' })
-    }
-  }
+    if (!profile?.is_org_admin) {
+      const { data: membership } = await admin
+        .from('workspace_members')
+        .select('ics_position, status')
+        .eq('workspace_id', workspaceId)
+        .eq('user_id', user.id)
+        .eq('status', 'active')
+        .maybeSingle()
 
-  const { data: workspace } = await admin
-    .from('workspaces')
-    .select('name')
-    .eq('id', workspaceId)
-    .maybeSingle()
-
-  const { error: upsertError } = await admin.from('workspace_members').upsert(
-    {
-      workspace_id: workspaceId,
-      email,
-      ics_position: icsPosition,
-      status: 'invited',
-      invited_by: user.id,
-      invited_at: new Date().toISOString(),
-      user_id: null,
-      joined_at: null,
-    },
-    { onConflict: 'workspace_id,email' }
-  )
-
-  if (upsertError) {
-    return res.status(400).json({ error: upsertError.message })
-  }
-
-  const inviteRedirect = getAppCallbackUrl(workspaceId)
-
-  try {
-    const delivery = await sendInviteEmail({
-      admin,
-      email,
-      redirectTo: inviteRedirect,
-      workspaceLabel: workspace?.name,
-    })
-
-    if (delivery.warning) {
-      return res.status(200).json({ ok: true, method: delivery.method, emailWarning: delivery.warning })
+      if (!membership || !ROSTER_MANAGER_POSITIONS.has(membership.ics_position)) {
+        return res.status(403).json({ error: 'You do not have permission to invite roster members.' })
+      }
     }
 
-    return res.status(200).json({ ok: true, method: delivery.method })
+    const { data: workspace } = await admin
+      .from('workspaces')
+      .select('name')
+      .eq('id', workspaceId)
+      .maybeSingle()
+
+    const { error: upsertError } = await admin.from('workspace_members').upsert(
+      {
+        workspace_id: workspaceId,
+        email,
+        ics_position: icsPosition,
+        status: 'invited',
+        invited_by: user.id,
+        invited_at: new Date().toISOString(),
+      },
+      { onConflict: 'workspace_id,email' }
+    )
+
+    if (upsertError) {
+      return res.status(400).json({ error: upsertError.message })
+    }
+
+    const inviteRedirect = getAppCallbackUrl(workspaceId)
+
+    try {
+      const delivery = await sendInviteEmail({
+        admin,
+        email,
+        redirectTo: inviteRedirect,
+        workspaceLabel: workspace?.name,
+      })
+
+      if (delivery.warning) {
+        return res.status(200).json({ ok: true, method: delivery.method, emailWarning: delivery.warning })
+      }
+
+      return res.status(200).json({ ok: true, method: delivery.method })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Invitation email failed.'
+      return res.status(200).json({
+        ok: true,
+        emailWarning: `Roster updated, but the invitation email could not be sent: ${message}`,
+      })
+    }
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Invitation email failed.'
-    return res.status(200).json({
-      ok: true,
-      emailWarning: `Roster updated, but the invitation email could not be sent: ${message}`,
-    })
+    const message = error instanceof Error ? error.message : 'Invite failed.'
+    console.error('invite handler error', error)
+    return res.status(500).json({ error: message })
   }
 }

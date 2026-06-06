@@ -200,7 +200,9 @@ export async function inviteWorkspaceMember(params: {
   workspaceId: string
   email: string
   icsPosition: string
-}): Promise<{ ok: true } | { ok: false; message: string }> {
+}): Promise<
+  { ok: true; warning?: string } | { ok: false; message: string }
+> {
   if (!isSupabaseConfigured) {
     return { ok: false, message: 'Supabase is not configured.' }
   }
@@ -222,10 +224,15 @@ export async function inviteWorkspaceMember(params: {
   const payload = (await response.json().catch(() => ({}))) as {
     error?: string
     message?: string
+    emailWarning?: string
   }
 
   if (!response.ok) {
     return { ok: false, message: payload.error ?? payload.message ?? 'Invite failed.' }
+  }
+
+  if (payload.emailWarning) {
+    return { ok: true, warning: payload.emailWarning }
   }
 
   return { ok: true }

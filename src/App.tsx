@@ -11704,6 +11704,10 @@ function App() {
       setSupabaseWorkspaceRoster(roster)
       resetAddRosterMemberDraft()
       setIsAddRosterMemberOpen(false)
+      if (result.warning) {
+        toast.warning(result.warning)
+        return
+      }
       toast.success(`Invitation sent to ${email} as ${position}.`)
       return
     }
