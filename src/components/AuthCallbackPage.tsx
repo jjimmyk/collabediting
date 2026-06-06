@@ -7,6 +7,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import {
   parseAuthCallbackUrl,
   shouldPromptForPasswordSetup,
+  stashInvitedWorkspaceId,
   userNeedsPasswordSetup,
 } from '@/lib/auth-callback'
 import { getSupabaseClient } from '@/lib/supabase'
@@ -34,6 +35,9 @@ export function AuthCallbackPage() {
       }
 
       const callback = parseAuthCallbackUrl()
+      const searchParams = new URLSearchParams(window.location.search)
+      const invitedWorkspaceId = searchParams.get('workspace')
+      stashInvitedWorkspaceId(invitedWorkspaceId)
 
       try {
         if (callback.tokenHash && callback.type) {
@@ -90,7 +94,7 @@ export function AuthCallbackPage() {
         window.history.replaceState({}, '', '/')
 
         const needsPassword =
-          shouldPromptForPasswordSetup(callback.type) ||
+          shouldPromptForPasswordSetup(callback.type, currentSession.user) ||
           userNeedsPasswordSetup(currentSession.user)
 
         if (needsPassword) {

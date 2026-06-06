@@ -51,8 +51,36 @@ export function hasAuthCallbackParams(url: string = window.location.href): boole
   )
 }
 
-export function shouldPromptForPasswordSetup(type: AuthCallbackType | null): boolean {
-  return type === 'signup' || type === 'invite' || type === 'recovery' || type === 'magiclink'
+export function shouldPromptForPasswordSetup(
+  type: AuthCallbackType | null,
+  user?: { user_metadata?: Record<string, unknown> } | null
+): boolean {
+  if (type === 'invite') {
+    return true
+  }
+  if (type === 'signup' || type === 'recovery') {
+    return userNeedsPasswordSetup(user)
+  }
+  if (type === 'magiclink') {
+    return userNeedsPasswordSetup(user)
+  }
+  return userNeedsPasswordSetup(user)
+}
+
+export const POST_AUTH_WORKSPACE_STORAGE_KEY = 'pratus-post-auth-workspace-id'
+
+export function stashInvitedWorkspaceId(workspaceId: string | null): void {
+  if (typeof window === 'undefined' || !workspaceId) return
+  sessionStorage.setItem(POST_AUTH_WORKSPACE_STORAGE_KEY, workspaceId)
+}
+
+export function consumeInvitedWorkspaceId(): string | null {
+  if (typeof window === 'undefined') return null
+  const workspaceId = sessionStorage.getItem(POST_AUTH_WORKSPACE_STORAGE_KEY)
+  if (workspaceId) {
+    sessionStorage.removeItem(POST_AUTH_WORKSPACE_STORAGE_KEY)
+  }
+  return workspaceId
 }
 
 export function userNeedsPasswordSetup(

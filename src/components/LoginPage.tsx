@@ -39,18 +39,18 @@ export function LoginPage() {
           </div>
           <CardTitle>Sign in to Pratus</CardTitle>
           <CardDescription>
-            Sign in with your roster email and password.
+            Sign in with the email address you were invited with and the password you created.
           </CardDescription>
         </CardHeader>
         <CardContent>
           <form className="space-y-4" onSubmit={handleSubmit}>
             <div className="space-y-2">
-              <Label htmlFor="login-email">Work email</Label>
+              <Label htmlFor="login-email">Email</Label>
               <Input
                 id="login-email"
                 type="email"
                 autoComplete="email"
-                placeholder="jimmy.king@disastertech.com"
+                placeholder="name@agency.gov"
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
                 required
@@ -72,8 +72,8 @@ export function LoginPage() {
               {isSubmitting ? 'Signing in…' : 'Sign in'}
             </Button>
             <p className="text-xs text-muted-foreground">
-              Demo accounts: <strong>jimmy.king@disastertech.com</strong> and{' '}
-              <strong>jamespking47@gmail.com</strong>
+              First time here? Open the invitation email from Pratus, accept the invite, and create
+              your password. You will only see workspaces you were added to.
             </p>
           </form>
         </CardContent>

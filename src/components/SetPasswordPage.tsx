@@ -55,8 +55,8 @@ export function SetPasswordPage() {
           <CardTitle>Create your password</CardTitle>
           <CardDescription>
             {profileEmail
-              ? `Set a password for ${profileEmail} to finish signing in.`
-              : 'Set a password to finish signing in.'}
+              ? `Confirm your email and create a password for ${profileEmail} to finish accepting your invitation.`
+              : 'Confirm your email and create a password to finish accepting your invitation.'}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -87,7 +87,7 @@ export function SetPasswordPage() {
             </div>
             {error && <p className="text-sm text-destructive">{error}</p>}
             <Button type="submit" className="w-full" disabled={isSubmitting}>
-              {isSubmitting ? 'Saving…' : 'Save password and continue'}
+              {isSubmitting ? 'Saving…' : 'Create password and continue'}
             </Button>
           </form>
         </CardContent>

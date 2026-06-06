@@ -153,6 +153,7 @@ import {
 } from '@/lib/ics-213rr-resource-request'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/contexts/AuthContext'
+import { consumeInvitedWorkspaceId } from '@/lib/auth-callback'
 import type { WorkspaceRosterMember } from '@/lib/workspace-types'
 import { buildDefaultLocalWorkspaceRosters } from '@/lib/default-roster'
 import {
@@ -6090,6 +6091,7 @@ function App() {
     profileEmail,
     isOrgAdmin,
     canAccessWorkspace,
+    accessibleWorkspaces,
     getAccessToken,
     signOut,
   } = useAuth()
@@ -6127,6 +6129,7 @@ function App() {
   const ics201SketchViewModelRef = useRef<SketchViewModel | null>(null)
   const [isDrawingIcs201Polygon, setIsDrawingIcs201Polygon] = useState(false)
   const preserveIncidentGeometryRef = useRef(false)
+  const hasHandledInviteRedirectRef = useRef(false)
   const [isObjectivesOpen, setIsObjectivesOpen] = useState(true)
   const [panelWidthMode, setPanelWidthMode] = useState<'one-third' | 'one-half'>(
     'one-half'
@@ -11839,6 +11842,40 @@ function App() {
     )
     liveIcs201FormRef.current = null
   }
+  useEffect(() => {
+    if (!isSupabaseEnabled || accessibleWorkspaces.length === 0 || hasHandledInviteRedirectRef.current) {
+      return
+    }
+
+    const invitedWorkspaceId = consumeInvitedWorkspaceId()
+    if (!invitedWorkspaceId) {
+      return
+    }
+
+    const invitedWorkspace = accessibleWorkspaces.find(
+      (workspace) => workspace.workspaceId === invitedWorkspaceId
+    )
+    if (!invitedWorkspace) {
+      return
+    }
+
+    hasHandledInviteRedirectRef.current = true
+
+    if (invitedWorkspace.kind === 'incident') {
+      const incident =
+        incidentList.find((item) => item.id === invitedWorkspace.legacyId) ??
+        SITREP_ONGOING_INCIDENTS.find((item) => item.id === invitedWorkspace.legacyId)
+      if (incident) {
+        enterIncidentWorkspace(incident)
+      }
+      return
+    }
+
+    const exercise = exerciseList.find((item) => item.id === invitedWorkspace.legacyId)
+    if (exercise) {
+      enterExerciseWorkspace(exercise)
+    }
+  }, [isSupabaseEnabled, accessibleWorkspaces, incidentList, exerciseList])
   useEffect(() => {
     if (!isSupabaseEnabled) return
     if (
@@ -28186,7 +28223,7 @@ function App() {
             <DialogTitle>Add roster member</DialogTitle>
             <DialogDescription>
               {isSupabaseEnabled
-                ? `Send an email invitation and assign an ICS position for ${activeWorkspaceRosterLabel}. Invited users can sign in after accepting the link.`
+                ? `Send an email invitation and assign an ICS position for ${activeWorkspaceRosterLabel}. The invitee will create a password, then sign in with email and password to access only this workspace.`
                 : `Invite a team member by email and assign their ICS position for ${activeWorkspaceRosterLabel}.`}
             </DialogDescription>
           </DialogHeader>
