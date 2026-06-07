@@ -3505,11 +3505,11 @@ type LeftTab =
   | `form-${string}`
 
 const WORKSPACE_FORMS_MENU: Array<{ id: string; tab: LeftTab; label: string }> = [
-  { id: 'ICS-201', tab: 'briefing', label: 'ICS-201 Incident Briefing' },
-  { id: 'ICS-204', tab: 'form-ICS-204', label: 'ICS-204 Assignment List' },
-  { id: 'ICS-233', tab: 'form-ICS-233', label: 'ICS-233 Open Actions' },
-  { id: 'ICS-208', tab: 'form-ICS-208', label: 'ICS-208 Safety Message' },
-  { id: 'ICS-209', tab: 'form-ICS-209', label: 'ICS-209 Incident Status Summary' },
+  { id: 'ICS-201', tab: 'briefing', label: 'Incident Briefing / ICS-201' },
+  { id: 'ICS-204', tab: 'form-ICS-204', label: 'Assignment List / ICS-204' },
+  { id: 'ICS-233', tab: 'form-ICS-233', label: 'Open Actions / ICS-233' },
+  { id: 'ICS-208', tab: 'form-ICS-208', label: 'Safety Message / ICS-208' },
+  { id: 'ICS-209', tab: 'form-ICS-209', label: 'Incident Status Summary / ICS-209' },
 ]
 
 type PratusPlanStatus = 'pending' | 'accepted' | 'cancelled'
