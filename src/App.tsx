@@ -157,6 +157,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { consumeInvitedWorkspaceId } from '@/lib/auth-callback'
 import {
   buildIcs233AssignmentOptions,
+  collectIcs233RemoteNotifications,
   createDefaultIcs233ActionRow,
   formatIcs233AssigneeLabel,
   getIcs233AssignmentRecipientEmails,
@@ -220,6 +221,7 @@ import {
 import { useIcs201ObjectivesSectionEditor } from '@/hooks/useIcs201ObjectivesSectionEditor'
 import { useIcs201Presence } from '@/hooks/useIcs201Presence'
 import { useIcs201Sync } from '@/hooks/useIcs201Sync'
+import { useIcs233Sync } from '@/hooks/useIcs233Sync'
 import { useIcs201TextSectionEditor } from '@/hooks/useIcs201TextSectionEditor'
 
 type OperationalStatus = 'Operational' | 'Partially Operational' | 'Not Operational'
@@ -8448,6 +8450,7 @@ function App() {
     >
   >({})
   const loadedWorkspaceFormsKeyRef = useRef<string | null>(null)
+  const ics233PersistSkipRef = useRef(false)
   const [aorSectionSearchQuery, setAorSectionSearchQuery] = useState('')
   const [inlineAorDraft, setInlineAorDraft] = useState<{
     itemType: 'Objective' | 'Action'
@@ -11687,7 +11690,11 @@ function App() {
     const cached = workspaceFormsCacheRef.current[workspaceKey]
     setIcs204Forms(cached?.ics204Forms ?? [])
     setIcs204VersionsById(cached?.ics204VersionsById ?? {})
-    setIcs233Rows((cached?.ics233Rows ?? []).map((row) => normalizeIcs233Row(row)))
+    if (isSupabaseEnabled) {
+      setIcs233Rows([])
+    } else {
+      setIcs233Rows((cached?.ics233Rows ?? []).map((row) => normalizeIcs233Row(row)))
+    }
     setExpandedIcs204FormId(cached?.ics204Forms[0]?.id ?? null)
   }
   useEffect(() => {
@@ -11868,6 +11875,113 @@ function App() {
       return [...previous, version].slice(-100)
     })
   }, [])
+  const deliverIcs233Notification = useCallback(
+    ({
+      recipientEmail,
+      title,
+      summary,
+      severity = 'Medium' as NotificationItem['severity'],
+    }: {
+      recipientEmail: string
+      title: string
+      summary: string
+      severity?: NotificationItem['severity']
+    }) => {
+      if (recipientEmail.toLowerCase() !== (profileEmail ?? '').toLowerCase()) {
+        return
+      }
+
+      const timestamp = new Date().toISOString().slice(0, 16).replace('T', ' ')
+      setNotifications((previous) => {
+        const nextId =
+          previous.length === 0 ? 1 : Math.max(...previous.map((item) => item.id)) + 1
+        return [
+          {
+            id: nextId,
+            title,
+            severity,
+            status: 'New',
+            category: 'Action',
+            timestamp,
+            owner: profileEmail ?? 'System',
+            summary,
+            impact: summary,
+            location: [0, 0] as [number, number],
+            recipientEmail,
+          },
+          ...previous,
+        ]
+      })
+      toast.info(title, { description: summary })
+    },
+    [profileEmail]
+  )
+  const handleIcs233Loaded = useCallback((payload: { documentId: string; rows: Ics233TaskRow[] }) => {
+    ics233PersistSkipRef.current = true
+    setIcs233Rows(payload.rows.map((row) => normalizeIcs233Row(row)))
+  }, [])
+  const handleIcs233RemoteRowsUpdated = useCallback(
+    (rows: Ics233TaskRow[]) => {
+      const previousRows = ics233RowsRef.current
+      const normalizedRows = rows.map((row) => normalizeIcs233Row(row))
+
+      for (const notification of collectIcs233RemoteNotifications(
+        previousRows,
+        normalizedRows,
+        activeWorkspaceRoster,
+        profileEmail,
+        activeWorkspaceRosterLabel
+      )) {
+        deliverIcs233Notification(notification)
+      }
+
+      ics233PersistSkipRef.current = true
+      setIcs233Rows(normalizedRows)
+    },
+    [activeWorkspaceRoster, activeWorkspaceRosterLabel, deliverIcs233Notification, profileEmail]
+  )
+  const isIcs233Editing = activeIcs233CellEdit !== null || isIcs233RowModalEditing
+  const {
+    documentId: ics233DocumentId,
+    loading: isIcs233Loading,
+    syncError: ics233SyncError,
+    isSaving: isIcs233Saving,
+    saveRows: saveIcs233Rows,
+  } = useIcs233Sync({
+    enabled:
+      isSupabaseEnabled &&
+      (isInIncidentWorkspace || isInExerciseWorkspace) &&
+      activeWorkspaceSupabaseId !== null,
+    workspaceId: activeWorkspaceSupabaseId,
+    userId: user?.id ?? null,
+    isEditing: isIcs233Editing,
+    onLoaded: handleIcs233Loaded,
+    onRemoteRowsUpdated: handleIcs233RemoteRowsUpdated,
+  })
+  useEffect(() => {
+    if (!isSupabaseEnabled || activeWorkspaceSupabaseId === null || ics233DocumentId === null) {
+      return
+    }
+    if (ics233PersistSkipRef.current) {
+      ics233PersistSkipRef.current = false
+      return
+    }
+    const timer = window.setTimeout(() => {
+      void saveIcs233Rows(ics233Rows)
+    }, 400)
+    return () => window.clearTimeout(timer)
+  }, [
+    activeWorkspaceSupabaseId,
+    ics233DocumentId,
+    ics233Rows,
+    isSupabaseEnabled,
+    saveIcs233Rows,
+  ])
+  useEffect(() => {
+    if (ics233SyncError) {
+      toast.error(ics233SyncError)
+    }
+  }, [ics233SyncError])
   const {
     documentId: ics201DocumentId,
     loading: isIcs201Loading,
@@ -15588,45 +15702,6 @@ function App() {
   const ics233AssignmentOptions = useMemo(
     () => buildIcs233AssignmentOptions(activeWorkspaceRoster, ICS_ROSTER_POSITION_OPTIONS),
     [activeWorkspaceRoster]
-  )
-  const deliverIcs233Notification = useCallback(
-    ({
-      recipientEmail,
-      title,
-      summary,
-      severity = 'Medium' as NotificationItem['severity'],
-    }: {
-      recipientEmail: string
-      title: string
-      summary: string
-      severity?: NotificationItem['severity']
-    }) => {
-      const timestamp = new Date().toISOString().slice(0, 16).replace('T', ' ')
-      setNotifications((previous) => {
-        const nextId =
-          previous.length === 0 ? 1 : Math.max(...previous.map((item) => item.id)) + 1
-        return [
-          {
-            id: nextId,
-            title,
-            severity,
-            status: 'New',
-            category: 'Action',
-            timestamp,
-            owner: profileEmail ?? 'System',
-            summary,
-            impact: summary,
-            location: [0, 0] as [number, number],
-            recipientEmail,
-          },
-          ...previous,
-        ]
-      })
-      if (recipientEmail.toLowerCase() === (profileEmail ?? '').toLowerCase()) {
-        toast.info(title, { description: summary })
-      }
-    },
-    [profileEmail]
   )
   const updateIcs233Row = <K extends keyof Omit<Ics233TaskRow, 'id'>>(
     rowId: number,

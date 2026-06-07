@@ -258,3 +258,66 @@ export function createDefaultIcs233ActionRow(
     status: 'Not Started',
   }
 }
+
+export type Ics233NotificationPayload = {
+  recipientEmail: string
+  title: string
+  summary: string
+}
+
+function hasIcs233AssignmentChanged(previous: Ics233TaskRow, next: Ics233TaskRow): boolean {
+  return (
+    previous.assigneeType !== next.assigneeType ||
+    previous.assigneeUserEmail !== next.assigneeUserEmail ||
+    previous.assigneePosition !== next.assigneePosition
+  )
+}
+
+export function collectIcs233RemoteNotifications(
+  previousRows: Ics233TaskRow[],
+  nextRows: Ics233TaskRow[],
+  roster: WorkspaceRosterMember[],
+  profileEmail: string | null,
+  workspaceLabel: string
+): Ics233NotificationPayload[] {
+  if (!profileEmail) {
+    return []
+  }
+
+  const normalizedProfileEmail = profileEmail.toLowerCase()
+  const notifications: Ics233NotificationPayload[] = []
+
+  for (const row of nextRows) {
+    const previous = previousRows.find((entry) => entry.id === row.id)
+    const taskLabel = row.task.trim() || `Action #${row.id}`
+    const assignmentChanged = !previous || hasIcs233AssignmentChanged(previous, row)
+
+    if (
+      assignmentChanged &&
+      row.assigneeType !== 'unassigned' &&
+      isCurrentUserAssignedToIcs233Action(row, profileEmail, roster) &&
+      row.assignedByEmail?.toLowerCase() !== normalizedProfileEmail
+    ) {
+      notifications.push({
+        recipientEmail: profileEmail,
+        title: `ICS-233 action assigned: ${taskLabel}`,
+        summary: `${row.assignedByEmail ?? 'A roster member'} assigned you "${taskLabel}" in ${workspaceLabel}.`,
+      })
+    }
+
+    if (
+      previous &&
+      previous.status !== row.status &&
+      row.assignedByEmail?.toLowerCase() === normalizedProfileEmail
+    ) {
+      const assigneeLabel = formatIcs233AssigneeLabel(row, roster)
+      notifications.push({
+        recipientEmail: profileEmail,
+        title: `ICS-233 action marked ${row.status}`,
+        summary: `${assigneeLabel} marked "${taskLabel}" as ${row.status} in ${workspaceLabel}.`,
+      })
+    }
+  }
+
+  return notifications
+}

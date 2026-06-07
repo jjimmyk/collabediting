@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { readFileSync, existsSync } from 'node:fs'
+import { readFileSync, existsSync, readdirSync } from 'node:fs'
 import { resolve, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import pg from 'pg'
@@ -44,11 +44,10 @@ if (!connectionString) {
   process.exit(1)
 }
 
-const migrationPath = resolve(
-  __dirname,
-  '../supabase/migrations/001_workspaces_roster_auth.sql'
-)
-const sql = readFileSync(migrationPath, 'utf8')
+const migrationsDir = resolve(__dirname, '../supabase/migrations')
+const migrationFiles = readdirSync(migrationsDir)
+  .filter((file) => file.endsWith('.sql'))
+  .sort()
 
 const client = new pg.Client({
   connectionString,
@@ -57,8 +56,13 @@ const client = new pg.Client({
 
 try {
   await client.connect()
-  console.log('Applying Supabase schema migration…')
-  await client.query(sql)
+  console.log(`Applying ${migrationFiles.length} Supabase migration(s)…`)
+  for (const file of migrationFiles) {
+    const migrationPath = resolve(migrationsDir, file)
+    const sql = readFileSync(migrationPath, 'utf8')
+    console.log(`→ ${file}`)
+    await client.query(sql)
+  }
   console.log('Schema applied successfully.')
 } catch (error) {
   console.error('Migration failed:', error instanceof Error ? error.message : error)
