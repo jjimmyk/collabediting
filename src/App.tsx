@@ -155,6 +155,20 @@ import {
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/contexts/AuthContext'
 import { consumeInvitedWorkspaceId } from '@/lib/auth-callback'
+import {
+  buildIcs233AssignmentOptions,
+  createDefaultIcs233ActionRow,
+  formatIcs233AssigneeLabel,
+  getIcs233AssignmentRecipientEmails,
+  getIcs233AssignmentValue,
+  getIcs233AssigneeStatusSelectOptions,
+  ICS233_ASSIGNEE_STATUS_OPTIONS,
+  isCurrentUserAssignedToIcs233Action,
+  normalizeIcs233Row,
+  parseIcs233AssignmentValue,
+  type Ics233ActionStatus,
+  type Ics233TaskRow,
+} from '@/lib/ics233-workflow'
 import type { WorkspaceRosterMember } from '@/lib/workspace-types'
 import { buildDefaultLocalWorkspaceRosters } from '@/lib/default-roster'
 import {
@@ -215,13 +229,14 @@ type NotificationItem = {
   title: string
   severity: 'Critical' | 'High' | 'Medium' | 'Low'
   status: 'New' | 'Acknowledged' | 'Resolved'
-  category: 'Power' | 'Transport' | 'Shelter' | 'Weather' | 'Hazmat'
+  category: 'Power' | 'Transport' | 'Shelter' | 'Weather' | 'Hazmat' | 'Action'
   timestamp: string
   owner: string
   summary: string
   impact: string
   location: [number, number]
   relatedEventId?: number
+  recipientEmail?: string
   regionalThreats?: {
     region: string
     description: string
@@ -3683,16 +3698,6 @@ type Ics204WorkAssignmentRow = {
   specialEquipmentSupplies: string
   reportingLocation: string
   requestedArrivalTime: string
-}
-type Ics233TaskRow = {
-  id: number
-  task: string
-  assignee: string
-  pointOfContact: string
-  pocBriefed: 'Yes' | 'No'
-  start: string
-  deadline: string
-  status: 'Not Started' | 'In Progress' | 'Complete' | 'Cannot Complete'
 }
 type SitrepActivityRow = {
   id: number
@@ -8403,7 +8408,12 @@ function App() {
   const [ics233Rows, setIcs233Rows] = useState<Ics233TaskRow[]>([])
   const [activeIcs233CellEdit, setActiveIcs233CellEdit] = useState<{
     rowId: number
-    field: keyof Omit<Ics233TaskRow, 'id'>
+    field:
+      | keyof Pick<
+          Ics233TaskRow,
+          'task' | 'pointOfContact' | 'pocBriefed' | 'start' | 'deadline' | 'status'
+        >
+      | 'assignment'
   } | null>(null)
   const [ics233TaskDraftEdit, setIcs233TaskDraftEdit] = useState<{ rowId: number; value: string } | null>(null)
   const [ics233Filters, setIcs233Filters] = useState({
@@ -8479,7 +8489,7 @@ function App() {
   const [appearanceMode, setAppearanceMode] = useState<'light' | 'dark' | 'glass'>(
     'light'
   )
-  const [notifications] = useState<NotificationItem[]>([
+  const [notifications, setNotifications] = useState<NotificationItem[]>([
     {
       id: 0,
       title: 'Refinery fire reported at BP Cherry Point, Washington',
@@ -11677,7 +11687,7 @@ function App() {
     const cached = workspaceFormsCacheRef.current[workspaceKey]
     setIcs204Forms(cached?.ics204Forms ?? [])
     setIcs204VersionsById(cached?.ics204VersionsById ?? {})
-    setIcs233Rows(cached?.ics233Rows ?? [])
+    setIcs233Rows((cached?.ics233Rows ?? []).map((row) => normalizeIcs233Row(row)))
     setExpandedIcs204FormId(cached?.ics204Forms[0]?.id ?? null)
   }
   useEffect(() => {
@@ -15575,6 +15585,49 @@ function App() {
       )
     )
   }
+  const ics233AssignmentOptions = useMemo(
+    () => buildIcs233AssignmentOptions(activeWorkspaceRoster, ICS_ROSTER_POSITION_OPTIONS),
+    [activeWorkspaceRoster]
+  )
+  const deliverIcs233Notification = useCallback(
+    ({
+      recipientEmail,
+      title,
+      summary,
+      severity = 'Medium' as NotificationItem['severity'],
+    }: {
+      recipientEmail: string
+      title: string
+      summary: string
+      severity?: NotificationItem['severity']
+    }) => {
+      const timestamp = new Date().toISOString().slice(0, 16).replace('T', ' ')
+      setNotifications((previous) => {
+        const nextId =
+          previous.length === 0 ? 1 : Math.max(...previous.map((item) => item.id)) + 1
+        return [
+          {
+            id: nextId,
+            title,
+            severity,
+            status: 'New',
+            category: 'Action',
+            timestamp,
+            owner: profileEmail ?? 'System',
+            summary,
+            impact: summary,
+            location: [0, 0] as [number, number],
+            recipientEmail,
+          },
+          ...previous,
+        ]
+      })
+      if (recipientEmail.toLowerCase() === (profileEmail ?? '').toLowerCase()) {
+        toast.info(title, { description: summary })
+      }
+    },
+    [profileEmail]
+  )
   const updateIcs233Row = <K extends keyof Omit<Ics233TaskRow, 'id'>>(
     rowId: number,
     field: K,
@@ -15591,6 +15644,80 @@ function App() {
       )
     )
   }
+  const assignIcs233Action = (rowId: number, assignmentValue: string) => {
+    const parsed = parseIcs233AssignmentValue(assignmentValue)
+    const assigneeLabel = formatIcs233AssigneeLabel(
+      { ...parsed, assigneeLabel: parsed.assigneeLabel },
+      activeWorkspaceRoster
+    )
+    const existingRow = ics233Rows.find((row) => row.id === rowId)
+    const taskLabel = existingRow?.task.trim() || `Action #${rowId}`
+
+    setIcs233Rows((previous) =>
+      previous.map((row) =>
+        row.id === rowId
+          ? {
+              ...row,
+              ...parsed,
+              assigneeLabel,
+              assignedByEmail: profileEmail ?? null,
+              status: 'Not Started',
+            }
+          : row
+      )
+    )
+
+    if (parsed.assigneeType !== 'unassigned') {
+      const notificationRow = {
+        assigneeType: parsed.assigneeType,
+        assigneeUserEmail: parsed.assigneeUserEmail,
+        assigneePosition: parsed.assigneePosition,
+      }
+      getIcs233AssignmentRecipientEmails(notificationRow, activeWorkspaceRoster).forEach(
+        (email) => {
+          deliverIcs233Notification({
+            recipientEmail: email,
+            title: `ICS-233 action assigned: ${taskLabel}`,
+            summary: `${profileEmail ?? 'A roster member'} assigned you "${taskLabel}" in ${activeWorkspaceRosterLabel}.`,
+          })
+        }
+      )
+    }
+  }
+  const updateIcs233ActionStatus = (rowId: number, status: Ics233ActionStatus) => {
+    if (
+      !ICS233_ASSIGNEE_STATUS_OPTIONS.includes(
+        status as (typeof ICS233_ASSIGNEE_STATUS_OPTIONS)[number]
+      )
+    ) {
+      return
+    }
+
+    const existingRow = ics233Rows.find((row) => row.id === rowId)
+    if (
+      !existingRow ||
+      !isCurrentUserAssignedToIcs233Action(existingRow, profileEmail, activeWorkspaceRoster)
+    ) {
+      toast.error('Only the assigned user can update this action status.')
+      return
+    }
+    if (existingRow.status === status) {
+      return
+    }
+
+    const taskLabel = existingRow.task.trim() || `Action #${rowId}`
+    setIcs233Rows((previous) =>
+      previous.map((row) => (row.id === rowId ? { ...row, status } : row))
+    )
+
+    if (existingRow.assignedByEmail) {
+      deliverIcs233Notification({
+        recipientEmail: existingRow.assignedByEmail,
+        title: `ICS-233 action marked ${status}`,
+        summary: `${profileEmail ?? 'Assignee'} marked "${taskLabel}" as ${status} in ${activeWorkspaceRosterLabel}.`,
+      })
+    }
+  }
   const deleteIcs233Row = (rowId: number) => {
     setIcs233Rows((previous) => previous.filter((row) => row.id !== rowId))
     if (activeIcs233CellEdit?.rowId === rowId) {
@@ -15604,13 +15731,6 @@ function App() {
       setIsIcs233RowModalEditing(false)
     }
   }
-  const ics233AssigneeOptions = [
-    'Planning Section Staffing Cell',
-    'Law Group 1',
-    'Urban Search Team Alpha',
-    'Medical Strike Team',
-    'Mobile Command Unit',
-  ]
   const ics233PointOfContactOptions = [
     'M. Bennett (555-0113)',
     'Capt. R. Wallace (555-0104)',
@@ -15626,19 +15746,7 @@ function App() {
       const nextId =
         previous.length === 0 ? 1 : Math.max(...previous.map((row) => row.id)) + 1
       createdId = nextId
-      return [
-        ...previous,
-        {
-          id: nextId,
-          task: '',
-          assignee: ics233AssigneeOptions[0] ?? '',
-          pointOfContact: '',
-          pocBriefed: 'No',
-          start: defaultDateTime,
-          deadline: defaultDateTime,
-          status: 'Not Started',
-        },
-      ]
+      return [...previous, createDefaultIcs233ActionRow(nextId, defaultDateTime)]
     })
     setExpandedIcs233RowId(createdId)
     setSelectedIcs233RowId(createdId)
@@ -15647,9 +15755,12 @@ function App() {
     setIcs233TaskDraftEdit({ rowId: createdId, value: '' })
   }
   const filteredIcs233Rows = ics233Rows.filter((row) => {
+    const assigneeLabel = formatIcs233AssigneeLabel(row, activeWorkspaceRoster)
     const matchesTask = row.task.toLowerCase().includes(ics233Filters.task.trim().toLowerCase())
     const matchesAssignee =
-      ics233Filters.assignee === 'all' || row.assignee === ics233Filters.assignee
+      ics233Filters.assignee === 'all' ||
+      getIcs233AssignmentValue(row) === ics233Filters.assignee ||
+      assigneeLabel === ics233Filters.assignee
     const matchesPoc =
       ics233Filters.pointOfContact === 'all' || row.pointOfContact === ics233Filters.pointOfContact
     const matchesPocBriefed =
@@ -26393,9 +26504,9 @@ function App() {
                                     className="h-8 w-full rounded-md border bg-transparent px-2 text-xs outline-none"
                                   >
                                     <option value="all">All</option>
-                                    {ics233AssigneeOptions.map((option) => (
-                                      <option key={option} value={option}>
-                                        {option}
+                                    {ics233AssignmentOptions.map((option) => (
+                                      <option key={option.value} value={option.value}>
+                                        {option.label}
                                       </option>
                                     ))}
                                   </select>
@@ -26508,7 +26619,7 @@ function App() {
                                     <option value="Not Started">Not Started</option>
                                     <option value="In Progress">In Progress</option>
                                     <option value="Complete">Complete</option>
-                                    <option value="Cannot Complete">Cannot Complete</option>
+                                    <option value="Incomplete">Incomplete</option>
                                   </select>
                                 </th>
                                 <th className="px-2 py-2" />
@@ -26524,7 +26635,17 @@ function App() {
                                   </td>
                                 </tr>
                               )}
-                              {filteredIcs233Rows.map((row) => (
+                              {filteredIcs233Rows.map((row) => {
+                                const rowAssigneeLabel = formatIcs233AssigneeLabel(
+                                  row,
+                                  activeWorkspaceRoster
+                                )
+                                const isAssignedToCurrentUser = isCurrentUserAssignedToIcs233Action(
+                                  row,
+                                  profileEmail,
+                                  activeWorkspaceRoster
+                                )
+                                return (
                                 <tr
                                   key={row.id}
                                   className="cursor-pointer border-b align-top last:border-b-0 hover:bg-muted/35"
@@ -26615,11 +26736,11 @@ function App() {
                                   </td>
                                   <td className="px-2 py-2">
                                     {activeIcs233CellEdit?.rowId === row.id &&
-                                    activeIcs233CellEdit.field === 'assignee' ? (
+                                    activeIcs233CellEdit.field === 'assignment' ? (
                                       <select
-                                        value={row.assignee}
+                                        value={getIcs233AssignmentValue(row)}
                                         onChange={(event) => {
-                                          updateIcs233Row(row.id, 'assignee', event.target.value)
+                                          assignIcs233Action(row.id, event.target.value)
                                           setActiveIcs233CellEdit(null)
                                         }}
                                         onBlur={() => setActiveIcs233CellEdit(null)}
@@ -26627,11 +26748,19 @@ function App() {
                                         className="h-8 w-full rounded-md border bg-transparent px-2 text-xs outline-none"
                                         autoFocus
                                       >
-                                        {ics233AssigneeOptions.map((option) => (
-                                          <option key={option} value={option}>
-                                            {option}
-                                          </option>
-                                        ))}
+                                        {(['Assignment', 'Roster Members', 'Roster Positions'] as const).map(
+                                          (group) => (
+                                            <optgroup key={group} label={group}>
+                                              {ics233AssignmentOptions
+                                                .filter((option) => option.group === group)
+                                                .map((option) => (
+                                                  <option key={option.value} value={option.value}>
+                                                    {option.label}
+                                                  </option>
+                                                ))}
+                                            </optgroup>
+                                          )
+                                        )}
                                       </select>
                                     ) : (
                                       <button
@@ -26639,10 +26768,10 @@ function App() {
                                         className="w-full pt-1 text-left text-xs"
                                         onClick={(event) => {
                                           event.stopPropagation()
-                                          setActiveIcs233CellEdit({ rowId: row.id, field: 'assignee' })
+                                          setActiveIcs233CellEdit({ rowId: row.id, field: 'assignment' })
                                         }}
                                       >
-                                        {row.assignee}
+                                        {rowAssigneeLabel}
                                       </button>
                                     )}
                                   </td>
@@ -26765,11 +26894,12 @@ function App() {
                                       <select
                                         value={row.status}
                                         onChange={(event) => {
-                                          updateIcs233Row(
-                                            row.id,
-                                            'status',
-                                            event.target.value as Ics233TaskRow['status']
-                                          )
+                                          const nextStatus = event.target.value as Ics233ActionStatus
+                                          if (isAssignedToCurrentUser) {
+                                            updateIcs233ActionStatus(row.id, nextStatus)
+                                          } else {
+                                            updateIcs233Row(row.id, 'status', nextStatus)
+                                          }
                                           setActiveIcs233CellEdit(null)
                                         }}
                                         onBlur={() => setActiveIcs233CellEdit(null)}
@@ -26777,10 +26907,20 @@ function App() {
                                         className="h-8 w-full rounded-md border bg-transparent px-2 text-xs outline-none"
                                         autoFocus
                                       >
-                                        <option value="Not Started">Not Started</option>
-                                        <option value="In Progress">In Progress</option>
-                                        <option value="Complete">Complete</option>
-                                        <option value="Cannot Complete">Cannot Complete</option>
+                                        {isAssignedToCurrentUser ? (
+                                          getIcs233AssigneeStatusSelectOptions(row.status).map((option) => (
+                                            <option key={option} value={option}>
+                                              {option}
+                                            </option>
+                                          ))
+                                        ) : (
+                                          <>
+                                            <option value="Not Started">Not Started</option>
+                                            <option value="In Progress">In Progress</option>
+                                            <option value="Complete">Complete</option>
+                                            <option value="Incomplete">Incomplete</option>
+                                          </>
+                                        )}
                                       </select>
                                     ) : (
                                       <button
@@ -26813,7 +26953,8 @@ function App() {
                                     </div>
                                   </td>
                                 </tr>
-                              ))}
+                              )
+                            })}
                             </tbody>
                           </table>
                         </div>
@@ -26822,6 +26963,15 @@ function App() {
                       <div className="space-y-2 border-t px-3 py-2.5">
                         {filteredIcs233Rows.map((row) => {
                           const isOpen = expandedIcs233RowId === row.id
+                          const rowAssigneeLabel = formatIcs233AssigneeLabel(
+                            row,
+                            activeWorkspaceRoster
+                          )
+                          const isAssignedToCurrentUser = isCurrentUserAssignedToIcs233Action(
+                            row,
+                            profileEmail,
+                            activeWorkspaceRoster
+                          )
                           return (
                             <Item
                               key={row.id}
@@ -26839,7 +26989,7 @@ function App() {
                                   <ItemContent>
                                     <ItemTitle>{row.task || `Task #${row.id}`}</ItemTitle>
                                     <ItemDescription>
-                                      {row.assignee} • {row.status}
+                                      {rowAssigneeLabel} • {row.status}
                                     </ItemDescription>
                                   </ItemContent>
                                   <ItemActions className="gap-1">
@@ -26880,15 +27030,25 @@ function App() {
                                       className="h-8 w-full rounded-md border bg-transparent px-2 text-xs outline-none"
                                     />
                                     <select
-                                      value={row.assignee}
-                                      onChange={(event) => updateIcs233Row(row.id, 'assignee', event.target.value)}
+                                      value={getIcs233AssignmentValue(row)}
+                                      onChange={(event) =>
+                                        assignIcs233Action(row.id, event.target.value)
+                                      }
                                       className="h-8 w-full rounded-md border bg-transparent px-2 text-xs outline-none"
                                     >
-                                      {ics233AssigneeOptions.map((option) => (
-                                        <option key={option} value={option}>
-                                          {option}
-                                        </option>
-                                      ))}
+                                      {(['Assignment', 'Roster Members', 'Roster Positions'] as const).map(
+                                        (group) => (
+                                          <optgroup key={group} label={group}>
+                                            {ics233AssignmentOptions
+                                              .filter((option) => option.group === group)
+                                              .map((option) => (
+                                                <option key={option.value} value={option.value}>
+                                                  {option.label}
+                                                </option>
+                                              ))}
+                                          </optgroup>
+                                        )
+                                      )}
                                     </select>
                                     <select
                                       value={row.pointOfContact}
@@ -26927,19 +27087,30 @@ function App() {
                                     />
                                     <select
                                       value={row.status}
-                                      onChange={(event) =>
-                                        updateIcs233Row(
-                                          row.id,
-                                          'status',
-                                          event.target.value as Ics233TaskRow['status']
-                                        )
-                                      }
+                                      onChange={(event) => {
+                                        const nextStatus = event.target.value as Ics233ActionStatus
+                                        if (isAssignedToCurrentUser) {
+                                          updateIcs233ActionStatus(row.id, nextStatus)
+                                        } else {
+                                          updateIcs233Row(row.id, 'status', nextStatus)
+                                        }
+                                      }}
                                       className="h-8 w-full rounded-md border bg-transparent px-2 text-xs outline-none"
                                     >
-                                      <option value="Not Started">Not Started</option>
-                                      <option value="In Progress">In Progress</option>
-                                      <option value="Complete">Complete</option>
-                                      <option value="Cannot Complete">Cannot Complete</option>
+                                      {isAssignedToCurrentUser ? (
+                                        getIcs233AssigneeStatusSelectOptions(row.status).map((option) => (
+                                          <option key={option} value={option}>
+                                            {option}
+                                          </option>
+                                        ))
+                                      ) : (
+                                        <>
+                                          <option value="Not Started">Not Started</option>
+                                          <option value="In Progress">In Progress</option>
+                                          <option value="Complete">Complete</option>
+                                          <option value="Incomplete">Incomplete</option>
+                                        </>
+                                      )}
                                     </select>
                                   </div>
                                 </CollapsibleContent>
@@ -27407,6 +27578,18 @@ function App() {
         <DialogContent className="!w-[68vw] !max-w-[68vw] sm:!max-w-[68vw]">
           {selectedIcs233Row && (
             <div className="space-y-3">
+              {(() => {
+                const selectedRowAssigneeLabel = formatIcs233AssigneeLabel(
+                  selectedIcs233Row,
+                  activeWorkspaceRoster
+                )
+                const isSelectedRowAssignedToCurrentUser = isCurrentUserAssignedToIcs233Action(
+                  selectedIcs233Row,
+                  profileEmail,
+                  activeWorkspaceRoster
+                )
+                return (
+                  <>
               <div className="flex items-center justify-between">
                 <p className="text-sm font-semibold">ICS-233 Task Detail</p>
                 <div className="flex items-center gap-2">
@@ -27447,20 +27630,28 @@ function App() {
                   <p className="font-semibold">Assignee</p>
                   {isIcs233RowModalEditing ? (
                     <select
-                      value={selectedIcs233Row.assignee}
+                      value={getIcs233AssignmentValue(selectedIcs233Row)}
                       onChange={(event) =>
-                        updateIcs233Row(selectedIcs233Row.id, 'assignee', event.target.value)
+                        assignIcs233Action(selectedIcs233Row.id, event.target.value)
                       }
                       className="h-9 w-full rounded-md border bg-transparent px-2 text-xs outline-none"
                     >
-                      {ics233AssigneeOptions.map((option) => (
-                        <option key={option} value={option}>
-                          {option}
-                        </option>
-                      ))}
+                      {(['Assignment', 'Roster Members', 'Roster Positions'] as const).map(
+                        (group) => (
+                          <optgroup key={group} label={group}>
+                            {ics233AssignmentOptions
+                              .filter((option) => option.group === group)
+                              .map((option) => (
+                                <option key={option.value} value={option.value}>
+                                  {option.label}
+                                </option>
+                              ))}
+                          </optgroup>
+                        )
+                      )}
                     </select>
                   ) : (
-                    <p className="rounded-md border px-2 py-2">{selectedIcs233Row.assignee}</p>
+                    <p className="rounded-md border px-2 py-2">{selectedRowAssigneeLabel}</p>
                   )}
                 </div>
                 <div className="space-y-1">
@@ -27532,28 +27723,43 @@ function App() {
                 </div>
                 <div className="space-y-1">
                   <p className="font-semibold">Status</p>
-                  {isIcs233RowModalEditing ? (
+                  {isIcs233RowModalEditing || isSelectedRowAssignedToCurrentUser ? (
                     <select
                       value={selectedIcs233Row.status}
-                      onChange={(event) =>
-                        updateIcs233Row(
-                          selectedIcs233Row.id,
-                          'status',
-                          event.target.value as Ics233TaskRow['status']
-                        )
-                      }
+                      onChange={(event) => {
+                        const nextStatus = event.target.value as Ics233ActionStatus
+                        if (isSelectedRowAssignedToCurrentUser) {
+                          updateIcs233ActionStatus(selectedIcs233Row.id, nextStatus)
+                        } else {
+                          updateIcs233Row(selectedIcs233Row.id, 'status', nextStatus)
+                        }
+                      }}
                       className="h-9 w-full rounded-md border bg-transparent px-2 text-xs outline-none"
                     >
-                      <option value="Not Started">Not Started</option>
-                      <option value="In Progress">In Progress</option>
-                      <option value="Complete">Complete</option>
-                      <option value="Cannot Complete">Cannot Complete</option>
+                      {isSelectedRowAssignedToCurrentUser ? (
+                        getIcs233AssigneeStatusSelectOptions(selectedIcs233Row.status).map(
+                          (option) => (
+                          <option key={option} value={option}>
+                            {option}
+                          </option>
+                        ))
+                      ) : (
+                        <>
+                          <option value="Not Started">Not Started</option>
+                          <option value="In Progress">In Progress</option>
+                          <option value="Complete">Complete</option>
+                          <option value="Incomplete">Incomplete</option>
+                        </>
+                      )}
                     </select>
                   ) : (
                     <p className="rounded-md border px-2 py-2">{selectedIcs233Row.status}</p>
                   )}
                 </div>
               </div>
+                  </>
+                )
+              })()}
             </div>
           )}
         </DialogContent>
