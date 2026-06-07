@@ -3503,6 +3503,15 @@ type LeftTab =
   | 'seerist'
   | 'files'
   | `form-${string}`
+
+const WORKSPACE_FORMS_MENU: Array<{ id: string; tab: LeftTab; label: string }> = [
+  { id: 'ICS-201', tab: 'briefing', label: 'ICS-201 Incident Briefing' },
+  { id: 'ICS-204', tab: 'form-ICS-204', label: 'ICS-204 Assignment List' },
+  { id: 'ICS-233', tab: 'form-ICS-233', label: 'ICS-233 Open Actions' },
+  { id: 'ICS-208', tab: 'form-ICS-208', label: 'ICS-208 Safety Message' },
+  { id: 'ICS-209', tab: 'form-ICS-209', label: 'ICS-209 Incident Status Summary' },
+]
+
 type PratusPlanStatus = 'pending' | 'accepted' | 'cancelled'
 type PratusAssignmentRecommendation = {
   assignment: string
@@ -6779,13 +6788,10 @@ function App() {
   const [selectedSearchResult, setSelectedSearchResult] = useState<SearchResult | null>(null)
   const [appliedFilterQuery, setAppliedFilterQuery] = useState<string | null>(null)
   const [appliedFilterLabel, setAppliedFilterLabel] = useState<string | null>(null)
-  const [isAddFormsOpen, setIsAddFormsOpen] = useState(false)
-  const [selectedIcsForms, setSelectedIcsForms] = useState<string[]>([])
-  const [draftIcsForms, setDraftIcsForms] = useState<string[]>([])
   const [selectedTopBarButton, setSelectedTopBarButton] = useState<string | null>(null)
   const [isPratusAiDrawerOpen, setIsPratusAiDrawerOpen] = useState(false)
   const [isPlanningPDialogOpen, setIsPlanningPDialogOpen] = useState(false)
-  const [expandedIcs204FormId, setExpandedIcs204FormId] = useState<number | null>(1)
+  const [expandedIcs204FormId, setExpandedIcs204FormId] = useState<number | null>(null)
   const [expandedIcs204WorkAssignmentKey, setExpandedIcs204WorkAssignmentKey] = useState<string | null>(null)
   const [pratusAiMessages, setPratusAiMessages] = useState<PratusAiMessage[]>([])
   const [pratusAiDraftMessage, setPratusAiDraftMessage] = useState('')
@@ -8415,8 +8421,6 @@ function App() {
   const [expandedIcs233RowId, setExpandedIcs233RowId] = useState<number | null>(null)
   const [selectedIcs233RowId, setSelectedIcs233RowId] = useState<number | null>(null)
   const [isIcs233RowModalEditing, setIsIcs233RowModalEditing] = useState(false)
-  const selectedIcsFormsRef = useRef(selectedIcsForms)
-  selectedIcsFormsRef.current = selectedIcsForms
   const ics204FormsRef = useRef(ics204Forms)
   ics204FormsRef.current = ics204Forms
   const ics204VersionsByIdRef = useRef(ics204VersionsById)
@@ -8427,7 +8431,6 @@ function App() {
     Record<
       string,
       {
-        selectedForms: string[]
         ics204Forms: Ics204FormState[]
         ics204VersionsById: Record<number, Ics204Version[]>
         ics233Rows: Ics233TaskRow[]
@@ -11658,7 +11661,6 @@ function App() {
     activeIncidentWorkspace?.name ?? activeExerciseWorkspace?.name ?? 'Workspace'
   const persistActiveWorkspaceForms = (workspaceKey: string) => {
     workspaceFormsCacheRef.current[workspaceKey] = {
-      selectedForms: selectedIcsFormsRef.current,
       ics204Forms: ics204FormsRef.current,
       ics204VersionsById: ics204VersionsByIdRef.current,
       ics233Rows: ics233RowsRef.current,
@@ -11666,7 +11668,6 @@ function App() {
   }
   const loadWorkspaceForms = (workspaceKey: string | null) => {
     if (!workspaceKey) {
-      setSelectedIcsForms([])
       setIcs204Forms([])
       setIcs204VersionsById({})
       setIcs233Rows([])
@@ -11674,7 +11675,6 @@ function App() {
       return
     }
     const cached = workspaceFormsCacheRef.current[workspaceKey]
-    setSelectedIcsForms(cached?.selectedForms ?? [])
     setIcs204Forms(cached?.ics204Forms ?? [])
     setIcs204VersionsById(cached?.ics204VersionsById ?? {})
     setIcs233Rows(cached?.ics233Rows ?? [])
@@ -11695,14 +11695,11 @@ function App() {
     if (
       !isInIncidentWorkspace &&
       !isInExerciseWorkspace &&
-      (activeTab.startsWith('form-') || isAddFormsOpen)
+      (activeTab.startsWith('form-') || activeTab === 'briefing')
     ) {
-      if (activeTab.startsWith('form-')) {
-        setActiveTab('notifications')
-      }
-      setIsAddFormsOpen(false)
+      setActiveTab('notifications')
     }
-  }, [activeTab, isAddFormsOpen, isInExerciseWorkspace, isInIncidentWorkspace])
+  }, [activeTab, isInExerciseWorkspace, isInIncidentWorkspace])
   const isValidRosterEmail = (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())
   const resetAddRosterMemberDraft = () => {
     setRosterMemberEmailDraft('')
@@ -14636,9 +14633,6 @@ function App() {
             })
             return next
           })
-          setSelectedIcsForms((previous) =>
-            previous.includes('ICS-204') ? previous : [...previous, 'ICS-204']
-          )
           setExpandedIcs204FormId(createdForms[0].id)
           setActiveTab('form-ICS-204')
         }
@@ -16259,12 +16253,18 @@ function App() {
                               type="button"
                               size="sm"
                               variant={
-                                isGlassMode ? 'outline' : activeTab === 'briefing' ? 'default' : 'outline'
+                                isGlassMode
+                                  ? 'outline'
+                                  : activeTab === 'briefing' || activeTab.startsWith('form-')
+                                    ? 'default'
+                                    : 'outline'
                               }
                               className={cn(
                                 'h-8 gap-1',
                                 glassIconButtonClasses,
-                                selectedGlassTabClasses(activeTab === 'briefing')
+                                selectedGlassTabClasses(
+                                  activeTab === 'briefing' || activeTab.startsWith('form-')
+                                )
                               )}
                               aria-label="Open forms menu"
                               data-pratus-context-id="tab:forms"
@@ -16275,16 +16275,19 @@ function App() {
                               <ChevronDown className="h-3.5 w-3.5" />
                             </Button>
                           </DropdownMenuTrigger>
-                          <DropdownMenuContent align="start" className="w-52">
+                          <DropdownMenuContent align="start" className="w-56">
                             <DropdownMenuLabel>Forms</DropdownMenuLabel>
                             <DropdownMenuSeparator />
-                            <DropdownMenuItem
-                              onSelect={() => setActiveTab('briefing')}
-                              className={cn('gap-2', activeTab === 'briefing' && 'bg-accent')}
-                            >
-                              <FileText className="h-4 w-4" />
-                              ICS-201 Incident Briefing
-                            </DropdownMenuItem>
+                            {WORKSPACE_FORMS_MENU.map((form) => (
+                              <DropdownMenuItem
+                                key={form.id}
+                                onSelect={() => setActiveTab(form.tab)}
+                                className={cn('gap-2', activeTab === form.tab && 'bg-accent')}
+                              >
+                                <FileText className="h-4 w-4" />
+                                {form.label}
+                              </DropdownMenuItem>
+                            ))}
                           </DropdownMenuContent>
                         </DropdownMenu>
                         {isInIncidentWorkspace && (
@@ -16366,127 +16369,6 @@ function App() {
                           Seerist
                         </TooltipContent>
                       </Tooltip>
-                    )}
-                    {(isInIncidentWorkspace || isInExerciseWorkspace) &&
-                      selectedIcsForms.map((form) => {
-                      const formTabId = `form-${form}` as LeftTab
-                      const formNumber = form.replace('ICS-', '')
-                      return (
-                        <Tooltip key={form}>
-                          <TooltipTrigger asChild>
-                            <Button
-                              type="button"
-                              size="icon"
-                              variant={isGlassMode ? 'outline' : activeTab === formTabId ? 'default' : 'outline'}
-                              className={selectedGlassTabClasses(activeTab === formTabId)}
-                              onClick={() => setActiveTab(formTabId)}
-                              aria-label={`Open ${form} tab`}
-                              data-has-form-badge="true"
-                              data-pratus-context-id={`tab:${formTabId}`}
-                              data-pratus-context-label={form}
-                            >
-                              <span className="relative inline-flex h-4 w-4 items-center justify-center">
-                                <FileText className="h-4 w-4" />
-                                <span
-                                  className={cn(
-                                    'absolute -right-2 -bottom-2 rounded bg-foreground px-0.5 py-px text-[7px] leading-none text-background',
-                                    isGlassMode && 'z-20'
-                                  )}
-                                >
-                                  {formNumber}
-                                </span>
-                              </span>
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent side="bottom" sideOffset={6}>
-                            {form}
-                          </TooltipContent>
-                        </Tooltip>
-                      )
-                    })}
-                    {(isInIncidentWorkspace || isInExerciseWorkspace) && (
-                    <DropdownMenu
-                      open={isAddFormsOpen}
-                      onOpenChange={(open) => {
-                        setIsAddFormsOpen(open)
-                        if (open) {
-                          setDraftIcsForms(selectedIcsForms)
-                        }
-                      }}
-                    >
-                      <DropdownMenuTrigger asChild>
-                        {isCompactPanelTabs ? (
-                          <Button
-                            type="button"
-                            size="icon"
-                            variant="outline"
-                            aria-label="More options"
-                            className={glassIconButtonClasses}
-                          >
-                            <MoreHorizontal className="h-4 w-4" />
-                          </Button>
-                        ) : (
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            className={glassIconButtonClasses}
-                          >
-                            + Add
-                          </Button>
-                        )}
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="start" className="w-48">
-                        <DropdownMenuLabel>Add ICS Forms</DropdownMenuLabel>
-                        <DropdownMenuSeparator />
-                        <div className="px-1 pb-1">
-                          <Button
-                            type="button"
-                            size="sm"
-                            className="w-full"
-                            onClick={() => {
-                              setSelectedIcsForms(draftIcsForms)
-                              if (draftIcsForms.length > 0) {
-                                setActiveTab(`form-${draftIcsForms[0]}` as LeftTab)
-                              }
-                              setIsAddFormsOpen(false)
-                            }}
-                          >
-                            Add Selected
-                          </Button>
-                        </div>
-                        <DropdownMenuSeparator />
-                        {['ICS-204', 'ICS-233', 'ICS-208', 'ICS-209'].map((form) => (
-                          <DropdownMenuItem
-                            key={form}
-                            onSelect={(event) => {
-                              event.preventDefault()
-                              setDraftIcsForms((previous) =>
-                                previous.includes(form)
-                                  ? previous.filter((item) => item !== form)
-                                  : [...previous, form]
-                              )
-                            }}
-                            className="gap-2"
-                          >
-                            <Checkbox
-                              checked={draftIcsForms.includes(form)}
-                              onCheckedChange={(checked) => {
-                                setDraftIcsForms((previous) => {
-                                  if (checked) {
-                                    return previous.includes(form) ? previous : [...previous, form]
-                                  }
-                                  return previous.filter((item) => item !== form)
-                                })
-                              }}
-                              onClick={(event) => event.stopPropagation()}
-                              aria-label={`Select ${form}`}
-                            />
-                            {form}
-                          </DropdownMenuItem>
-                        ))}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
                     )}
                   </div>
                 </TooltipProvider>
