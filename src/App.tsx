@@ -8323,51 +8323,7 @@ function App() {
   ) => {
     setSitrepForm((previous) => ({ ...previous, [field]: value }))
   }
-  const [ics204Forms, setIcs204Forms] = useState<Ics204FormState[]>([
-    {
-      id: 1,
-      assignedUnit: 'Division A Task Force',
-      branch: 'Operations Branch',
-      division: 'Division A',
-      group: 'Evacuation Group',
-      stagingArea: 'North Staging',
-      sectionChief: 'T. Hale',
-      branchDirector: 'R. Patel',
-      divisionGroupSupervisor: 'K. Simmons',
-      resourcesAssigned: [
-        {
-          id: 1,
-          resourceIdentifier: 'USAR Team Alpha',
-          leader: 'Capt. J. Nguyen',
-          contact: '555-0142',
-          location: 'North Levee Sector',
-        },
-      ],
-      workAssignments: [
-        {
-          id: 1,
-          assignment: 'Clear debris and establish access lane at River Bend Corridor',
-          priority: 'High',
-          resourceRequirements: [
-            {
-              id: 1,
-              resource: 'Debris Team',
-              required: '2',
-              have: '1',
-              need: '1',
-            },
-          ],
-          overheadPositions: 'Task Force Leader, Safety Officer',
-          specialEquipmentSupplies: 'Excavator, traffic cones, fuel trailer',
-          reportingLocation: 'River Bend Staging',
-          requestedArrivalTime: '13:00',
-        },
-      ],
-      specialInstructions: 'Maintain responder accountability checks every 60 minutes.',
-      communications:
-        'Primary: Tac Channel 3 (155.160). Alternate: Command Net 1. Medical emergency code: MED-ALPHA.',
-    },
-  ])
+  const [ics204Forms, setIcs204Forms] = useState<Ics204FormState[]>([])
   type Ics204Version = {
     id: string
     createdAt: number
@@ -8412,29 +8368,9 @@ function App() {
       }
     })
   }
-  const [ics204VersionsById, setIcs204VersionsById] = useState<Record<number, Ics204Version[]>>(() => {
-    const initial: Record<number, Ics204Version[]> = {}
-    ;[
-      {
-        id: 1,
-        assignedUnit: 'Division A Task Force',
-        branch: 'Operations Branch',
-        division: 'Division A',
-        group: 'Evacuation Group',
-        stagingArea: 'North Staging',
-        sectionChief: 'T. Hale',
-        branchDirector: 'R. Patel',
-        divisionGroupSupervisor: 'K. Simmons',
-        resourcesAssigned: [],
-        workAssignments: [],
-        specialInstructions: '',
-        communications: '',
-      } as Ics204FormState,
-    ].forEach((form) => {
-      initial[form.id] = seedIcs204Versions(form)
-    })
-    return initial
-  })
+  const [ics204VersionsById, setIcs204VersionsById] = useState<Record<number, Ics204Version[]>>(
+    {}
+  )
   const [viewingIcs204VersionByFormId, setViewingIcs204VersionByFormId] = useState<
     Record<number, Ics204Version | null>
   >({})
@@ -8458,28 +8394,7 @@ function App() {
     formId: number
   } | null>(null)
   const liveIcs204FormsRef = useRef<Record<number, Ics204FormState>>({})
-  const [ics233Rows, setIcs233Rows] = useState<Ics233TaskRow[]>([
-    {
-      id: 1,
-      task: 'Coordinate branch staffing relief handoff',
-      assignee: 'Planning Section Staffing Cell',
-      pointOfContact: 'M. Bennett (555-0113)',
-      pocBriefed: 'Yes',
-      start: '2026-04-29T13:00',
-      deadline: '2026-04-29T15:00',
-      status: 'In Progress',
-    },
-    {
-      id: 2,
-      task: 'Validate perimeter sweep coverage by division',
-      assignee: 'Law Group 1',
-      pointOfContact: 'Capt. R. Wallace (555-0104)',
-      pocBriefed: 'No',
-      start: '2026-04-29T13:15',
-      deadline: '2026-04-29T16:00',
-      status: 'Not Started',
-    },
-  ])
+  const [ics233Rows, setIcs233Rows] = useState<Ics233TaskRow[]>([])
   const [activeIcs233CellEdit, setActiveIcs233CellEdit] = useState<{
     rowId: number
     field: keyof Omit<Ics233TaskRow, 'id'>
@@ -8500,6 +8415,26 @@ function App() {
   const [expandedIcs233RowId, setExpandedIcs233RowId] = useState<number | null>(null)
   const [selectedIcs233RowId, setSelectedIcs233RowId] = useState<number | null>(null)
   const [isIcs233RowModalEditing, setIsIcs233RowModalEditing] = useState(false)
+  const selectedIcsFormsRef = useRef(selectedIcsForms)
+  selectedIcsFormsRef.current = selectedIcsForms
+  const ics204FormsRef = useRef(ics204Forms)
+  ics204FormsRef.current = ics204Forms
+  const ics204VersionsByIdRef = useRef(ics204VersionsById)
+  ics204VersionsByIdRef.current = ics204VersionsById
+  const ics233RowsRef = useRef(ics233Rows)
+  ics233RowsRef.current = ics233Rows
+  const workspaceFormsCacheRef = useRef<
+    Record<
+      string,
+      {
+        selectedForms: string[]
+        ics204Forms: Ics204FormState[]
+        ics204VersionsById: Record<number, Ics204Version[]>
+        ics233Rows: Ics233TaskRow[]
+      }
+    >
+  >({})
+  const loadedWorkspaceFormsKeyRef = useRef<string | null>(null)
   const [aorSectionSearchQuery, setAorSectionSearchQuery] = useState('')
   const [inlineAorDraft, setInlineAorDraft] = useState<{
     itemType: 'Objective' | 'Action'
@@ -11721,6 +11656,53 @@ function App() {
       : []
   const activeWorkspaceRosterLabel =
     activeIncidentWorkspace?.name ?? activeExerciseWorkspace?.name ?? 'Workspace'
+  const persistActiveWorkspaceForms = (workspaceKey: string) => {
+    workspaceFormsCacheRef.current[workspaceKey] = {
+      selectedForms: selectedIcsFormsRef.current,
+      ics204Forms: ics204FormsRef.current,
+      ics204VersionsById: ics204VersionsByIdRef.current,
+      ics233Rows: ics233RowsRef.current,
+    }
+  }
+  const loadWorkspaceForms = (workspaceKey: string | null) => {
+    if (!workspaceKey) {
+      setSelectedIcsForms([])
+      setIcs204Forms([])
+      setIcs204VersionsById({})
+      setIcs233Rows([])
+      setExpandedIcs204FormId(null)
+      return
+    }
+    const cached = workspaceFormsCacheRef.current[workspaceKey]
+    setSelectedIcsForms(cached?.selectedForms ?? [])
+    setIcs204Forms(cached?.ics204Forms ?? [])
+    setIcs204VersionsById(cached?.ics204VersionsById ?? {})
+    setIcs233Rows(cached?.ics233Rows ?? [])
+    setExpandedIcs204FormId(cached?.ics204Forms[0]?.id ?? null)
+  }
+  useEffect(() => {
+    const previousKey = loadedWorkspaceFormsKeyRef.current
+    if (previousKey === activeWorkspaceRosterKey) {
+      return
+    }
+    if (previousKey) {
+      persistActiveWorkspaceForms(previousKey)
+    }
+    loadWorkspaceForms(activeWorkspaceRosterKey)
+    loadedWorkspaceFormsKeyRef.current = activeWorkspaceRosterKey
+  }, [activeWorkspaceRosterKey])
+  useEffect(() => {
+    if (
+      !isInIncidentWorkspace &&
+      !isInExerciseWorkspace &&
+      (activeTab.startsWith('form-') || isAddFormsOpen)
+    ) {
+      if (activeTab.startsWith('form-')) {
+        setActiveTab('notifications')
+      }
+      setIsAddFormsOpen(false)
+    }
+  }, [activeTab, isAddFormsOpen, isInExerciseWorkspace, isInIncidentWorkspace])
   const isValidRosterEmail = (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())
   const resetAddRosterMemberDraft = () => {
     setRosterMemberEmailDraft('')
@@ -16385,7 +16367,8 @@ function App() {
                         </TooltipContent>
                       </Tooltip>
                     )}
-                    {selectedIcsForms.map((form) => {
+                    {(isInIncidentWorkspace || isInExerciseWorkspace) &&
+                      selectedIcsForms.map((form) => {
                       const formTabId = `form-${form}` as LeftTab
                       const formNumber = form.replace('ICS-', '')
                       return (
@@ -16421,6 +16404,7 @@ function App() {
                         </Tooltip>
                       )
                     })}
+                    {(isInIncidentWorkspace || isInExerciseWorkspace) && (
                     <DropdownMenu
                       open={isAddFormsOpen}
                       onOpenChange={(open) => {
@@ -16503,6 +16487,7 @@ function App() {
                         ))}
                       </DropdownMenuContent>
                     </DropdownMenu>
+                    )}
                   </div>
                 </TooltipProvider>
                 <div className="flex items-center gap-2">
@@ -16896,7 +16881,7 @@ function App() {
                     />
                   </div>
                 )}
-                {activeTab === 'form-ICS-233' && (
+                {activeTab === 'form-ICS-233' && (isInIncidentWorkspace || isInExerciseWorkspace) && (
                   <div className="flex items-center gap-1">
                     <Button
                       type="button"
@@ -24745,7 +24730,7 @@ function App() {
                   </div>
                 )}
 
-                {activeTab === 'form-ICS-204' && (
+                {activeTab === 'form-ICS-204' && (isInIncidentWorkspace || isInExerciseWorkspace) && (
                   <div className="space-y-3">
                     <div className="flex items-center justify-end">
                       <Button type="button" size="sm" variant="outline" onClick={addIcs204Form}>
@@ -26428,7 +26413,7 @@ function App() {
                   </div>
                 )}
 
-                {activeTab === 'form-ICS-233' && (
+                {activeTab === 'form-ICS-233' && (isInIncidentWorkspace || isInExerciseWorkspace) && (
                   <Item
                     variant="outline"
                     className={cn(
@@ -27055,6 +27040,7 @@ function App() {
 
                 {activeTab.startsWith('form-') &&
                   activeFormTabLabel &&
+                  (isInIncidentWorkspace || isInExerciseWorkspace) &&
                   activeTab !== 'form-ICS-204' &&
                   activeTab !== 'form-ICS-233' && (
                   <Item variant="outline" className={cn('flex-col items-stretch p-0', glassItemBorderClasses)}>
