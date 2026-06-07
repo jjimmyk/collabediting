@@ -8433,6 +8433,7 @@ function App() {
   const [expandedIcs233RowId, setExpandedIcs233RowId] = useState<number | null>(null)
   const [selectedIcs233RowId, setSelectedIcs233RowId] = useState<number | null>(null)
   const [isIcs233RowModalEditing, setIsIcs233RowModalEditing] = useState(false)
+  const [ics233ComposeDraft, setIcs233ComposeDraft] = useState<Ics233TaskRow | null>(null)
   const ics204FormsRef = useRef(ics204Forms)
   ics204FormsRef.current = ics204Forms
   const ics204VersionsByIdRef = useRef(ics204VersionsById)
@@ -11940,7 +11941,8 @@ function App() {
     },
     [activeWorkspaceRoster, activeWorkspaceRosterLabel, deliverIcs233Notification, profileEmail]
   )
-  const isIcs233Editing = activeIcs233CellEdit !== null || isIcs233RowModalEditing
+  const isIcs233Editing =
+    activeIcs233CellEdit !== null || isIcs233RowModalEditing || ics233ComposeDraft !== null
   const {
     documentId: ics233DocumentId,
     loading: isIcs233Loading,
@@ -15719,6 +15721,25 @@ function App() {
       )
     )
   }
+  const notifyIcs233Assignees = (
+    row: Pick<
+      Ics233TaskRow,
+      'id' | 'task' | 'assigneeType' | 'assigneeUserEmail' | 'assigneePosition'
+    >
+  ) => {
+    if (row.assigneeType === 'unassigned') {
+      return
+    }
+
+    const taskLabel = row.task.trim() || `Action #${row.id}`
+    getIcs233AssignmentRecipientEmails(row, activeWorkspaceRoster).forEach((email) => {
+      deliverIcs233Notification({
+        recipientEmail: email,
+        title: `ICS-233 action assigned: ${taskLabel}`,
+        summary: `${profileEmail ?? 'A roster member'} assigned you "${taskLabel}" in ${activeWorkspaceRosterLabel}.`,
+      })
+    })
+  }
   const assignIcs233Action = (rowId: number, assignmentValue: string) => {
     const parsed = parseIcs233AssignmentValue(assignmentValue)
     const assigneeLabel = formatIcs233AssigneeLabel(
@@ -15743,21 +15764,72 @@ function App() {
     )
 
     if (parsed.assigneeType !== 'unassigned') {
-      const notificationRow = {
+      notifyIcs233Assignees({
+        id: rowId,
+        task: taskLabel,
         assigneeType: parsed.assigneeType,
         assigneeUserEmail: parsed.assigneeUserEmail,
         assigneePosition: parsed.assigneePosition,
-      }
-      getIcs233AssignmentRecipientEmails(notificationRow, activeWorkspaceRoster).forEach(
-        (email) => {
-          deliverIcs233Notification({
-            recipientEmail: email,
-            title: `ICS-233 action assigned: ${taskLabel}`,
-            summary: `${profileEmail ?? 'A roster member'} assigned you "${taskLabel}" in ${activeWorkspaceRosterLabel}.`,
-          })
-        }
-      )
+      })
     }
+  }
+  const updateIcs233ComposeDraft = <K extends keyof Omit<Ics233TaskRow, 'id'>>(
+    field: K,
+    value: Ics233TaskRow[K]
+  ) => {
+    setIcs233ComposeDraft((previous) =>
+      previous
+        ? {
+            ...previous,
+            [field]: value,
+          }
+        : previous
+    )
+  }
+  const updateIcs233ComposeDraftAssignment = (assignmentValue: string) => {
+    const parsed = parseIcs233AssignmentValue(assignmentValue)
+    const assigneeLabel = formatIcs233AssigneeLabel(
+      { ...parsed, assigneeLabel: parsed.assigneeLabel },
+      activeWorkspaceRoster
+    )
+    setIcs233ComposeDraft((previous) =>
+      previous
+        ? {
+            ...previous,
+            ...parsed,
+            assigneeLabel,
+          }
+        : previous
+    )
+  }
+  const commitIcs233NewAction = () => {
+    if (!ics233ComposeDraft) {
+      return
+    }
+    if (!ics233ComposeDraft.task.trim()) {
+      toast.error('Enter a task before assigning.')
+      return
+    }
+    if (ics233ComposeDraft.assigneeType === 'unassigned') {
+      toast.error('Select an assignee before assigning.')
+      return
+    }
+
+    const row: Ics233TaskRow = {
+      ...ics233ComposeDraft,
+      assignedByEmail: profileEmail ?? null,
+      status: 'Not Started',
+    }
+    setIcs233Rows((previous) => [...previous, row])
+    notifyIcs233Assignees(row)
+    setIcs233ComposeDraft(null)
+    setSelectedIcs233RowId(null)
+    setIsIcs233RowModalEditing(false)
+  }
+  const cancelIcs233NewAction = () => {
+    setIcs233ComposeDraft(null)
+    setSelectedIcs233RowId(null)
+    setIsIcs233RowModalEditing(false)
   }
   const updateIcs233ActionStatus = (rowId: number, status: Ics233ActionStatus) => {
     if (
@@ -15814,20 +15886,15 @@ function App() {
     'Lt. A. Rivera (555-0171)',
   ]
   const addIcs233Action = () => {
-    let createdId = 1
     const now = new Date()
     const defaultDateTime = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}T${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
-    setIcs233Rows((previous) => {
-      const nextId =
-        previous.length === 0 ? 1 : Math.max(...previous.map((row) => row.id)) + 1
-      createdId = nextId
-      return [...previous, createDefaultIcs233ActionRow(nextId, defaultDateTime)]
-    })
-    setExpandedIcs233RowId(createdId)
-    setSelectedIcs233RowId(createdId)
-    setIsIcs233RowModalEditing(true)
-    setActiveIcs233CellEdit({ rowId: createdId, field: 'task' })
-    setIcs233TaskDraftEdit({ rowId: createdId, value: '' })
+    const nextId =
+      ics233Rows.length === 0 ? 1 : Math.max(...ics233Rows.map((row) => row.id)) + 1
+    setIcs233ComposeDraft(createDefaultIcs233ActionRow(nextId, defaultDateTime))
+    setSelectedIcs233RowId(null)
+    setIsIcs233RowModalEditing(false)
+    setActiveIcs233CellEdit(null)
+    setIcs233TaskDraftEdit(null)
   }
   const filteredIcs233Rows = ics233Rows.filter((row) => {
     const assigneeLabel = formatIcs233AssigneeLabel(row, activeWorkspaceRoster)
@@ -15869,6 +15936,8 @@ function App() {
   })
   const selectedIcs233Row =
     selectedIcs233RowId === null ? null : ics233Rows.find((row) => row.id === selectedIcs233RowId) ?? null
+  const ics233ModalRow = ics233ComposeDraft ?? selectedIcs233Row
+  const isIcs233ComposeMode = ics233ComposeDraft !== null
   const selectedPratusResource =
     selectedPratusResourceId === null
       ? null
@@ -27642,196 +27711,248 @@ function App() {
       )}
       </div>
       <Dialog
-        open={selectedIcs233Row !== null}
+        open={ics233ModalRow !== null}
         onOpenChange={(open) => {
           if (!open) {
             setSelectedIcs233RowId(null)
             setIsIcs233RowModalEditing(false)
+            setIcs233ComposeDraft(null)
           }
         }}
       >
         <DialogContent className="!w-[68vw] !max-w-[68vw] sm:!max-w-[68vw]">
-          {selectedIcs233Row && (
-            <div className="space-y-3">
+          {ics233ModalRow && (
+            <div className="flex flex-col gap-3">
               {(() => {
+                const modalRow = ics233ModalRow
                 const selectedRowAssigneeLabel = formatIcs233AssigneeLabel(
-                  selectedIcs233Row,
+                  modalRow,
                   activeWorkspaceRoster
                 )
                 const isSelectedRowAssignedToCurrentUser = isCurrentUserAssignedToIcs233Action(
-                  selectedIcs233Row,
+                  modalRow,
                   profileEmail,
                   activeWorkspaceRoster
                 )
+                const isEditingFields = isIcs233ComposeMode || isIcs233RowModalEditing
                 return (
                   <>
-              <div className="flex items-center justify-between">
-                <p className="text-sm font-semibold">ICS-233 Task Detail</p>
-                <div className="flex items-center gap-2">
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setIsIcs233RowModalEditing((previous) => !previous)}
-                  >
-                    {isIcs233RowModalEditing ? 'Done' : 'Edit'}
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    className="text-destructive hover:text-destructive"
-                    onClick={() => deleteIcs233Row(selectedIcs233Row.id)}
-                  >
-                    Delete
-                  </Button>
-                </div>
-              </div>
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm font-semibold">
+                        {isIcs233ComposeMode ? 'New ICS-233 Action' : 'ICS-233 Task Detail'}
+                      </p>
+                      {!isIcs233ComposeMode && (
+                        <div className="flex items-center gap-2">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setIsIcs233RowModalEditing((previous) => !previous)}
+                          >
+                            {isIcs233RowModalEditing ? 'Done' : 'Edit'}
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="text-destructive hover:text-destructive"
+                            onClick={() => deleteIcs233Row(modalRow.id)}
+                          >
+                            Delete
+                          </Button>
+                        </div>
+                      )}
+                    </div>
 
-              <div className="grid grid-cols-2 gap-3 text-xs">
-                <div className="col-span-2 space-y-1">
-                  <p className="font-semibold">Task</p>
-                  {isIcs233RowModalEditing ? (
-                    <input
-                      value={selectedIcs233Row.task}
-                      onChange={(event) => updateIcs233Row(selectedIcs233Row.id, 'task', event.target.value)}
-                      className="h-9 w-full rounded-md border bg-transparent px-2 text-xs outline-none"
-                    />
-                  ) : (
-                    <p className="rounded-md border px-2 py-2">{selectedIcs233Row.task}</p>
-                  )}
-                </div>
-                <div className="space-y-1">
-                  <p className="font-semibold">Assignee</p>
-                  {isIcs233RowModalEditing ? (
-                    <select
-                      value={getIcs233AssignmentValue(selectedIcs233Row)}
-                      onChange={(event) =>
-                        assignIcs233Action(selectedIcs233Row.id, event.target.value)
-                      }
-                      className="h-9 w-full rounded-md border bg-transparent px-2 text-xs outline-none"
-                    >
-                      {(['Assignment', 'Roster Members', 'Roster Positions'] as const).map(
-                        (group) => (
-                          <optgroup key={group} label={group}>
-                            {ics233AssignmentOptions
-                              .filter((option) => option.group === group)
-                              .map((option) => (
-                                <option key={option.value} value={option.value}>
-                                  {option.label}
-                                </option>
-                              ))}
-                          </optgroup>
-                        )
+                    <div className="grid grid-cols-2 gap-3 text-xs">
+                      <div className="col-span-2 space-y-1">
+                        <p className="font-semibold">Task</p>
+                        {isEditingFields ? (
+                          <input
+                            value={modalRow.task}
+                            onChange={(event) =>
+                              isIcs233ComposeMode
+                                ? updateIcs233ComposeDraft('task', event.target.value)
+                                : updateIcs233Row(modalRow.id, 'task', event.target.value)
+                            }
+                            className="h-9 w-full rounded-md border bg-transparent px-2 text-xs outline-none"
+                            autoFocus={isIcs233ComposeMode}
+                          />
+                        ) : (
+                          <p className="rounded-md border px-2 py-2">{modalRow.task}</p>
+                        )}
+                      </div>
+                      <div className="space-y-1">
+                        <p className="font-semibold">Assignee</p>
+                        {isEditingFields ? (
+                          <select
+                            value={getIcs233AssignmentValue(modalRow)}
+                            onChange={(event) =>
+                              isIcs233ComposeMode
+                                ? updateIcs233ComposeDraftAssignment(event.target.value)
+                                : assignIcs233Action(modalRow.id, event.target.value)
+                            }
+                            className="h-9 w-full rounded-md border bg-transparent px-2 text-xs outline-none"
+                          >
+                            {(['Assignment', 'Roster Members', 'Roster Positions'] as const).map(
+                              (group) => (
+                                <optgroup key={group} label={group}>
+                                  {ics233AssignmentOptions
+                                    .filter((option) => option.group === group)
+                                    .map((option) => (
+                                      <option key={option.value} value={option.value}>
+                                        {option.label}
+                                      </option>
+                                    ))}
+                                </optgroup>
+                              )
+                            )}
+                          </select>
+                        ) : (
+                          <p className="rounded-md border px-2 py-2">{selectedRowAssigneeLabel}</p>
+                        )}
+                      </div>
+                      <div className="space-y-1">
+                        <p className="font-semibold">Point of Contact</p>
+                        {isEditingFields ? (
+                          <select
+                            value={modalRow.pointOfContact}
+                            onChange={(event) =>
+                              isIcs233ComposeMode
+                                ? updateIcs233ComposeDraft('pointOfContact', event.target.value)
+                                : updateIcs233Row(modalRow.id, 'pointOfContact', event.target.value)
+                            }
+                            className="h-9 w-full rounded-md border bg-transparent px-2 text-xs outline-none"
+                          >
+                            {ics233PointOfContactOptions.map((option) => (
+                              <option key={option} value={option}>
+                                {option}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <p className="rounded-md border px-2 py-2">{modalRow.pointOfContact}</p>
+                        )}
+                      </div>
+                      <div className="space-y-1">
+                        <p className="font-semibold">POC Briefed</p>
+                        {isEditingFields ? (
+                          <select
+                            value={modalRow.pocBriefed}
+                            onChange={(event) =>
+                              isIcs233ComposeMode
+                                ? updateIcs233ComposeDraft(
+                                    'pocBriefed',
+                                    event.target.value as 'Yes' | 'No'
+                                  )
+                                : updateIcs233Row(
+                                    modalRow.id,
+                                    'pocBriefed',
+                                    event.target.value as 'Yes' | 'No'
+                                  )
+                            }
+                            className="h-9 w-full rounded-md border bg-transparent px-2 text-xs outline-none"
+                          >
+                            <option value="Yes">Yes</option>
+                            <option value="No">No</option>
+                          </select>
+                        ) : (
+                          <p className="rounded-md border px-2 py-2">{modalRow.pocBriefed}</p>
+                        )}
+                      </div>
+                      <div className="space-y-1">
+                        <p className="font-semibold">Start</p>
+                        {isEditingFields ? (
+                          <input
+                            type="datetime-local"
+                            value={modalRow.start}
+                            onChange={(event) =>
+                              isIcs233ComposeMode
+                                ? updateIcs233ComposeDraft('start', event.target.value)
+                                : updateIcs233Row(modalRow.id, 'start', event.target.value)
+                            }
+                            className="h-9 w-full rounded-md border bg-transparent px-2 text-xs outline-none"
+                          />
+                        ) : (
+                          <p className="rounded-md border px-2 py-2">
+                            {modalRow.start.replace('T', ' ')}
+                          </p>
+                        )}
+                      </div>
+                      <div className="space-y-1">
+                        <p className="font-semibold">Deadline</p>
+                        {isEditingFields ? (
+                          <input
+                            type="datetime-local"
+                            value={modalRow.deadline}
+                            onChange={(event) =>
+                              isIcs233ComposeMode
+                                ? updateIcs233ComposeDraft('deadline', event.target.value)
+                                : updateIcs233Row(modalRow.id, 'deadline', event.target.value)
+                            }
+                            className="h-9 w-full rounded-md border bg-transparent px-2 text-xs outline-none"
+                          />
+                        ) : (
+                          <p className="rounded-md border px-2 py-2">
+                            {modalRow.deadline.replace('T', ' ')}
+                          </p>
+                        )}
+                      </div>
+                      {!isIcs233ComposeMode && (
+                        <div className="space-y-1">
+                          <p className="font-semibold">Status</p>
+                          {isIcs233RowModalEditing || isSelectedRowAssignedToCurrentUser ? (
+                            <select
+                              value={modalRow.status}
+                              onChange={(event) => {
+                                const nextStatus = event.target.value as Ics233ActionStatus
+                                if (isSelectedRowAssignedToCurrentUser) {
+                                  updateIcs233ActionStatus(modalRow.id, nextStatus)
+                                } else {
+                                  updateIcs233Row(modalRow.id, 'status', nextStatus)
+                                }
+                              }}
+                              className="h-9 w-full rounded-md border bg-transparent px-2 text-xs outline-none"
+                            >
+                              {isSelectedRowAssignedToCurrentUser ? (
+                                getIcs233AssigneeStatusSelectOptions(modalRow.status).map(
+                                  (option) => (
+                                    <option key={option} value={option}>
+                                      {option}
+                                    </option>
+                                  )
+                                )
+                              ) : (
+                                <>
+                                  <option value="Not Started">Not Started</option>
+                                  <option value="In Progress">In Progress</option>
+                                  <option value="Complete">Complete</option>
+                                  <option value="Incomplete">Incomplete</option>
+                                </>
+                              )}
+                            </select>
+                          ) : (
+                            <p className="rounded-md border px-2 py-2">{modalRow.status}</p>
+                          )}
+                        </div>
                       )}
-                    </select>
-                  ) : (
-                    <p className="rounded-md border px-2 py-2">{selectedRowAssigneeLabel}</p>
-                  )}
-                </div>
-                <div className="space-y-1">
-                  <p className="font-semibold">Point of Contact</p>
-                  {isIcs233RowModalEditing ? (
-                    <select
-                      value={selectedIcs233Row.pointOfContact}
-                      onChange={(event) =>
-                        updateIcs233Row(selectedIcs233Row.id, 'pointOfContact', event.target.value)
-                      }
-                      className="h-9 w-full rounded-md border bg-transparent px-2 text-xs outline-none"
-                    >
-                      {ics233PointOfContactOptions.map((option) => (
-                        <option key={option} value={option}>
-                          {option}
-                        </option>
-                      ))}
-                    </select>
-                  ) : (
-                    <p className="rounded-md border px-2 py-2">{selectedIcs233Row.pointOfContact}</p>
-                  )}
-                </div>
-                <div className="space-y-1">
-                  <p className="font-semibold">POC Briefed</p>
-                  {isIcs233RowModalEditing ? (
-                    <select
-                      value={selectedIcs233Row.pocBriefed}
-                      onChange={(event) =>
-                        updateIcs233Row(selectedIcs233Row.id, 'pocBriefed', event.target.value as 'Yes' | 'No')
-                      }
-                      className="h-9 w-full rounded-md border bg-transparent px-2 text-xs outline-none"
-                    >
-                      <option value="Yes">Yes</option>
-                      <option value="No">No</option>
-                    </select>
-                  ) : (
-                    <p className="rounded-md border px-2 py-2">{selectedIcs233Row.pocBriefed}</p>
-                  )}
-                </div>
-                <div className="space-y-1">
-                  <p className="font-semibold">Start</p>
-                  {isIcs233RowModalEditing ? (
-                    <input
-                      type="datetime-local"
-                      value={selectedIcs233Row.start}
-                      onChange={(event) => updateIcs233Row(selectedIcs233Row.id, 'start', event.target.value)}
-                      className="h-9 w-full rounded-md border bg-transparent px-2 text-xs outline-none"
-                    />
-                  ) : (
-                    <p className="rounded-md border px-2 py-2">{selectedIcs233Row.start.replace('T', ' ')}</p>
-                  )}
-                </div>
-                <div className="space-y-1">
-                  <p className="font-semibold">Deadline</p>
-                  {isIcs233RowModalEditing ? (
-                    <input
-                      type="datetime-local"
-                      value={selectedIcs233Row.deadline}
-                      onChange={(event) =>
-                        updateIcs233Row(selectedIcs233Row.id, 'deadline', event.target.value)
-                      }
-                      className="h-9 w-full rounded-md border bg-transparent px-2 text-xs outline-none"
-                    />
-                  ) : (
-                    <p className="rounded-md border px-2 py-2">
-                      {selectedIcs233Row.deadline.replace('T', ' ')}
-                    </p>
-                  )}
-                </div>
-                <div className="space-y-1">
-                  <p className="font-semibold">Status</p>
-                  {isIcs233RowModalEditing || isSelectedRowAssignedToCurrentUser ? (
-                    <select
-                      value={selectedIcs233Row.status}
-                      onChange={(event) => {
-                        const nextStatus = event.target.value as Ics233ActionStatus
-                        if (isSelectedRowAssignedToCurrentUser) {
-                          updateIcs233ActionStatus(selectedIcs233Row.id, nextStatus)
-                        } else {
-                          updateIcs233Row(selectedIcs233Row.id, 'status', nextStatus)
-                        }
-                      }}
-                      className="h-9 w-full rounded-md border bg-transparent px-2 text-xs outline-none"
-                    >
-                      {isSelectedRowAssignedToCurrentUser ? (
-                        getIcs233AssigneeStatusSelectOptions(selectedIcs233Row.status).map(
-                          (option) => (
-                          <option key={option} value={option}>
-                            {option}
-                          </option>
-                        ))
-                      ) : (
-                        <>
-                          <option value="Not Started">Not Started</option>
-                          <option value="In Progress">In Progress</option>
-                          <option value="Complete">Complete</option>
-                          <option value="Incomplete">Incomplete</option>
-                        </>
-                      )}
-                    </select>
-                  ) : (
-                    <p className="rounded-md border px-2 py-2">{selectedIcs233Row.status}</p>
-                  )}
-                </div>
-              </div>
+                    </div>
+
+                    {isIcs233ComposeMode && (
+                      <div className="flex items-center justify-start gap-2 pt-1">
+                        <Button type="button" size="sm" onClick={commitIcs233NewAction}>
+                          Assign
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={cancelIcs233NewAction}
+                        >
+                          Cancel
+                        </Button>
+                      </div>
+                    )}
                   </>
                 )
               })()}
