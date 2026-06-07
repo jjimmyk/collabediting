@@ -15618,6 +15618,34 @@ function App() {
     'Dr. S. Cole (555-0158)',
     'Lt. A. Rivera (555-0171)',
   ]
+  const addIcs233Action = () => {
+    let createdId = 1
+    const now = new Date()
+    const defaultDateTime = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}T${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
+    setIcs233Rows((previous) => {
+      const nextId =
+        previous.length === 0 ? 1 : Math.max(...previous.map((row) => row.id)) + 1
+      createdId = nextId
+      return [
+        ...previous,
+        {
+          id: nextId,
+          task: '',
+          assignee: ics233AssigneeOptions[0] ?? '',
+          pointOfContact: '',
+          pocBriefed: 'No',
+          start: defaultDateTime,
+          deadline: defaultDateTime,
+          status: 'Not Started',
+        },
+      ]
+    })
+    setExpandedIcs233RowId(createdId)
+    setSelectedIcs233RowId(createdId)
+    setIsIcs233RowModalEditing(true)
+    setActiveIcs233CellEdit({ rowId: createdId, field: 'task' })
+    setIcs233TaskDraftEdit({ rowId: createdId, value: '' })
+  }
   const filteredIcs233Rows = ics233Rows.filter((row) => {
     const matchesTask = row.task.toLowerCase().includes(ics233Filters.task.trim().toLowerCase())
     const matchesAssignee =
@@ -16766,7 +16794,15 @@ function App() {
                   </div>
                 )}
                 {activeTab === 'form-ICS-233' && (isInIncidentWorkspace || isInExerciseWorkspace) && (
-                  <div className="flex items-center gap-1">
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={addIcs233Action}
+                    >
+                      + Add Action
+                    </Button>
                     <Button
                       type="button"
                       size="sm"
@@ -26306,6 +26342,11 @@ function App() {
                       isMapVisible && 'border-0 bg-transparent shadow-none'
                     )}
                   >
+                    <div className="flex items-center justify-end border-b px-3 py-2">
+                      <Button type="button" size="sm" variant="outline" onClick={addIcs233Action}>
+                        + Add Action
+                      </Button>
+                    </div>
                     {ics233ViewMode === 'table' ? (
                       <div className="px-3 py-2.5">
                         <div className="overflow-x-auto">
@@ -26482,7 +26523,9 @@ function App() {
                               {filteredIcs233Rows.length === 0 && (
                                 <tr>
                                   <td colSpan={8} className="px-2 py-4 text-center text-xs text-muted-foreground">
-                                    No rows match the current filters.
+                                    {ics233Rows.length === 0
+                                      ? 'No actions yet. Click + Add Action to create one.'
+                                      : 'No rows match the current filters.'}
                                   </td>
                                 </tr>
                               )}
@@ -26912,8 +26955,14 @@ function App() {
                         {filteredIcs233Rows.length === 0 && (
                           <Item variant="outline" className={glassItemBorderClasses}>
                             <ItemContent>
-                              <ItemTitle>No matching tasks</ItemTitle>
-                              <ItemDescription>Adjust the table filters to broaden results.</ItemDescription>
+                              <ItemTitle>
+                                {ics233Rows.length === 0 ? 'No actions yet' : 'No matching tasks'}
+                              </ItemTitle>
+                              <ItemDescription>
+                                {ics233Rows.length === 0
+                                  ? 'Click + Add Action to create an open action for this workspace.'
+                                  : 'Adjust the table filters to broaden results.'}
+                              </ItemDescription>
                             </ItemContent>
                           </Item>
                         )}
