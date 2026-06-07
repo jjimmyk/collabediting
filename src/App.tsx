@@ -26342,11 +26342,6 @@ function App() {
                       isMapVisible && 'border-0 bg-transparent shadow-none'
                     )}
                   >
-                    <div className="flex items-center justify-end border-b px-3 py-2">
-                      <Button type="button" size="sm" variant="outline" onClick={addIcs233Action}>
-                        + Add Action
-                      </Button>
-                    </div>
                     {ics233ViewMode === 'table' ? (
                       <div className="px-3 py-2.5">
                         <div className="overflow-x-auto">
