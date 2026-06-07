@@ -11692,7 +11692,9 @@ function App() {
     loadedWorkspaceFormsKeyRef.current = activeWorkspaceRosterKey
   }, [activeWorkspaceRosterKey])
   useEffect(() => {
-    if (
+    if (activeTab === 'msel' && !isInExerciseWorkspace) {
+      setActiveTab('sitreps')
+    } else if (
       !isInIncidentWorkspace &&
       !isInExerciseWorkspace &&
       (activeTab.startsWith('form-') || activeTab === 'briefing')
@@ -16290,7 +16292,7 @@ function App() {
                             ))}
                           </DropdownMenuContent>
                         </DropdownMenu>
-                        {isInIncidentWorkspace && (
+                        {isInExerciseWorkspace && (
                           <Tooltip>
                             <TooltipTrigger asChild>
                               <Button
@@ -22893,7 +22895,7 @@ function App() {
                   </div>
                 )}
 
-                {activeTab === 'msel' && isInIncidentWorkspace && (
+                {activeTab === 'msel' && isInExerciseWorkspace && (
                   <div className="space-y-3">
                     <div className="rounded-md border px-3 py-2">
                       <p className="text-sm font-medium">MSEL</p>
