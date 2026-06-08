@@ -170,7 +170,9 @@ import {
   type Ics233TaskRow,
 } from '@/lib/ics233-workflow'
 import {
+  formatIcs233NotificationTimestamp,
   persistIcs233ActionNotifications,
+  stableNotificationIdFromUuid,
   type Ics233ActionNotificationRow,
 } from '@/lib/ics233-notification-service'
 import type { WorkspaceRosterMember } from '@/lib/workspace-types'
@@ -243,6 +245,7 @@ type NotificationItem = {
   location: [number, number]
   relatedEventId?: number
   recipientEmail?: string
+  ics233NotificationId?: string
   regionalThreats?: {
     region: string
     description: string
@@ -11880,6 +11883,81 @@ function App() {
       return [...previous, version].slice(-100)
     })
   }, [])
+  const upsertIcs233NotificationInTab = useCallback(
+    (notification: Ics233ActionNotificationRow, showToast: boolean) => {
+      if (notification.recipient_email.toLowerCase() !== (profileEmail ?? '').toLowerCase()) {
+        return
+      }
+
+      setNotifications((previous) => {
+        if (previous.some((item) => item.ics233NotificationId === notification.id)) {
+          return previous
+        }
+
+        return [
+          {
+            id: stableNotificationIdFromUuid(notification.id),
+            ics233NotificationId: notification.id,
+            title: notification.title,
+            severity: notification.severity as NotificationItem['severity'],
+            status: 'New',
+            category: 'Action',
+            timestamp: formatIcs233NotificationTimestamp(notification.created_at),
+            owner: notification.created_by_email ?? profileEmail ?? 'System',
+            summary: notification.summary,
+            impact: notification.summary,
+            location: [0, 0] as [number, number],
+            recipientEmail: notification.recipient_email,
+          },
+          ...previous,
+        ]
+      })
+
+      if (showToast) {
+        toast.info(notification.title, { description: notification.summary })
+      }
+    },
+    [profileEmail]
+  )
+  const hydrateIcs233NotificationsInTab = useCallback(
+    (notifications: Ics233ActionNotificationRow[]) => {
+      if (notifications.length === 0) {
+        return
+      }
+
+      setNotifications((previous) => {
+        const existingIds = new Set(
+          previous
+            .map((item) => item.ics233NotificationId)
+            .filter((id): id is string => id !== undefined)
+        )
+
+        const hydratedItems = notifications
+          .filter((notification) => !existingIds.has(notification.id))
+          .map((notification) => ({
+            id: stableNotificationIdFromUuid(notification.id),
+            ics233NotificationId: notification.id,
+            title: notification.title,
+            severity: notification.severity as NotificationItem['severity'],
+            status: 'New' as const,
+            category: 'Action' as const,
+            timestamp: formatIcs233NotificationTimestamp(notification.created_at),
+            owner: notification.created_by_email ?? profileEmail ?? 'System',
+            summary: notification.summary,
+            impact: notification.summary,
+            location: [0, 0] as [number, number],
+            recipientEmail: notification.recipient_email,
+          }))
+
+        if (hydratedItems.length === 0) {
+          return previous
+        }
+
+        return [...hydratedItems, ...previous]
+      })
+    },
+    [profileEmail]
+  )
   const deliverIcs233Notification = useCallback(
     ({
       recipientEmail,
@@ -11925,20 +12003,15 @@ function App() {
   )
   const handleIcs233ActionNotificationFromDb = useCallback(
     (notification: Ics233ActionNotificationRow) => {
-      deliverIcs233Notification({
-        recipientEmail: notification.recipient_email,
-        title: notification.title,
-        summary: notification.summary,
-        severity: notification.severity as NotificationItem['severity'],
-        owner: notification.created_by_email ?? undefined,
-      })
+      upsertIcs233NotificationInTab(notification, true)
     },
-    [deliverIcs233Notification]
+    [upsertIcs233NotificationInTab]
   )
   useIcs233NotificationSync({
     enabled: isSupabaseEnabled && profileEmail !== null,
     profileEmail,
-    onNotification: handleIcs233ActionNotificationFromDb,
+    onHydrate: hydrateIcs233NotificationsInTab,
+    onLiveNotification: handleIcs233ActionNotificationFromDb,
   })
   const handleIcs233Loaded = useCallback((payload: { documentId: string; rows: Ics233TaskRow[] }) => {
     ics233PersistSkipRef.current = true

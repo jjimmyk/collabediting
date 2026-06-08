@@ -28,6 +28,19 @@ function mapIcs233ActionNotificationRow(row: Ics233ActionNotificationRow): Ics23
   }
 }
 
+export function stableNotificationIdFromUuid(uuid: string): number {
+  let hash = 0
+  for (let index = 0; index < uuid.length; index += 1) {
+    hash = (hash << 5) - hash + uuid.charCodeAt(index)
+    hash |= 0
+  }
+  return 1_000_000_000 + Math.abs(hash)
+}
+
+export function formatIcs233NotificationTimestamp(createdAt: string): string {
+  return createdAt.slice(0, 16).replace('T', ' ')
+}
+
 export async function persistIcs233ActionNotifications(
   workspaceId: string,
   notifications: PersistIcs233ActionNotificationInput[]
