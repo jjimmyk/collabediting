@@ -157,7 +157,6 @@ import { useAuth } from '@/contexts/AuthContext'
 import { consumeInvitedWorkspaceId } from '@/lib/auth-callback'
 import {
   buildIcs233AssignmentOptions,
-  collectIcs233RemoteNotifications,
   createDefaultIcs233ActionRow,
   formatIcs233AssigneeLabel,
   getIcs233AssignmentRecipientEmails,
@@ -170,6 +169,10 @@ import {
   type Ics233ActionStatus,
   type Ics233TaskRow,
 } from '@/lib/ics233-workflow'
+import {
+  persistIcs233ActionNotifications,
+  type Ics233ActionNotificationRow,
+} from '@/lib/ics233-notification-service'
 import type { WorkspaceRosterMember } from '@/lib/workspace-types'
 import { buildDefaultLocalWorkspaceRosters } from '@/lib/default-roster'
 import {
@@ -222,6 +225,7 @@ import { useIcs201ObjectivesSectionEditor } from '@/hooks/useIcs201ObjectivesSec
 import { useIcs201Presence } from '@/hooks/useIcs201Presence'
 import { useIcs201Sync } from '@/hooks/useIcs201Sync'
 import { useIcs233Sync } from '@/hooks/useIcs233Sync'
+import { useIcs233NotificationSync } from '@/hooks/useIcs233NotificationSync'
 import { useIcs201TextSectionEditor } from '@/hooks/useIcs201TextSectionEditor'
 
 type OperationalStatus = 'Operational' | 'Partially Operational' | 'Not Operational'
@@ -11882,11 +11886,13 @@ function App() {
       title,
       summary,
       severity = 'Medium' as NotificationItem['severity'],
+      owner,
     }: {
       recipientEmail: string
       title: string
       summary: string
       severity?: NotificationItem['severity']
+      owner?: string
     }) => {
       if (recipientEmail.toLowerCase() !== (profileEmail ?? '').toLowerCase()) {
         return
@@ -11904,7 +11910,7 @@ function App() {
             status: 'New',
             category: 'Action',
             timestamp,
-            owner: profileEmail ?? 'System',
+            owner: owner ?? profileEmail ?? 'System',
             summary,
             impact: summary,
             location: [0, 0] as [number, number],
@@ -11917,29 +11923,34 @@ function App() {
     },
     [profileEmail]
   )
+  const handleIcs233ActionNotificationFromDb = useCallback(
+    (notification: Ics233ActionNotificationRow) => {
+      deliverIcs233Notification({
+        recipientEmail: notification.recipient_email,
+        title: notification.title,
+        summary: notification.summary,
+        severity: notification.severity as NotificationItem['severity'],
+        owner: notification.created_by_email ?? undefined,
+      })
+    },
+    [deliverIcs233Notification]
+  )
+  useIcs233NotificationSync({
+    enabled: isSupabaseEnabled && profileEmail !== null,
+    profileEmail,
+    onNotification: handleIcs233ActionNotificationFromDb,
+  })
   const handleIcs233Loaded = useCallback((payload: { documentId: string; rows: Ics233TaskRow[] }) => {
     ics233PersistSkipRef.current = true
     setIcs233Rows(payload.rows.map((row) => normalizeIcs233Row(row)))
   }, [])
   const handleIcs233RemoteRowsUpdated = useCallback(
     (rows: Ics233TaskRow[]) => {
-      const previousRows = ics233RowsRef.current
       const normalizedRows = rows.map((row) => normalizeIcs233Row(row))
-
-      for (const notification of collectIcs233RemoteNotifications(
-        previousRows,
-        normalizedRows,
-        activeWorkspaceRoster,
-        profileEmail,
-        activeWorkspaceRosterLabel
-      )) {
-        deliverIcs233Notification(notification)
-      }
-
       ics233PersistSkipRef.current = true
       setIcs233Rows(normalizedRows)
     },
-    [activeWorkspaceRoster, activeWorkspaceRosterLabel, deliverIcs233Notification, profileEmail]
+    []
   )
   const isIcs233Editing =
     activeIcs233CellEdit !== null || isIcs233RowModalEditing || ics233ComposeDraft !== null
@@ -15732,13 +15743,27 @@ function App() {
     }
 
     const taskLabel = row.task.trim() || `Action #${row.id}`
-    getIcs233AssignmentRecipientEmails(row, activeWorkspaceRoster).forEach((email) => {
-      deliverIcs233Notification({
-        recipientEmail: email,
-        title: `ICS-233 action assigned: ${taskLabel}`,
-        summary: `${profileEmail ?? 'A roster member'} assigned you "${taskLabel}" in ${activeWorkspaceRosterLabel}.`,
+    const recipients = getIcs233AssignmentRecipientEmails(row, activeWorkspaceRoster)
+    if (recipients.length === 0) {
+      return
+    }
+
+    const payloads = recipients.map((email) => ({
+      recipientEmail: email,
+      title: `ICS-233 action assigned: ${taskLabel}`,
+      summary: `${profileEmail ?? 'A roster member'} assigned you "${taskLabel}" in ${activeWorkspaceRosterLabel}.`,
+      actionRowId: row.id,
+      createdByEmail: profileEmail,
+    }))
+
+    if (isSupabaseEnabled && activeWorkspaceSupabaseId) {
+      void persistIcs233ActionNotifications(activeWorkspaceSupabaseId, payloads).catch(() => {
+        payloads.forEach((payload) => deliverIcs233Notification(payload))
       })
-    })
+      return
+    }
+
+    payloads.forEach((payload) => deliverIcs233Notification(payload))
   }
   const assignIcs233Action = (rowId: number, assignmentValue: string) => {
     const parsed = parseIcs233AssignmentValue(assignmentValue)
@@ -15858,11 +15883,24 @@ function App() {
     )
 
     if (existingRow.assignedByEmail) {
-      deliverIcs233Notification({
+      const assigneeLabel = formatIcs233AssigneeLabel(existingRow, activeWorkspaceRoster)
+      const statusPayload = {
         recipientEmail: existingRow.assignedByEmail,
         title: `ICS-233 action marked ${status}`,
-        summary: `${profileEmail ?? 'Assignee'} marked "${taskLabel}" as ${status} in ${activeWorkspaceRosterLabel}.`,
-      })
+        summary: `${assigneeLabel} marked "${taskLabel}" as ${status} in ${activeWorkspaceRosterLabel}.`,
+        actionRowId: rowId,
+        createdByEmail: profileEmail,
+      }
+
+      if (isSupabaseEnabled && activeWorkspaceSupabaseId) {
+        void persistIcs233ActionNotifications(activeWorkspaceSupabaseId, [statusPayload]).catch(
+          () => {
+            deliverIcs233Notification(statusPayload)
+          }
+        )
+      } else {
+        deliverIcs233Notification(statusPayload)
+      }
     }
   }
   const deleteIcs233Row = (rowId: number) => {
