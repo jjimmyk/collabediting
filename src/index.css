@@ -393,3 +393,82 @@
 .pratus-ics201-tutorial-popover .driver-popover-arrow {
   border-color: var(--popover);
 }
+
+/* ArcGIS popup — camera feed placeholder */
+.pratus-map-camera-feed {
+  margin-bottom: 4px;
+}
+
+.pratus-map-camera-feed__label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.pratus-map-camera-feed__dot {
+  width: 8px;
+  height: 8px;
+  flex-shrink: 0;
+  border-radius: 9999px;
+  background: #ef4444;
+  animation: pratus-camera-live-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes pratus-camera-live-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.pratus-map-camera-feed__viewport {
+  overflow: hidden;
+  border: 1px solid rgb(148 163 184 / 35%);
+  border-radius: 6px;
+  background: #0f172a;
+  aspect-ratio: 16 / 9;
+}
+
+.pratus-map-camera-feed__placeholder {
+  display: flex;
+  min-height: 140px;
+  height: 100%;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 12px;
+  text-align: center;
+  color: #94a3b8;
+  font-size: 12px;
+}
+
+.pratus-map-camera-feed__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 9999px;
+  background: rgb(255 255 255 / 10%);
+  color: #e2e8f0;
+  font-size: 11px;
+}
+
+.pratus-map-camera-feed__hint {
+  max-width: 18rem;
+  color: #64748b;
+  font-size: 11px;
+}
+
+.pratus-map-camera-feed__divider {
+  margin: 12px 0;
+  border: none;
+  border-top: 1px solid rgb(148 163 184 / 35%);
+}

@@ -3,6 +3,9 @@ import type { WorkspaceRosterMember } from '@/lib/workspace-types'
 export const DEFAULT_WORKSPACE_ROSTER_EMAILS = [
   'jimmy.king@disastertech.com',
   'jamespking47@gmail.com',
+  'sean@disastertech.com',
+  'carlton.landry@disastertech.com',
+  'michael.baccigalopi@disastertech.com',
 ] as const
 
 export const DEFAULT_WORKSPACE_ROSTER_POSITION = 'Incident Commander'
@@ -36,6 +39,7 @@ export function createDefaultRosterMember(email: string): WorkspaceRosterMember 
     id: `default-${email}`,
     email: email.toLowerCase(),
     icsPosition: DEFAULT_WORKSPACE_ROSTER_POSITION,
+    icsPositions: [DEFAULT_WORKSPACE_ROSTER_POSITION],
     status: 'active',
     addedAt: formatNow(),
     userId: null,

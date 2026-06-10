@@ -1,8 +1,9 @@
 #!/usr/bin/env node
-import { readFileSync, existsSync, readdirSync } from 'node:fs'
+import { readFileSync, existsSync } from 'node:fs'
 import { resolve, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import pg from 'pg'
+import { runPendingMigrations } from './migration-runner.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
@@ -45,25 +46,34 @@ if (!connectionString) {
 }
 
 const migrationsDir = resolve(__dirname, '../supabase/migrations')
-const migrationFiles = readdirSync(migrationsDir)
-  .filter((file) => file.endsWith('.sql'))
-  .sort()
 
 const client = new pg.Client({
   connectionString,
-  ssl: { rejectUnauthorized: false },
+  ssl: connectionString.includes('localhost')
+    ? undefined
+    : { rejectUnauthorized: false },
 })
 
 try {
-  await client.connect()
-  console.log(`Applying ${migrationFiles.length} Supabase migration(s)…`)
-  for (const file of migrationFiles) {
-    const migrationPath = resolve(migrationsDir, file)
-    const sql = readFileSync(migrationPath, 'utf8')
-    console.log(`→ ${file}`)
-    await client.query(sql)
+  if (!connectionString.includes('localhost')) {
+    process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'
   }
-  console.log('Schema applied successfully.')
+  await client.connect()
+  const result = await runPendingMigrations(client, migrationsDir)
+
+  if (result.baselined) {
+    console.log('Schema migration tracking initialized.')
+  } else if (result.applied.length === 0) {
+    console.log('No new migrations to apply.')
+  } else {
+    console.log(`Applied ${result.applied.length} new migration(s).`)
+  }
+
+  if (result.skipped.length > 0 && !result.baselined) {
+    console.log(`Skipped ${result.skipped.length} already-applied migration(s).`)
+  }
+
+  console.log('Done.')
 } catch (error) {
   console.error('Migration failed:', error instanceof Error ? error.message : error)
   process.exit(1)

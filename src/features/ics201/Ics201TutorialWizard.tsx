@@ -23,11 +23,13 @@ function buildTutorialSteps(
 ): DriveStep[] {
   const kindLabel = workspaceKind === 'exercise' ? 'exercise' : 'incident'
 
-  const ensureBriefingVisible = () => {
+  const ensureBriefingVisible = (selector: string) => {
     onNavigateToIcs201()
     window.setTimeout(() => {
-      void waitForTutorialElement(ICS201_TUTORIAL_SELECTORS.panel).then(() => {
-        refreshTour()
+      void waitForTutorialElement(selector).then((element) => {
+        if (element) {
+          refreshTour()
+        }
       })
     }, 120)
   }
@@ -36,7 +38,7 @@ function buildTutorialSteps(
     {
       element: ICS201_TUTORIAL_SELECTORS.workspaceMenu,
       popover: {
-        title: 'Welcome to the ICS-201 tutorial',
+        title: 'Welcome to PRATUS Coach',
         description: `You're in the ${kindLabel} workspace "${workspaceName}". This walkthrough highlights each control in place so you can see exactly where to click.`,
         side: 'bottom',
         align: 'start',
@@ -44,6 +46,9 @@ function buildTutorialSteps(
     },
     {
       element: ICS201_TUTORIAL_SELECTORS.formsMenu,
+      onDeselected: () => {
+        onNavigateToIcs201()
+      },
       popover: {
         title: 'Open the ICS-201 form',
         description:
@@ -55,7 +60,7 @@ function buildTutorialSteps(
     {
       element: () => requireTutorialElement(ICS201_TUTORIAL_SELECTORS.panel),
       onHighlightStarted: () => {
-        ensureBriefingVisible()
+        ensureBriefingVisible(ICS201_TUTORIAL_SELECTORS.panel)
       },
       popover: {
         title: 'ICS-201 form overview',
@@ -68,7 +73,7 @@ function buildTutorialSteps(
     {
       element: () => requireTutorialElement(ICS201_TUTORIAL_SELECTORS.currentSituation),
       onHighlightStarted: () => {
-        ensureBriefingVisible()
+        ensureBriefingVisible(ICS201_TUTORIAL_SELECTORS.currentSituation)
       },
       popover: {
         title: 'Edit sections',
@@ -81,7 +86,7 @@ function buildTutorialSteps(
     {
       element: () => requireTutorialElement(ICS201_TUTORIAL_SELECTORS.generateDraft),
       onHighlightStarted: () => {
-        ensureBriefingVisible()
+        ensureBriefingVisible(ICS201_TUTORIAL_SELECTORS.generateDraft)
       },
       popover: {
         title: 'Generate a draft with Pratus AI',
@@ -94,7 +99,7 @@ function buildTutorialSteps(
     {
       element: () => requireTutorialElement(ICS201_TUTORIAL_SELECTORS.versionHistory),
       onHighlightStarted: () => {
-        ensureBriefingVisible()
+        ensureBriefingVisible(ICS201_TUTORIAL_SELECTORS.versionHistory)
       },
       popover: {
         title: 'Versions and signing',
@@ -107,7 +112,7 @@ function buildTutorialSteps(
     {
       element: () => requireTutorialElement(ICS201_TUTORIAL_SELECTORS.exportMenu),
       onHighlightStarted: () => {
-        ensureBriefingVisible()
+        ensureBriefingVisible(ICS201_TUTORIAL_SELECTORS.exportMenu)
       },
       popover: {
         title: 'Export the ICS-201',
@@ -122,7 +127,7 @@ function buildTutorialSteps(
       popover: {
         title: "You're ready",
         description:
-          'Open Forms → ICS-201 Incident Briefing anytime from this workspace. Use the ⋮ menu here to restart this tutorial.',
+          'Open Forms → ICS-201 Incident Briefing anytime from this workspace. Use the Start Here button here to restart PRATUS Coach.',
         side: 'bottom',
         align: 'start',
         doneBtnText: 'Finish',
@@ -133,10 +138,8 @@ function buildTutorialSteps(
 
 function createTutorialDriver(
   steps: DriveStep[],
-  onOpenChange: (open: boolean) => void
+  onClosedByUser: () => void
 ): Driver {
-  let activeDriver: Driver | null = null
-
   const config: Config = {
     steps,
     animate: true,
@@ -153,13 +156,11 @@ function createTutorialDriver(
     doneBtnText: 'Finish',
     popoverClass: 'pratus-ics201-tutorial-popover',
     onDestroyed: () => {
-      onOpenChange(false)
-      activeDriver = null
+      onClosedByUser()
     },
   }
 
-  activeDriver = driver(config)
-  return activeDriver
+  return driver(config)
 }
 
 export function Ics201TutorialWizard({
@@ -170,11 +171,31 @@ export function Ics201TutorialWizard({
   onNavigateToIcs201,
 }: Ics201TutorialWizardProps) {
   const driverRef = useRef<Driver | null>(null)
+  const suppressCloseRef = useRef(false)
+  const onNavigateToIcs201Ref = useRef(onNavigateToIcs201)
+  const onOpenChangeRef = useRef(onOpenChange)
+  const workspaceNameRef = useRef(workspaceName)
+  const workspaceKindRef = useRef(workspaceKind)
+
+  onNavigateToIcs201Ref.current = onNavigateToIcs201
+  onOpenChangeRef.current = onOpenChange
+  workspaceNameRef.current = workspaceName
+  workspaceKindRef.current = workspaceKind
+
+  const destroyTour = () => {
+    if (!driverRef.current) {
+      return
+    }
+
+    suppressCloseRef.current = true
+    driverRef.current.destroy()
+    driverRef.current = null
+    suppressCloseRef.current = false
+  }
 
   useEffect(() => {
     if (!open) {
-      driverRef.current?.destroy()
-      driverRef.current = null
+      destroyTour()
       return
     }
 
@@ -183,24 +204,26 @@ export function Ics201TutorialWizard({
     }
 
     const steps = buildTutorialSteps(
-      workspaceName,
-      workspaceKind,
-      onNavigateToIcs201,
+      workspaceNameRef.current,
+      workspaceKindRef.current,
+      () => onNavigateToIcs201Ref.current(),
       refreshTour
     )
 
-    driverRef.current?.destroy()
-    const tour = createTutorialDriver(steps, onOpenChange)
+    destroyTour()
+    const tour = createTutorialDriver(steps, () => {
+      if (suppressCloseRef.current) {
+        return
+      }
+      onOpenChangeRef.current(false)
+    })
     driverRef.current = tour
     tour.drive()
 
     return () => {
-      tour.destroy()
-      if (driverRef.current === tour) {
-        driverRef.current = null
-      }
+      destroyTour()
     }
-  }, [open, onNavigateToIcs201, onOpenChange, workspaceKind, workspaceName])
+  }, [open])
 
   return null
 }

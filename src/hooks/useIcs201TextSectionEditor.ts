@@ -8,35 +8,50 @@ import { createIcs201YjsProvider, type Ics201YjsProvider } from '@/lib/ics201-yj
 type UseIcs201TextSectionEditorOptions = {
   enabled: boolean
   active: boolean
+  /** Keep Yjs connected while viewing so passive readers see live edits. */
+  stayConnected?: boolean
   documentId: string | null
   sectionId: Ics201SectionId
   seedValue: string
   maxLength?: number
+  /** Debounced publish of live text into ics201_documents.form_data (no version row). */
+  onFormPublish?: (value: string) => Promise<void>
+  formPublishDebounceMs?: number
 }
 
 export function useIcs201TextSectionEditor({
   enabled,
   active,
+  stayConnected = false,
   documentId,
   sectionId,
   seedValue,
   maxLength,
+  onFormPublish,
+  formPublishDebounceMs = 10000,
 }: UseIcs201TextSectionEditorOptions) {
   const [value, setValue] = useState(seedValue)
   const ydocRef = useRef<Y.Doc | null>(null)
   const ytextRef = useRef<Y.Text | null>(null)
   const providerRef = useRef<Ics201YjsProvider | null>(null)
   const suppressObserverRef = useRef(false)
-  const isCollaborative = enabled && active && documentId !== null
+  const formPublishTimerRef = useRef<number | null>(null)
+  const onFormPublishRef = useRef(onFormPublish)
+  const shouldConnect = enabled && documentId !== null && (active || stayConnected)
+  const isLiveConnected = shouldConnect
 
   useEffect(() => {
-    if (!active) {
+    onFormPublishRef.current = onFormPublish
+  }, [onFormPublish])
+
+  useEffect(() => {
+    if (!shouldConnect) {
       setValue(seedValue)
     }
-  }, [active, seedValue])
+  }, [seedValue, shouldConnect])
 
   useEffect(() => {
-    if (!enabled || !active || !documentId) {
+    if (!shouldConnect || !documentId) {
       providerRef.current?.destroy()
       providerRef.current = null
       ydocRef.current = null
@@ -46,6 +61,18 @@ export function useIcs201TextSectionEditor({
 
     const activeDocumentId = documentId
     let cancelled = false
+
+    const scheduleFormPublish = (nextValue: string) => {
+      const publish = onFormPublishRef.current
+      if (!publish) return
+      if (formPublishTimerRef.current !== null) {
+        window.clearTimeout(formPublishTimerRef.current)
+      }
+      formPublishTimerRef.current = window.setTimeout(() => {
+        formPublishTimerRef.current = null
+        void publish(nextValue)
+      }, formPublishDebounceMs)
+    }
 
     async function connect() {
       const ydoc = new Y.Doc()
@@ -74,7 +101,9 @@ export function useIcs201TextSectionEditor({
 
       const syncFromY = () => {
         if (suppressObserverRef.current) return
-        setValue(clipText(ytext.toString(), maxLength))
+        const next = clipText(ytext.toString(), maxLength)
+        setValue(next)
+        scheduleFormPublish(next)
       }
 
       ytext.observe(syncFromY)
@@ -92,16 +121,21 @@ export function useIcs201TextSectionEditor({
 
     return () => {
       cancelled = true
+      if (formPublishTimerRef.current !== null) {
+        window.clearTimeout(formPublishTimerRef.current)
+        formPublishTimerRef.current = null
+      }
       void providerRef.current?.persistNow()
       providerRef.current?.destroy()
       providerRef.current = null
       ydocRef.current = null
       ytextRef.current = null
     }
-  }, [active, documentId, enabled, maxLength, sectionId, seedValue])
+  }, [documentId, formPublishDebounceMs, maxLength, sectionId, seedValue, shouldConnect])
 
   const setValueFromInput = useCallback(
     (next: string) => {
+      if (!active) return
       const clipped = clipText(next, maxLength)
       const ytext = ytextRef.current
       const ydoc = ydocRef.current
@@ -116,7 +150,7 @@ export function useIcs201TextSectionEditor({
       }
       setValue(clipped)
     },
-    [maxLength]
+    [active, maxLength]
   )
 
   const replaceValue = useCallback(
@@ -140,14 +174,23 @@ export function useIcs201TextSectionEditor({
   )
 
   const persistNow = useCallback(async () => {
+    if (formPublishTimerRef.current !== null) {
+      window.clearTimeout(formPublishTimerRef.current)
+      formPublishTimerRef.current = null
+    }
     await providerRef.current?.persistNow()
-  }, [])
+    const latest = clipText(ytextRef.current?.toString() ?? value, maxLength)
+    if (onFormPublishRef.current) {
+      await onFormPublishRef.current(latest)
+    }
+  }, [maxLength, value])
 
   return {
     value,
     setValue: setValueFromInput,
     replaceValue,
     persistNow,
-    isCollaborative,
+    isCollaborative: isLiveConnected,
+    isLiveConnected,
   }
 }

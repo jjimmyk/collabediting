@@ -1,3 +1,9 @@
+import { primaryIcsPosition, WORKSPACE_PERMISSION_EDIT_ICS201 } from '@/lib/ics-positions'
+import {
+  buildDefaultPositionPermissionMap,
+  permissionsFromRows,
+  type PositionPermissionMap,
+} from '@/features/roster/workspace-position-roster'
 import { getAcceptInviteUrl } from '@/lib/app-url'
 import {
   hasDefaultFullWorkspaceAccess,
@@ -10,8 +16,11 @@ import type {
   DbWorkspaceMember,
   UserProfile,
   WorkspaceKind,
+  WorkspacePermissions,
   WorkspaceRosterMember,
 } from '@/lib/workspace-types'
+
+export type ResolvedWorkspacePermissions = WorkspacePermissions
 
 function formatMemberDate(iso: string): string {
   return new Date(iso).toLocaleString([], {
@@ -23,11 +32,23 @@ function formatMemberDate(iso: string): string {
   })
 }
 
+function mapMemberPositions(row: DbWorkspaceMember): string[] {
+  const fromJoin = (row.workspace_member_positions ?? [])
+    .map((entry) => entry.ics_position)
+    .filter((entry) => entry.length > 0)
+  if (fromJoin.length > 0) {
+    return [...fromJoin].sort((a, b) => a.localeCompare(b))
+  }
+  return row.ics_position ? [row.ics_position] : []
+}
+
 function mapDbMember(row: DbWorkspaceMember): WorkspaceRosterMember {
+  const icsPositions = mapMemberPositions(row)
   return {
     id: row.id,
     email: row.email,
-    icsPosition: row.ics_position,
+    icsPosition: primaryIcsPosition(icsPositions),
+    icsPositions,
     status: row.status,
     addedAt: formatMemberDate(row.joined_at ?? row.invited_at),
     userId: row.user_id,
@@ -73,7 +94,7 @@ export async function fetchAccessibleWorkspaces(
   if (isOrgAdmin) {
     const { data, error } = await supabase
       .from('workspaces')
-      .select('id, kind, legacy_id, name, region, summary')
+      .select('id, kind, legacy_id, name, region, summary, archived_at')
       .order('name')
 
     if (error || !data) {
@@ -86,8 +107,10 @@ export async function fetchAccessibleWorkspaces(
       legacyId: row.legacy_id,
       name: row.name,
       icsPosition: 'Org Admin',
+      icsPositions: ['Org Admin'],
       region: row.region ?? null,
       summary: row.summary ?? null,
+      archivedAt: row.archived_at ?? null,
     }))
   }
 
@@ -96,13 +119,15 @@ export async function fetchAccessibleWorkspaces(
     .select(
       `
       ics_position,
+      workspace_member_positions (ics_position),
       workspace:workspaces (
         id,
         kind,
         legacy_id,
         name,
         region,
-        summary
+        summary,
+        archived_at
       )
     `
     )
@@ -123,6 +148,7 @@ export async function fetchAccessibleWorkspaces(
             name: string
             region: string | null
             summary: string | null
+            archived_at?: string | null
           }
         | {
             id: string
@@ -131,21 +157,78 @@ export async function fetchAccessibleWorkspaces(
             name: string
             region: string | null
             summary: string | null
+            archived_at?: string | null
           }[]
         | null
       const workspace = Array.isArray(workspaceRaw) ? workspaceRaw[0] : workspaceRaw
       if (!workspace) return null
+      const memberPositions = (
+        row as {
+          ics_position?: string
+          workspace_member_positions?: Array<{ ics_position: string }>
+        }
+      ).workspace_member_positions
+      const icsPositions = mapMemberPositions({
+        id: '',
+        workspace_id: workspace.id,
+        user_id: null,
+        email: '',
+        ics_position: (row as { ics_position?: string }).ics_position ?? '',
+        status: 'active',
+        invited_at: '',
+        joined_at: null,
+        workspace_member_positions: memberPositions,
+      })
       return {
         workspaceId: workspace.id,
         kind: workspace.kind,
         legacyId: workspace.legacy_id,
         name: workspace.name,
-        icsPosition: row.ics_position as string,
+        icsPosition: primaryIcsPosition(icsPositions),
+        icsPositions,
         region: workspace.region ?? null,
         summary: workspace.summary ?? null,
+        archivedAt: workspace.archived_at ?? null,
       }
     })
     .filter((entry): entry is AccessibleWorkspace => entry !== null)
+}
+
+export async function fetchWorkspacePermissions(
+  workspaceId: string
+): Promise<ResolvedWorkspacePermissions> {
+  const supabase = getSupabaseClient()
+  if (!supabase) {
+    return {
+      positions: ['Incident Commander'],
+      permissions: ['edit_ics201'],
+      canEditIcs201Form: true,
+    }
+  }
+
+  const { data, error } = await supabase.rpc('get_my_workspace_permissions', {
+    p_workspace_id: workspaceId,
+  })
+
+  if (error || !data || typeof data !== 'object') {
+    return {
+      positions: [],
+      permissions: [],
+      canEditIcs201Form: false,
+    }
+  }
+
+  const payload = data as {
+    positions?: string[]
+    permissions?: string[]
+    can_edit_ics201_form?: boolean
+  }
+
+  return {
+    positions: Array.isArray(payload.positions) ? payload.positions : [],
+    permissions: Array.isArray(payload.permissions) ? payload.permissions : [],
+    canEditIcs201Form: payload.can_edit_ics201_form === true,
+  }
 }
 
 export async function resolveWorkspaceId(
@@ -203,7 +286,19 @@ export async function fetchWorkspaceRoster(workspaceId: string): Promise<Workspa
 
   const { data, error } = await supabase
     .from('workspace_members')
-    .select('id, workspace_id, user_id, email, ics_position, status, invited_at, joined_at')
+    .select(
+      `
+      id,
+      workspace_id,
+      user_id,
+      email,
+      ics_position,
+      status,
+      invited_at,
+      joined_at,
+      workspace_member_positions (ics_position)
+    `
+    )
     .eq('workspace_id', workspaceId)
     .neq('status', 'removed')
     .order('invited_at', { ascending: true })
@@ -231,9 +326,12 @@ export async function inviteWorkspaceMember(params: {
   accessToken: string
   workspaceId: string
   email: string
-  icsPosition: string
+  icsPositions: string[]
+  password?: string
+  confirmPasswordOverwrite?: boolean
 }): Promise<
-  { ok: true; warning?: string } | { ok: false; message: string }
+  | { ok: true; warning?: string; method?: string; action?: 'created' | 'updated' }
+  | { ok: false; message: string; code?: 'user_exists' | 'password_too_short' }
 > {
   if (!isSupabaseConfigured) {
     return { ok: false, message: 'Supabase is not configured.' }
@@ -248,8 +346,10 @@ export async function inviteWorkspaceMember(params: {
     body: JSON.stringify({
       workspaceId: params.workspaceId,
       email: params.email,
-      icsPosition: params.icsPosition,
+      icsPositions: params.icsPositions,
       redirectTo: getAcceptInviteUrl(params.workspaceId),
+      ...(params.password ? { password: params.password } : {}),
+      ...(params.confirmPasswordOverwrite ? { confirmPasswordOverwrite: true } : {}),
     }),
   })
 
@@ -257,17 +357,141 @@ export async function inviteWorkspaceMember(params: {
     error?: string
     message?: string
     emailWarning?: string
+    code?: 'user_exists' | 'password_too_short'
+    method?: string
+    action?: 'created' | 'updated'
   }
 
   if (!response.ok) {
-    return { ok: false, message: payload.error ?? payload.message ?? 'Invite failed.' }
+    return {
+      ok: false,
+      message: payload.error ?? payload.message ?? 'Invite failed.',
+      code: payload.code,
+    }
   }
 
   if (payload.emailWarning) {
-    return { ok: true, warning: payload.emailWarning }
+    return { ok: true, warning: payload.emailWarning, method: payload.method }
   }
 
+  return {
+    ok: true,
+    method: payload.method,
+    action: payload.action,
+  }
+}
+
+export async function updateRosterMemberPositions(params: {
+  accessToken: string
+  memberId: string
+  icsPositions: string[]
+}): Promise<{ ok: true; icsPositions: string[] } | { ok: false; message: string }> {
+  if (!isSupabaseConfigured) {
+    return { ok: false, message: 'Supabase is not configured.' }
+  }
+
+  const response = await fetch('/api/update-roster-member-positions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${params.accessToken}`,
+    },
+    body: JSON.stringify({
+      memberId: params.memberId,
+      icsPositions: params.icsPositions,
+    }),
+  })
+
+  const payload = (await response.json().catch(() => ({}))) as {
+    error?: string
+    icsPositions?: string[]
+  }
+
+  if (!response.ok) {
+    return { ok: false, message: payload.error ?? 'Could not update roster positions.' }
+  }
+
+  return {
+    ok: true,
+    icsPositions: Array.isArray(payload.icsPositions) ? payload.icsPositions : params.icsPositions,
+  }
+}
+
+export async function fetchWorkspacePositionPermissions(
+  workspaceId: string
+): Promise<PositionPermissionMap> {
+  const supabase = getSupabaseClient()
+  if (!supabase) {
+    return buildDefaultPositionPermissionMap()
+  }
+
+  const { data, error } = await supabase
+    .from('workspace_position_permissions')
+    .select('ics_position, permission')
+    .eq('workspace_id', workspaceId)
+
+  if (error || !data) {
+    return buildDefaultPositionPermissionMap()
+  }
+
+  return permissionsFromRows(data as Array<{ ics_position: string; permission: string }>)
+}
+
+export async function setWorkspacePositionEditIcs201(
+  workspaceId: string,
+  icsPosition: string,
+  enabled: boolean
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  const supabase = getSupabaseClient()
+  if (!supabase) {
+    return { ok: false, message: 'Supabase is not configured.' }
+  }
+
+  if (enabled) {
+    const { error } = await supabase.from('workspace_position_permissions').upsert(
+      {
+        workspace_id: workspaceId,
+        ics_position: icsPosition,
+        permission: WORKSPACE_PERMISSION_EDIT_ICS201,
+      },
+      { onConflict: 'workspace_id,ics_position,permission' }
+    )
+    if (error) {
+      return { ok: false, message: error.message }
+    }
+    return { ok: true }
+  }
+
+  const { error } = await supabase
+    .from('workspace_position_permissions')
+    .delete()
+    .eq('workspace_id', workspaceId)
+    .eq('ics_position', icsPosition)
+    .eq('permission', WORKSPACE_PERMISSION_EDIT_ICS201)
+
+  if (error) {
+    return { ok: false, message: error.message }
+  }
   return { ok: true }
+}
+
+export async function fetchCanManageWorkspaceRoster(
+  workspaceId: string,
+  isOrgAdmin: boolean
+): Promise<boolean> {
+  if (isOrgAdmin) return true
+  const supabase = getSupabaseClient()
+  if (!supabase) return true
+
+  const { data, error } = await supabase.rpc('current_user_is_roster_manager', {
+    p_workspace_id: workspaceId,
+  })
+
+  if (error) {
+    return false
+  }
+
+  return data === true
 }
 
 export type CreatedWorkspace = {
@@ -317,6 +541,31 @@ export async function createWorkspace(params: {
   }
 
   return { ok: true, workspace: payload.workspace }
+}
+
+export async function setWorkspaceArchived(
+  workspaceId: string,
+  archived: boolean
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  if (!isSupabaseConfigured) {
+    return { ok: false, message: 'Supabase is not configured.' }
+  }
+
+  const supabase = getSupabaseClient()
+  if (!supabase) {
+    return { ok: false, message: 'Supabase is not configured.' }
+  }
+
+  const { error } = await supabase.rpc('set_workspace_archived', {
+    p_workspace_id: workspaceId,
+    p_archived: archived,
+  })
+
+  if (error) {
+    return { ok: false, message: error.message }
+  }
+
+  return { ok: true }
 }
 
 export function canAccessLegacyWorkspace(

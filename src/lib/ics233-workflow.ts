@@ -204,7 +204,8 @@ export function getIcs233AssignmentRecipientEmails(
     return roster
       .filter(
         (member) =>
-          member.status !== 'removed' && member.icsPosition === row.assigneePosition
+          member.status !== 'removed' &&
+          member.icsPositions.includes(row.assigneePosition as string)
       )
       .map((member) => member.email)
   }
@@ -232,7 +233,7 @@ export function isCurrentUserAssignedToIcs233Action(
       (member) =>
         member.status !== 'removed' &&
         member.email.toLowerCase() === normalizedEmail &&
-        member.icsPosition === row.assigneePosition
+        member.icsPositions.includes(row.assigneePosition as string)
     )
   }
 

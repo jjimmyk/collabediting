@@ -1,4 +1,9 @@
 {
+  "functions": {
+    "api/migrate.ts": {
+      "includeFiles": "scripts/migration-runner.mjs"
+    }
+  },
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api/$1" },
     { "source": "/(.*)", "destination": "/index.html" }

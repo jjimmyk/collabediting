@@ -105,6 +105,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(500).json({ error: workspaceError?.message ?? 'Could not create workspace.' })
     }
 
+    const { error: permissionsError } = await admin.rpc('seed_workspace_position_permissions', {
+      p_workspace_id: workspace.id,
+    })
+
+    if (permissionsError) {
+      return res.status(500).json({ error: permissionsError.message })
+    }
+
     const { error: memberError } = await admin.from('workspace_members').upsert(
       {
         workspace_id: workspace.id,
@@ -120,6 +128,31 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (memberError) {
       return res.status(500).json({ error: memberError.message })
+    }
+
+    const { data: memberRow, error: memberLookupError } = await admin
+      .from('workspace_members')
+      .select('id')
+      .eq('workspace_id', workspace.id)
+      .eq('email', creatorEmail)
+      .single()
+
+    if (memberLookupError || !memberRow) {
+      return res.status(500).json({
+        error: memberLookupError?.message ?? 'Could not find workspace member.',
+      })
+    }
+
+    const { error: positionError } = await admin.from('workspace_member_positions').upsert(
+      {
+        member_id: memberRow.id,
+        ics_position: 'Incident Commander',
+      },
+      { onConflict: 'member_id,ics_position' }
+    )
+
+    if (positionError) {
+      return res.status(500).json({ error: positionError.message })
     }
 
     return res.status(200).json({

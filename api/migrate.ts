@@ -1,7 +1,13 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import pg from 'pg'
+
+type MigrationRunResult = {
+  applied: string[]
+  skipped: string[]
+  baselined: boolean
+}
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
@@ -36,19 +42,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     })
   }
 
-  let migrationFiles: string[]
   const migrationDir = join(process.cwd(), 'supabase/migrations')
-  try {
-    migrationFiles = readdirSync(migrationDir)
-      .filter((file) => file.endsWith('.sql'))
-      .sort()
-  } catch {
-    return res.status(500).json({ error: 'Could not read migrations directory.' })
-  }
-
-  if (migrationFiles.length === 0) {
-    return res.status(500).json({ error: 'No migration files found.' })
-  }
+  const runnerUrl = pathToFileURL(
+    join(process.cwd(), 'scripts/migration-runner.mjs')
+  ).href
 
   const client = new pg.Client({
     connectionString,
@@ -61,17 +58,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   })
 
   try {
-    // Supabase pooler certificates can fail default Node verification on Vercel.
     process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'
-    await client.connect()
-    for (const file of migrationFiles) {
-      const sql = readFileSync(join(migrationDir, file), 'utf8')
-      await client.query(sql)
+    const { runPendingMigrations } = (await import(runnerUrl)) as {
+      runPendingMigrations: (
+        client: pg.Client,
+        migrationsDir: string,
+        options?: { verbose?: boolean }
+      ) => Promise<MigrationRunResult>
     }
+
+    await client.connect()
+    const result = await runPendingMigrations(client, migrationDir, { verbose: false })
+
     return res.status(200).json({
       ok: true,
-      message: 'Schema migrations applied.',
-      files: migrationFiles,
+      message: result.baselined
+        ? 'Existing database baselined; migration tracking enabled.'
+        : result.applied.length > 0
+          ? 'New schema migrations applied.'
+          : 'No new migrations to apply.',
+      baselined: result.baselined,
+      applied: result.applied,
+      skipped: result.skipped,
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Migration failed'

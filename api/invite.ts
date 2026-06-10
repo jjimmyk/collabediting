@@ -1,5 +1,10 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import {
+  MIN_AUTH_PASSWORD_LENGTH,
+  provisionWorkspaceRosterMember,
+} from './roster-shared.js'
+import { parseIcsPositionsInput, upsertWorkspaceMemberWithPositions } from './roster-shared.js'
 
 const supabaseUrl =
   process.env.VITE_SUPABASE_URL ??
@@ -18,7 +23,10 @@ type InviteBody = {
   workspaceId?: string
   email?: string
   icsPosition?: string
+  icsPositions?: string[]
   redirectTo?: string
+  password?: string
+  confirmPasswordOverwrite?: boolean
 }
 
 function getAppUrl(): string {
@@ -170,13 +178,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const workspaceId = body.workspaceId?.trim()
     const email = body.email?.trim().toLowerCase()
     const icsPosition = body.icsPosition?.trim()
+    const icsPositions = parseIcsPositionsInput(body, icsPosition)
+    const password = typeof body.password === 'string' ? body.password : ''
+    const confirmPasswordOverwrite = body.confirmPasswordOverwrite === true
+    const hasPassword = password.length > 0
 
-    if (!workspaceId || !email || !icsPosition) {
-      return res.status(400).json({ error: 'workspaceId, email, and icsPosition are required.' })
+    if (!workspaceId || !email || icsPositions.length === 0) {
+      return res.status(400).json({
+        error: 'workspaceId, email, and at least one icsPosition are required.',
+      })
     }
 
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return res.status(400).json({ error: 'Invalid email address.' })
+    }
+
+    if (hasPassword && password.length < MIN_AUTH_PASSWORD_LENGTH) {
+      return res.status(400).json({
+        error: `Password must be at least ${MIN_AUTH_PASSWORD_LENGTH} characters.`,
+        code: 'password_too_short',
+      })
     }
 
     const admin = createClient(supabaseUrl, supabaseServiceRoleKey)
@@ -216,21 +237,44 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .eq('id', workspaceId)
       .maybeSingle()
 
-    const { error: upsertError } = await admin.from('workspace_members').upsert(
-      {
-        workspace_id: workspaceId,
+    if (hasPassword) {
+      const provisioned = await provisionWorkspaceRosterMember(admin, {
+        workspaceId,
         email,
-        ics_position: icsPosition,
-        status: 'invited',
-        invited_by: user.id,
-        invited_at: new Date().toISOString(),
-      },
-      { onConflict: 'workspace_id,email' }
-    )
+        icsPositions,
+        password,
+        invitedBy: user.id,
+        confirmPasswordOverwrite,
+      })
 
-    if (upsertError) {
-      return res.status(400).json({ error: upsertError.message })
+      if (!provisioned.ok) {
+        if (provisioned.code === 'user_exists') {
+          return res.status(409).json({
+            error:
+              'This email already has a Pratus account. Confirm to replace their password and add them to this workspace.',
+            code: 'user_exists',
+          })
+        }
+        return res.status(400).json({
+          error: `Password must be at least ${MIN_AUTH_PASSWORD_LENGTH} characters.`,
+          code: provisioned.code,
+        })
+      }
+
+      return res.status(200).json({
+        ok: true,
+        method: 'direct_provision',
+        action: provisioned.action,
+      })
     }
+
+    await upsertWorkspaceMemberWithPositions(admin, {
+      workspaceId,
+      email,
+      icsPositions,
+      status: 'invited',
+      invitedBy: user.id,
+    })
 
     const inviteRedirect = getAppCallbackUrl(workspaceId)
 

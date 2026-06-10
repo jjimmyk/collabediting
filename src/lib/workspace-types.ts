@@ -5,7 +5,9 @@ export type WorkspaceMemberStatus = 'invited' | 'active' | 'removed'
 export type WorkspaceRosterMember = {
   id: string
   email: string
+  /** Primary position label (first assigned position). */
   icsPosition: string
+  icsPositions: string[]
   status: WorkspaceMemberStatus
   addedAt: string
   userId: string | null
@@ -17,8 +19,16 @@ export type AccessibleWorkspace = {
   legacyId: number
   name: string
   icsPosition: string
+  icsPositions: string[]
   region: string | null
   summary: string | null
+  archivedAt: string | null
+}
+
+export type WorkspacePermissions = {
+  positions: string[]
+  permissions: string[]
+  canEditIcs201Form: boolean
 }
 
 export type UserProfile = {
@@ -35,6 +45,7 @@ export type DbWorkspace = {
   name: string
   region: string | null
   summary: string | null
+  archived_at?: string | null
 }
 
 export type DbWorkspaceMember = {
@@ -46,4 +57,5 @@ export type DbWorkspaceMember = {
   status: WorkspaceMemberStatus
   invited_at: string
   joined_at: string | null
+  workspace_member_positions?: Array<{ ics_position: string }> | null
 }

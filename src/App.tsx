@@ -33,6 +33,7 @@ import {
 import Zoom from '@arcgis/core/widgets/Zoom'
 import {
   AlertTriangle,
+  Archive,
   Box,
   Check,
   ChevronDown,
@@ -45,6 +46,7 @@ import {
   Download as DownloadIcon,
   ExternalLink,
   Eye,
+  EyeOff,
   FileText,
   Folder,
   FolderOpen,
@@ -59,8 +61,10 @@ import {
   MoreHorizontal,
   MoreVertical,
   MousePointer2,
+  LayoutGrid,
   Lock,
   Moon,
+  Network,
   Plus,
   Pencil,
   Radar,
@@ -76,6 +80,7 @@ import {
   Trash2,
   UserCircle,
   Users,
+  Video,
   X,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
@@ -175,16 +180,50 @@ import {
   stableNotificationIdFromUuid,
   type Ics233ActionNotificationRow,
 } from '@/lib/ics233-notification-service'
+import {
+  fetchHubNotificationRecipients,
+  formatHubNotificationTimestamp,
+  persistHubUserNotifications,
+  type HubUserNotificationRow,
+} from '@/lib/hub-notification-service'
+import type { HubNotificationRecipient } from '@/data/hub-notification-recipients'
 import type { WorkspaceRosterMember } from '@/lib/workspace-types'
 import { buildDefaultLocalWorkspaceRosters } from '@/lib/default-roster'
 import {
   createWorkspace,
+  fetchCanManageWorkspaceRoster,
+  fetchWorkspacePositionPermissions,
   fetchWorkspaceRoster,
   findAccessibleWorkspaceUuid,
   inviteWorkspaceMember,
   removeWorkspaceRosterMember as removeWorkspaceRosterMemberFromDb,
   resolveWorkspaceId,
+  setWorkspaceArchived,
+  setWorkspacePositionEditIcs201,
+  updateRosterMemberPositions,
 } from '@/lib/workspace-service'
+import type {
+  Ics204FormState,
+  Ics204ResourceAssignedRow,
+  Ics204ResourceRequirementRow,
+  Ics204Version,
+  Ics204WorkAssignmentRow,
+} from '@/features/ics204/types'
+import {
+  cloneIcs204FormState,
+  createLocalIcs204DocumentId,
+  ics204AuthorColor as resolveIcs204AuthorColor,
+} from '@/features/ics204/utils'
+import { isIncidentArchived } from '@/lib/incident-archive'
+import { WorkspacePositionRoster } from '@/features/roster/WorkspacePositionRoster'
+import { WorkspaceOrgChartRoster } from '@/features/roster/WorkspaceOrgChartRoster'
+import { RosterAddMemberToolbar } from '@/features/roster/RosterAddMemberToolbar'
+import {
+  buildDefaultPositionPermissionMap,
+  buildPositionRosterEntries,
+  rosterMembersAssignableToPosition,
+  type PositionPermissionMap,
+} from '@/features/roster/workspace-position-roster'
 import { femaRegionGeometries } from '@/data/fema-regions'
 import {
   DEFAULT_EVENT_CREATION_RULES,
@@ -199,6 +238,9 @@ import { NotificationSettingsPage } from '@/components/NotificationSettingsPage'
 import pratusLogo from '@/assets/pratus-logo.png'
 import { Ics201SectionEditorBadges } from '@/features/ics201/Ics201SectionEditorBadges'
 import { Ics201TutorialWizard } from '@/features/ics201/Ics201TutorialWizard'
+import { HubTutorialWizard } from '@/features/hub/HubTutorialWizard'
+import { StartHereButton } from '@/components/StartHereButton'
+import { CreateHubNotificationDialog } from '@/components/CreateHubNotificationDialog'
 import {
   BASELINE_MAP_SKETCH_POLYGON,
   createInitialIcs201Form,
@@ -226,9 +268,23 @@ import {
 import { useIcs201ObjectivesSectionEditor } from '@/hooks/useIcs201ObjectivesSectionEditor'
 import { useIcs201Presence } from '@/hooks/useIcs201Presence'
 import { useIcs201Sync } from '@/hooks/useIcs201Sync'
+import { useIcs204WorkspaceForms } from '@/hooks/useIcs204WorkspaceForms'
 import { useIcs233Sync } from '@/hooks/useIcs233Sync'
 import { useIcs233NotificationSync } from '@/hooks/useIcs233NotificationSync'
+import { useHubNotificationSync } from '@/hooks/useHubNotificationSync'
 import { useIcs201TextSectionEditor } from '@/hooks/useIcs201TextSectionEditor'
+import { useWorkspacePermissions } from '@/hooks/useWorkspacePermissions'
+import { patchIcs201DocumentForm } from '@/lib/ics201-service'
+import { PlanningPStepper } from '@/features/planning-p/PlanningPStepper'
+import { PLANNING_P_STEPS } from '@/features/planning-p/planning-p-steps'
+import {
+  DEFAULT_INCIDENT_COMPLEXITY,
+  getIncidentComplexityOptionsForWorkflow,
+  isPlanningPIncidentWorkspace,
+  normalizeIncidentComplexityForWorkflow,
+  STANDARD_INCIDENT_COMPLEXITY_OPTIONS,
+} from '@/lib/workspace-format'
+import { ICS_POSITIONS, WORKSPACE_ROSTER_POSITIONS } from '@/lib/ics-positions'
 
 type OperationalStatus = 'Operational' | 'Partially Operational' | 'Not Operational'
 
@@ -246,6 +302,7 @@ type NotificationItem = {
   relatedEventId?: number
   recipientEmail?: string
   ics233NotificationId?: string
+  hubNotificationId?: string
   regionalThreats?: {
     region: string
     description: string
@@ -258,6 +315,19 @@ type NotificationItem = {
     }[]
     responseChecklist: { label: string }[]
   }
+}
+
+const isNotificationVisibleToUser = (
+  item: NotificationItem,
+  profileEmail: string | null
+) => {
+  if (!item.recipientEmail) {
+    return true
+  }
+  if (!profileEmail) {
+    return true
+  }
+  return item.recipientEmail.toLowerCase() === profileEmail.toLowerCase()
 }
 
 type NotificationTaskResource = {
@@ -675,24 +745,6 @@ type RosterPositionItem = {
   location: [number, number]
 }
 
-const ICS_ROSTER_POSITION_OPTIONS = [
-  'Incident Commander',
-  'Public Information Officer',
-  'Safety Officer',
-  'Liaison Officer',
-  'Operations Section Chief',
-  'Planning Section Chief',
-  'Logistics Section Chief',
-  'Finance/Admin Section Chief',
-  'Situation Unit Leader',
-  'Resources Unit Leader',
-  'Documentation Unit Leader',
-  'Display Unit Leader',
-  'Demobilization Unit Leader',
-  'Technical Specialist',
-  'Agency Representative',
-] as const
-
 type SafetyAnalysisItem = {
   id: number
   hazard: string
@@ -744,6 +796,9 @@ type IncidentListItem = {
   summary: string
   resourcesCommitted: string
   relatedEventIds: number[]
+  workspaceFormat?: string
+  incidentComplexity?: string
+  archivedAt?: string | null
 }
 
 const INCIDENT_CATEGORY_OPTIONS = [
@@ -920,6 +975,26 @@ const formatInitialIncidentReportSummary = (report: InitialIncidentReportState) 
 
   if (report.icNotified === 'yes' && report.icNotifiedName.trim()) {
     parts.push(`IC notified: ${report.icNotifiedName.trim()}`)
+  }
+
+  if (report.rpName.trim()) {
+    parts.push(`RP: ${report.rpName.trim()}`)
+  }
+
+  if (report.materialReleased.trim()) {
+    parts.push(`Material released: ${report.materialReleased.trim()}`)
+  }
+
+  if (report.enterWater) {
+    parts.push(`Enter water: ${report.enterWater.toUpperCase()}`)
+  }
+
+  if (report.releaseDischargeRate.trim()) {
+    parts.push(`Release / discharge rate: ${report.releaseDischargeRate.trim()}`)
+  }
+
+  if (report.sourceControlled) {
+    parts.push(`Source controlled: ${report.sourceControlled.toUpperCase()}`)
   }
 
   if (report.scenarios.length > 0) {
@@ -1225,6 +1300,11 @@ const DEFAULT_EVENT_LIST: EventListItem[] = (
       qiDrill: 'no',
       icNotified: 'yes',
       icNotifiedName: 'BP Cherry Point Unified Command',
+      rpName: '',
+      materialReleased: '',
+      enterWater: '',
+      releaseDischargeRate: '',
+      sourceControlled: '',
       scenarios: ['Fire – Jet Pressurized', 'Process Area - Gas Release'],
     },
   },
@@ -2306,6 +2386,14 @@ const FEMA_AOR_POPUP_TEMPLATE = {
     '<b>Data Sources:</b> {sitrepSourcesSummary}',
 }
 
+const RESOURCE_AT_RISK_POPUP_DETAILS =
+  '<b>Type:</b> {kind}<br/><b>Status:</b> {status}<br/><b>ID:</b> {assetId}<br/><b>Updated:</b> {updatedAt}<br/><b>Description:</b> {description}'
+
+const RESOURCE_AT_RISK_POPUP_TEMPLATE = {
+  title: '{title}',
+  content: RESOURCE_AT_RISK_POPUP_DETAILS,
+}
+
 const applyFemaAorPopupState = (graphic: Graphic, aor: FemaAorItem) => {
   graphic.attributes = buildFemaAorGraphicAttributes(aor)
   graphic.popupTemplate = FEMA_AOR_POPUP_TEMPLATE
@@ -2719,6 +2807,11 @@ type InitialIncidentReportState = {
   qiDrill: YesNoField
   icNotified: YesNoField
   icNotifiedName: string
+  rpName: string
+  materialReleased: string
+  enterWater: YesNoField
+  releaseDischargeRate: string
+  sourceControlled: YesNoField
   scenarios: string[]
 }
 
@@ -2783,6 +2876,11 @@ const createDefaultInitialIncidentReport = (): InitialIncidentReportState => ({
   qiDrill: '',
   icNotified: '',
   icNotifiedName: '',
+  rpName: '',
+  materialReleased: '',
+  enterWater: '',
+  releaseDischargeRate: '',
+  sourceControlled: '',
   scenarios: [],
 })
 
@@ -2851,6 +2949,15 @@ const buildEventFromCcmerReport = (report: InitialIncidentReportState): EventLis
     report.qiDrill ? `QI drill: ${report.qiDrill.toUpperCase()}` : null,
     report.icNotified
       ? `IC notified: ${report.icNotified.toUpperCase()}${report.icNotifiedName.trim() ? ` (${report.icNotifiedName.trim()})` : ''}`
+      : null,
+    report.rpName.trim() ? `RP: ${report.rpName.trim()}` : null,
+    report.materialReleased.trim() ? `Material released: ${report.materialReleased.trim()}` : null,
+    report.enterWater ? `Enter water: ${report.enterWater.toUpperCase()}` : null,
+    report.releaseDischargeRate.trim()
+      ? `Release / discharge rate: ${report.releaseDischargeRate.trim()}`
+      : null,
+    report.sourceControlled
+      ? `Source controlled: ${report.sourceControlled.toUpperCase()}`
       : null,
   ].filter((entry): entry is string => Boolean(entry))
   if (responseNotes.length > 0) {
@@ -3031,6 +3138,7 @@ const inferScenariosFromEvent = (event: EventListItem) => {
 const buildInitialIncidentReportFromEvent = (event: EventListItem): InitialIncidentReportState => {
   if (event.sourceReport) {
     return {
+      ...createDefaultInitialIncidentReport(),
       ...event.sourceReport,
       callType: 'incident',
       shortDescription: event.sourceReport.shortDescription.trim() || event.name,
@@ -3312,6 +3420,89 @@ function CcmerDutyNotificationForm({
           }
           className="min-h-24"
         />
+      </div>
+      <div>
+        <p className="text-sm font-medium">Release Details</p>
+        <p className="text-xs text-muted-foreground">
+          Document responsible party and release information.
+        </p>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div className="grid gap-2">
+          <Label htmlFor={`${idPrefix}-rp-name`}>RP Name</Label>
+          <Input
+            id={`${idPrefix}-rp-name`}
+            value={value.rpName}
+            onChange={(event) =>
+              onChange((previous) => ({
+                ...previous,
+                rpName: event.target.value,
+              }))
+            }
+          />
+        </div>
+        <div className="grid gap-2">
+          <Label htmlFor={`${idPrefix}-material-released`}>Material Released</Label>
+          <Input
+            id={`${idPrefix}-material-released`}
+            value={value.materialReleased}
+            onChange={(event) =>
+              onChange((previous) => ({
+                ...previous,
+                materialReleased: event.target.value,
+              }))
+            }
+          />
+        </div>
+        <div className="grid gap-2">
+          <Label htmlFor={`${idPrefix}-release-discharge-rate`}>Release / Discharge Rate</Label>
+          <Input
+            id={`${idPrefix}-release-discharge-rate`}
+            placeholder="e.g. 50 bbl/hr"
+            value={value.releaseDischargeRate}
+            onChange={(event) =>
+              onChange((previous) => ({
+                ...previous,
+                releaseDischargeRate: event.target.value,
+              }))
+            }
+          />
+        </div>
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2">
+        {(
+          [
+            ['enterWater', 'Enter Water'],
+            ['sourceControlled', 'Source Controlled'],
+          ] as const
+        ).map(([fieldKey, fieldLabel]) => (
+          <div key={fieldKey} className="grid gap-2">
+            <Label>{fieldLabel}</Label>
+            <RadioGroup
+              value={value[fieldKey]}
+              onValueChange={(nextValue) =>
+                onChange((previous) => ({
+                  ...previous,
+                  [fieldKey]: nextValue as YesNoField,
+                }))
+              }
+              className="flex gap-4"
+            >
+              <div className="flex items-center gap-2">
+                <RadioGroupItem value="yes" id={`${idPrefix}-${fieldKey}-yes`} />
+                <Label htmlFor={`${idPrefix}-${fieldKey}-yes`} className="cursor-pointer">
+                  Yes
+                </Label>
+              </div>
+              <div className="flex items-center gap-2">
+                <RadioGroupItem value="no" id={`${idPrefix}-${fieldKey}-no`} />
+                <Label htmlFor={`${idPrefix}-${fieldKey}-no`} className="cursor-pointer">
+                  No
+                </Label>
+              </div>
+            </RadioGroup>
+          </div>
+        ))}
       </div>
       <div className="grid gap-4 sm:grid-cols-2">
         {(
@@ -3684,30 +3875,6 @@ type Ics209FormState = {
   preparedBySignature: string
   preparedByDateTime: string
 }
-type Ics204ResourceAssignedRow = {
-  id: number
-  resourceIdentifier: string
-  leader: string
-  contact: string
-  location: string
-}
-type Ics204ResourceRequirementRow = {
-  id: number
-  resource: string
-  required: string
-  have: string
-  need: string
-}
-type Ics204WorkAssignmentRow = {
-  id: number
-  assignment: string
-  priority: string
-  resourceRequirements: Ics204ResourceRequirementRow[]
-  overheadPositions: string
-  specialEquipmentSupplies: string
-  reportingLocation: string
-  requestedArrivalTime: string
-}
 type SitrepActivityRow = {
   id: number
   time: string
@@ -3744,21 +3911,6 @@ type SitrepFormState = {
   keyIssues: string[]
   nextSteps: string[]
   distribution: string
-}
-type Ics204FormState = {
-  id: number
-  assignedUnit: string
-  branch: string
-  division: string
-  group: string
-  stagingArea: string
-  sectionChief: string
-  branchDirector: string
-  divisionGroupSupervisor: string
-  resourcesAssigned: Ics204ResourceAssignedRow[]
-  workAssignments: Ics204WorkAssignmentRow[]
-  specialInstructions: string
-  communications: string
 }
 
 let crc32Table: Uint32Array | null = null
@@ -6218,7 +6370,10 @@ function App() {
   const [incidentLocation, setIncidentLocation] = useState('')
   const [incidentCategory, setIncidentCategory] = useState('')
   const [incidentWorkflow, setIncidentWorkflow] = useState('ipieca-ims')
-  const [incidentComplexity, setIncidentComplexity] = useState('tier-1')
+  const [incidentComplexity, setIncidentComplexity] = useState<string>(
+    DEFAULT_INCIDENT_COMPLEXITY
+  )
+  const [planningPStepId, setPlanningPStepId] = useState(PLANNING_P_STEPS[0]?.id ?? 'objectives-meeting')
   const [incidentTemplate, setIncidentTemplate] = useState('')
   const [previewTemplateId, setPreviewTemplateId] = useState<string | null>(null)
   const [incidentSituationReport, setIncidentSituationReport] = useState('')
@@ -6321,11 +6476,10 @@ function App() {
     { value: 'washington-ics', label: 'Washington ICS' },
     { value: 'phmsa-ics', label: 'Pipeline and Hazardous Materials Safety Administration ICS' },
   ] as const
-  const incidentComplexityOptions = [
-    { value: 'tier-1', label: 'Minor (Tier 1)' },
-    { value: 'tier-2', label: 'Major (Tier 2)' },
-    { value: 'tier-3', label: 'Full (Tier 3)' },
-  ] as const
+  const effectiveIncidentComplexityOptions = useMemo(
+    () => getIncidentComplexityOptionsForWorkflow(incidentWorkflow),
+    [incidentWorkflow]
+  )
   const incidentTeamTemplateOptions = [
     'Unified Command',
     'Operations Focused',
@@ -6356,7 +6510,7 @@ function App() {
     setIncidentLocation('')
     setIncidentCategory('')
     setIncidentWorkflow('ipieca-ims')
-    setIncidentComplexity('tier-1')
+    setIncidentComplexity(DEFAULT_INCIDENT_COMPLEXITY)
     setIncidentTemplate('')
     setPreviewTemplateId(null)
     setIncidentSituationReport('')
@@ -6482,6 +6636,8 @@ function App() {
       summary,
       resourcesCommitted,
       relatedEventIds: [],
+      workspaceFormat: incidentWorkflow,
+      incidentComplexity,
     }
 
     if (isSupabaseEnabled) {
@@ -6621,6 +6777,8 @@ function App() {
       summary,
       resourcesCommitted,
       relatedEventIds: [...incidentRelatedEventIds],
+      workspaceFormat: incidentWorkflow,
+      incidentComplexity,
     }
 
     if (isSupabaseEnabled) {
@@ -6780,6 +6938,7 @@ function App() {
   }
   const [expandedItemId, setExpandedItemId] = useState<string | null>(null)
   const [expandedThreats, setExpandedThreats] = useState<Set<string>>(new Set())
+  const [visibleThreatLiveFeeds, setVisibleThreatLiveFeeds] = useState<Set<string>>(new Set())
   const [completedResponseActions, setCompletedResponseActions] = useState<Set<string>>(
     new Set()
   )
@@ -6805,14 +6964,14 @@ function App() {
   const [selectedTopBarButton, setSelectedTopBarButton] = useState<string | null>(null)
   const [isPratusAiDrawerOpen, setIsPratusAiDrawerOpen] = useState(false)
   const [isPlanningPDialogOpen, setIsPlanningPDialogOpen] = useState(false)
-  const [expandedIcs204FormId, setExpandedIcs204FormId] = useState<number | null>(null)
+  const [expandedIcs204FormId, setExpandedIcs204FormId] = useState<string | null>(null)
   const [expandedIcs204WorkAssignmentKey, setExpandedIcs204WorkAssignmentKey] = useState<string | null>(null)
   const [pratusAiMessages, setPratusAiMessages] = useState<PratusAiMessage[]>([])
   const [pratusAiDraftMessage, setPratusAiDraftMessage] = useState('')
   const [isPratusAiSelectingContext, setIsPratusAiSelectingContext] = useState(false)
   const [isPratusAiLoading, setIsPratusAiLoading] = useState(false)
   const pratusAiLoadingTimerRef = useRef<number | null>(null)
-  const [ics204ResourcePickerFormId, setIcs204ResourcePickerFormId] = useState<number | null>(null)
+  const [ics204ResourcePickerFormId, setIcs204ResourcePickerFormId] = useState<string | null>(null)
   const [ics204ResourceNameFilter, setIcs204ResourceNameFilter] = useState('')
   const [ics204ResourceCurrentLocationFilter, setIcs204ResourceCurrentLocationFilter] = useState('')
   const [ics204ResourceCurrentOpFilter, setIcs204ResourceCurrentOpFilter] = useState('all')
@@ -7546,6 +7705,7 @@ function App() {
   const [isCreatingSignedIcs201Version, setIsCreatingSignedIcs201Version] = useState(false)
   const [isIcs201SignNameDialogOpen, setIsIcs201SignNameDialogOpen] = useState(false)
   const [isIcs201TutorialOpen, setIsIcs201TutorialOpen] = useState(false)
+  const [isHubTutorialOpen, setIsHubTutorialOpen] = useState(false)
   const [ics201SignNameInput, setIcs201SignNameInput] = useState('You')
   const [viewingIcs201Version, setViewingIcs201Version] = useState<Ics201Version | null>(null)
   const [currentSituationEdit, setCurrentSituationEdit] = useState<string | null>(null)
@@ -8344,76 +8504,36 @@ function App() {
     setSitrepForm((previous) => ({ ...previous, [field]: value }))
   }
   const [ics204Forms, setIcs204Forms] = useState<Ics204FormState[]>([])
-  type Ics204Version = {
-    id: string
-    createdAt: number
-    authorName: string
-    authorColor: string
-    snapshot: Ics204FormState
-    signatures: Ics201VersionSignature[]
-  }
-  const seedIcs204Versions = (form: Ics204FormState): Ics204Version[] => {
-    const now = Date.now()
-    const authors: Array<{ name: string; color: string }> = [
-      { name: 'You', color: '#16a34a' },
-      { name: 'Maya Chen', color: '#ef4444' },
-      { name: 'Diego Alvarez', color: '#3b82f6' },
-      { name: form.divisionGroupSupervisor || 'A. Rivera', color: '#16a34a' },
-    ]
-    const signers: Array<{ name: string; role: string }> = [
-      { name: form.sectionChief || 'T. Hale', role: 'Operations Section Chief' },
-      { name: form.branchDirector || 'R. Patel', role: 'Branch Director' },
-    ]
-    return Array.from({ length: 5 }, (_, index) => {
-      const minutesAgo = (5 - index) * 3
-      const createdAt = now - minutesAgo * 60_000
-      const author = authors[index % authors.length]
-      const isSigned = index === 2 || index === 4
-      const signatures: Ics201VersionSignature[] = []
-      if (isSigned) {
-        const signer = signers[index === 4 ? 0 : 1]
-        signatures.push({
-          name: signer.name,
-          role: signer.role,
-          signedAt: createdAt + 30_000,
-        })
-      }
-      return {
-        id: `seed-204-${form.id}-v${index + 1}`,
-        createdAt,
-        authorName: author.name,
-        authorColor: author.color,
-        snapshot: form,
-        signatures,
-      }
-    })
-  }
-  const [ics204VersionsById, setIcs204VersionsById] = useState<Record<number, Ics204Version[]>>(
+  const [ics204VersionsById, setIcs204VersionsById] = useState<Record<string, Ics204Version[]>>(
     {}
   )
   const [viewingIcs204VersionByFormId, setViewingIcs204VersionByFormId] = useState<
-    Record<number, Ics204Version | null>
+    Record<string, Ics204Version | null>
   >({})
   const [isCreatingSignedIcs204ByFormId, setIsCreatingSignedIcs204ByFormId] = useState<
-    Record<number, boolean>
+    Record<string, boolean>
   >({})
   const [ics204VersionDialog, setIcs204VersionDialog] = useState<
-    { formId: number; kind: 'all' | 'signed' } | null
+    { formId: string; kind: 'all' | 'signed' } | null
   >(null)
   const [ics204SignDialog, setIcs204SignDialog] = useState<
     | {
-        formId: number
+        formId: string
         mode: 'new-version' | 'review'
         role: string
       }
     | null
   >(null)
   const [ics204SignNameInput, setIcs204SignNameInput] = useState('You')
-  const [ics204AssignedByFormId, setIcs204AssignedByFormId] = useState<Record<number, boolean>>({})
+  const [ics204AssignedByFormId, setIcs204AssignedByFormId] = useState<Record<string, boolean>>({})
   const [ics204AssignConfirmDialog, setIcs204AssignConfirmDialog] = useState<{
-    formId: number
+    formId: string
   } | null>(null)
-  const liveIcs204FormsRef = useRef<Record<number, Ics204FormState>>({})
+  const [ics204DeleteConfirmDialog, setIcs204DeleteConfirmDialog] = useState<{
+    formId: string
+    label: string
+  } | null>(null)
+  const liveIcs204FormsRef = useRef<Record<string, Ics204FormState>>({})
   const [ics233Rows, setIcs233Rows] = useState<Ics233TaskRow[]>([])
   const [activeIcs233CellEdit, setActiveIcs233CellEdit] = useState<{
     rowId: number
@@ -8452,7 +8572,7 @@ function App() {
       string,
       {
         ics204Forms: Ics204FormState[]
-        ics204VersionsById: Record<number, Ics204Version[]>
+        ics204VersionsById: Record<string, Ics204Version[]>
         ics233Rows: Ics233TaskRow[]
       }
     >
@@ -8827,6 +8947,10 @@ function App() {
   ])
   const [incidentEventFilters, setIncidentEventFilters] = useState<number[]>([])
   const [incidentCategoryFilters, setIncidentCategoryFilters] = useState<string[]>([])
+  const [showArchivedIncidents, setShowArchivedIncidents] = useState(false)
+  const [incidentArchiveOverrides, setIncidentArchiveOverrides] = useState<
+    Record<number, string | null>
+  >({})
   const [exerciseList, setExerciseList] = useState<ExerciseListItem[]>(DEFAULT_EXERCISE_LIST)
   const [activeIncidentWorkspaceId, setActiveIncidentWorkspaceId] = useState<number | null>(null)
   const [activeExerciseWorkspaceId, setActiveExerciseWorkspaceId] = useState<number | null>(null)
@@ -8841,14 +8965,39 @@ function App() {
   const [isInvitingRosterMember, setIsInvitingRosterMember] = useState(false)
   const [isAddRosterMemberOpen, setIsAddRosterMemberOpen] = useState(false)
   const [rosterMemberEmailDraft, setRosterMemberEmailDraft] = useState('')
+  const [rosterMemberPasswordDraft, setRosterMemberPasswordDraft] = useState('')
+  const [rosterMemberPasswordVisible, setRosterMemberPasswordVisible] = useState(false)
+  const [isRosterPasswordOverwriteConfirmOpen, setIsRosterPasswordOverwriteConfirmOpen] =
+    useState(false)
+  const [rosterMemberPositionsDraft, setRosterMemberPositionsDraft] = useState<string[]>([
+    'Incident Commander',
+  ])
+  const [rosterInvitePositionPreset, setRosterInvitePositionPreset] = useState<string | null>(null)
+  const [activeWorkspacePositionPermissions, setActiveWorkspacePositionPermissions] =
+    useState<PositionPermissionMap>(() => buildDefaultPositionPermissionMap())
+  const [localPositionPermissionsByKey, setLocalPositionPermissionsByKey] = useState<
+    Record<string, PositionPermissionMap>
+  >({})
+  const [canManageWorkspaceRoster, setCanManageWorkspaceRoster] = useState(true)
+  const [rosterPermissionUpdatingPosition, setRosterPermissionUpdatingPosition] = useState<
+    string | null
+  >(null)
+  const [rosterAssigningPosition, setRosterAssigningPosition] = useState<string | null>(null)
+  const [rosterViewMode, setRosterViewMode] = useState<'grid' | 'org-chart'>('grid')
   const [rosterMemberPositionDraft, setRosterMemberPositionDraft] = useState<string>(
-    ICS_ROSTER_POSITION_OPTIONS[0]
+    ICS_POSITIONS[0]
   )
   const [eventList, setEventList] = useState<EventListItem[]>(DEFAULT_EVENT_LIST)
   const [eventSeverityFilters, setEventSeverityFilters] = useState<EventListItem['severity'][]>([])
   const [eventBusinessUnitFilters, setEventBusinessUnitFilters] = useState<string[]>([])
   const [isEventsSettingsOpen, setIsEventsSettingsOpen] = useState(false)
   const [isNotificationSettingsOpen, setIsNotificationSettingsOpen] = useState(false)
+  const [isCreateHubNotificationOpen, setIsCreateHubNotificationOpen] = useState(false)
+  const [hubNotificationRecipients, setHubNotificationRecipients] = useState<
+    HubNotificationRecipient[]
+  >([])
+  const [isLoadingHubNotificationRecipients, setIsLoadingHubNotificationRecipients] =
+    useState(false)
   const [eventCreationRules, setEventCreationRules] = useState<EventCreationRule[]>(
     DEFAULT_EVENT_CREATION_RULES
   )
@@ -9689,7 +9838,9 @@ function App() {
       }))
     )
     const pointGraphics = [
-      ...notifications.map((item) => ({
+      ...notifications
+        .filter((item) => !item.recipientEmail)
+        .map((item) => ({
         mapKey: `notification-${item.id}`,
         title: item.title,
         kind: 'Notification',
@@ -9824,16 +9975,16 @@ function App() {
                       impact: 'impact' in item ? item.impact : '',
                     }),
             },
-        popupTemplate: {
-          title: '{title}',
-          content: isResourceAtRisk
-            ? '<b>Type:</b> {kind}<br/><b>Status:</b> {status}<br/><b>ID:</b> {assetId}<br/><b>Updated:</b> {updatedAt}<br/><b>Description:</b> {description}'
-            : isEvent
-              ? '<b>Type:</b> {kind}<br/><b>Status:</b> {status}<br/><b>Created:</b> {creationLabel}<br/><b>Updated:</b> {updatedByLine}<br/><b>Event Report:</b> {eventReport}'
-              : usesExecutiveSummary
-                ? '<b>Type:</b> {kind}<br/><b>Status:</b> {status}<br/><b>Owner:</b> {owner}<br/><b>Updated:</b> {updatedByLine}<br/><b>Executive Summary:</b> {executiveSummary}'
-                : '<b>Type:</b> {kind}<br/><b>Status:</b> {status}<br/><b>Owner:</b> {owner}<br/><b>Updated:</b> {timestamp}<br/><b>Impact:</b> {impact}',
-        },
+        popupTemplate: isResourceAtRisk
+          ? RESOURCE_AT_RISK_POPUP_TEMPLATE
+          : {
+              title: '{title}',
+              content: isEvent
+                ? '<b>Type:</b> {kind}<br/><b>Status:</b> {status}<br/><b>Created:</b> {creationLabel}<br/><b>Updated:</b> {updatedByLine}<br/><b>Event Report:</b> {eventReport}'
+                : usesExecutiveSummary
+                  ? '<b>Type:</b> {kind}<br/><b>Status:</b> {status}<br/><b>Owner:</b> {owner}<br/><b>Updated:</b> {updatedByLine}<br/><b>Executive Summary:</b> {executiveSummary}'
+                  : '<b>Type:</b> {kind}<br/><b>Status:</b> {status}<br/><b>Owner:</b> {owner}<br/><b>Updated:</b> {timestamp}<br/><b>Impact:</b> {impact}',
+            },
       })
       return { mapKey: item.mapKey, graphic }
     })
@@ -10601,6 +10752,12 @@ function App() {
     return 'Panel Content'
   }
   const isCompactPanelTabs = isMapVisible && panelWidthMode === 'one-third'
+  const rosterPanelLayoutMode =
+    !isMapVisible || !isObjectivesOpen
+      ? 'wide'
+      : panelWidthMode === 'one-third'
+        ? 'compact'
+        : 'medium'
   const activeResourcesFieldFilters = resourcesFieldFiltersByView[resourcesPanelView]
   const activeResourcesFieldFilterCount = activeResourcesFieldFilters.filter(
     (rule) => rule.field && rule.value.trim()
@@ -11003,7 +11160,10 @@ function App() {
   }
 
   const normalizedQuery = searchQuery.trim().toLowerCase()
-  const searchFilteredNotifications = notifications.filter((item) => {
+  const userVisibleNotifications = notifications.filter((item) =>
+    isNotificationVisibleToUser(item, profileEmail)
+  )
+  const searchFilteredNotifications = userVisibleNotifications.filter((item) => {
     if (!normalizedQuery) {
       return true
     }
@@ -11100,26 +11260,6 @@ function App() {
       .toLowerCase()
       .includes(normalizedQuery)
   })
-  const searchFilteredIncidents = incidentList.filter((item) => {
-    if (!normalizedQuery) {
-      return true
-    }
-
-    return [
-      item.name,
-      item.type,
-      item.status,
-      item.severity,
-      item.region,
-      item.lead,
-      item.summary,
-      item.resourcesCommitted,
-      getIncidentRelatedEventsLabel(item, eventList),
-    ]
-      .join(' ')
-      .toLowerCase()
-      .includes(normalizedQuery)
-  })
   const searchFilteredEvents = eventList.filter((item) => {
     if (!normalizedQuery) {
       return true
@@ -11167,7 +11307,7 @@ function App() {
   })
   const normalizedAppliedFilterQuery = appliedFilterQuery?.trim().toLowerCase() ?? ''
   const activePanelSearchQuery = normalizedQuery || normalizedAppliedFilterQuery
-  const cardFilteredNotifications = notifications.filter((item) => {
+  const cardFilteredNotifications = userVisibleNotifications.filter((item) => {
     if (!activePanelSearchQuery) {
       return true
     }
@@ -11364,42 +11504,6 @@ function App() {
   }
   const getDerivedActionStatus = (item: AorItem) =>
     item.itemType === 'Action' ? (item.assignee ? 'Assigned' : 'Unassigned') : ''
-  const cardFilteredIncidentList = incidentList.filter((item) => {
-    if (isSupabaseEnabled && !canAccessWorkspace('incident', item.id)) {
-      return false
-    }
-
-    if (!matchesIncidentCategoryFilters(item, incidentCategoryFilters)) {
-      return false
-    }
-
-    if (
-      incidentEventFilters.length > 0 &&
-      !incidentEventFilters.some((eventId) => item.relatedEventIds.includes(eventId))
-    ) {
-      return false
-    }
-
-    if (!activePanelSearchQuery) {
-      return true
-    }
-
-    return [
-      item.name,
-      item.type,
-      item.category,
-      item.status,
-      item.severity,
-      item.region,
-      item.lead,
-      item.summary,
-      item.resourcesCommitted,
-      getIncidentRelatedEventsLabel(item, eventList),
-    ]
-      .join(' ')
-      .toLowerCase()
-      .includes(activePanelSearchQuery)
-  })
   const cardFilteredFemaAors = femaAors.filter((item) => {
     if (!activePanelSearchQuery) {
       return true
@@ -11450,6 +11554,7 @@ function App() {
             name: workspace.name,
             region: workspace.region ?? existing.region,
             summary: workspace.summary ?? existing.summary,
+            archivedAt: workspace.archivedAt ?? existing.archivedAt ?? null,
           })
           continue
         }
@@ -11469,11 +11574,94 @@ function App() {
           summary: workspace.summary ?? '',
           resourcesCommitted: 'Initial responders mobilizing',
           relatedEventIds: [],
+          archivedAt: workspace.archivedAt ?? null,
         })
       }
     }
-    return sortIncidentsBySeverity([...byId.values()])
-  }, [accessibleWorkspaces, incidentList, isSupabaseEnabled, profileEmail])
+    return sortIncidentsBySeverity(
+      [...byId.values()].map((incident) => ({
+        ...incident,
+        archivedAt:
+          incident.archivedAt ?? incidentArchiveOverrides[incident.id] ?? null,
+      }))
+    )
+  }, [
+    accessibleWorkspaces,
+    incidentArchiveOverrides,
+    incidentList,
+    isSupabaseEnabled,
+    profileEmail,
+  ])
+  const accessibleIncidentsForUi = useMemo(
+    () =>
+      allIncidentsForWorkspace.filter((incident) => {
+        if (isSupabaseEnabled && !canAccessWorkspace('incident', incident.id)) {
+          return false
+        }
+        if (!showArchivedIncidents && isIncidentArchived(incident)) {
+          return false
+        }
+        return true
+      }),
+    [
+      allIncidentsForWorkspace,
+      canAccessWorkspace,
+      isSupabaseEnabled,
+      showArchivedIncidents,
+    ]
+  )
+  const cardFilteredIncidentList = accessibleIncidentsForUi.filter((item) => {
+    if (!matchesIncidentCategoryFilters(item, incidentCategoryFilters)) {
+      return false
+    }
+
+    if (
+      incidentEventFilters.length > 0 &&
+      !incidentEventFilters.some((eventId) => item.relatedEventIds.includes(eventId))
+    ) {
+      return false
+    }
+
+    if (!activePanelSearchQuery) {
+      return true
+    }
+
+    return [
+      item.name,
+      item.type,
+      item.category,
+      item.status,
+      item.severity,
+      item.region,
+      item.lead,
+      item.summary,
+      item.resourcesCommitted,
+      getIncidentRelatedEventsLabel(item, eventList),
+    ]
+      .join(' ')
+      .toLowerCase()
+      .includes(activePanelSearchQuery)
+  })
+  const searchFilteredIncidents = accessibleIncidentsForUi.filter((item) => {
+    if (!normalizedQuery) {
+      return true
+    }
+
+    return [
+      item.name,
+      item.type,
+      item.status,
+      item.severity,
+      item.region,
+      item.lead,
+      item.summary,
+      item.resourcesCommitted,
+      getIncidentRelatedEventsLabel(item, eventList),
+    ]
+      .join(' ')
+      .toLowerCase()
+      .includes(normalizedQuery)
+  })
   const allExercisesForWorkspace = useMemo(() => {
     const byId = new Map<number, ExerciseListItem>()
     for (const exercise of exerciseList) {
@@ -11667,6 +11855,17 @@ function App() {
   )
   const isInExerciseWorkspace = activeExerciseWorkspace !== null
   const isInIncidentWorkspace = activeIncidentWorkspace !== null
+  const showPlanningPStepper =
+    isInIncidentWorkspace &&
+    isPlanningPIncidentWorkspace({
+      workspaceFormat: activeIncidentWorkspace?.workspaceFormat,
+      incidentComplexity: activeIncidentWorkspace?.incidentComplexity,
+    })
+  useEffect(() => {
+    if (showPlanningPStepper) {
+      setPlanningPStepId(PLANNING_P_STEPS[0]?.id ?? 'objectives-meeting')
+    }
+  }, [activeIncidentWorkspaceId, showPlanningPStepper])
   const activeWorkspaceRosterKey =
     activeIncidentWorkspace !== null
       ? `incident-${activeIncidentWorkspace.id}`
@@ -11682,8 +11881,8 @@ function App() {
     activeIncidentWorkspace?.name ?? activeExerciseWorkspace?.name ?? 'Workspace'
   const persistActiveWorkspaceForms = (workspaceKey: string) => {
     workspaceFormsCacheRef.current[workspaceKey] = {
-      ics204Forms: ics204FormsRef.current,
-      ics204VersionsById: ics204VersionsByIdRef.current,
+      ics204Forms: isSupabaseEnabled ? [] : ics204FormsRef.current,
+      ics204VersionsById: isSupabaseEnabled ? {} : ics204VersionsByIdRef.current,
       ics233Rows: ics233RowsRef.current,
     }
   }
@@ -11695,14 +11894,17 @@ function App() {
       setExpandedIcs204FormId(null)
       return
     }
+    if (isSupabaseEnabled) {
+      setIcs204Forms([])
+      setIcs204VersionsById({})
+      setIcs233Rows([])
+      setExpandedIcs204FormId(null)
+      return
+    }
     const cached = workspaceFormsCacheRef.current[workspaceKey]
     setIcs204Forms(cached?.ics204Forms ?? [])
     setIcs204VersionsById(cached?.ics204VersionsById ?? {})
-    if (isSupabaseEnabled) {
-      setIcs233Rows([])
-    } else {
-      setIcs233Rows((cached?.ics233Rows ?? []).map((row) => normalizeIcs233Row(row)))
-    }
+    setIcs233Rows((cached?.ics233Rows ?? []).map((row) => normalizeIcs233Row(row)))
     setExpandedIcs204FormId(cached?.ics204Forms[0]?.id ?? null)
   }
   useEffect(() => {
@@ -11730,7 +11932,12 @@ function App() {
   const isValidRosterEmail = (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())
   const resetAddRosterMemberDraft = () => {
     setRosterMemberEmailDraft('')
-    setRosterMemberPositionDraft(ICS_ROSTER_POSITION_OPTIONS[0])
+    setRosterMemberPasswordDraft('')
+    setRosterMemberPasswordVisible(false)
+    setIsRosterPasswordOverwriteConfirmOpen(false)
+    setRosterMemberPositionsDraft(['Incident Commander'])
+    setRosterMemberPositionDraft(ICS_POSITIONS[0])
+    setRosterInvitePositionPreset(null)
   }
   useEffect(() => {
     if (!isSupabaseEnabled || accessibleWorkspaces.length === 0) {
@@ -11813,6 +12020,11 @@ function App() {
       const roster = await fetchWorkspaceRoster(workspaceId)
       if (cancelled) return
       setSupabaseWorkspaceRoster(roster)
+
+      const permissions = await fetchWorkspacePositionPermissions(workspaceId)
+      if (cancelled) return
+      setActiveWorkspacePositionPermissions(permissions)
+
       setIsRosterLoading(false)
     }
 
@@ -11830,6 +12042,30 @@ function App() {
     accessibleWorkspaces,
     isAddRosterMemberOpen,
   ])
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadRosterManagerAccess() {
+      if (!isSupabaseEnabled || !activeWorkspaceSupabaseId) {
+        setCanManageWorkspaceRoster(true)
+        return
+      }
+
+      const canManage = await fetchCanManageWorkspaceRoster(
+        activeWorkspaceSupabaseId,
+        isOrgAdmin
+      )
+      if (!cancelled) {
+        setCanManageWorkspaceRoster(canManage)
+      }
+    }
+
+    void loadRosterManagerAccess()
+
+    return () => {
+      cancelled = true
+    }
+  }, [isSupabaseEnabled, activeWorkspaceSupabaseId, isOrgAdmin])
   const isInIcs201Workspace = isInIncidentWorkspace || isInExerciseWorkspace
   const ics201EditingFlags = useMemo(
     () => ({
@@ -11872,8 +12108,30 @@ function App() {
     },
     []
   )
+  const ics201LiveConnectedRef = useRef(false)
+  const ics201LiveCurrentSituationRef = useRef('')
+  const handleIcs204Loaded = useCallback(
+    (payload: { forms: Ics204FormState[]; versionsById: Record<string, Ics204Version[]> }) => {
+      setIcs204Forms(payload.forms.map((form) => cloneIcs204FormState(form)))
+      setIcs204VersionsById(payload.versionsById)
+      setExpandedIcs204FormId((previous) => {
+        if (previous && payload.forms.some((form) => form.id === previous)) {
+          return previous
+        }
+        return payload.forms[0]?.id ?? null
+      })
+    },
+    []
+  )
   const handleIcs201RemoteFormUpdated = useCallback((form: Ics201FormState) => {
-    setIcs201Form(cloneIcs201FormState(form))
+    setIcs201Form((previous) => {
+      const next = cloneIcs201FormState(form)
+      if (ics201LiveConnectedRef.current) {
+        next.currentSituationSummary =
+          ics201LiveCurrentSituationRef.current || previous.currentSituationSummary
+      }
+      return next
+    })
   }, [])
   const handleIcs201RemoteVersionInserted = useCallback((version: Ics201Version) => {
     setIcs201Versions((previous) => {
@@ -12001,6 +12259,186 @@ function App() {
     },
     [profileEmail]
   )
+  const upsertHubNotificationInTab = useCallback(
+    (notification: HubUserNotificationRow, showToast: boolean) => {
+      if (
+        notification.recipient_email.toLowerCase() !== (profileEmail ?? '').toLowerCase()
+      ) {
+        return
+      }
+
+      setNotifications((previous) => {
+        if (previous.some((item) => item.hubNotificationId === notification.id)) {
+          return previous
+        }
+
+        return [
+          {
+            id: stableNotificationIdFromUuid(notification.id),
+            hubNotificationId: notification.id,
+            title: notification.title,
+            severity: notification.severity as NotificationItem['severity'],
+            status: 'New',
+            category: 'Action',
+            timestamp: formatHubNotificationTimestamp(notification.created_at),
+            owner: notification.created_by_email ?? profileEmail ?? 'System',
+            summary: notification.summary,
+            impact: notification.summary,
+            location: [0, 0] as [number, number],
+            recipientEmail: notification.recipient_email,
+          },
+          ...previous,
+        ]
+      })
+
+      if (showToast) {
+        toast.info(notification.title, { description: notification.summary })
+      }
+    },
+    [profileEmail]
+  )
+  const hydrateHubNotificationsInTab = useCallback(
+    (notifications: HubUserNotificationRow[]) => {
+      if (notifications.length === 0) {
+        return
+      }
+
+      setNotifications((previous) => {
+        const existingIds = new Set(
+          previous
+            .map((item) => item.hubNotificationId)
+            .filter((id): id is string => id !== undefined)
+        )
+
+        const hydratedItems = notifications
+          .filter((notification) => !existingIds.has(notification.id))
+          .map((notification) => ({
+            id: stableNotificationIdFromUuid(notification.id),
+            hubNotificationId: notification.id,
+            title: notification.title,
+            severity: notification.severity as NotificationItem['severity'],
+            status: 'New' as const,
+            category: 'Action' as const,
+            timestamp: formatHubNotificationTimestamp(notification.created_at),
+            owner: notification.created_by_email ?? profileEmail ?? 'System',
+            summary: notification.summary,
+            impact: notification.summary,
+            location: [0, 0] as [number, number],
+            recipientEmail: notification.recipient_email,
+          }))
+
+        if (hydratedItems.length === 0) {
+          return previous
+        }
+
+        return [...hydratedItems, ...previous]
+      })
+    },
+    [profileEmail]
+  )
+  const deliverHubNotificationLocally = useCallback(
+    ({
+      recipientEmail,
+      title,
+      summary,
+      severity = 'Medium' as NotificationItem['severity'],
+      owner,
+    }: {
+      recipientEmail: string
+      title: string
+      summary: string
+      severity?: NotificationItem['severity']
+      owner?: string
+    }) => {
+      if (recipientEmail.toLowerCase() !== (profileEmail ?? '').toLowerCase()) {
+        return
+      }
+
+      const timestamp = new Date().toISOString().slice(0, 16).replace('T', ' ')
+      setNotifications((previous) => {
+        const nextId =
+          previous.length === 0 ? 1 : Math.max(...previous.map((item) => item.id)) + 1
+        return [
+          {
+            id: nextId,
+            title,
+            severity,
+            status: 'New',
+            category: 'Action',
+            timestamp,
+            owner: owner ?? profileEmail ?? 'System',
+            summary,
+            impact: summary,
+            location: [0, 0] as [number, number],
+            recipientEmail,
+          },
+          ...previous,
+        ]
+      })
+      toast.info(title, { description: summary })
+    },
+    [profileEmail]
+  )
+  const handleSendHubNotification = useCallback(
+    async ({
+      title,
+      summary,
+      severity,
+      recipientEmails,
+    }: {
+      title: string
+      summary: string
+      severity: NotificationItem['severity']
+      recipientEmails: string[]
+    }) => {
+      const owner = profileEmail ?? 'You'
+      const createdByEmail = profileEmail ?? undefined
+
+      if (isSupabaseEnabled) {
+        const persisted = await persistHubUserNotifications(
+          recipientEmails.map((recipientEmail) => ({
+            recipientEmail,
+            title,
+            summary,
+            severity,
+            createdByEmail,
+          }))
+        )
+
+        persisted.forEach((notification) => {
+          upsertHubNotificationInTab(notification, true)
+        })
+      } else {
+        recipientEmails.forEach((recipientEmail) => {
+          deliverHubNotificationLocally({
+            recipientEmail,
+            title,
+            summary,
+            severity,
+            owner,
+          })
+        })
+      }
+
+      toast.success('Notification sent', {
+        description: `Delivered to ${recipientEmails.length} recipient${
+          recipientEmails.length === 1 ? '' : 's'
+        }.`,
+      })
+    },
+    [
+      deliverHubNotificationLocally,
+      isSupabaseEnabled,
+      profileEmail,
+      upsertHubNotificationInTab,
+    ]
+  )
+  const handleHubNotificationFromDb = useCallback(
+    (notification: HubUserNotificationRow) => {
+      upsertHubNotificationInTab(notification, true)
+    },
+    [upsertHubNotificationInTab]
+  )
   const handleIcs233ActionNotificationFromDb = useCallback(
     (notification: Ics233ActionNotificationRow) => {
       upsertIcs233NotificationInTab(notification, true)
@@ -12013,6 +12451,35 @@ function App() {
     onHydrate: hydrateIcs233NotificationsInTab,
     onLiveNotification: handleIcs233ActionNotificationFromDb,
   })
+  useHubNotificationSync({
+    enabled: isSupabaseEnabled && profileEmail !== null,
+    profileEmail,
+    onHydrate: hydrateHubNotificationsInTab,
+    onLiveNotification: handleHubNotificationFromDb,
+  })
+  useEffect(() => {
+    if (!isCreateHubNotificationOpen) {
+      return
+    }
+
+    let cancelled = false
+    setIsLoadingHubNotificationRecipients(true)
+    void fetchHubNotificationRecipients(profileEmail, isOrgAdmin)
+      .then((recipients) => {
+        if (!cancelled) {
+          setHubNotificationRecipients(recipients)
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsLoadingHubNotificationRecipients(false)
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [isCreateHubNotificationOpen, isOrgAdmin, profileEmail])
   const handleIcs233Loaded = useCallback((payload: { documentId: string; rows: Ics233TaskRow[] }) => {
     ics233PersistSkipRef.current = true
     setIcs233Rows(payload.rows.map((row) => normalizeIcs233Row(row)))
@@ -12088,10 +12555,79 @@ function App() {
     onRemoteFormUpdated: handleIcs201RemoteFormUpdated,
     onRemoteVersionInserted: handleIcs201RemoteVersionInserted,
   })
+  const {
+    loading: isIcs204Loading,
+    error: ics204SyncError,
+    isSaving: isIcs204Saving,
+    createForm: createIcs204Form,
+    deleteForm: deleteIcs204Document,
+    saveDraft: saveIcs204DraftToServer,
+    appendVersion: appendIcs204VersionToServer,
+    saveSignedReview: saveIcs204SignedReviewToServer,
+  } = useIcs204WorkspaceForms({
+    enabled:
+      isSupabaseEnabled &&
+      (isInIncidentWorkspace || isInExerciseWorkspace) &&
+      activeWorkspaceSupabaseId !== null,
+    workspaceId: activeWorkspaceSupabaseId,
+    userId: user?.id ?? null,
+    profileEmail,
+    onLoaded: handleIcs204Loaded,
+  })
+  const { canEditIcs201Form, refresh: refreshWorkspacePermissions } = useWorkspacePermissions(
+    isInIncidentWorkspace || isInExerciseWorkspace ? activeWorkspaceSupabaseId : null,
+    isOrgAdmin
+  )
+  const activePositionPermissions = isSupabaseEnabled
+    ? activeWorkspacePositionPermissions
+    : activeWorkspaceRosterKey !== null
+      ? (localPositionPermissionsByKey[activeWorkspaceRosterKey] ??
+        buildDefaultPositionPermissionMap())
+      : buildDefaultPositionPermissionMap()
+  const positionRosterEntries = useMemo(
+    () =>
+      buildPositionRosterEntries(
+        activeWorkspaceRoster,
+        activePositionPermissions,
+        activePanelSearchQuery
+      ),
+    [activeWorkspaceRoster, activePositionPermissions, activePanelSearchQuery]
+  )
+  const positionRosterEntriesByPosition = useMemo(
+    () => Object.fromEntries(positionRosterEntries.map((entry) => [entry.position, entry])),
+    [positionRosterEntries]
+  )
+  const visibleRosterPositions = useMemo(
+    () => new Set(positionRosterEntries.map((entry) => entry.position)),
+    [positionRosterEntries]
+  )
+  const assignableByPosition = useMemo(() => {
+    const map: Record<string, WorkspaceRosterMember[]> = {}
+    for (const position of WORKSPACE_ROSTER_POSITIONS) {
+      map[position] = rosterMembersAssignableToPosition(activeWorkspaceRoster, position)
+    }
+    return map
+  }, [activeWorkspaceRoster])
+  useEffect(() => {
+    if (canEditIcs201Form) {
+      return
+    }
+    setIcs201EditingReportInfo(false)
+    setIcs201EditingIncidentBriefing(false)
+    setIcs201EditingMapSketch(false)
+    setIcs201EditingCurrentSituation(false)
+    setIcs201EditingObjectives(false)
+    setIcs201EditingActions(false)
+    setIcs201EditingOrgChart(false)
+    setIcs201EditingResources(false)
+    setIcs201EditingSafetyAnalysis(false)
+    setIsCreatingSignedIcs201Version(false)
+  }, [canEditIcs201Form])
+  const currentUserRosterMember = activeWorkspaceRoster.find(
+    (member) => member.email.toLowerCase() === (profileEmail ?? '').toLowerCase()
+  )
   const currentUserRosterPosition =
-    activeWorkspaceRoster.find(
-      (member) => member.email.toLowerCase() === (profileEmail ?? '').toLowerCase()
-    )?.icsPosition ?? 'Incident Commander'
+    currentUserRosterMember?.icsPosition ?? 'Incident Commander'
   const {
     activeEditors: ics201ActiveEditors,
     sectionEditors: ics201SectionEditors,
@@ -12112,17 +12648,46 @@ function App() {
       }),
     [activeWorkspaceRoster, profileEmail]
   )
+  const publishIcs201CurrentSituationToForm = useCallback(
+    async (value: string) => {
+      if (!ics201DocumentId) return
+      try {
+        await patchIcs201DocumentForm(
+          ics201DocumentId,
+          { currentSituationSummary: value },
+          user?.id ?? null
+        )
+      } catch {
+        // Autosave should not interrupt live co-editing.
+      }
+    },
+    [ics201DocumentId, user?.id]
+  )
   const ics201CurrentSituationEditor = useIcs201TextSectionEditor({
     enabled: isSupabaseEnabled,
-    active: ics201EditingCurrentSituation,
+    active: ics201EditingCurrentSituation && canEditIcs201Form,
+    stayConnected: isSupabaseEnabled && ics201DocumentId !== null && activeTab === 'briefing',
     documentId: ics201DocumentId,
     sectionId: 'current-situation',
     seedValue: ics201Form.currentSituationSummary,
     maxLength: ics201EnforcesCharLimit ? ICS201_STRICT_CHAR_LIMIT : undefined,
+    onFormPublish: publishIcs201CurrentSituationToForm,
+    formPublishDebounceMs: 10000,
   })
+  ics201LiveConnectedRef.current = ics201CurrentSituationEditor.isLiveConnected
+  ics201LiveCurrentSituationRef.current = ics201CurrentSituationEditor.isLiveConnected
+    ? ics201CurrentSituationEditor.value
+    : ''
+  const getIcs201FormWithLiveSections = useCallback((): Ics201FormState => {
+    const form = cloneIcs201FormState(ics201Form)
+    if (ics201CurrentSituationEditor.isLiveConnected) {
+      form.currentSituationSummary = ics201CurrentSituationEditor.value
+    }
+    return form
+  }, [ics201CurrentSituationEditor.isLiveConnected, ics201CurrentSituationEditor.value, ics201Form])
   const ics201ObjectivesEditor = useIcs201ObjectivesSectionEditor({
     enabled: isSupabaseEnabled,
-    active: ics201EditingObjectives,
+    active: ics201EditingObjectives && canEditIcs201Form,
     documentId: ics201DocumentId,
     sectionId: 'objectives',
     seedValue: ics201Form.objectives,
@@ -12176,16 +12741,28 @@ function App() {
       toast.error(ics201SyncError)
     }
   }, [ics201SyncError])
-  const addWorkspaceRosterMember = async () => {
+  useEffect(() => {
+    if (ics204SyncError) {
+      toast.error(ics204SyncError)
+    }
+  }, [ics204SyncError])
+  const ics204AuthorName = profileEmail ?? 'You'
+  const ics204LocalAuthorColor = resolveIcs204AuthorColor(user?.id ?? null)
+  const addWorkspaceRosterMember = async (confirmPasswordOverwrite = false) => {
     if (activeWorkspaceRosterKey === null) return
     const email = rosterMemberEmailDraft.trim().toLowerCase()
     if (!isValidRosterEmail(email)) {
       toast.error('Enter a valid email address.')
       return
     }
-    const position = rosterMemberPositionDraft.trim()
-    if (position.length === 0) {
-      toast.error('Select an ICS position.')
+    const icsPositions = [...rosterMemberPositionsDraft]
+    if (icsPositions.length === 0) {
+      toast.error('Select at least one ICS position.')
+      return
+    }
+    const password = rosterMemberPasswordDraft
+    if (password.length > 0 && password.length < 8) {
+      toast.error('Password must be at least 8 characters.')
       return
     }
     const existingMembers = activeWorkspaceRoster
@@ -12210,10 +12787,16 @@ function App() {
         accessToken,
         workspaceId: activeWorkspaceSupabaseId,
         email,
-        icsPosition: position,
+        icsPositions,
+        ...(password.length > 0 ? { password } : {}),
+        ...(confirmPasswordOverwrite ? { confirmPasswordOverwrite: true } : {}),
       })
       setIsInvitingRosterMember(false)
       if (!result.ok) {
+        if (result.code === 'user_exists') {
+          setIsRosterPasswordOverwriteConfirmOpen(true)
+          return
+        }
         toast.error(result.message)
         return
       }
@@ -12225,7 +12808,16 @@ function App() {
         toast.warning(result.warning)
         return
       }
-      toast.success(`Invitation sent to ${email} as ${position}.`)
+      const positionLabel = icsPositions.join(', ')
+      if (result.method === 'direct_provision') {
+        toast.success(
+          result.action === 'updated'
+            ? `${email} was added to the roster. Their password was updated — they can sign in immediately.`
+            : `${email} was added to the roster. They can sign in immediately with the password you set.`
+        )
+        return
+      }
+      toast.success(`Invitation sent to ${email} as ${positionLabel}.`)
       return
     }
 
@@ -12233,7 +12825,8 @@ function App() {
     const nextMember: WorkspaceRosterMember = {
       id: `local-${localMembers.length === 0 ? 1 : localMembers.length + 1}`,
       email,
-      icsPosition: position,
+      icsPosition: icsPositions[0],
+      icsPositions,
       status: 'active',
       userId: null,
       addedAt: new Date().toLocaleString([], {
@@ -12250,7 +12843,154 @@ function App() {
     }))
     resetAddRosterMemberDraft()
     setIsAddRosterMemberOpen(false)
-    toast.success(`Added ${email} as ${position}.`)
+    toast.success(`Added ${email} as ${icsPositions.join(', ')}.`)
+  }
+  const toggleRosterMemberPositionsDraft = (position: string) => {
+    setRosterMemberPositionsDraft((previous) => {
+      if (previous.includes(position)) {
+        if (previous.length === 1) {
+          return previous
+        }
+        return previous.filter((entry) => entry !== position)
+      }
+      return [...previous, position].sort((a, b) => a.localeCompare(b))
+    })
+  }
+  const openInviteToPosition = (position: string) => {
+    setRosterMemberEmailDraft('')
+    setRosterMemberPasswordDraft('')
+    setRosterMemberPasswordVisible(false)
+    setIsRosterPasswordOverwriteConfirmOpen(false)
+    setRosterMemberPositionsDraft([position])
+    setRosterMemberPositionDraft(position)
+    setRosterInvitePositionPreset(position)
+    setIsAddRosterMemberOpen(true)
+  }
+  const openAddRosterMemberDialog = () => {
+    resetAddRosterMemberDraft()
+    setIsAddRosterMemberOpen(true)
+  }
+  const updateMemberIcsPositions = async (
+    memberId: string,
+    icsPositions: string[],
+    options?: { successMessage?: string }
+  ): Promise<boolean> => {
+    if (icsPositions.length === 0) {
+      await removeWorkspaceRosterMember(memberId)
+      return true
+    }
+
+    if (isSupabaseEnabled) {
+      if (!activeWorkspaceSupabaseId) {
+        toast.error('This workspace is not synced to Supabase yet.')
+        return false
+      }
+      const accessToken = await getAccessToken()
+      if (!accessToken) {
+        toast.error('Sign in again to update roster positions.')
+        return false
+      }
+      const result = await updateRosterMemberPositions({
+        accessToken,
+        memberId,
+        icsPositions,
+      })
+      if (!result.ok) {
+        toast.error(result.message)
+        return false
+      }
+      const roster = await fetchWorkspaceRoster(activeWorkspaceSupabaseId)
+      setSupabaseWorkspaceRoster(roster)
+      if (options?.successMessage) {
+        toast.success(options.successMessage)
+      }
+      return true
+    }
+
+    if (activeWorkspaceRosterKey === null) return false
+    setLocalWorkspaceRostersByKey((previous) => ({
+      ...previous,
+      [activeWorkspaceRosterKey]: (previous[activeWorkspaceRosterKey] ?? []).map((member) =>
+        member.id === memberId
+          ? {
+              ...member,
+              icsPositions,
+              icsPosition: icsPositions[0],
+            }
+          : member
+      ),
+    }))
+    if (options?.successMessage) {
+      toast.success(options.successMessage)
+    }
+    return true
+  }
+  const assignExistingMemberToPosition = async (memberId: string, position: string) => {
+    const member = activeWorkspaceRoster.find((entry) => entry.id === memberId)
+    if (!member || member.icsPositions.includes(position)) return
+
+    setRosterAssigningPosition(position)
+    const nextPositions = [...member.icsPositions, position].sort((a, b) => a.localeCompare(b))
+    await updateMemberIcsPositions(memberId, nextPositions, {
+      successMessage: `Assigned ${member.email} to ${position}.`,
+    })
+    setRosterAssigningPosition(null)
+  }
+  const unassignMemberFromPosition = async (memberId: string, position: string) => {
+    const member = activeWorkspaceRoster.find((entry) => entry.id === memberId)
+    if (!member) return
+
+    setRosterAssigningPosition(position)
+    const nextPositions = member.icsPositions.filter((entry) => entry !== position)
+    if (nextPositions.length === 0) {
+      await removeWorkspaceRosterMember(memberId)
+      setRosterAssigningPosition(null)
+      return
+    }
+    await updateMemberIcsPositions(memberId, nextPositions, {
+      successMessage: `Removed ${member.email} from ${position}.`,
+    })
+    setRosterAssigningPosition(null)
+  }
+  const toggleWorkspacePositionEditIcs201 = async (position: string, enabled: boolean) => {
+    if (!canManageWorkspaceRoster) return
+
+    setRosterPermissionUpdatingPosition(position)
+
+    if (isSupabaseEnabled && activeWorkspaceSupabaseId) {
+      const result = await setWorkspacePositionEditIcs201(
+        activeWorkspaceSupabaseId,
+        position,
+        enabled
+      )
+      if (!result.ok) {
+        setRosterPermissionUpdatingPosition(null)
+        toast.error(result.message)
+        return
+      }
+      const permissions = await fetchWorkspacePositionPermissions(activeWorkspaceSupabaseId)
+      setActiveWorkspacePositionPermissions(permissions)
+      await refreshWorkspacePermissions()
+      setRosterPermissionUpdatingPosition(null)
+      return
+    }
+
+    if (activeWorkspaceRosterKey === null) {
+      setRosterPermissionUpdatingPosition(null)
+      return
+    }
+
+    setLocalPositionPermissionsByKey((previous) => {
+      const current = previous[activeWorkspaceRosterKey] ?? buildDefaultPositionPermissionMap()
+      return {
+        ...previous,
+        [activeWorkspaceRosterKey]: {
+          ...current,
+          [position]: { editIcs201: enabled },
+        },
+      }
+    })
+    setRosterPermissionUpdatingPosition(null)
   }
   const removeWorkspaceRosterMember = async (memberId: string) => {
     if (activeWorkspaceRosterKey === null) return
@@ -12276,15 +13016,7 @@ function App() {
       ),
     }))
   }
-  const cardFilteredWorkspaceRoster = activeWorkspaceRoster.filter((member) => {
-    if (!activePanelSearchQuery) {
-      return true
-    }
-    return [member.email, member.icsPosition, member.status, member.addedAt]
-      .join(' ')
-      .toLowerCase()
-      .includes(activePanelSearchQuery)
-  })
+
   const activeNavigationDestination = useMemo(() => {
     if (isInExerciseWorkspace) return 'exercise-workspace' as const
     if (isInIncidentWorkspace) return 'incident-workspace' as const
@@ -12293,12 +13025,10 @@ function App() {
   }, [activeTab, isInExerciseWorkspace, isInIncidentWorkspace])
   const filteredIncidentWorkspaceOptions = useMemo(
     () =>
-      allIncidentsForWorkspace.filter(
-        (incident) =>
-          (!isSupabaseEnabled || canAccessWorkspace('incident', incident.id)) &&
-          matchesWorkspaceNavSearch(incident, incidentWorkspaceNavQuery)
+      accessibleIncidentsForUi.filter((incident) =>
+        matchesWorkspaceNavSearch(incident, incidentWorkspaceNavQuery)
       ),
-    [allIncidentsForWorkspace, incidentWorkspaceNavQuery, isSupabaseEnabled, canAccessWorkspace]
+    [accessibleIncidentsForUi, incidentWorkspaceNavQuery]
   )
   const filteredExerciseWorkspaceOptions = useMemo(
     () =>
@@ -12309,6 +13039,43 @@ function App() {
       ),
     [allExercisesForWorkspace, exerciseWorkspaceNavQuery, isSupabaseEnabled, canAccessWorkspace]
   )
+  const handleSetIncidentArchived = async (
+    incident: IncidentListItem,
+    archived: boolean
+  ) => {
+    const workspaceId =
+      incident.workspaceId ??
+      findAccessibleWorkspaceUuid(accessibleWorkspaces, 'incident', incident.id)
+
+    if (isSupabaseEnabled && workspaceId) {
+      const result = await setWorkspaceArchived(workspaceId, archived)
+      if (!result.ok) {
+        toast.error(result.message)
+        return
+      }
+      await refreshAccess()
+    } else {
+      setIncidentArchiveOverrides((previous) => ({
+        ...previous,
+        [incident.id]: archived ? new Date().toISOString() : null,
+      }))
+      setIncidentList((previous) =>
+        previous.map((item) =>
+          item.id === incident.id
+            ? { ...item, archivedAt: archived ? new Date().toISOString() : null }
+            : item
+        )
+      )
+    }
+
+    if (archived && activeIncidentWorkspaceId === incident.id) {
+      setActiveIncidentWorkspaceId(null)
+      setActiveWorkspaceSupabaseId(null)
+      setActiveTab('incident-list')
+    }
+
+    toast.success(archived ? `${incident.name} archived.` : `${incident.name} restored.`)
+  }
   const enterIncidentWorkspace = (incident: IncidentListItem) => {
     if (isSupabaseEnabled && !canAccessWorkspace('incident', incident.id)) {
       toast.error('You are not on the roster for this incident workspace.')
@@ -12440,7 +13207,7 @@ function App() {
     setIsLeftSidebarOpen(false)
   }
   const navigateToIncidentWorkspace = () => {
-    const incident = activeIncidentWorkspace ?? allIncidentsForWorkspace[0]
+    const incident = activeIncidentWorkspace ?? accessibleIncidentsForUi[0]
     if (!incident) return
     enterIncidentWorkspace(incident)
     setIsLeftSidebarOpen(false)
@@ -12493,7 +13260,7 @@ function App() {
     setIncidentName(seed.incidentName)
     setIncidentCategory(seed.incidentCategory)
     setIncidentWorkflow('ipieca-ims')
-    setIncidentComplexity('tier-1')
+    setIncidentComplexity(DEFAULT_INCIDENT_COMPLEXITY)
     setIncidentTemplate(seed.incidentTemplate)
     setPreviewTemplateId(null)
     setIncidentSituationReport(seed.incidentSituationReport)
@@ -13819,6 +14586,26 @@ function App() {
       const next = new Set(previous)
       if (next.has(key)) {
         next.delete(key)
+        setVisibleThreatLiveFeeds((feeds) => {
+          if (!feeds.has(key)) {
+            return feeds
+          }
+          const nextFeeds = new Set(feeds)
+          nextFeeds.delete(key)
+          return nextFeeds
+        })
+      } else {
+        next.add(key)
+      }
+      return next
+    })
+  }
+
+  const toggleThreatLiveFeed = (key: string) => {
+    setVisibleThreatLiveFeeds((previous) => {
+      const next = new Set(previous)
+      if (next.has(key)) {
+        next.delete(key)
       } else {
         next.add(key)
       }
@@ -14635,219 +15422,7 @@ function App() {
       }
 
       if (shouldApplyPlan && planAction === 'draft-ics-204-recommendation') {
-        let createdForms: Ics204FormState[] = []
-        setIcs204Forms((previous) => {
-          const baseId =
-            previous.length === 0 ? 0 : Math.max(...previous.map((form) => form.id))
-          createdForms = [
-            {
-              id: baseId + 1,
-              assignedUnit: 'Division A/B Search & Rescue Task Force',
-              branch: 'Operations Branch',
-              division: 'Divisions A/B',
-              group: 'Search & Rescue Group',
-              stagingArea: 'North Staging Area',
-              sectionChief: 'T. Hale',
-              branchDirector: 'R. Patel',
-              divisionGroupSupervisor: 'K. Simmons',
-              resourcesAssigned: [
-                {
-                  id: 1,
-                  resourceIdentifier: 'Urban Search Team Alpha',
-                  leader: 'Capt. J. Nguyen',
-                  contact: '555-0142',
-                  location: 'North Levee Sector',
-                },
-                {
-                  id: 2,
-                  resourceIdentifier: 'Engine Co. 7',
-                  leader: 'Lt. M. Ortega',
-                  contact: '555-0118',
-                  location: 'River Bend Corridor',
-                },
-              ],
-              workAssignments: [
-                {
-                  id: 1,
-                  assignment:
-                    'Conduct perimeter control and life-safety sweeps across Divisions A and B.',
-                  priority: 'High',
-                  resourceRequirements: [
-                    { id: 1, resource: 'USAR Team', required: '2', have: '2', need: '0' },
-                    { id: 2, resource: 'Engine Co.', required: '2', have: '1', need: '1' },
-                  ],
-                  overheadPositions: 'Task Force Leader, Safety Officer, Rescue Specialist',
-                  specialEquipmentSupplies:
-                    'Confined-space kit, swift-water PPE, lighting trailer',
-                  reportingLocation: 'North Staging Area',
-                  requestedArrivalTime: '13:00',
-                },
-                {
-                  id: 2,
-                  assignment:
-                    'Maintain accountability checks and report life-safety status every 60 minutes.',
-                  priority: 'High',
-                  resourceRequirements: [
-                    { id: 1, resource: 'Accountability Officer', required: '1', have: '1', need: '0' },
-                  ],
-                  overheadPositions: 'Accountability Officer',
-                  specialEquipmentSupplies: 'Personnel accountability board, radios',
-                  reportingLocation: 'North Staging Area',
-                  requestedArrivalTime: '13:30',
-                },
-              ],
-              specialInstructions:
-                'Maintain responder accountability checks every 60 minutes. Coordinate sweeps with Branch Director before re-entry to flagged structures.',
-              communications:
-                'Primary: Tac Channel 3 (155.160). Alternate: Command Net 1. Medical emergency code: MED-ALPHA.',
-            },
-            {
-              id: baseId + 2,
-              assignedUnit: 'Branch Staffing Coordination Unit',
-              branch: 'Operations Branch',
-              division: 'All Divisions',
-              group: 'Command & Coordination Group',
-              stagingArea: 'Central Command Post',
-              sectionChief: 'T. Hale',
-              branchDirector: 'R. Patel',
-              divisionGroupSupervisor: 'M. Wells',
-              resourcesAssigned: [
-                {
-                  id: 1,
-                  resourceIdentifier: 'Mobile Command Unit MCU-1',
-                  leader: 'Cmdr. L. Park',
-                  contact: '555-0173',
-                  location: 'Central Command Post',
-                },
-                {
-                  id: 2,
-                  resourceIdentifier: 'Logistics Liaison Team',
-                  leader: 'A. Banks',
-                  contact: '555-0155',
-                  location: 'Central Command Post',
-                },
-              ],
-              workAssignments: [
-                {
-                  id: 1,
-                  assignment:
-                    'Synchronize branch staffing levels and confirm relief handoff schedule across Divisions.',
-                  priority: 'High',
-                  resourceRequirements: [
-                    { id: 1, resource: 'Branch Director', required: '2', have: '2', need: '0' },
-                    { id: 2, resource: 'Staging Manager', required: '1', have: '1', need: '0' },
-                  ],
-                  overheadPositions: 'Branch Director, Staging Manager, Liaison Officer',
-                  specialEquipmentSupplies:
-                    'Staffing boards, ICS-218 forms, hardline phones',
-                  reportingLocation: 'Central Command Post',
-                  requestedArrivalTime: '12:30',
-                },
-                {
-                  id: 2,
-                  assignment:
-                    'Publish updated relief schedule and brief incoming supervisors at handoff.',
-                  priority: 'Medium',
-                  resourceRequirements: [
-                    { id: 1, resource: 'Documentation Unit', required: '1', have: '1', need: '0' },
-                  ],
-                  overheadPositions: 'Documentation Unit Leader',
-                  specialEquipmentSupplies: 'Printer, schedule template, briefing packets',
-                  reportingLocation: 'Central Command Post',
-                  requestedArrivalTime: '14:00',
-                },
-              ],
-              specialInstructions:
-                'Confirm relief shift coverage 30 minutes before handoff. Escalate uncovered positions to Operations Section Chief immediately.',
-              communications:
-                'Primary: Command Net 1 (154.265). Alternate: Logistics Net 2. Notification path: MCU-1 → Branch Director → Section Chief.',
-            },
-            {
-              id: baseId + 3,
-              assignedUnit: 'Medical Strike Team Bravo',
-              branch: 'Operations Branch',
-              division: 'Medical',
-              group: 'Medical Operations Group',
-              stagingArea: 'South Aid Station',
-              sectionChief: 'T. Hale',
-              branchDirector: 'R. Patel',
-              divisionGroupSupervisor: 'D. Ortiz',
-              resourcesAssigned: [
-                {
-                  id: 1,
-                  resourceIdentifier: 'Medical Strike Team Bravo',
-                  leader: 'Dr. S. Kapoor',
-                  contact: '555-0167',
-                  location: 'South Aid Station',
-                },
-                {
-                  id: 2,
-                  resourceIdentifier: 'Mobile Triage Unit',
-                  leader: 'EMT P. Lopez',
-                  contact: '555-0192',
-                  location: 'South Aid Station',
-                },
-              ],
-              workAssignments: [
-                {
-                  id: 1,
-                  assignment:
-                    'Prepare medical operations briefing materials for next operational period and distribute assignments.',
-                  priority: 'Medium',
-                  resourceRequirements: [
-                    { id: 1, resource: 'Medical Officer', required: '2', have: '2', need: '0' },
-                    { id: 2, resource: 'EMT', required: '4', have: '3', need: '1' },
-                  ],
-                  overheadPositions: 'Medical Unit Leader, Triage Officer',
-                  specialEquipmentSupplies:
-                    'Triage tags, ALS kit, restock pallets, IV supply bin',
-                  reportingLocation: 'South Aid Station',
-                  requestedArrivalTime: '15:00',
-                },
-                {
-                  id: 2,
-                  assignment:
-                    'Coordinate transport routes with Logistics for casualties from Divisions A/B.',
-                  priority: 'High',
-                  resourceRequirements: [
-                    { id: 1, resource: 'Ambulance', required: '3', have: '2', need: '1' },
-                  ],
-                  overheadPositions: 'Transport Coordinator',
-                  specialEquipmentSupplies: 'Stretchers, oxygen cylinders, route maps',
-                  reportingLocation: 'South Aid Station',
-                  requestedArrivalTime: '15:30',
-                },
-              ],
-              specialInstructions:
-                'Coordinate with Hospital Liaison before patient transport. Update Med-Comm every 30 minutes with patient counts and acuity.',
-              communications:
-                'Primary: Med-Comm Channel 7 (155.340). Alternate: Tac Channel 5. Emergency code: MED-ALPHA. HEAR radio for hospital handoff.',
-            },
-          ]
-          return [...previous, ...createdForms]
-        })
-
-        if (createdForms.length > 0) {
-          const createdAt = Date.now()
-          setIcs204VersionsById((previous) => {
-            const next = { ...previous }
-            createdForms.forEach((form) => {
-              next[form.id] = [
-                {
-                  id: `pratus-204-${form.id}-v1`,
-                  createdAt,
-                  authorName: 'PRATUS AI',
-                  authorColor: '#a855f7',
-                  snapshot: form,
-                  signatures: [],
-                },
-              ]
-            })
-            return next
-          })
-          setExpandedIcs204FormId(createdForms[0].id)
-          setActiveTab('form-ICS-204')
-        }
+        void applyDraftIcs204Recommendations()
       }
 
       if (shouldApplyPlan && planAction === 'draft-sitrep') {
@@ -15396,6 +15971,10 @@ function App() {
     }))
   }
   const saveIcs201Section = (nextForm: Ics201FormState, sectionId?: Ics201SectionId) => {
+    if (!canEditIcs201Form) {
+      toast.error('Your ICS position does not include permission to edit the ICS-201 form.')
+      return
+    }
     const savedForm = cloneIcs201FormState(nextForm)
     setIcs201Form(savedForm)
     pushIcs201Version(savedForm, { sectionId })
@@ -15526,45 +16105,46 @@ function App() {
       ],
     }))
   }
-  const addIcs204Form = () => {
-    let createdId = 1
-    let createdForm: Ics204FormState | null = null
-    setIcs204Forms((previous) => {
-      const nextId = previous.length === 0 ? 1 : Math.max(...previous.map((form) => form.id)) + 1
-      createdId = nextId
-      const newForm: Ics204FormState = {
-        id: nextId,
-        assignedUnit: `New Unit ${nextId}`,
-        branch: '',
-        division: '',
-        group: '',
-        stagingArea: '',
-        sectionChief: '',
-        branchDirector: '',
-        divisionGroupSupervisor: '',
-        resourcesAssigned: [],
-        workAssignments: [],
-        specialInstructions: '',
-        communications: '',
-      }
-      createdForm = newForm
-      return [...previous, newForm]
+  const addIcs204Form = async () => {
+    if (!canEditIcs201Form) return
+    const result = await createIcs204Form()
+    if (!result) return
+    setIcs204Forms((previous) => [...previous, cloneIcs204FormState(result.form)])
+    setIcs204VersionsById((previous) => ({
+      ...previous,
+      [result.form.id]: result.versions.map((version) => ({
+        ...version,
+        snapshot: cloneIcs204FormState(version.snapshot),
+      })),
+    }))
+    setExpandedIcs204FormId(result.form.id)
+  }
+  const deleteIcs204Form = async (formId: string) => {
+    if (!canEditIcs201Form) return
+    const deleted = await deleteIcs204Document(formId)
+    if (!deleted) return
+    setIcs204Forms((previous) => previous.filter((form) => form.id !== formId))
+    setIcs204VersionsById((previous) => {
+      const next = { ...previous }
+      delete next[formId]
+      return next
     })
-    setExpandedIcs204FormId(createdId)
-    if (createdForm) {
-      const initialVersion: Ics204Version = {
-        id: `seed-204-${createdId}-v1`,
-        createdAt: Date.now(),
-        authorName: 'You',
-        authorColor: '#16a34a',
-        snapshot: createdForm,
-        signatures: [],
-      }
-      setIcs204VersionsById((previous) => ({ ...previous, [createdId]: [initialVersion] }))
-    }
+    setViewingIcs204VersionByFormId((previous) => {
+      const next = { ...previous }
+      delete next[formId]
+      return next
+    })
+    setIsCreatingSignedIcs204ByFormId((previous) => {
+      const next = { ...previous }
+      delete next[formId]
+      return next
+    })
+    delete liveIcs204FormsRef.current[formId]
+    setExpandedIcs204FormId((previous) => (previous === formId ? null : previous))
+    setIcs204DeleteConfirmDialog(null)
   }
   const updateIcs204Field = <K extends keyof Omit<Ics204FormState, 'id'>>(
-    formId: number,
+    formId: string,
     field: K,
     value: Ics204FormState[K]
   ) => {
@@ -15580,7 +16160,7 @@ function App() {
     )
   }
   const updateIcs204ResourceAssigned = (
-    formId: number,
+    formId: string,
     rowId: number,
     field: keyof Ics204ResourceAssignedRow,
     value: string
@@ -15603,7 +16183,7 @@ function App() {
       )
     )
   }
-  const addIcs204ResourceAssigned = (formId: number, resource: ResourceItem) => {
+  const addIcs204ResourceAssigned = (formId: string, resource: ResourceItem) => {
     setIcs204Forms((previous) =>
       previous.map((form) =>
         form.id === formId
@@ -15634,7 +16214,7 @@ function App() {
     )
     setIcs204ResourcePickerFormId(null)
   }
-  const deleteIcs204ResourceAssignedRow = (formId: number, rowId: number) => {
+  const deleteIcs204ResourceAssignedRow = (formId: string, rowId: number) => {
     setIcs204Forms((previous) =>
       previous.map((form) =>
         form.id === formId
@@ -15647,7 +16227,7 @@ function App() {
     )
   }
   const updateIcs204WorkAssignment = (
-    formId: number,
+    formId: string,
     rowId: number,
     field: Exclude<keyof Ics204WorkAssignmentRow, 'resourceRequirements'>,
     value: string
@@ -15670,7 +16250,7 @@ function App() {
       )
     )
   }
-  const addIcs204WorkAssignment = (formId: number) => {
+  const addIcs204WorkAssignment = (formId: string) => {
     setIcs204Forms((previous) =>
       previous.map((form) =>
         form.id === formId
@@ -15697,7 +16277,7 @@ function App() {
       )
     )
   }
-  const addIcs204ResourceRequirementRow = (formId: number, workAssignmentId: number) => {
+  const addIcs204ResourceRequirementRow = (formId: string, workAssignmentId: number) => {
     setIcs204Forms((previous) =>
       previous.map((form) =>
         form.id === formId
@@ -15729,7 +16309,7 @@ function App() {
     )
   }
   const updateIcs204ResourceRequirementCell = (
-    formId: number,
+    formId: string,
     workAssignmentId: number,
     requirementId: number,
     field: keyof Ics204ResourceRequirementRow,
@@ -15761,7 +16341,7 @@ function App() {
     )
   }
   const deleteIcs204ResourceRequirementRow = (
-    formId: number,
+    formId: string,
     workAssignmentId: number,
     requirementId: number
   ) => {
@@ -15785,8 +16365,300 @@ function App() {
       )
     )
   }
+  const mergePersistedIcs204Version = (
+    formId: string,
+    previous: Record<string, Ics204Version[]>,
+    latestVersion: Ics204Version | null,
+    persisted: Ics204Version
+  ): Record<string, Ics204Version[]> => {
+    const existing = previous[formId] ?? []
+    if (existing.length === 0) {
+      return { ...previous, [formId]: [persisted] }
+    }
+    const next = [...existing]
+    const lastIndex = next.length - 1
+    if (latestVersion && next[lastIndex]?.id === latestVersion.id) {
+      next[lastIndex] = persisted
+    } else if (next.some((entry) => entry.id === persisted.id)) {
+      const index = next.findIndex((entry) => entry.id === persisted.id)
+      next[index] = persisted
+    } else {
+      next.push(persisted)
+    }
+    return { ...previous, [formId]: next.slice(-100) }
+  }
+  const handleIcs204SaveDraft = (formId: string, form: Ics204FormState, latestVersion: Ics204Version) => {
+    const optimisticVersion: Ics204Version = {
+      ...latestVersion,
+      createdAt: Date.now(),
+      authorName: ics204AuthorName,
+      authorColor: ics204LocalAuthorColor,
+      snapshot: cloneIcs204FormState(form),
+    }
+    setIcs204VersionsById((previous) => mergePersistedIcs204Version(formId, previous, latestVersion, optimisticVersion))
+    void saveIcs204DraftToServer(formId, form, latestVersion).then((persisted) => {
+      if (!persisted) return
+      setIcs204VersionsById((previous) => mergePersistedIcs204Version(formId, previous, latestVersion, persisted))
+    })
+  }
+  const handleIcs204AppendVersion = (
+    formId: string,
+    form: Ics204FormState,
+    signatures: Ics201VersionSignature[] = [],
+    authorNameOverride?: string
+  ) => {
+    const authorName = authorNameOverride ?? ics204AuthorName
+    const optimisticVersion: Ics204Version = {
+      id: `local-v-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      createdAt: Date.now(),
+      authorName,
+      authorColor: ics204LocalAuthorColor,
+      snapshot: cloneIcs204FormState(form),
+      signatures,
+    }
+    setIcs204VersionsById((previous) => ({
+      ...previous,
+      [formId]: [...(previous[formId] ?? []), optimisticVersion].slice(-100),
+    }))
+    void appendIcs204VersionToServer(formId, form, signatures).then((persisted) => {
+      if (!persisted) return
+      setIcs204VersionsById((previous) => {
+        const existing = previous[formId] ?? []
+        return {
+          ...previous,
+          [formId]: existing
+            .map((entry) => (entry.id === optimisticVersion.id ? persisted : entry))
+            .slice(-100),
+        }
+      })
+    })
+  }
+  const handleIcs204SignReview = (
+    formId: string,
+    form: Ics204FormState,
+    latestVersion: Ics204Version,
+    signature: Ics201VersionSignature
+  ) => {
+    const nextVersion: Ics204Version = {
+      ...latestVersion,
+      signatures: [...latestVersion.signatures, signature],
+    }
+    setIcs204VersionsById((previous) => mergePersistedIcs204Version(formId, previous, latestVersion, nextVersion))
+    void saveIcs204SignedReviewToServer(formId, form, latestVersion.id, nextVersion.signatures).then(
+      (persisted) => {
+        if (!persisted) return
+        setIcs204VersionsById((previous) =>
+          mergePersistedIcs204Version(formId, previous, latestVersion, persisted)
+        )
+      }
+    )
+  }
+  const applyDraftIcs204Recommendations = async () => {
+    const templates: Partial<Ics204FormState>[] = [
+      {
+        assignedUnit: 'Division A/B Search & Rescue Task Force',
+        branch: 'Operations Branch',
+        division: 'Divisions A/B',
+        group: 'Search & Rescue Group',
+        stagingArea: 'North Staging Area',
+        sectionChief: 'T. Hale',
+        branchDirector: 'R. Patel',
+        divisionGroupSupervisor: 'K. Simmons',
+        resourcesAssigned: [
+          {
+            id: 1,
+            resourceIdentifier: 'Urban Search Team Alpha',
+            leader: 'Capt. J. Nguyen',
+            contact: '555-0142',
+            location: 'North Levee Sector',
+          },
+          {
+            id: 2,
+            resourceIdentifier: 'Engine Co. 7',
+            leader: 'Lt. M. Ortega',
+            contact: '555-0118',
+            location: 'River Bend Corridor',
+          },
+        ],
+        workAssignments: [
+          {
+            id: 1,
+            assignment:
+              'Conduct perimeter control and life-safety sweeps across Divisions A and B.',
+            priority: 'High',
+            resourceRequirements: [
+              { id: 1, resource: 'USAR Team', required: '2', have: '2', need: '0' },
+              { id: 2, resource: 'Engine Co.', required: '2', have: '1', need: '1' },
+            ],
+            overheadPositions: 'Task Force Leader, Safety Officer, Rescue Specialist',
+            specialEquipmentSupplies: 'Confined-space kit, swift-water PPE, lighting trailer',
+            reportingLocation: 'North Staging Area',
+            requestedArrivalTime: '13:00',
+          },
+          {
+            id: 2,
+            assignment:
+              'Maintain accountability checks and report life-safety status every 60 minutes.',
+            priority: 'High',
+            resourceRequirements: [
+              { id: 1, resource: 'Accountability Officer', required: '1', have: '1', need: '0' },
+            ],
+            overheadPositions: 'Accountability Officer',
+            specialEquipmentSupplies: 'Personnel accountability board, radios',
+            reportingLocation: 'North Staging Area',
+            requestedArrivalTime: '13:30',
+          },
+        ],
+        specialInstructions:
+          'Maintain responder accountability checks every 60 minutes. Coordinate sweeps with Branch Director before re-entry to flagged structures.',
+        communications:
+          'Primary: Tac Channel 3 (155.160). Alternate: Command Net 1. Medical emergency code: MED-ALPHA.',
+      },
+      {
+        assignedUnit: 'Branch Staffing Coordination Unit',
+        branch: 'Operations Branch',
+        division: 'All Divisions',
+        group: 'Command & Coordination Group',
+        stagingArea: 'Central Command Post',
+        sectionChief: 'T. Hale',
+        branchDirector: 'R. Patel',
+        divisionGroupSupervisor: 'M. Wells',
+        resourcesAssigned: [
+          {
+            id: 1,
+            resourceIdentifier: 'Mobile Command Unit MCU-1',
+            leader: 'Cmdr. L. Park',
+            contact: '555-0173',
+            location: 'Central Command Post',
+          },
+          {
+            id: 2,
+            resourceIdentifier: 'Logistics Liaison Team',
+            leader: 'A. Banks',
+            contact: '555-0155',
+            location: 'Central Command Post',
+          },
+        ],
+        workAssignments: [
+          {
+            id: 1,
+            assignment:
+              'Synchronize branch staffing levels and confirm relief handoff schedule across Divisions.',
+            priority: 'High',
+            resourceRequirements: [
+              { id: 1, resource: 'Branch Director', required: '2', have: '2', need: '0' },
+              { id: 2, resource: 'Staging Manager', required: '1', have: '1', need: '0' },
+            ],
+            overheadPositions: 'Branch Director, Staging Manager, Liaison Officer',
+            specialEquipmentSupplies: 'Staffing boards, ICS-218 forms, hardline phones',
+            reportingLocation: 'Central Command Post',
+            requestedArrivalTime: '12:30',
+          },
+          {
+            id: 2,
+            assignment:
+              'Publish updated relief schedule and brief incoming supervisors at handoff.',
+            priority: 'Medium',
+            resourceRequirements: [
+              { id: 1, resource: 'Documentation Unit', required: '1', have: '1', need: '0' },
+            ],
+            overheadPositions: 'Documentation Unit Leader',
+            specialEquipmentSupplies: 'Printer, schedule template, briefing packets',
+            reportingLocation: 'Central Command Post',
+            requestedArrivalTime: '14:00',
+          },
+        ],
+        specialInstructions:
+          'Confirm relief shift coverage 30 minutes before handoff. Escalate uncovered positions to Operations Section Chief immediately.',
+        communications:
+          'Primary: Command Net 1 (154.265). Alternate: Logistics Net 2. Notification path: MCU-1 → Branch Director → Section Chief.',
+      },
+      {
+        assignedUnit: 'Medical Strike Team Bravo',
+        branch: 'Operations Branch',
+        division: 'Medical',
+        group: 'Medical Operations Group',
+        stagingArea: 'South Aid Station',
+        sectionChief: 'T. Hale',
+        branchDirector: 'R. Patel',
+        divisionGroupSupervisor: 'D. Ortiz',
+        resourcesAssigned: [
+          {
+            id: 1,
+            resourceIdentifier: 'Medical Strike Team Bravo',
+            leader: 'Dr. S. Kapoor',
+            contact: '555-0167',
+            location: 'South Aid Station',
+          },
+          {
+            id: 2,
+            resourceIdentifier: 'Mobile Triage Unit',
+            leader: 'EMT P. Lopez',
+            contact: '555-0192',
+            location: 'South Aid Station',
+          },
+        ],
+        workAssignments: [
+          {
+            id: 1,
+            assignment:
+              'Prepare medical operations briefing materials for next operational period and distribute assignments.',
+            priority: 'Medium',
+            resourceRequirements: [
+              { id: 1, resource: 'Medical Officer', required: '2', have: '2', need: '0' },
+              { id: 2, resource: 'EMT', required: '4', have: '3', need: '1' },
+            ],
+            overheadPositions: 'Medical Unit Leader, Triage Officer',
+            specialEquipmentSupplies: 'Triage tags, ALS kit, restock pallets, IV supply bin',
+            reportingLocation: 'South Aid Station',
+            requestedArrivalTime: '15:00',
+          },
+          {
+            id: 2,
+            assignment:
+              'Coordinate transport routes with Logistics for casualties from Divisions A/B.',
+            priority: 'High',
+            resourceRequirements: [
+              { id: 1, resource: 'Ambulance', required: '3', have: '2', need: '1' },
+            ],
+            overheadPositions: 'Transport Coordinator',
+            specialEquipmentSupplies: 'Stretchers, oxygen cylinders, route maps',
+            reportingLocation: 'South Aid Station',
+            requestedArrivalTime: '15:30',
+          },
+        ],
+        specialInstructions:
+          'Coordinate with Hospital Liaison before patient transport. Update Med-Comm every 30 minutes with patient counts and acuity.',
+        communications:
+          'Primary: Med-Comm Channel 7 (155.340). Alternate: Tac Channel 5. Emergency code: MED-ALPHA. HEAR radio for hospital handoff.',
+      },
+    ]
+    const results = await Promise.all(templates.map((template) => createIcs204Form(template)))
+    const created = results.filter(
+      (result): result is { form: Ics204FormState; versions: Ics204Version[] } => result !== null
+    )
+    if (created.length === 0) return
+    setIcs204Forms((previous) => [
+      ...previous,
+      ...created.map((entry) => cloneIcs204FormState(entry.form)),
+    ])
+    setIcs204VersionsById((previous) => {
+      const next = { ...previous }
+      created.forEach((entry) => {
+        next[entry.form.id] = entry.versions.map((version) => ({
+          ...version,
+          authorName: 'PRATUS AI',
+          authorColor: '#a855f7',
+          snapshot: cloneIcs204FormState(version.snapshot),
+        }))
+      })
+      return next
+    })
+    setExpandedIcs204FormId(created[0].form.id)
+    setActiveTab('form-ICS-204')
+  }
   const ics233AssignmentOptions = useMemo(
-    () => buildIcs233AssignmentOptions(activeWorkspaceRoster, ICS_ROSTER_POSITION_OPTIONS),
+    () => buildIcs233AssignmentOptions(activeWorkspaceRoster, ICS_POSITIONS),
     [activeWorkspaceRoster]
   )
   const updateIcs233Row = <K extends keyof Omit<Ics233TaskRow, 'id'>>(
@@ -16179,6 +17051,7 @@ function App() {
               size="icon"
               aria-label="Open menu"
               className={glassIconButtonClasses}
+              data-hub-tutorial="sidebar-menu"
               onClick={() => setIsLeftSidebarOpen(true)}
             >
               <Menu className="h-4 w-4" />
@@ -16191,31 +17064,18 @@ function App() {
                     ? activeIncidentWorkspace.name
                     : 'United States Coast Guard'}
               </span>
-              {(isInIncidentWorkspace || isInExerciseWorkspace) && (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className={cn('h-7 w-7', glassIconButtonClasses)}
-                      aria-label="Workspace options"
-                      data-ics201-tutorial="workspace-menu"
-                    >
-                      <MoreVertical className="h-4 w-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="start" className="w-48">
-                    <DropdownMenuItem
-                      onSelect={() => {
-                        setIsIcs201TutorialOpen(true)
-                      }}
-                    >
-                      Tutorial Wizard
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              )}
+              <StartHereButton
+                className={cn('ml-2 h-10', glassIconButtonClasses)}
+                data-ics201-tutorial="workspace-menu"
+                data-hub-tutorial="hub-menu"
+                onClick={() => {
+                  if (isInIncidentWorkspace || isInExerciseWorkspace) {
+                    setIsIcs201TutorialOpen(true)
+                  } else {
+                    setIsHubTutorialOpen(true)
+                  }
+                }}
+              />
             </div>
           </div>
           <div className="flex items-start gap-2">
@@ -16249,6 +17109,7 @@ function App() {
                 'relative transition-all duration-200',
                 isSearchExpanded || normalizedQuery ? 'w-[28rem]' : 'w-64'
               )}
+              data-hub-tutorial="search-bar"
             >
               <div
                 className={cn(
@@ -16393,6 +17254,7 @@ function App() {
               variant="outline"
               size="sm"
               className={cn('h-10', glassIconButtonClasses)}
+              data-hub-tutorial="map-toggle"
               onClick={() => setIsMapVisible((previous) => !previous)}
             >
               {isMapVisible ? 'Exit Map' : 'Show Map'}
@@ -16402,6 +17264,7 @@ function App() {
               variant="outline"
               size="sm"
               className={cn('h-10 gap-2', glassIconButtonClasses)}
+              data-hub-tutorial="pratus-ai"
               onClick={() => setIsPratusAiDrawerOpen((previous) => !previous)}
             >
               <img src={pratusLogo} alt="" className="h-4 w-auto object-contain" aria-hidden="true" />
@@ -16441,9 +17304,25 @@ function App() {
         </div>
       </div>
       <div className="absolute inset-0 flex overflow-hidden">
+      {showPlanningPStepper && (
+        <aside
+          className={cn(
+            'absolute top-14 left-0 z-20 h-[calc(100%-3.5rem)] w-56 shrink-0 border-r shadow-lg backdrop-blur',
+            glassPanelClasses,
+            !isGlassMode && 'bg-background/95 supports-[backdrop-filter]:bg-background/80'
+          )}
+        >
+          <PlanningPStepper
+            activeStepId={planningPStepId}
+            onStepChange={setPlanningPStepId}
+            className="h-full"
+          />
+        </aside>
+      )}
       <div
         className={cn(
-          'relative min-w-0 flex-1 overflow-hidden transition-[width] duration-300'
+          'relative min-w-0 flex-1 overflow-hidden transition-[width] duration-300',
+          showPlanningPStepper && 'pl-56'
         )}
       >
       <div
@@ -16457,7 +17336,8 @@ function App() {
       <div
         ref={leftPanelRef}
         className={cn(
-          'absolute top-14 left-0 z-10 h-[calc(100%-3.5rem)] transition-[width] duration-300',
+          'absolute top-14 z-10 h-[calc(100%-3.5rem)] min-w-0 transition-[width,left] duration-300',
+          showPlanningPStepper ? 'left-56' : 'left-0',
           isObjectivesOpen
             ? isMapVisible
               ? panelWidthMode === 'one-half'
@@ -16471,7 +17351,7 @@ function App() {
         open={isObjectivesOpen}
         onOpenChange={setIsObjectivesOpen}
         className={cn(
-          'h-full shadow-lg backdrop-blur',
+          'h-full shadow-lg backdrop-blur overflow-hidden',
           isMapVisible ? 'border-r border-border' : 'border-r-0',
           glassPanelClasses
         )}
@@ -16481,7 +17361,7 @@ function App() {
             {isObjectivesOpen ? (
               <>
                 <TooltipProvider>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2" data-hub-tutorial="panel-tabs">
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <Button
@@ -16491,6 +17371,7 @@ function App() {
                           className={selectedGlassTabClasses(activeTab === 'notifications')}
                           onClick={() => setActiveTab('notifications')}
                           aria-label="Open Notifications tab"
+                          data-hub-tutorial="notifications-tab"
                         >
                           <Bell className="h-4 w-4" />
                         </Button>
@@ -16560,6 +17441,7 @@ function App() {
                             aria-label="Open Incidents tab"
                             data-pratus-context-id="tab:incident-list"
                             data-pratus-context-label="Incidents"
+                            data-hub-tutorial="incidents-tab"
                           >
                             <AlertTriangle className="h-4 w-4" />
                           </Button>
@@ -16598,6 +17480,7 @@ function App() {
                             aria-label="Open Exercises tab"
                             data-pratus-context-id="tab:exercises"
                             data-pratus-context-label="Exercises"
+                            data-hub-tutorial="exercises-tab"
                           >
                             <Shield className="h-4 w-4" />
                           </Button>
@@ -16617,6 +17500,7 @@ function App() {
                             aria-label="Open Events tab"
                             data-pratus-context-id="tab:events"
                             data-pratus-context-label="Events"
+                            data-hub-tutorial="events-tab"
                           >
                             <Radio className="h-4 w-4" />
                           </Button>
@@ -16635,6 +17519,7 @@ function App() {
                           aria-label="Open Analytics tab"
                           data-pratus-context-id="tab:analytics"
                           data-pratus-context-label="Analytics"
+                          data-hub-tutorial="analytics-tab"
                         >
                           <BarChart3 className="h-4 w-4" />
                         </Button>
@@ -16864,13 +17749,14 @@ function App() {
           <CollapsibleContent className="flex-1 overflow-hidden p-4">
             <Card
               className={cn(
-                'h-full min-h-0 transition-shadow',
+                'h-full min-h-0 min-w-0 overflow-hidden transition-shadow',
                 glassCardClasses,
                 isPratusAiSelectingContext &&
                   'cursor-pointer hover:bg-primary/5 hover:ring-2 hover:ring-primary/50 active:ring-2 active:ring-primary'
               )}
               data-pratus-context-id={`tab:${activeTab}`}
               data-pratus-context-label={getPratusContextLabelForTab(activeTab)}
+              data-hub-tutorial="hub-panel"
             >
               <CardHeader
                 className={cn(
@@ -16938,6 +17824,36 @@ function App() {
                   {activeTab === 'form-ICS-204' && 'ICS-204 Assignment List'}
                   {activeTab !== 'form-ICS-204' && activeFormTabLabel}
                 </CardTitle>
+                {activeTab === 'roster' && (isInIncidentWorkspace || isInExerciseWorkspace) && (
+                  <div className="flex flex-wrap items-center justify-end gap-2">
+                    <ToggleGroup
+                      type="single"
+                      value={rosterViewMode}
+                      onValueChange={(value) => {
+                        if (value === 'grid' || value === 'org-chart') {
+                          setRosterViewMode(value)
+                        }
+                      }}
+                      variant="outline"
+                      size="sm"
+                      aria-label="Roster view"
+                    >
+                      <ToggleGroupItem value="grid" className="gap-1.5 px-2.5 text-xs">
+                        <LayoutGrid className="h-3.5 w-3.5" />
+                        Grid
+                      </ToggleGroupItem>
+                      <ToggleGroupItem value="org-chart" className="gap-1.5 px-2.5 text-xs">
+                        <Network className="h-3.5 w-3.5" />
+                        Org Chart
+                      </ToggleGroupItem>
+                    </ToggleGroup>
+                    {canManageWorkspaceRoster && (
+                      <Button type="button" size="sm" onClick={openAddRosterMemberDialog}>
+                        + Add Member
+                      </Button>
+                    )}
+                  </div>
+                )}
                 {activeTab === 'resources' && (
                   <div className="flex items-center gap-1">
                     <ToggleGroup
@@ -17272,6 +18188,16 @@ function App() {
                         )}
                       </DropdownMenuContent>
                     </DropdownMenu>
+                    <label className="inline-flex items-center gap-2 text-xs text-muted-foreground">
+                      <Checkbox
+                        checked={showArchivedIncidents}
+                        onCheckedChange={(checked) =>
+                          setShowArchivedIncidents(checked === true)
+                        }
+                        aria-label="Show archived incidents"
+                      />
+                      Show archived
+                    </label>
                     <Button
                       type="button"
                       size="sm"
@@ -17283,18 +18209,6 @@ function App() {
                       + Create Incident
                     </Button>
                   </div>
-                )}
-                {activeTab === 'roster' && (isInIncidentWorkspace || isInExerciseWorkspace) && (
-                  <Button
-                    type="button"
-                    size="sm"
-                    onClick={() => {
-                      resetAddRosterMemberDraft()
-                      setIsAddRosterMemberOpen(true)
-                    }}
-                  >
-                    + Add Member
-                  </Button>
                 )}
                 {activeTab === 'exercises' && (
                   <Button
@@ -17309,7 +18223,15 @@ function App() {
                   </Button>
                 )}
                 {activeTab === 'notifications' && !isNotificationSettingsOpen && (
-                  <DropdownMenu>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={() => setIsCreateHubNotificationOpen(true)}
+                    >
+                      + Create Notification
+                    </Button>
+                    <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button
                         type="button"
@@ -17332,6 +18254,7 @@ function App() {
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
+                  </div>
                 )}
                 {activeTab === 'events' && !isEventsSettingsOpen && (
                   <div className="flex flex-wrap items-center justify-end gap-2">
@@ -17530,9 +18453,10 @@ function App() {
                         <DropdownMenuSeparator />
                         <DropdownMenuItem
                           onSelect={() => {
-                            setIcs201PreviewBlocks(buildIcs201DocxBlocks(ics201Form))
+                            const exportForm = getIcs201FormWithLiveSections()
+                            setIcs201PreviewBlocks(buildIcs201DocxBlocks(exportForm))
                             setIcs201PreviewTitle(
-                              `ICS-201 Preview — ${ics201Form.incidentName.trim() || 'Incident'}`
+                              `ICS-201 Preview — ${exportForm.incidentName.trim() || 'Incident'}`
                             )
                             setIsIcs201PreviewOpen(true)
                           }}
@@ -17543,8 +18467,9 @@ function App() {
                         <DropdownMenuSeparator />
                         <DropdownMenuItem
                           onSelect={() => {
+                            const exportForm = getIcs201FormWithLiveSections()
                             const safeIncident =
-                              ics201Form.incidentName.trim().replace(/[^a-zA-Z0-9-_]+/g, '_') ||
+                              exportForm.incidentName.trim().replace(/[^a-zA-Z0-9-_]+/g, '_') ||
                               'Incident'
                             const stamp = new Date()
                               .toISOString()
@@ -17552,8 +18477,8 @@ function App() {
                               .replace(/[:T]/g, '-')
                             downloadDocx(
                               `ICS-201_${safeIncident}_${stamp}.docx`,
-                              buildIcs201DocxBlocks(ics201Form),
-                              buildIcs201ExportOptions(ics201Form)
+                              buildIcs201DocxBlocks(exportForm),
+                              buildIcs201ExportOptions(exportForm)
                             )
                           }}
                         >
@@ -17562,8 +18487,10 @@ function App() {
                         </DropdownMenuItem>
                         <DropdownMenuItem
                           onSelect={() => {
+                            void ics201CurrentSituationEditor.persistNow()
+                            const exportForm = getIcs201FormWithLiveSections()
                             const safeIncident =
-                              ics201Form.incidentName.trim().replace(/[^a-zA-Z0-9-_]+/g, '_') ||
+                              exportForm.incidentName.trim().replace(/[^a-zA-Z0-9-_]+/g, '_') ||
                               'Incident'
                             const stamp = new Date()
                               .toISOString()
@@ -17571,7 +18498,7 @@ function App() {
                               .replace(/[:T]/g, '-')
                             exportIcs201Pdf(
                               `ICS-201_${safeIncident}_${stamp}.pdf`,
-                              ics201Form
+                              exportForm
                             )
                           }}
                         >
@@ -17583,7 +18510,7 @@ function App() {
                   </div>
                 )}
               </CardHeader>
-              <CardContent className="min-h-0 flex-1 space-y-2 overflow-y-auto [scrollbar-gutter:stable]">
+              <CardContent className="min-h-0 min-w-0 flex-1 space-y-2 overflow-x-hidden overflow-y-auto [scrollbar-gutter:stable]">
                 {activeTab === 'notifications' && isNotificationSettingsOpen && (
                   <NotificationSettingsPage
                     rules={notificationCreationRules}
@@ -17739,6 +18666,7 @@ function App() {
                                       const threatKey = `${key}-threat-${threatIndex}`
                                       const threatMapKey = `notification-${item.id}-threat-${threatIndex}`
                                       const threatOpen = expandedThreats.has(threatKey)
+                                      const threatLiveFeedVisible = visibleThreatLiveFeeds.has(threatKey)
                                       return (
                                         <Item
                                           key={threatKey}
@@ -17825,6 +18753,56 @@ function App() {
                                                   </span>{' '}
                                                   {threat.risk}
                                                 </p>
+                                                {item.id === 0 && (
+                                                  <div className="mt-3 space-y-3 border-t pt-3">
+                                                    <div className="flex items-center gap-2">
+                                                      <Video
+                                                        className="h-4 w-4 shrink-0 text-foreground"
+                                                        aria-hidden="true"
+                                                      />
+                                                      <Button
+                                                        type="button"
+                                                        size="sm"
+                                                        variant="outline"
+                                                        className={cn('h-8', glassIconButtonClasses)}
+                                                        aria-expanded={threatLiveFeedVisible}
+                                                        onClick={(event) => {
+                                                          event.stopPropagation()
+                                                          toggleThreatLiveFeed(threatKey)
+                                                        }}
+                                                      >
+                                                        {threatLiveFeedVisible
+                                                          ? 'Hide Live Feed'
+                                                          : 'Show Live Feed'}
+                                                      </Button>
+                                                    </div>
+                                                    {threatLiveFeedVisible && (
+                                                      <div className="pratus-map-camera-feed">
+                                                        <div className="pratus-map-camera-feed__label">
+                                                          <span
+                                                            className="pratus-map-camera-feed__dot"
+                                                            aria-hidden="true"
+                                                          />
+                                                          Live Camera — {threat.resource}
+                                                        </div>
+                                                        <div className="pratus-map-camera-feed__viewport">
+                                                          <div className="pratus-map-camera-feed__placeholder">
+                                                            <span
+                                                              className="pratus-map-camera-feed__icon"
+                                                              aria-hidden="true"
+                                                            >
+                                                              ▶
+                                                            </span>
+                                                            <span>Connecting to site camera…</span>
+                                                            <span className="pratus-map-camera-feed__hint">
+                                                              Placeholder feed for {threat.resource}
+                                                            </span>
+                                                          </div>
+                                                        </div>
+                                                      </div>
+                                                    )}
+                                                  </div>
+                                                )}
                                               </div>
                                             </CollapsibleContent>
                                           </Collapsible>
@@ -19960,101 +20938,64 @@ function App() {
                         <ItemDescription>Fetching workspace members from Supabase.</ItemDescription>
                       </ItemContent>
                     </Item>
-                  ) : cardFilteredWorkspaceRoster.length === 0 ? (
+                  ) : positionRosterEntries.length === 0 ? (
                     <Item variant="outline" className={glassItemBorderClasses}>
                       <ItemContent>
-                        <ItemTitle>No roster members yet</ItemTitle>
-                        <ItemDescription>
-                          Add team members by email and assign an ICS position for{' '}
-                          {activeWorkspaceRosterLabel}.
-                        </ItemDescription>
+                        <ItemTitle>No matching positions</ItemTitle>
+                        <ItemDescription>Try a broader search term.</ItemDescription>
                       </ItemContent>
                     </Item>
                   ) : (
-                    <div className="space-y-2 pt-px">
-                      {cardFilteredWorkspaceRoster.map((member) => {
-                        const key = `roster-${activeWorkspaceRosterKey}-${member.id}`
-                        const isOpen = expandedItemId === key
-                        return (
-                          <Item
-                            key={member.id}
-                            variant="outline"
-                            className={cn(
-                              'flex-col items-stretch p-0',
-                              glassItemBorderClasses,
-                              selectedPanelItemId === key && 'ring-2 ring-primary/60 bg-primary/5'
-                            )}
-                          >
-                            <Collapsible
-                              open={isOpen}
-                              onOpenChange={(open) => setExpandedItemId(open ? key : null)}
-                            >
-                              <div
-                                className="flex cursor-pointer items-center gap-2 px-3 py-2.5"
-                                onClick={() => toggleExpandedItem(key)}
-                              >
-                                <ItemContent>
-                                  <ItemTitle>{member.email}</ItemTitle>
-                                  <ItemDescription>{member.icsPosition}</ItemDescription>
-                                </ItemContent>
-                                <ItemActions>
-                                  <Badge variant="secondary">{member.icsPosition}</Badge>
-                                  {isSupabaseEnabled && (
-                                    <Badge
-                                      variant={member.status === 'active' ? 'default' : 'outline'}
-                                    >
-                                      {member.status === 'active' ? 'Active' : 'Invited'}
-                                    </Badge>
-                                  )}
-                                  <CollapsibleTrigger asChild>
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      aria-label="Toggle roster member details"
-                                      onClick={(event) => event.stopPropagation()}
-                                    >
-                                      <ChevronDown
-                                        className={cn(
-                                          'h-4 w-4 transition-transform',
-                                          isOpen && 'rotate-180'
-                                        )}
-                                      />
-                                    </Button>
-                                  </CollapsibleTrigger>
-                                </ItemActions>
-                              </div>
-                              <CollapsibleContent>
-                                <div className="border-t px-3 py-2 text-sm">
-                                  <div className="grid grid-cols-2 gap-2">
-                                    <p>
-                                      <span className="font-medium">Email:</span> {member.email}
-                                    </p>
-                                    <p>
-                                      <span className="font-medium">ICS Position:</span>{' '}
-                                      {member.icsPosition}
-                                    </p>
-                                  </div>
-                                  <p className="mt-2">
-                                    <span className="font-medium">Added:</span> {member.addedAt}
-                                  </p>
-                                  <div className="mt-3 flex justify-end">
-                                    <Button
-                                      type="button"
-                                      size="sm"
-                                      variant="outline"
-                                      className="h-7 gap-1 text-xs text-destructive hover:text-destructive"
-                                      onClick={() => removeWorkspaceRosterMember(member.id)}
-                                    >
-                                      <Trash2 className="h-3.5 w-3.5" />
-                                      Remove
-                                    </Button>
-                                  </div>
-                                </div>
-                              </CollapsibleContent>
-                            </Collapsible>
-                          </Item>
-                        )
-                      })}
+                    <div className="min-w-0 w-full max-w-full space-y-2 overflow-hidden">
+                      <RosterAddMemberToolbar
+                        canManageRoster={canManageWorkspaceRoster}
+                        isSupabaseEnabled={isSupabaseEnabled}
+                        onAddMember={openAddRosterMemberDialog}
+                        layoutMode={rosterPanelLayoutMode}
+                      />
+                      {rosterViewMode === 'org-chart' ? (
+                        <WorkspaceOrgChartRoster
+                      entriesByPosition={positionRosterEntriesByPosition}
+                      visiblePositions={visibleRosterPositions}
+                      assignableByPosition={assignableByPosition}
+                      canManageRoster={canManageWorkspaceRoster}
+                      glassItemBorderClasses={glassItemBorderClasses}
+                      isUpdatingPermission={rosterPermissionUpdatingPosition}
+                      isAssigningPosition={rosterAssigningPosition}
+                      workspaceLabel={activeWorkspaceRosterLabel}
+                      layoutMode={rosterPanelLayoutMode}
+                      onToggleEditIcs201={(position, enabled) => {
+                        void toggleWorkspacePositionEditIcs201(position, enabled)
+                      }}
+                      onAssignExistingMember={(memberId, position) => {
+                        void assignExistingMemberToPosition(memberId, position)
+                      }}
+                      onInviteToPosition={openInviteToPosition}
+                      onUnassignMember={(memberId, position) => {
+                        void unassignMemberFromPosition(memberId, position)
+                      }}
+                    />
+                      ) : (
+                        <WorkspacePositionRoster
+                      entries={positionRosterEntries}
+                      assignableByPosition={assignableByPosition}
+                      canManageRoster={canManageWorkspaceRoster}
+                      glassItemBorderClasses={glassItemBorderClasses}
+                      isUpdatingPermission={rosterPermissionUpdatingPosition}
+                      isAssigningPosition={rosterAssigningPosition}
+                      layoutMode={rosterPanelLayoutMode}
+                      onToggleEditIcs201={(position, enabled) => {
+                        void toggleWorkspacePositionEditIcs201(position, enabled)
+                      }}
+                      onAssignExistingMember={(memberId, position) => {
+                        void assignExistingMemberToPosition(memberId, position)
+                      }}
+                      onInviteToPosition={openInviteToPosition}
+                      onUnassignMember={(memberId, position) => {
+                        void unassignMemberFromPosition(memberId, position)
+                      }}
+                    />
+                      )}
                     </div>
                   )
                 )}
@@ -20095,6 +21036,11 @@ function App() {
                                 <ItemDescription>{incident.region}</ItemDescription>
                               </ItemContent>
                               <ItemActions>
+                                {isIncidentArchived(incident) && (
+                                  <Badge variant="outline" className="text-[10px]">
+                                    Archived
+                                  </Badge>
+                                )}
                                 {renderIncidentCategoryBadge(incident.category)}
                                 <Button
                                   type="button"
@@ -20107,6 +21053,26 @@ function App() {
                                   }}
                                 >
                                   Enter Workspace
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  aria-label={
+                                    isIncidentArchived(incident)
+                                      ? `Restore ${incident.name}`
+                                      : `Archive ${incident.name}`
+                                  }
+                                  onClick={(event) => {
+                                    event.stopPropagation()
+                                    void handleSetIncidentArchived(
+                                      incident,
+                                      !isIncidentArchived(incident)
+                                    )
+                                  }}
+                                >
+                                  <Archive className="mr-1 h-3.5 w-3.5" />
+                                  {isIncidentArchived(incident) ? 'Restore' : 'Archive'}
                                 </Button>
                                 <Button
                                   variant="ghost"
@@ -21308,6 +22274,12 @@ function App() {
                         </Button>
                       </div>
                     )}
+                    {!canEditIcs201Form && !viewingIcs201Version && (
+                      <div className="flex flex-wrap items-center gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-950 dark:border-amber-500 dark:bg-amber-500/10 dark:text-amber-100">
+                        View only — your ICS position(s) do not include permission to edit the
+                        ICS-201 form.
+                      </div>
+                    )}
                     {!viewingIcs201Version && !isCreatingSignedIcs201Version && (
                       <div className="flex flex-wrap items-center gap-2 rounded-md border border-emerald-400 bg-emerald-50 px-3 py-2 text-xs text-emerald-900 dark:border-emerald-500 dark:bg-emerald-500/10 dark:text-emerald-200">
                         {(() => {
@@ -21440,7 +22412,7 @@ function App() {
                         const isLatestSigned = !!latest && latest.signatures.length > 0
                         return (
                           <>
-                            {!isLatestSigned && (
+                            {canEditIcs201Form && !isLatestSigned && (
                               <Button
                                 type="button"
                                 size="sm"
@@ -21484,6 +22456,7 @@ function App() {
                                 Generate Draft
                               </Button>
                             )}
+                            {canEditIcs201Form && (
                             <Button
                               type="button"
                               size="sm"
@@ -21503,6 +22476,7 @@ function App() {
                               <Plus className="h-3.5 w-3.5" />
                               {isLatestSigned ? 'Create New Version' : 'Create New Signed Version'}
                             </Button>
+                            )}
                           </>
                         )
                       })()}
@@ -21550,7 +22524,7 @@ function App() {
                             <Label className="text-xs font-semibold">Report Identification</Label>
                             <Ics201SectionEditorBadges editors={ics201SectionEditors['report-info'] ?? []} />
                           </div>
-                          {!ics201EditingReportInfo && (
+                          {canEditIcs201Form && !ics201EditingReportInfo && (
                             <Button
                               type="button"
                               size="icon"
@@ -21789,7 +22763,7 @@ function App() {
                                 editors={ics201SectionEditors['incident-briefing'] ?? []}
                               />
                             </div>
-                            {!ics201EditingIncidentBriefing && (
+                            {canEditIcs201Form && !ics201EditingIncidentBriefing && (
                               <Button
                                 type="button"
                                 size="icon"
@@ -22042,7 +23016,7 @@ function App() {
                                 </Tooltip>
                               </TooltipProvider>
                             </div>
-                            {!ics201EditingMapSketch && (
+                            {canEditIcs201Form && !ics201EditingMapSketch && (
                               <Button
                                 type="button"
                                 size="icon"
@@ -22307,7 +23281,7 @@ function App() {
                                 editors={ics201SectionEditors['current-situation'] ?? []}
                               />
                             </div>
-                            {!ics201EditingCurrentSituation && (
+                            {canEditIcs201Form && !ics201EditingCurrentSituation && (
                               <Button
                                 type="button"
                                 size="icon"
@@ -22355,9 +23329,13 @@ function App() {
                             </>
                           ) : (
                             <div className="min-h-24 whitespace-pre-wrap rounded-md border border-dashed border-border/60 bg-muted/20 px-2.5 py-2 text-xs">
-                              {ics201Form.currentSituationSummary || (
-                                <span className="text-muted-foreground">—</span>
-                              )}
+                              {ics201CurrentSituationEditor.isLiveConnected
+                                ? ics201CurrentSituationEditor.value || (
+                                    <span className="text-muted-foreground">—</span>
+                                  )
+                                : ics201Form.currentSituationSummary || (
+                                    <span className="text-muted-foreground">—</span>
+                                  )}
                             </div>
                           )}
                           {ics201EditingCurrentSituation && (
@@ -22418,7 +23396,8 @@ function App() {
                               <ItemTitle>Objectives</ItemTitle>
                               <Ics201SectionEditorBadges editors={ics201SectionEditors.objectives ?? []} />
                             </div>
-                            {!ics201EditingObjectives ? (
+                            {canEditIcs201Form &&
+                              (!ics201EditingObjectives ? (
                               <Button
                                 type="button"
                                 size="icon"
@@ -22440,7 +23419,7 @@ function App() {
                               >
                                 + Add Objective
                               </Button>
-                            )}
+                            ))}
                           </div>
                           {ics201EditingObjectives ? (
                             (() => {
@@ -22557,7 +23536,8 @@ function App() {
                               <ItemTitle>Actions</ItemTitle>
                               <Ics201SectionEditorBadges editors={ics201SectionEditors.actions ?? []} />
                             </div>
-                            {!ics201EditingActions ? (
+                            {canEditIcs201Form &&
+                              (!ics201EditingActions ? (
                               <Button
                                 type="button"
                                 size="icon"
@@ -22597,7 +23577,7 @@ function App() {
                               >
                                 + Add Action
                               </Button>
-                            )}
+                            ))}
                           </div>
                           {ics201EditingActions ? (
                             <>
@@ -22728,7 +23708,7 @@ function App() {
                               <ItemTitle>Organization Chart</ItemTitle>
                               <Ics201SectionEditorBadges editors={ics201SectionEditors['org-chart'] ?? []} />
                             </div>
-                            {!ics201EditingOrgChart && (
+                            {canEditIcs201Form && !ics201EditingOrgChart && (
                               <Button
                                 type="button"
                                 size="icon"
@@ -22862,7 +23842,8 @@ function App() {
                               <ItemTitle>Resources Summary</ItemTitle>
                               <Ics201SectionEditorBadges editors={ics201SectionEditors.resources ?? []} />
                             </div>
-                            {!ics201EditingResources ? (
+                            {canEditIcs201Form &&
+                              (!ics201EditingResources ? (
                               <Button
                                 type="button"
                                 size="icon"
@@ -22902,7 +23883,7 @@ function App() {
                               >
                                 + Add Resource
                               </Button>
-                            )}
+                            ))}
                           </div>
                           {ics201EditingResources ? (
                             <>
@@ -23054,7 +24035,8 @@ function App() {
                                 editors={ics201SectionEditors['safety-analysis'] ?? []}
                               />
                             </div>
-                            {!ics201EditingSafetyAnalysis ? (
+                            {canEditIcs201Form &&
+                              (!ics201EditingSafetyAnalysis ? (
                               <Button
                                 type="button"
                                 size="icon"
@@ -23093,7 +24075,7 @@ function App() {
                               >
                                 + Add Safety Item
                               </Button>
-                            )}
+                            ))}
                           </div>
                           {ics201EditingSafetyAnalysis ? (
                             <>
@@ -25018,8 +26000,17 @@ function App() {
 
                 {activeTab === 'form-ICS-204' && (isInIncidentWorkspace || isInExerciseWorkspace) && (
                   <div className="space-y-3">
-                    <div className="flex items-center justify-end">
-                      <Button type="button" size="sm" variant="outline" onClick={addIcs204Form}>
+                    <div className="flex items-center justify-end gap-2">
+                      {isIcs204Loading ? (
+                        <span className="text-xs text-muted-foreground">Loading ICS-204 forms…</span>
+                      ) : null}
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={!canEditIcs201Form || isIcs204Saving}
+                        onClick={() => void addIcs204Form()}
+                      >
                         + Add ICS-204
                       </Button>
                     </div>
@@ -25077,6 +26068,25 @@ function App() {
                                     </ItemDescription>
                                   </ItemContent>
                                   <ItemActions className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2 justify-end">
+                                    {canEditIcs201Form ? (
+                                      <Button
+                                        type="button"
+                                        size="sm"
+                                        variant="outline"
+                                        className="h-7 gap-1 text-xs text-destructive hover:text-destructive"
+                                        disabled={isIcs204Saving}
+                                        onClick={(event) => {
+                                          event.stopPropagation()
+                                          setIcs204DeleteConfirmDialog({
+                                            formId: form.id,
+                                            label: form.assignedUnit || `ICS-204`,
+                                          })
+                                        }}
+                                      >
+                                        <Trash2 className="h-3 w-3" />
+                                        Delete
+                                      </Button>
+                                    ) : null}
                                     {isFormFullySigned &&
                                       (isFormAssigned ? (
                                         <span className="flex items-center gap-1 rounded-full border border-emerald-400 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-800 dark:border-emerald-500/60 dark:bg-emerald-500/10 dark:text-emerald-200">
@@ -25293,25 +26303,14 @@ function App() {
                                             size="sm"
                                             variant="outline"
                                             className="h-7 gap-1 text-xs"
-                                            disabled={!latestFormVersion}
+                                            disabled={!latestFormVersion || !canEditIcs201Form || isIcs204Saving}
                                             onClick={() => {
                                               if (!latestFormVersion) return
-                                              setIcs204VersionsById((previous) => {
-                                                const existing = previous[form.id] ?? []
-                                                if (existing.length === 0) return previous
-                                                const next = [...existing]
-                                                next[next.length - 1] = {
-                                                  ...latestFormVersion,
-                                                  createdAt: Date.now(),
-                                                  authorName: 'You',
-                                                  authorColor: '#16a34a',
-                                                  snapshot: form,
-                                                }
-                                                return { ...previous, [form.id]: next }
-                                              })
+                                              handleIcs204SaveDraft(form.id, form, latestFormVersion)
                                             }}
                                           >
                                             Save
+                                            {isIcs204Saving ? '…' : null}
                                           </Button>
                                         )}
                                         <Button
@@ -25319,25 +26318,10 @@ function App() {
                                           size="sm"
                                           variant="outline"
                                           className="h-7 gap-1 text-xs"
+                                          disabled={!canEditIcs201Form || isIcs204Saving}
                                           onClick={() => {
                                             if (isLatestFormSigned) {
-                                              const newVersion: Ics204Version = {
-                                                id: `${Date.now()}-204-${form.id}-draft-${Math.random()
-                                                  .toString(36)
-                                                  .slice(2, 8)}`,
-                                                createdAt: Date.now(),
-                                                authorName: 'You',
-                                                authorColor: '#16a34a',
-                                                snapshot: form,
-                                                signatures: [],
-                                              }
-                                              setIcs204VersionsById((previous) => ({
-                                                ...previous,
-                                                [form.id]: [
-                                                  ...(previous[form.id] ?? []),
-                                                  newVersion,
-                                                ].slice(-100),
-                                              }))
+                                              handleIcs204AppendVersion(form.id, form, [])
                                               return
                                             }
                                             setIsCreatingSignedIcs204ByFormId((previous) => ({
@@ -28640,15 +29624,17 @@ function App() {
               variant="outline"
               className="h-8 gap-1 text-xs"
               onClick={() => {
+                void ics201CurrentSituationEditor.persistNow()
+                const exportForm = getIcs201FormWithLiveSections()
                 const safeIncident =
-                  ics201Form.incidentName.trim().replace(/[^a-zA-Z0-9-_]+/g, '_') || 'Incident'
+                  exportForm.incidentName.trim().replace(/[^a-zA-Z0-9-_]+/g, '_') || 'Incident'
                 const stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-')
                 downloadDocx(
                   `ICS-201_${safeIncident}_${stamp}.docx`,
                   ics201PreviewBlocks.length > 0
                     ? ics201PreviewBlocks
-                    : buildIcs201DocxBlocks(ics201Form),
-                  buildIcs201ExportOptions(ics201Form)
+                    : buildIcs201DocxBlocks(exportForm),
+                  buildIcs201ExportOptions(exportForm)
                 )
               }}
             >
@@ -28660,12 +29646,14 @@ function App() {
               size="sm"
               className="h-8 gap-1 bg-blue-600 text-xs text-white hover:bg-blue-700"
               onClick={() => {
+                void ics201CurrentSituationEditor.persistNow()
+                const exportForm = getIcs201FormWithLiveSections()
                 const safeIncident =
-                  ics201Form.incidentName.trim().replace(/[^a-zA-Z0-9-_]+/g, '_') || 'Incident'
+                  exportForm.incidentName.trim().replace(/[^a-zA-Z0-9-_]+/g, '_') || 'Incident'
                 const stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-')
                 exportIcs201Pdf(
                   `ICS-201_${safeIncident}_${stamp}.pdf`,
-                  ics201Form
+                  exportForm
                 )
               }}
             >
@@ -28933,19 +29921,23 @@ function App() {
                 if (!name) {
                   return
                 }
-                pushIcs201Version(ics201Form, {
-                  authorColorOverride: ics201AuthorColor,
-                  signatures: [
-                    {
-                      name,
-                      role: 'Technical Specialist',
-                      signedAt: Date.now(),
-                    },
-                  ],
-                })
-                setIsIcs201SignNameDialogOpen(false)
-                setIsCreatingSignedIcs201Version(false)
-                setIcs201SignNameInput('You')
+                void (async () => {
+                  await ics201CurrentSituationEditor.persistNow()
+                  const signedForm = getIcs201FormWithLiveSections()
+                  pushIcs201Version(signedForm, {
+                    authorColorOverride: ics201AuthorColor,
+                    signatures: [
+                      {
+                        name,
+                        role: 'Technical Specialist',
+                        signedAt: Date.now(),
+                      },
+                    ],
+                  })
+                  setIsIcs201SignNameDialogOpen(false)
+                  setIsCreatingSignedIcs201Version(false)
+                  setIcs201SignNameInput('You')
+                })()
               }}
             >
               <Check className="h-3.5 w-3.5" />
@@ -28965,6 +29957,14 @@ function App() {
           onNavigateToIcs201={() => setActiveTab('briefing')}
         />
       )}
+      {!isInIncidentWorkspace && !isInExerciseWorkspace && (
+        <HubTutorialWizard
+          open={isHubTutorialOpen}
+          onOpenChange={setIsHubTutorialOpen}
+          onNavigateToTab={(tab) => setActiveTab(tab)}
+          onEnsurePanelOpen={() => setIsObjectivesOpen(true)}
+        />
+      )}
       <Dialog
         open={isAddRosterMemberOpen}
         onOpenChange={(open) => {
@@ -28976,11 +29976,17 @@ function App() {
       >
         <DialogContent className="!w-[28rem] !max-w-[28rem] sm:!max-w-[28rem]">
           <DialogHeader>
-            <DialogTitle>Add roster member</DialogTitle>
+            <DialogTitle>
+              {rosterInvitePositionPreset
+                ? `Invite user to ${rosterInvitePositionPreset}`
+                : 'Add roster member'}
+            </DialogTitle>
             <DialogDescription>
-              {isSupabaseEnabled
-                ? `Send an email invitation and assign an ICS position for ${activeWorkspaceRosterLabel}. The invitee will create a password, then sign in with email and password to access only this workspace.`
-                : `Invite a team member by email and assign their ICS position for ${activeWorkspaceRosterLabel}.`}
+              {rosterInvitePositionPreset
+                ? `Add a team member to ${rosterInvitePositionPreset} on ${activeWorkspaceRosterLabel}.`
+                : isSupabaseEnabled
+                  ? `Add a team member to ${activeWorkspaceRosterLabel}. Leave password blank to email an invitation, or set a password so they can sign in immediately.`
+                  : `Invite a team member by email and assign their ICS position for ${activeWorkspaceRosterLabel}.`}
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-3 py-1">
@@ -28994,30 +30000,71 @@ function App() {
                 onChange={(event) => setRosterMemberEmailDraft(event.target.value)}
                 placeholder="name@agency.gov"
                 onKeyDown={(event) => {
-                  if (event.key === 'Enter') {
+                  if (event.key === 'Enter' && rosterMemberPasswordDraft.length === 0) {
                     event.preventDefault()
-                    addWorkspaceRosterMember()
+                    void addWorkspaceRosterMember()
                   }
                 }}
               />
             </div>
+            {isSupabaseEnabled && (
+              <div className="grid gap-2">
+                <Label htmlFor="roster-member-password">Password (optional)</Label>
+                <div className="relative">
+                  <Input
+                    id="roster-member-password"
+                    type={rosterMemberPasswordVisible ? 'text' : 'password'}
+                    value={rosterMemberPasswordDraft}
+                    onChange={(event) => setRosterMemberPasswordDraft(event.target.value)}
+                    placeholder="Set a sign-in password"
+                    autoComplete="new-password"
+                    className="pr-9"
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') {
+                        event.preventDefault()
+                        void addWorkspaceRosterMember()
+                      }
+                    }}
+                  />
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="ghost"
+                    className="absolute right-0 top-0 h-9 w-9 text-muted-foreground"
+                    aria-label={rosterMemberPasswordVisible ? 'Hide password' : 'Show password'}
+                    onClick={() => setRosterMemberPasswordVisible((previous) => !previous)}
+                  >
+                    {rosterMemberPasswordVisible ? (
+                      <EyeOff className="h-4 w-4" />
+                    ) : (
+                      <Eye className="h-4 w-4" />
+                    )}
+                  </Button>
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  If set, an account is created immediately and no invite email is sent. Minimum 8
+                  characters.
+                </p>
+              </div>
+            )}
             <div className="grid gap-2">
-              <Label htmlFor="roster-member-position">ICS Position</Label>
-              <Select
-                value={rosterMemberPositionDraft}
-                onValueChange={setRosterMemberPositionDraft}
-              >
-                <SelectTrigger id="roster-member-position">
-                  <SelectValue placeholder="Select ICS position" />
-                </SelectTrigger>
-                <SelectContent>
-                  {ICS_ROSTER_POSITION_OPTIONS.map((position) => (
-                    <SelectItem key={position} value={position}>
-                      {position}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label>ICS Positions (select at least one)</Label>
+              <div className="max-h-48 space-y-2 overflow-y-auto rounded-md border p-3">
+                {WORKSPACE_ROSTER_POSITIONS.map((position) => (
+                  <label
+                    key={position}
+                    htmlFor={`roster-add-position-${position}`}
+                    className="flex cursor-pointer items-center gap-2 text-sm"
+                  >
+                    <Checkbox
+                      id={`roster-add-position-${position}`}
+                      checked={rosterMemberPositionsDraft.includes(position)}
+                      onCheckedChange={() => toggleRosterMemberPositionsDraft(position)}
+                    />
+                    <span>{position}</span>
+                  </label>
+                ))}
+              </div>
             </div>
           </div>
           <DialogFooter>
@@ -29033,17 +30080,56 @@ function App() {
               disabled={
                 isInvitingRosterMember ||
                 !isValidRosterEmail(rosterMemberEmailDraft) ||
-                rosterMemberPositionDraft.trim().length === 0
+                rosterMemberPositionsDraft.length === 0 ||
+                (rosterMemberPasswordDraft.length > 0 && rosterMemberPasswordDraft.length < 8)
               }
               onClick={() => {
                 void addWorkspaceRosterMember()
               }}
             >
               {isInvitingRosterMember
-                ? 'Sending invite…'
+                ? rosterMemberPasswordDraft.length > 0
+                  ? 'Adding member…'
+                  : 'Sending invite…'
                 : isSupabaseEnabled
-                  ? 'Send invite'
+                  ? rosterMemberPasswordDraft.length > 0
+                    ? 'Add member'
+                    : 'Send invite'
                   : 'Add to roster'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={isRosterPasswordOverwriteConfirmOpen}
+        onOpenChange={setIsRosterPasswordOverwriteConfirmOpen}
+      >
+        <DialogContent className="!w-[26rem] !max-w-[26rem] sm:!max-w-[26rem]">
+          <DialogHeader>
+            <DialogTitle>Replace existing password?</DialogTitle>
+            <DialogDescription>
+              {rosterMemberEmailDraft.trim().length > 0
+                ? `${rosterMemberEmailDraft.trim().toLowerCase()} already has a Pratus account. Continuing will replace their current password with the one you entered and add them to this workspace.`
+                : 'This email already has a Pratus account. Continuing will replace their current password and add them to this workspace.'}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setIsRosterPasswordOverwriteConfirmOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              disabled={isInvitingRosterMember}
+              className="bg-amber-600 text-white hover:bg-amber-700"
+              onClick={() => {
+                void addWorkspaceRosterMember(true)
+              }}
+            >
+              {isInvitingRosterMember ? 'Updating…' : 'Replace password and add'}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -29729,7 +30815,7 @@ function App() {
       >
         <SheetContent
           side="left"
-          className="w-[280px] !max-w-[280px] !min-w-[260px] p-0"
+          className="w-[336px] !max-w-[336px] !min-w-[312px] p-0"
         >
           <div className="flex h-full flex-col">
             <SheetHeader className="gap-1 border-b border-border bg-muted/40 px-4 py-4">
@@ -29775,7 +30861,7 @@ function App() {
                   <button
                     type="button"
                     onClick={navigateToIncidentWorkspace}
-                    disabled={allIncidentsForWorkspace.length === 0}
+                    disabled={accessibleIncidentsForUi.length === 0}
                     className={cn(
                       'flex w-full items-center gap-2 rounded-md px-1 py-1 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50',
                       activeNavigationDestination === 'incident-workspace'
@@ -29793,33 +30879,70 @@ function App() {
                       onChange={(event) => setIncidentWorkspaceNavQuery(event.target.value)}
                       placeholder="Search incidents..."
                       className="h-8 pl-7 text-xs"
-                      disabled={allIncidentsForWorkspace.length === 0}
+                      disabled={accessibleIncidentsForUi.length === 0}
                     />
                   </div>
+                  <label className="mt-2 flex items-center gap-2 px-1 text-[11px] text-muted-foreground">
+                    <Checkbox
+                      checked={showArchivedIncidents}
+                      onCheckedChange={(checked) =>
+                        setShowArchivedIncidents(checked === true)
+                      }
+                      aria-label="Show archived incidents in navigation"
+                    />
+                    Show archived
+                  </label>
                   <div className="mt-1 max-h-40 space-y-0.5 overflow-y-auto">
                     {filteredIncidentWorkspaceOptions.map((incident) => (
-                      <button
+                      <div
                         key={incident.id}
-                        type="button"
-                        onClick={() => selectIncidentWorkspace(incident)}
                         className={cn(
-                          'flex w-full flex-col items-start rounded-md px-2 py-1.5 text-left transition-colors hover:bg-accent/60',
-                          activeIncidentWorkspaceId === incident.id &&
-                            'bg-accent text-accent-foreground'
+                          'flex items-start gap-0.5 rounded-md',
+                          activeIncidentWorkspaceId === incident.id && 'bg-accent text-accent-foreground'
                         )}
                       >
-                        <span className="line-clamp-2 text-xs font-medium">{incident.name}</span>
-                        <span
+                        <button
+                          type="button"
+                          onClick={() => selectIncidentWorkspace(incident)}
                           className={cn(
-                            'text-[11px]',
-                            activeIncidentWorkspaceId === incident.id
-                              ? 'text-accent-foreground/80'
-                              : 'text-muted-foreground'
+                            'flex min-w-0 flex-1 flex-col items-start px-2 py-1.5 text-left transition-colors hover:bg-accent/60',
+                            activeIncidentWorkspaceId === incident.id &&
+                              'text-accent-foreground'
                           )}
                         >
-                          {incident.type} · {incident.severity}
-                        </span>
-                      </button>
+                          <span className="line-clamp-2 text-xs font-medium">{incident.name}</span>
+                          <span
+                            className={cn(
+                              'text-[11px]',
+                              activeIncidentWorkspaceId === incident.id
+                                ? 'text-accent-foreground/80'
+                                : 'text-muted-foreground'
+                            )}
+                          >
+                            {incident.type} · {incident.severity}
+                            {isIncidentArchived(incident) ? ' · Archived' : ''}
+                          </span>
+                        </button>
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="ghost"
+                          className="mt-0.5 h-7 w-7 shrink-0"
+                          aria-label={
+                            isIncidentArchived(incident)
+                              ? `Restore ${incident.name}`
+                              : `Archive ${incident.name}`
+                          }
+                          onClick={() =>
+                            void handleSetIncidentArchived(
+                              incident,
+                              !isIncidentArchived(incident)
+                            )
+                          }
+                        >
+                          <Archive className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
                     ))}
                     {filteredIncidentWorkspaceOptions.length === 0 && (
                       <p className="px-2 py-1.5 text-xs text-muted-foreground">No matching incidents</p>
@@ -30798,6 +31921,52 @@ function App() {
         </DialogContent>
       </Dialog>
       <Dialog
+        open={ics204DeleteConfirmDialog !== null}
+        onOpenChange={(open) => {
+          if (!open) setIcs204DeleteConfirmDialog(null)
+        }}
+      >
+        <DialogContent className="!w-[26rem] !max-w-[26rem] sm:!max-w-[26rem]">
+          {ics204DeleteConfirmDialog ? (
+            <>
+              <div className="flex items-center gap-2 px-1 pb-1 text-sm font-semibold">
+                <Trash2 className="h-4 w-4 text-destructive" />
+                Delete ICS-204
+              </div>
+              <p className="px-1 text-xs text-muted-foreground">
+                Delete{' '}
+                <span className="font-semibold text-foreground">
+                  {ics204DeleteConfirmDialog.label}
+                </span>
+                ? This removes the assignment list and its version history. This cannot be undone.
+              </p>
+              <div className="flex items-center justify-end gap-2 px-1 pt-3">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-8 text-xs"
+                  onClick={() => setIcs204DeleteConfirmDialog(null)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="destructive"
+                  className="h-8 gap-1 text-xs"
+                  disabled={isIcs204Saving}
+                  onClick={() => void deleteIcs204Form(ics204DeleteConfirmDialog.formId)}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  Delete
+                </Button>
+              </div>
+            </>
+          ) : null}
+        </DialogContent>
+      </Dialog>
+      <Dialog
         open={ics204SignDialog !== null}
         onOpenChange={(open) => {
           if (!open) {
@@ -30860,54 +32029,37 @@ function App() {
                 const form = ics204Forms.find((entry) => entry.id === formId)
                 if (!form) return
                 if (ics204SignDialog.mode === 'review') {
-                  setIcs204VersionsById((previous) => {
-                    const existing = previous[formId] ?? []
-                    if (existing.length === 0) return previous
-                    const latestIndex = existing.length - 1
-                    const latest = existing[latestIndex]
-                    if (
-                      latest.signatures.some(
-                        (signature, index) =>
-                          index > 0 && signature.role === ics204SignDialog.role
-                      )
-                    ) {
-                      return previous
-                    }
-                    const next = [...existing]
-                    next[latestIndex] = {
-                      ...latest,
-                      signatures: [
-                        ...latest.signatures,
-                        {
-                          name,
-                          role: ics204SignDialog.role,
-                          signedAt: Date.now(),
-                        },
-                      ],
-                    }
-                    return { ...previous, [formId]: next }
+                  const existing = ics204VersionsById[formId] ?? []
+                  const latest = existing[existing.length - 1]
+                  if (!latest) return
+                  if (
+                    latest.signatures.some(
+                      (signature, index) =>
+                        index > 0 && signature.role === ics204SignDialog.role
+                    )
+                  ) {
+                    setIcs204SignDialog(null)
+                    setIcs204SignNameInput('You')
+                    return
+                  }
+                  handleIcs204SignReview(formId, form, latest, {
+                    name,
+                    role: ics204SignDialog.role,
+                    signedAt: Date.now(),
                   })
                 } else {
-                  const newVersion: Ics204Version = {
-                    id: `${Date.now()}-204-${formId}-signed-${Math.random()
-                      .toString(36)
-                      .slice(2, 8)}`,
-                    createdAt: Date.now(),
-                    authorName: name,
-                    authorColor: '#16a34a',
-                    snapshot: form,
-                    signatures: [
+                  handleIcs204AppendVersion(
+                    formId,
+                    form,
+                    [
                       {
                         name,
                         role: ics204SignDialog.role,
                         signedAt: Date.now(),
                       },
                     ],
-                  }
-                  setIcs204VersionsById((previous) => ({
-                    ...previous,
-                    [formId]: [...(previous[formId] ?? []), newVersion].slice(-100),
-                  }))
+                    name
+                  )
                   setIsCreatingSignedIcs204ByFormId((previous) => {
                     const next = { ...previous }
                     delete next[formId]
@@ -31947,7 +33099,12 @@ function App() {
                           <DropdownMenuItem
                             key={option.value}
                             className="pr-2"
-                            onClick={() => setIncidentWorkflow(option.value)}
+                            onClick={() => {
+                              setIncidentWorkflow(option.value)
+                              setIncidentComplexity((previous) =>
+                                normalizeIncidentComplexityForWorkflow(option.value, previous)
+                              )
+                            }}
                           >
                             <div className="flex items-center gap-2">
                               <Checkbox
@@ -31973,7 +33130,7 @@ function App() {
                           className="w-full justify-between font-normal"
                         >
                           <span className="truncate text-left">
-                            {incidentComplexityOptions.find(
+                            {effectiveIncidentComplexityOptions.find(
                               (option) => option.value === incidentComplexity
                             )?.label ?? 'Select incident complexity'}
                           </span>
@@ -31981,7 +33138,7 @@ function App() {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="start">
-                        {incidentComplexityOptions.map((option) => (
+                        {effectiveIncidentComplexityOptions.map((option) => (
                           <DropdownMenuItem
                             key={option.value}
                             className="pr-2"
@@ -32789,6 +33946,14 @@ function App() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <CreateHubNotificationDialog
+        open={isCreateHubNotificationOpen}
+        onOpenChange={setIsCreateHubNotificationOpen}
+        recipients={hubNotificationRecipients}
+        loadingRecipients={isLoadingHubNotificationRecipients}
+        senderLabel={profileEmail ?? undefined}
+        onSend={handleSendHubNotification}
+      />
     </main>
   )
 }
