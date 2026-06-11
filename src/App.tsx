@@ -366,6 +366,25 @@ import {
   ics208AuthorColor,
 } from '@/features/ics208/utils'
 import { useIcs208WorkspaceForm } from '@/hooks/useIcs208WorkspaceForm'
+import { ICS208HM_SECTION_PROMPTS } from '@/features/ics208hm/constants'
+import { Ics208hmWorkspacePanel } from '@/features/ics208hm/Ics208hmWorkspacePanel'
+import type {
+  Ics208hmFormSectionDrafts,
+  Ics208hmFormState,
+  Ics208hmSectionId,
+  Ics208hmVersion,
+} from '@/features/ics208hm/types'
+import {
+  applyIcs208hmSectionDraft,
+  cloneIcs208hmFormState,
+  createDefaultIcs208hmEntryTeamRows,
+  createDefaultIcs208hmMaterialRows,
+  createEmptyIcs208hmForm,
+  createLocalIcs208hmDocumentId,
+  extractIcs208hmSectionDraft,
+  ics208hmAuthorColor,
+} from '@/features/ics208hm/utils'
+import { useIcs208hmWorkspaceForm } from '@/hooks/useIcs208hmWorkspaceForm'
 import {
   buildIcs204DocxBlocks,
   buildIcs204ExportOptions,
@@ -3890,6 +3909,7 @@ const WORKSPACE_FORMS_MENU: Array<{ id: string; tab: LeftTab; label: string }> =
   { id: 'ICS-204', tab: 'form-ICS-204', label: 'Assignment List / ICS-204' },
   { id: 'ICS-233', tab: 'form-ICS-233', label: 'Open Actions / ICS-233' },
   { id: 'ICS-208', tab: 'form-ICS-208', label: 'Safety & Health Plan / ICS-208' },
+  { id: 'ICS-208HM', tab: 'form-ICS-208HM', label: 'HM Site Safety & Control Plan / ICS-208HM' },
   { id: 'ICS-209', tab: 'form-ICS-209', label: 'Incident Status Summary / ICS-209' },
 ]
 
@@ -6987,6 +7007,7 @@ function App() {
     | 'ics205a-section-generation'
     | 'ics206-section-generation'
     | 'ics208-section-generation'
+    | 'ics208hm-section-generation'
     | 'event-rule-generation'
     | 'notification-rule-generation'
   >('default')
@@ -7003,6 +7024,7 @@ function App() {
   const [pratusAiIcs205aSection, setPratusAiIcs205aSection] = useState<Ics205aSectionId | null>(null)
   const [pratusAiIcs206Section, setPratusAiIcs206Section] = useState<Ics206SectionId | null>(null)
   const [pratusAiIcs208Section, setPratusAiIcs208Section] = useState<Ics208SectionId | null>(null)
+  const [pratusAiIcs208hmSection, setPratusAiIcs208hmSection] = useState<Ics208hmSectionId | null>(null)
   const [pratusAiIcs234MatrixItem, setPratusAiIcs234MatrixItem] =
     useState<Ics234MatrixItemRef | null>(null)
   const [ics234EditingMatrixItem, setIcs234EditingMatrixItem] =
@@ -8427,6 +8449,16 @@ function App() {
   ics208FormRef.current = ics208Form
   const ics208VersionsRef = useRef(ics208Versions)
   ics208VersionsRef.current = ics208Versions
+  const [ics208hmForm, setIcs208hmForm] = useState<Ics208hmFormState | null>(null)
+  const [ics208hmVersions, setIcs208hmVersions] = useState<Ics208hmVersion[]>([])
+  const [ics208hmEditingSections, setIcs208hmEditingSections] = useState<
+    Partial<Record<Ics208hmSectionId, boolean>>
+  >({})
+  const [ics208hmSectionDrafts, setIcs208hmSectionDrafts] = useState<Ics208hmFormSectionDrafts>({})
+  const ics208hmFormRef = useRef(ics208hmForm)
+  ics208hmFormRef.current = ics208hmForm
+  const ics208hmVersionsRef = useRef(ics208hmVersions)
+  ics208hmVersionsRef.current = ics208hmVersions
   const liveIcs204FormsRef = useRef<Record<string, Ics204FormState>>({})
   const [ics233Rows, setIcs233Rows] = useState<Ics233TaskRow[]>([])
   const [activeIcs233CellEdit, setActiveIcs233CellEdit] = useState<{
@@ -8483,6 +8515,8 @@ function App() {
         ics206Versions: Ics206Version[]
         ics208Form: Ics208FormState | null
         ics208Versions: Ics208Version[]
+        ics208hmForm: Ics208hmFormState | null
+        ics208hmVersions: Ics208hmVersion[]
         ics233Rows: Ics233TaskRow[]
       }
     >
@@ -10666,6 +10700,7 @@ function App() {
     if (tab === 'form-ICS-205A') return 'ICS-205A Communications List'
     if (tab === 'form-ICS-206') return 'ICS-206 Medical Plan'
     if (tab === 'form-ICS-208') return 'ICS-208 Safety & Health Plan'
+    if (tab === 'form-ICS-208HM') return 'ICS-208HM Site Safety & Control Plan'
     if (tab.startsWith('form-')) return tab.replace('form-', '')
     return 'Panel Content'
   }
@@ -11817,6 +11852,8 @@ function App() {
       ics206Versions: isSupabaseEnabled ? [] : ics206VersionsRef.current,
       ics208Form: isSupabaseEnabled ? null : ics208FormRef.current,
       ics208Versions: isSupabaseEnabled ? [] : ics208VersionsRef.current,
+      ics208hmForm: isSupabaseEnabled ? null : ics208hmFormRef.current,
+      ics208hmVersions: isSupabaseEnabled ? [] : ics208hmVersionsRef.current,
       ics233Rows: ics233RowsRef.current,
     }
   }
@@ -11840,6 +11877,8 @@ function App() {
       setIcs206Versions([])
       setIcs208Form(null)
       setIcs208Versions([])
+      setIcs208hmForm(null)
+      setIcs208hmVersions([])
       setIcs233Rows([])
       setExpandedIcs204FormId(null)
       return
@@ -11863,6 +11902,8 @@ function App() {
       setIcs206Versions([])
       setIcs208Form(null)
       setIcs208Versions([])
+      setIcs208hmForm(null)
+      setIcs208hmVersions([])
       setIcs233Rows([])
       setExpandedIcs204FormId(null)
       return
@@ -11886,6 +11927,8 @@ function App() {
     setIcs206Versions(cached?.ics206Versions ?? [])
     setIcs208Form(cached?.ics208Form ?? null)
     setIcs208Versions(cached?.ics208Versions ?? [])
+    setIcs208hmForm(cached?.ics208hmForm ?? null)
+    setIcs208hmVersions(cached?.ics208hmVersions ?? [])
     setIcs233Rows((cached?.ics233Rows ?? []).map((row) => normalizeIcs233Row(row)))
     setExpandedIcs204FormId(cached?.ics204Forms[0]?.id ?? null)
   }
@@ -12199,6 +12242,18 @@ function App() {
       })))
       setIcs208EditingSections({})
       setIcs208SectionDrafts({})
+    },
+    []
+  )
+  const handleIcs208hmLoaded = useCallback(
+    (payload: { form: Ics208hmFormState; versions: Ics208hmVersion[] }) => {
+      setIcs208hmForm(cloneIcs208hmFormState(payload.form))
+      setIcs208hmVersions(payload.versions.map((version) => ({
+        ...version,
+        snapshot: cloneIcs208hmFormState(version.snapshot),
+      })))
+      setIcs208hmEditingSections({})
+      setIcs208hmSectionDrafts({})
     },
     []
   )
@@ -12845,6 +12900,30 @@ function App() {
     workspaceDefaults: ics208WorkspaceDefaults,
     onLoaded: handleIcs208Loaded,
   })
+  const ics208hmWorkspaceDefaults = useMemo(
+    (): Partial<Ics208hmFormState> => ({
+      incidentName: activeIncidentWorkspace?.name ?? activeExerciseWorkspace?.name ?? '',
+    }),
+    [activeIncidentWorkspace?.name, activeExerciseWorkspace?.name]
+  )
+  const {
+    loading: isIcs208hmLoading,
+    error: ics208hmSyncError,
+    isSaving: isIcs208hmSaving,
+    saveDraft: saveIcs208hmDraftToServer,
+    appendVersion: appendIcs208hmVersionToServer,
+    saveSignedReview: saveIcs208hmSignedReviewToServer,
+  } = useIcs208hmWorkspaceForm({
+    enabled:
+      isSupabaseEnabled &&
+      (isInIncidentWorkspace || isInExerciseWorkspace) &&
+      activeWorkspaceSupabaseId !== null,
+    workspaceId: activeWorkspaceSupabaseId,
+    userId: user?.id ?? null,
+    profileEmail,
+    workspaceDefaults: ics208hmWorkspaceDefaults,
+    onLoaded: handleIcs208hmLoaded,
+  })
   const { canEditIcs201Form, refresh: refreshWorkspacePermissions } = useWorkspacePermissions(
     isInIncidentWorkspace || isInExerciseWorkspace ? activeWorkspaceSupabaseId : null,
     isOrgAdmin
@@ -12912,6 +12991,8 @@ function App() {
     setIcs206SectionDrafts({})
     setIcs208EditingSections({})
     setIcs208SectionDrafts({})
+    setIcs208hmEditingSections({})
+    setIcs208hmSectionDrafts({})
   }, [canEditIcs201Form])
   const currentUserRosterMember = activeWorkspaceRoster.find(
     (member) => member.email.toLowerCase() === (profileEmail ?? '').toLowerCase()
@@ -13049,6 +13130,8 @@ function App() {
   const ics206LocalAuthorColor = ics206AuthorColor(user?.id ?? null)
   const ics208AuthorName = profileEmail ?? 'You'
   const ics208LocalAuthorColor = ics208AuthorColor(user?.id ?? null)
+  const ics208hmAuthorName = profileEmail ?? 'You'
+  const ics208hmLocalAuthorColor = ics208hmAuthorColor(user?.id ?? null)
   useEffect(() => {
     if (ics204SyncError) {
       toast.error(ics204SyncError)
@@ -13094,6 +13177,11 @@ function App() {
       toast.error(ics208SyncError)
     }
   }, [ics208SyncError])
+  useEffect(() => {
+    if (ics208hmSyncError) {
+      toast.error(ics208hmSyncError)
+    }
+  }, [ics208hmSyncError])
   useEffect(() => {
     if (isSupabaseEnabled) return
     if (!isInIncidentWorkspace && !isInExerciseWorkspace) return
@@ -13190,6 +13278,31 @@ function App() {
     ics208Form,
     ics208LocalAuthorColor,
     ics208WorkspaceDefaults,
+    isInExerciseWorkspace,
+    isInIncidentWorkspace,
+    isSupabaseEnabled,
+  ])
+  useEffect(() => {
+    if (isSupabaseEnabled) return
+    if (!isInIncidentWorkspace && !isInExerciseWorkspace) return
+    if (ics208hmForm) return
+    const localId = createLocalIcs208hmDocumentId()
+    const form = createEmptyIcs208hmForm(localId, ics208hmWorkspaceDefaults)
+    const initialVersion: Ics208hmVersion = {
+      id: `local-v-${localId}`,
+      createdAt: Date.now(),
+      authorName: ics208hmAuthorName,
+      authorColor: ics208hmLocalAuthorColor,
+      snapshot: cloneIcs208hmFormState(form),
+      signatures: [],
+    }
+    setIcs208hmForm(form)
+    setIcs208hmVersions([initialVersion])
+  }, [
+    ics208hmAuthorName,
+    ics208hmForm,
+    ics208hmLocalAuthorColor,
+    ics208hmWorkspaceDefaults,
     isInExerciseWorkspace,
     isInIncidentWorkspace,
     isSupabaseEnabled,
@@ -16936,6 +17049,176 @@ function App() {
       }, 1400)
       return
     }
+    if (pratusAiIntent === 'ics208hm-section-generation' && pratusAiIcs208hmSection) {
+      const section = pratusAiIcs208hmSection
+      if (!ics208hmForm) {
+        setPratusAiIntent('default')
+        setPratusAiIcs208hmSection(null)
+        setPratusAiDraftMessage('')
+        return
+      }
+      startIcs208hmSectionEdit(section)
+      setIsPratusAiDrawerOpen(false)
+      setPratusAiIntent('default')
+      setPratusAiIcs208hmSection(null)
+      setPratusAiDraftMessage('')
+      setIsPratusAiLoading(true)
+      if (pratusAiLoadingTimerRef.current) {
+        window.clearTimeout(pratusAiLoadingTimerRef.current)
+        pratusAiLoadingTimerRef.current = null
+      }
+      const incidentLabel =
+        ics208hmForm.incidentName ||
+        activeIncidentWorkspace?.name ||
+        activeExerciseWorkspace?.name ||
+        'this incident'
+      const now = new Date()
+      const later = new Date(Date.now() + 12 * 60 * 60 * 1000)
+      pratusAiLoadingTimerRef.current = window.setTimeout(() => {
+        switch (section) {
+          case 'incident-info':
+            patchIcs208hmSectionDraft(section, {
+              incidentName: incidentLabel,
+              datePrepared: ics208hmForm.datePrepared || now.toISOString().slice(0, 10),
+              operationalPeriodDateFrom:
+                ics208hmForm.operationalPeriodDateFrom || now.toISOString().slice(0, 10),
+              operationalPeriodDateTo:
+                ics208hmForm.operationalPeriodDateTo || later.toISOString().slice(0, 10),
+              operationalPeriodTimeFrom:
+                ics208hmForm.operationalPeriodTimeFrom || now.toTimeString().slice(0, 5),
+              operationalPeriodTimeTo:
+                ics208hmForm.operationalPeriodTimeTo || later.toTimeString().slice(0, 5),
+            })
+            break
+          case 'site-information':
+            patchIcs208hmSectionDraft(section, {
+              incidentLocation: `Hazmat incident site for ${incidentLabel} — confirm address/coordinates at Command Post.`,
+            })
+            break
+          case 'organization':
+            patchIcs208hmSectionDraft(section, {
+              organization: {
+                ...ics208hmForm.organization,
+                incidentCommander: ics208hmForm.organization.incidentCommander || 'Incident Commander',
+                hmGroupSupervisor:
+                  ics208hmForm.organization.hmGroupSupervisor || 'HM Group Supervisor',
+                safetyOfficer: ics208hmForm.organization.safetyOfficer || 'Safety Officer',
+                entryLeader: ics208hmForm.organization.entryLeader || 'Entry Leader',
+              },
+              entryTeam: createDefaultIcs208hmEntryTeamRows().map((row, index) => ({
+                ...row,
+                entryName: index === 0 ? 'Entry Team 1' : row.entryName,
+                entryPpeLevel: index === 0 ? 'Level B' : row.entryPpeLevel,
+                deconName: index === 0 ? 'Decon 1' : row.deconName,
+                deconPpeLevel: index === 0 ? 'Level C' : row.deconPpeLevel,
+              })),
+            })
+            break
+          case 'hazard-risk-analysis':
+            patchIcs208hmSectionDraft(section, [
+              {
+                id: 1,
+                material: 'UNK',
+                containerType: 'Drum',
+                qty: 'UNK',
+                physState: 'Liquid',
+                ph: '',
+                idlh: '',
+                fp: '',
+                it: '',
+                vp: '',
+                vd: '',
+                sg: '',
+                lel: '',
+                uel: '',
+                comment: `Identify and characterize all known products for ${incidentLabel}.`,
+              },
+              ...createDefaultIcs208hmMaterialRows().slice(1),
+            ])
+            break
+          case 'hazard-monitoring':
+            patchIcs208hmSectionDraft(section, {
+              lelInstruments: 'Multi-gas meter (LEL/O₂/CO/H₂S)',
+              o2Instruments: 'Multi-gas meter O₂ channel',
+              toxicityPpmInstruments: 'PID / colorimetric tubes',
+              radiologicalInstruments: 'Survey meter as required',
+              hazardMonitoringComment: 'Continuous monitoring during entry operations.',
+            })
+            break
+          case 'decontamination-procedures':
+            patchIcs208hmSectionDraft(section, {
+              standardDeconProceduresYesNo: 'yes',
+              decontaminationProceduresComment:
+                'Standard three-step decon: gross, technical, and final rinse at decon corridor.',
+            })
+            break
+          case 'site-communications':
+            patchIcs208hmSectionDraft(section, {
+              commandFrequency: 'Command Net 1',
+              tacticalFrequency: 'Tactical Net 2',
+              entryFrequency: 'Entry Team Net',
+            })
+            break
+          case 'medical-assistance':
+            patchIcs208hmSectionDraft(section, {
+              medicalMonitoringYesNo: 'yes',
+              medicalTreatmentTransportInPlaceYesNo: 'yes',
+              medicalAssistanceComment: 'Medical monitoring station at decon corridor.',
+            })
+            break
+          case 'site-map':
+            patchIcs208hmSectionDraft(section, {
+              siteMap: `Sketch Exclusion, Contamination Reduction, and Support Zones for ${incidentLabel}.`,
+              siteMapIncludes: {
+                weather: true,
+                commandPost: true,
+                zones: true,
+                assemblyAreas: true,
+                escapeRoutes: true,
+                other: false,
+              },
+            })
+            break
+          case 'entry-objectives':
+            patchIcs208hmSectionDraft(section, {
+              entryObjectives: `Characterize release, stabilize container, and sample product per HM Group Supervisor direction for ${incidentLabel}.`,
+            })
+            break
+          case 'sop-safe-work-practices':
+            patchIcs208hmSectionDraft(section, {
+              sopModificationsYesNo: 'no',
+              sopModificationsComment: 'Follow documented HM Group SOPs unless modified below.',
+            })
+            break
+          case 'emergency-procedures':
+            patchIcs208hmSectionDraft(section, {
+              emergencyProcedures:
+                'On emergency: withdraw entry team, notify IC, initiate emergency decon, and establish incident-within-incident branch.',
+            })
+            break
+          case 'safety-briefing':
+            patchIcs208hmSectionDraft(section, {
+              asstSafetyOfficerHmSignature:
+                ics208hmForm.asstSafetyOfficerHmSignature || 'Asst. Safety Officer - HM',
+              safetyBriefingCompletedTime:
+                ics208hmForm.safetyBriefingCompletedTime || new Date().toISOString().slice(0, 16),
+              hmGroupSupervisorSignature:
+                ics208hmForm.hmGroupSupervisorSignature || 'HM Group Supervisor',
+              incidentCommanderSignature:
+                ics208hmForm.incidentCommanderSignature || 'Incident Commander',
+            })
+            break
+          default:
+            break
+        }
+        setIsPratusAiLoading(false)
+        pratusAiLoadingTimerRef.current = null
+        toast.success(
+          `PRATUS AI drafted ICS-208HM ${section.replace(/-/g, ' ')}. Review and click Save to commit.`
+        )
+      }, 1400)
+      return
+    }
     if (pratusAiIntent === 'ics201-section-generation' && pratusAiIcs201Section) {
       const section = pratusAiIcs201Section
       const sectionLabel = ICS201_SECTION_LABELS[section]
@@ -19382,6 +19665,141 @@ function App() {
       )
     })
   }
+  const mergePersistedIcs208hmVersion = (
+    previous: Ics208hmVersion[],
+    latestVersion: Ics208hmVersion,
+    persisted: Ics208hmVersion
+  ) => {
+    const next = [...previous]
+    const lastIndex = next.length - 1
+    if (latestVersion && next[lastIndex]?.id === latestVersion.id) {
+      next[lastIndex] = persisted
+    } else if (next.some((entry) => entry.id === persisted.id)) {
+      next[next.findIndex((entry) => entry.id === persisted.id)] = persisted
+    } else {
+      next.push(persisted)
+    }
+    return next.slice(-100)
+  }
+  const openIcs208hmSectionGeneration = (section: Ics208hmSectionId) => {
+    setPratusAiIntent('ics208hm-section-generation')
+    setPratusAiIcs208hmSection(section)
+    setPratusAiDraftMessage(ICS208HM_SECTION_PROMPTS[section])
+    setIsPratusAiDrawerOpen(true)
+  }
+  const startIcs208hmSectionEdit = (section: Ics208hmSectionId) => {
+    if (!canEditIcs201Form || !ics208hmForm) return
+    setIcs208hmSectionDrafts((previous) => ({
+      ...previous,
+      [section]: extractIcs208hmSectionDraft(ics208hmForm, section),
+    }))
+    setIcs208hmEditingSections((previous) => ({
+      ...previous,
+      [section]: true,
+    }))
+  }
+  const cancelIcs208hmSectionEdit = (section: Ics208hmSectionId) => {
+    setIcs208hmEditingSections((previous) => {
+      const next = { ...previous }
+      delete next[section]
+      return next
+    })
+    setIcs208hmSectionDrafts((previous) => {
+      const next = { ...previous }
+      delete next[section]
+      return next
+    })
+  }
+  const patchIcs208hmSectionDraft = <S extends Ics208hmSectionId>(
+    section: S,
+    value: Ics208hmFormSectionDrafts[S]
+  ) => {
+    setIcs208hmSectionDrafts((previous) => ({
+      ...previous,
+      [section]: value,
+    }))
+  }
+  const saveIcs208hmSection = (section: Ics208hmSectionId) => {
+    if (!canEditIcs201Form) {
+      toast.error('Your ICS position does not include permission to edit ICS-208HM forms.')
+      return
+    }
+    const draft = ics208hmSectionDrafts[section]
+    if (draft === undefined || !ics208hmForm) return
+    const nextForm = applyIcs208hmSectionDraft(ics208hmForm, section, draft)
+    setIcs208hmForm(cloneIcs208hmFormState(nextForm))
+    const latestVersion = ics208hmVersions[ics208hmVersions.length - 1]
+    if (latestVersion && latestVersion.signatures.length === 0) {
+      handleIcs208hmSaveDraft(nextForm, latestVersion)
+    }
+    cancelIcs208hmSectionEdit(section)
+  }
+  const handleIcs208hmSaveDraft = (form: Ics208hmFormState, latestVersion: Ics208hmVersion) => {
+    const optimisticVersion: Ics208hmVersion = {
+      ...latestVersion,
+      createdAt: Date.now(),
+      authorName: ics208hmAuthorName,
+      authorColor: ics208hmLocalAuthorColor,
+      snapshot: cloneIcs208hmFormState(form),
+    }
+    setIcs208hmVersions((previous) =>
+      mergePersistedIcs208hmVersion(previous, latestVersion, optimisticVersion)
+    )
+    void saveIcs208hmDraftToServer(form.id, form, latestVersion).then((persisted) => {
+      if (!persisted) return
+      setIcs208hmVersions((previous) =>
+        mergePersistedIcs208hmVersion(previous, latestVersion, persisted)
+      )
+    })
+  }
+  const handleIcs208hmAppendVersion = (
+    form: Ics208hmFormState,
+    signatures: Ics201VersionSignature[] = [],
+    authorNameOverride?: string
+  ) => {
+    const authorName = authorNameOverride ?? ics208hmAuthorName
+    const optimisticVersion: Ics208hmVersion = {
+      id: `local-v-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      createdAt: Date.now(),
+      authorName,
+      authorColor: ics208hmLocalAuthorColor,
+      snapshot: cloneIcs208hmFormState(form),
+      signatures,
+    }
+    setIcs208hmVersions((previous) => [...previous, optimisticVersion].slice(-100))
+    void appendIcs208hmVersionToServer(form.id, form, signatures).then((persisted) => {
+      if (!persisted) return
+      setIcs208hmVersions((previous) =>
+        previous
+          .map((entry) => (entry.id === optimisticVersion.id ? persisted : entry))
+          .slice(-100)
+      )
+    })
+  }
+  const handleIcs208hmSignReview = (
+    form: Ics208hmFormState,
+    latestVersion: Ics208hmVersion,
+    signature: Ics201VersionSignature
+  ) => {
+    const nextVersion: Ics208hmVersion = {
+      ...latestVersion,
+      signatures: [...latestVersion.signatures, signature],
+    }
+    setIcs208hmVersions((previous) =>
+      mergePersistedIcs208hmVersion(previous, latestVersion, nextVersion)
+    )
+    void saveIcs208hmSignedReviewToServer(
+      form.id,
+      form,
+      latestVersion.id,
+      nextVersion.signatures
+    ).then((persisted) => {
+      if (!persisted) return
+      setIcs208hmVersions((previous) =>
+        mergePersistedIcs208hmVersion(previous, latestVersion, persisted)
+      )
+    })
+  }
   const applyDraftIcs204Recommendations = async () => {
     const templates: Partial<Ics204FormState>[] = [
       {
@@ -20801,6 +21219,7 @@ function App() {
                   {activeTab === 'form-ICS-205A' && 'ICS-205A Communications List'}
                   {activeTab === 'form-ICS-206' && 'ICS-206 Medical Plan'}
                   {activeTab === 'form-ICS-208' && 'ICS-208 Safety & Health Plan'}
+                  {activeTab === 'form-ICS-208HM' && 'ICS-208HM Site Safety & Control Plan'}
                   {activeTab !== 'form-ICS-204' &&
                     activeTab !== 'form-ICS-202' &&
                     activeTab !== 'form-ICS-203' &&
@@ -20810,6 +21229,7 @@ function App() {
                     activeTab !== 'form-ICS-205A' &&
                     activeTab !== 'form-ICS-206' &&
                     activeTab !== 'form-ICS-208' &&
+                    activeTab !== 'form-ICS-208HM' &&
                     activeFormTabLabel}
                 </CardTitle>
                 {activeTab === 'roster' && (isInIncidentWorkspace || isInExerciseWorkspace) && (
@@ -29033,6 +29453,32 @@ function App() {
                   />
                 )}
 
+                {activeTab === 'form-ICS-208HM' && (isInIncidentWorkspace || isInExerciseWorkspace) && (
+                  <Ics208hmWorkspacePanel
+                    form={ics208hmForm}
+                    setForm={setIcs208hmForm}
+                    versions={ics208hmVersions}
+                    canEdit={canEditIcs201Form}
+                    isLoading={isIcs208hmLoading}
+                    isSaving={isIcs208hmSaving}
+                    glassItemBorderClasses={glassItemBorderClasses}
+                    incidentName={
+                      activeIncidentWorkspace?.name ?? activeExerciseWorkspace?.name ?? ''
+                    }
+                    editingSections={ics208hmEditingSections}
+                    sectionDrafts={ics208hmSectionDrafts}
+                    onStartSectionEdit={startIcs208hmSectionEdit}
+                    onCancelSectionEdit={cancelIcs208hmSectionEdit}
+                    onSaveSection={saveIcs208hmSection}
+                    onGenerateSection={openIcs208hmSectionGeneration}
+                    onPatchSectionDraft={patchIcs208hmSectionDraft}
+                    onAppendVersion={handleIcs208hmAppendVersion}
+                    onSignReview={handleIcs208hmSignReview}
+                    downloadDocx={downloadDocx}
+                    downloadPdf={downloadPdf}
+                  />
+                )}
+
                 {activeTab === 'form-ICS-203' && (isInIncidentWorkspace || isInExerciseWorkspace) && (
                   <Ics203WorkspacePanel
                     form={ics203Form}
@@ -31060,6 +31506,7 @@ function App() {
                   activeTab !== 'form-ICS-205A' &&
                   activeTab !== 'form-ICS-206' &&
                   activeTab !== 'form-ICS-208' &&
+                  activeTab !== 'form-ICS-208HM' &&
                   activeTab !== 'form-ICS-233' && (
                   <Item variant="outline" className={cn('flex-col items-stretch p-0', glassItemBorderClasses)}>
                     <div className="px-3 py-2.5">
