@@ -1,11 +1,14 @@
 import type { Ics201VersionSignature } from '@/features/ics201/types'
+import type { ResourceListItemData } from '@/features/resources/types'
+
+export type Ics204ResourceSnapshot = ResourceListItemData
 
 export type Ics204ResourceAssignedRow = {
   id: number
-  resourceIdentifier: string
-  leader: string
-  contact: string
-  location: string
+  resourceId: number | null
+  reportingInfoNotes: string
+  has204A: boolean
+  resourceSnapshot: Ics204ResourceSnapshot | null
 }
 
 export type Ics204ResourceRequirementRow = {
@@ -42,6 +45,7 @@ export type Ics204FormState = {
   workAssignments: Ics204WorkAssignmentRow[]
   specialInstructions: string
   communications: string
+  emergencyCommunications: string
 }
 
 export type Ics204Version = {
@@ -79,4 +83,35 @@ export type Ics204VersionRow = {
 export type Ics204DocumentBundle = {
   document: Ics204DocumentRow
   versions: Ics204Version[]
+}
+
+export type Ics204SectionId =
+  | 'assignment-info'
+  | 'resources-assigned'
+  | 'work-assignments'
+  | 'special-instructions'
+  | 'communications'
+
+export type Ics204AssignmentInfoDraft = Pick<
+  Ics204FormState,
+  | 'sectionChief'
+  | 'branchDirector'
+  | 'divisionGroupSupervisor'
+  | 'branch'
+  | 'division'
+  | 'group'
+  | 'stagingArea'
+>
+
+export type Ics204CommunicationsDraft = Pick<
+  Ics204FormState,
+  'communications' | 'emergencyCommunications'
+>
+
+export type Ics204FormSectionDrafts = {
+  'assignment-info'?: Ics204AssignmentInfoDraft
+  'resources-assigned'?: Ics204ResourceAssignedRow[]
+  'work-assignments'?: Ics204WorkAssignmentRow[]
+  'special-instructions'?: string
+  communications?: Ics204CommunicationsDraft
 }

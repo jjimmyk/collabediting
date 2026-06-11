@@ -203,17 +203,102 @@ import {
   updateRosterMemberPositions,
 } from '@/lib/workspace-service'
 import type {
+  Ics204FormSectionDrafts,
   Ics204FormState,
   Ics204ResourceAssignedRow,
   Ics204ResourceRequirementRow,
   Ics204Version,
   Ics204WorkAssignmentRow,
+  Ics204SectionId,
 } from '@/features/ics204/types'
+import { ICS204_SECTION_LABELS, ICS204_SECTION_PROMPTS } from '@/features/ics204/constants'
+import { Ics204FormSections } from '@/features/ics204/Ics204FormSections'
+import { Ics204ExportPreviewDialog } from '@/features/ics204/Ics204ExportPreviewDialog'
+import { Ics204AssignedUnitField } from '@/features/ics204/Ics204SectionToolbar'
+import { ICS202_SECTION_PROMPTS } from '@/features/ics202/constants'
+import { Ics202WorkspacePanel } from '@/features/ics202/Ics202WorkspacePanel'
+import type {
+  Ics202FormSectionDrafts,
+  Ics202FormState,
+  Ics202SectionId,
+  Ics202Version,
+} from '@/features/ics202/types'
 import {
+  applyIcs202SectionDraft,
+  cloneIcs202FormState,
+  createEmptyIcs202Form,
+  createLocalIcs202DocumentId,
+  extractIcs202SectionDraft,
+  ics202AuthorColor,
+} from '@/features/ics202/utils'
+import { useIcs202WorkspaceForm } from '@/hooks/useIcs202WorkspaceForm'
+import { ICS203_SECTION_PROMPTS } from '@/features/ics203/constants'
+import { Ics203WorkspacePanel } from '@/features/ics203/Ics203WorkspacePanel'
+import type {
+  Ics203FormSectionDrafts,
+  Ics203FormState,
+  Ics203SectionId,
+  Ics203Version,
+} from '@/features/ics203/types'
+import {
+  applyIcs203SectionDraft,
+  cloneIcs203FormState,
+  createEmptyIcs203Form,
+  createLocalIcs203DocumentId,
+  extractIcs203SectionDraft,
+  ics203AuthorColor,
+} from '@/features/ics203/utils'
+import { useIcs203WorkspaceForm } from '@/hooks/useIcs203WorkspaceForm'
+import { ICS234_MATRIX_ITEM_PROMPTS, ICS234_SECTION_PROMPTS } from '@/features/ics234/constants'
+import { Ics234WorkspacePanel } from '@/features/ics234/Ics234WorkspacePanel'
+import type {
+  Ics234FormSectionDrafts,
+  Ics234FormState,
+  Ics234MatrixItemDraft,
+  Ics234MatrixItemEditState,
+  Ics234MatrixItemRef,
+  Ics234ObjectiveRow,
+  Ics234SectionId,
+  Ics234Version,
+} from '@/features/ics234/types'
+import {
+  applyIcs234MatrixItemDraft,
+  applyIcs234SectionDraft,
+  cloneIcs234FormState,
+  cloneIcs234ObjectiveRows,
+  createEmptyIcs234Form,
+  createLocalIcs234DocumentId,
+  extractIcs234MatrixItemDraft,
+  extractIcs234SectionDraft,
+  ics234AuthorColor,
+  ics234MatrixItemRefsMatch,
+  nextRowId,
+} from '@/features/ics234/utils'
+import { useIcs234WorkspaceForm } from '@/hooks/useIcs234WorkspaceForm'
+import {
+  buildIcs204DocxBlocks,
+  buildIcs204ExportOptions,
+  ics204ExportFilenameBase,
+  type Ics204DocxBlock,
+} from '@/features/ics204/export'
+import {
+  applyIcs204SectionDraft,
+  buildDemoIcs204ResourceSnapshot,
   cloneIcs204FormState,
+  createIcs204ResourceAssignedRow,
   createLocalIcs204DocumentId,
+  extractIcs204SectionDraft,
+  getIcs204FormForExport,
   ics204AuthorColor as resolveIcs204AuthorColor,
+  resolveIcs204ListTitle,
 } from '@/features/ics204/utils'
+import { ResourceListItemCard } from '@/features/resources/ResourceListItemCard'
+import type { ResourceListItemData } from '@/features/resources/types'
+import {
+  formatResourceCostPerUnit,
+  formatResourceCostUnitType,
+  getResourceIncidentAssignmentLabel,
+} from '@/features/resources/utils'
 import { isIncidentArchived } from '@/lib/incident-archive'
 import { WorkspacePositionRoster } from '@/features/roster/WorkspacePositionRoster'
 import { WorkspaceOrgChartRoster } from '@/features/roster/WorkspaceOrgChartRoster'
@@ -533,23 +618,6 @@ type ResourceItem = {
   deploymentKind: ResourceDeploymentKind
   assignedIncidentName: string | null
   assignedExerciseName: string | null
-}
-
-const getResourceIncidentAssignmentLabel = (resource: ResourceItem) =>
-  resource.deploymentKind === 'incident' ? resource.assignedIncidentName ?? '' : ''
-
-const formatResourceCostPerUnit = (costPerUnit: number) =>
-  costPerUnit.toLocaleString('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })
-
-const formatResourceCostUnitType = (costUnitType: ResourceCostUnitType) => {
-  if (costUnitType === 'per day') return 'Per day'
-  if (costUnitType === 'per hour') return 'Per hour'
-  return 'To purchase'
 }
 
 const RESOURCE_REQUEST_FILTER_FIELD_OPTIONS = [
@@ -3721,6 +3789,9 @@ type LeftTab =
 
 const WORKSPACE_FORMS_MENU: Array<{ id: string; tab: LeftTab; label: string }> = [
   { id: 'ICS-201', tab: 'briefing', label: 'Incident Briefing / ICS-201' },
+  { id: 'ICS-202', tab: 'form-ICS-202', label: 'Incident Objectives / ICS-202' },
+  { id: 'ICS-203', tab: 'form-ICS-203', label: 'Organization Assignment List / ICS-203' },
+  { id: 'ICS-234', tab: 'form-ICS-234', label: 'Work Analysis Matrix / ICS-234' },
   { id: 'ICS-204', tab: 'form-ICS-204', label: 'Assignment List / ICS-204' },
   { id: 'ICS-233', tab: 'form-ICS-233', label: 'Open Actions / ICS-233' },
   { id: 'ICS-208', tab: 'form-ICS-208', label: 'Safety Message / ICS-208' },
@@ -6926,10 +6997,26 @@ function App() {
     | 'ics201-generation'
     | 'sitrep-generation'
     | 'ics201-section-generation'
+    | 'ics204-section-generation'
+    | 'ics202-section-generation'
+    | 'ics203-section-generation'
+    | 'ics234-section-generation'
+    | 'ics234-matrix-item-generation'
     | 'event-rule-generation'
     | 'notification-rule-generation'
   >('default')
   const [pratusAiIcs201Section, setPratusAiIcs201Section] = useState<Ics201SectionId | null>(null)
+  const [pratusAiIcs204Context, setPratusAiIcs204Context] = useState<{
+    formId: string
+    section: Ics204SectionId
+  } | null>(null)
+  const [pratusAiIcs202Section, setPratusAiIcs202Section] = useState<Ics202SectionId | null>(null)
+  const [pratusAiIcs203Section, setPratusAiIcs203Section] = useState<Ics203SectionId | null>(null)
+  const [pratusAiIcs234Section, setPratusAiIcs234Section] = useState<Ics234SectionId | null>(null)
+  const [pratusAiIcs234MatrixItem, setPratusAiIcs234MatrixItem] =
+    useState<Ics234MatrixItemRef | null>(null)
+  const [ics234EditingMatrixItem, setIcs234EditingMatrixItem] =
+    useState<Ics234MatrixItemEditState | null>(null)
   const openIcs201SectionGeneration = (section: Ics201SectionId) => {
     setPratusAiIntent('ics201-section-generation')
     setPratusAiIcs201Section(section)
@@ -6972,6 +7059,10 @@ function App() {
   const [isPratusAiLoading, setIsPratusAiLoading] = useState(false)
   const pratusAiLoadingTimerRef = useRef<number | null>(null)
   const [ics204ResourcePickerFormId, setIcs204ResourcePickerFormId] = useState<string | null>(null)
+  const [isIcs204PreviewOpen, setIsIcs204PreviewOpen] = useState(false)
+  const [ics204PreviewBlocks, setIcs204PreviewBlocks] = useState<DocxBlock[]>([])
+  const [ics204PreviewTitle, setIcs204PreviewTitle] = useState('ICS-204 Preview')
+  const [ics204PreviewFormId, setIcs204PreviewFormId] = useState<string | null>(null)
   const [ics204ResourceNameFilter, setIcs204ResourceNameFilter] = useState('')
   const [ics204ResourceCurrentLocationFilter, setIcs204ResourceCurrentLocationFilter] = useState('')
   const [ics204ResourceCurrentOpFilter, setIcs204ResourceCurrentOpFilter] = useState('all')
@@ -8533,6 +8624,42 @@ function App() {
     formId: string
     label: string
   } | null>(null)
+  const [ics204EditingSectionsByFormId, setIcs204EditingSectionsByFormId] = useState<
+    Record<string, Partial<Record<Ics204SectionId, boolean>>>
+  >({})
+  const [ics204SectionDraftsByFormId, setIcs204SectionDraftsByFormId] = useState<
+    Record<string, Ics204FormSectionDrafts>
+  >({})
+  const [ics202Form, setIcs202Form] = useState<Ics202FormState | null>(null)
+  const [ics202Versions, setIcs202Versions] = useState<Ics202Version[]>([])
+  const [ics202EditingSections, setIcs202EditingSections] = useState<
+    Partial<Record<Ics202SectionId, boolean>>
+  >({})
+  const [ics202SectionDrafts, setIcs202SectionDrafts] = useState<Ics202FormSectionDrafts>({})
+  const ics202FormRef = useRef(ics202Form)
+  ics202FormRef.current = ics202Form
+  const ics202VersionsRef = useRef(ics202Versions)
+  ics202VersionsRef.current = ics202Versions
+  const [ics203Form, setIcs203Form] = useState<Ics203FormState | null>(null)
+  const [ics203Versions, setIcs203Versions] = useState<Ics203Version[]>([])
+  const [ics203EditingSections, setIcs203EditingSections] = useState<
+    Partial<Record<Ics203SectionId, boolean>>
+  >({})
+  const [ics203SectionDrafts, setIcs203SectionDrafts] = useState<Ics203FormSectionDrafts>({})
+  const ics203FormRef = useRef(ics203Form)
+  ics203FormRef.current = ics203Form
+  const ics203VersionsRef = useRef(ics203Versions)
+  ics203VersionsRef.current = ics203Versions
+  const [ics234Form, setIcs234Form] = useState<Ics234FormState | null>(null)
+  const [ics234Versions, setIcs234Versions] = useState<Ics234Version[]>([])
+  const [ics234EditingSections, setIcs234EditingSections] = useState<
+    Partial<Record<Ics234SectionId, boolean>>
+  >({})
+  const [ics234SectionDrafts, setIcs234SectionDrafts] = useState<Ics234FormSectionDrafts>({})
+  const ics234FormRef = useRef(ics234Form)
+  ics234FormRef.current = ics234Form
+  const ics234VersionsRef = useRef(ics234Versions)
+  ics234VersionsRef.current = ics234Versions
   const liveIcs204FormsRef = useRef<Record<string, Ics204FormState>>({})
   const [ics233Rows, setIcs233Rows] = useState<Ics233TaskRow[]>([])
   const [activeIcs233CellEdit, setActiveIcs233CellEdit] = useState<{
@@ -8573,6 +8700,12 @@ function App() {
       {
         ics204Forms: Ics204FormState[]
         ics204VersionsById: Record<string, Ics204Version[]>
+        ics202Form: Ics202FormState | null
+        ics202Versions: Ics202Version[]
+        ics203Form: Ics203FormState | null
+        ics203Versions: Ics203Version[]
+        ics234Form: Ics234FormState | null
+        ics234Versions: Ics234Version[]
         ics233Rows: Ics233TaskRow[]
       }
     >
@@ -10748,6 +10881,9 @@ function App() {
     if (tab === 'sitreps') return 'SITREPs'
     if (tab === 'seerist') return 'Seerist'
     if (tab === 'form-ICS-204') return 'ICS-204 Assignment List'
+    if (tab === 'form-ICS-202') return 'ICS-202 Incident Objectives'
+    if (tab === 'form-ICS-203') return 'ICS-203 Organization Assignment List'
+    if (tab === 'form-ICS-234') return 'ICS-234 Work Analysis Matrix'
     if (tab.startsWith('form-')) return tab.replace('form-', '')
     return 'Panel Content'
   }
@@ -11883,6 +12019,12 @@ function App() {
     workspaceFormsCacheRef.current[workspaceKey] = {
       ics204Forms: isSupabaseEnabled ? [] : ics204FormsRef.current,
       ics204VersionsById: isSupabaseEnabled ? {} : ics204VersionsByIdRef.current,
+      ics202Form: isSupabaseEnabled ? null : ics202FormRef.current,
+      ics202Versions: isSupabaseEnabled ? [] : ics202VersionsRef.current,
+      ics203Form: isSupabaseEnabled ? null : ics203FormRef.current,
+      ics203Versions: isSupabaseEnabled ? [] : ics203VersionsRef.current,
+      ics234Form: isSupabaseEnabled ? null : ics234FormRef.current,
+      ics234Versions: isSupabaseEnabled ? [] : ics234VersionsRef.current,
       ics233Rows: ics233RowsRef.current,
     }
   }
@@ -11890,6 +12032,12 @@ function App() {
     if (!workspaceKey) {
       setIcs204Forms([])
       setIcs204VersionsById({})
+      setIcs202Form(null)
+      setIcs202Versions([])
+      setIcs203Form(null)
+      setIcs203Versions([])
+      setIcs234Form(null)
+      setIcs234Versions([])
       setIcs233Rows([])
       setExpandedIcs204FormId(null)
       return
@@ -11897,6 +12045,12 @@ function App() {
     if (isSupabaseEnabled) {
       setIcs204Forms([])
       setIcs204VersionsById({})
+      setIcs202Form(null)
+      setIcs202Versions([])
+      setIcs203Form(null)
+      setIcs203Versions([])
+      setIcs234Form(null)
+      setIcs234Versions([])
       setIcs233Rows([])
       setExpandedIcs204FormId(null)
       return
@@ -11904,6 +12058,12 @@ function App() {
     const cached = workspaceFormsCacheRef.current[workspaceKey]
     setIcs204Forms(cached?.ics204Forms ?? [])
     setIcs204VersionsById(cached?.ics204VersionsById ?? {})
+    setIcs202Form(cached?.ics202Form ?? null)
+    setIcs202Versions(cached?.ics202Versions ?? [])
+    setIcs203Form(cached?.ics203Form ?? null)
+    setIcs203Versions(cached?.ics203Versions ?? [])
+    setIcs234Form(cached?.ics234Form ?? null)
+    setIcs234Versions(cached?.ics234Versions ?? [])
     setIcs233Rows((cached?.ics233Rows ?? []).map((row) => normalizeIcs233Row(row)))
     setExpandedIcs204FormId(cached?.ics204Forms[0]?.id ?? null)
   }
@@ -12120,6 +12280,43 @@ function App() {
         }
         return payload.forms[0]?.id ?? null
       })
+    },
+    []
+  )
+  const handleIcs202Loaded = useCallback(
+    (payload: { form: Ics202FormState; versions: Ics202Version[] }) => {
+      setIcs202Form(cloneIcs202FormState(payload.form))
+      setIcs202Versions(payload.versions.map((version) => ({
+        ...version,
+        snapshot: cloneIcs202FormState(version.snapshot),
+      })))
+      setIcs202EditingSections({})
+      setIcs202SectionDrafts({})
+    },
+    []
+  )
+  const handleIcs203Loaded = useCallback(
+    (payload: { form: Ics203FormState; versions: Ics203Version[] }) => {
+      setIcs203Form(cloneIcs203FormState(payload.form))
+      setIcs203Versions(payload.versions.map((version) => ({
+        ...version,
+        snapshot: cloneIcs203FormState(version.snapshot),
+      })))
+      setIcs203EditingSections({})
+      setIcs203SectionDrafts({})
+    },
+    []
+  )
+  const handleIcs234Loaded = useCallback(
+    (payload: { form: Ics234FormState; versions: Ics234Version[] }) => {
+      setIcs234Form(cloneIcs234FormState(payload.form))
+      setIcs234Versions(payload.versions.map((version) => ({
+        ...version,
+        snapshot: cloneIcs234FormState(version.snapshot),
+      })))
+      setIcs234EditingSections({})
+      setIcs234SectionDrafts({})
+      setIcs234EditingMatrixItem(null)
     },
     []
   )
@@ -12574,6 +12771,78 @@ function App() {
     profileEmail,
     onLoaded: handleIcs204Loaded,
   })
+  const ics202WorkspaceDefaults = useMemo(
+    (): Partial<Ics202FormState> => ({
+      incidentName: activeIncidentWorkspace?.name ?? activeExerciseWorkspace?.name ?? '',
+    }),
+    [activeIncidentWorkspace?.name, activeExerciseWorkspace?.name]
+  )
+  const {
+    loading: isIcs202Loading,
+    error: ics202SyncError,
+    isSaving: isIcs202Saving,
+    saveDraft: saveIcs202DraftToServer,
+    appendVersion: appendIcs202VersionToServer,
+    saveSignedReview: saveIcs202SignedReviewToServer,
+  } = useIcs202WorkspaceForm({
+    enabled:
+      isSupabaseEnabled &&
+      (isInIncidentWorkspace || isInExerciseWorkspace) &&
+      activeWorkspaceSupabaseId !== null,
+    workspaceId: activeWorkspaceSupabaseId,
+    userId: user?.id ?? null,
+    profileEmail,
+    workspaceDefaults: ics202WorkspaceDefaults,
+    onLoaded: handleIcs202Loaded,
+  })
+  const ics203WorkspaceDefaults = useMemo(
+    (): Partial<Ics203FormState> => ({
+      incidentName: activeIncidentWorkspace?.name ?? activeExerciseWorkspace?.name ?? '',
+    }),
+    [activeIncidentWorkspace?.name, activeExerciseWorkspace?.name]
+  )
+  const {
+    loading: isIcs203Loading,
+    error: ics203SyncError,
+    isSaving: isIcs203Saving,
+    saveDraft: saveIcs203DraftToServer,
+    appendVersion: appendIcs203VersionToServer,
+    saveSignedReview: saveIcs203SignedReviewToServer,
+  } = useIcs203WorkspaceForm({
+    enabled:
+      isSupabaseEnabled &&
+      (isInIncidentWorkspace || isInExerciseWorkspace) &&
+      activeWorkspaceSupabaseId !== null,
+    workspaceId: activeWorkspaceSupabaseId,
+    userId: user?.id ?? null,
+    profileEmail,
+    workspaceDefaults: ics203WorkspaceDefaults,
+    onLoaded: handleIcs203Loaded,
+  })
+  const ics234WorkspaceDefaults = useMemo(
+    (): Partial<Ics234FormState> => ({
+      incidentName: activeIncidentWorkspace?.name ?? activeExerciseWorkspace?.name ?? '',
+    }),
+    [activeIncidentWorkspace?.name, activeExerciseWorkspace?.name]
+  )
+  const {
+    loading: isIcs234Loading,
+    error: ics234SyncError,
+    isSaving: isIcs234Saving,
+    saveDraft: saveIcs234DraftToServer,
+    appendVersion: appendIcs234VersionToServer,
+    saveSignedReview: saveIcs234SignedReviewToServer,
+  } = useIcs234WorkspaceForm({
+    enabled:
+      isSupabaseEnabled &&
+      (isInIncidentWorkspace || isInExerciseWorkspace) &&
+      activeWorkspaceSupabaseId !== null,
+    workspaceId: activeWorkspaceSupabaseId,
+    userId: user?.id ?? null,
+    profileEmail,
+    workspaceDefaults: ics234WorkspaceDefaults,
+    onLoaded: handleIcs234Loaded,
+  })
   const { canEditIcs201Form, refresh: refreshWorkspacePermissions } = useWorkspacePermissions(
     isInIncidentWorkspace || isInExerciseWorkspace ? activeWorkspaceSupabaseId : null,
     isOrgAdmin
@@ -12622,6 +12891,15 @@ function App() {
     setIcs201EditingResources(false)
     setIcs201EditingSafetyAnalysis(false)
     setIsCreatingSignedIcs201Version(false)
+    setIcs204EditingSectionsByFormId({})
+    setIcs204SectionDraftsByFormId({})
+    setIcs202EditingSections({})
+    setIcs202SectionDrafts({})
+    setIcs203EditingSections({})
+    setIcs203SectionDrafts({})
+    setIcs234EditingSections({})
+    setIcs234SectionDrafts({})
+    setIcs234EditingMatrixItem(null)
   }, [canEditIcs201Form])
   const currentUserRosterMember = activeWorkspaceRoster.find(
     (member) => member.email.toLowerCase() === (profileEmail ?? '').toLowerCase()
@@ -12741,13 +13019,109 @@ function App() {
       toast.error(ics201SyncError)
     }
   }, [ics201SyncError])
+  const ics204AuthorName = profileEmail ?? 'You'
+  const ics204LocalAuthorColor = resolveIcs204AuthorColor(user?.id ?? null)
+  const ics202AuthorName = profileEmail ?? 'You'
+  const ics202LocalAuthorColor = ics202AuthorColor(user?.id ?? null)
+  const ics203AuthorName = profileEmail ?? 'You'
+  const ics203LocalAuthorColor = ics203AuthorColor(user?.id ?? null)
+  const ics234AuthorName = profileEmail ?? 'You'
+  const ics234LocalAuthorColor = ics234AuthorColor(user?.id ?? null)
   useEffect(() => {
     if (ics204SyncError) {
       toast.error(ics204SyncError)
     }
   }, [ics204SyncError])
-  const ics204AuthorName = profileEmail ?? 'You'
-  const ics204LocalAuthorColor = resolveIcs204AuthorColor(user?.id ?? null)
+  useEffect(() => {
+    if (ics202SyncError) {
+      toast.error(ics202SyncError)
+    }
+  }, [ics202SyncError])
+  useEffect(() => {
+    if (ics203SyncError) {
+      toast.error(ics203SyncError)
+    }
+  }, [ics203SyncError])
+  useEffect(() => {
+    if (ics234SyncError) {
+      toast.error(ics234SyncError)
+    }
+  }, [ics234SyncError])
+  useEffect(() => {
+    if (isSupabaseEnabled) return
+    if (!isInIncidentWorkspace && !isInExerciseWorkspace) return
+    if (ics234Form) return
+    const localId = createLocalIcs234DocumentId()
+    const form = createEmptyIcs234Form(localId, ics234WorkspaceDefaults)
+    const initialVersion: Ics234Version = {
+      id: `local-v-${localId}`,
+      createdAt: Date.now(),
+      authorName: ics234AuthorName,
+      authorColor: ics234LocalAuthorColor,
+      snapshot: cloneIcs234FormState(form),
+      signatures: [],
+    }
+    setIcs234Form(form)
+    setIcs234Versions([initialVersion])
+  }, [
+    ics234AuthorName,
+    ics234Form,
+    ics234LocalAuthorColor,
+    ics234WorkspaceDefaults,
+    isInExerciseWorkspace,
+    isInIncidentWorkspace,
+    isSupabaseEnabled,
+  ])
+  useEffect(() => {
+    if (isSupabaseEnabled) return
+    if (!isInIncidentWorkspace && !isInExerciseWorkspace) return
+    if (ics203Form) return
+    const localId = createLocalIcs203DocumentId()
+    const form = createEmptyIcs203Form(localId, ics203WorkspaceDefaults)
+    const initialVersion: Ics203Version = {
+      id: `local-v-${localId}`,
+      createdAt: Date.now(),
+      authorName: ics203AuthorName,
+      authorColor: ics203LocalAuthorColor,
+      snapshot: cloneIcs203FormState(form),
+      signatures: [],
+    }
+    setIcs203Form(form)
+    setIcs203Versions([initialVersion])
+  }, [
+    ics203AuthorName,
+    ics203Form,
+    ics203LocalAuthorColor,
+    ics203WorkspaceDefaults,
+    isInExerciseWorkspace,
+    isInIncidentWorkspace,
+    isSupabaseEnabled,
+  ])
+  useEffect(() => {
+    if (isSupabaseEnabled) return
+    if (!isInIncidentWorkspace && !isInExerciseWorkspace) return
+    if (ics202Form) return
+    const localId = createLocalIcs202DocumentId()
+    const form = createEmptyIcs202Form(localId, ics202WorkspaceDefaults)
+    const initialVersion: Ics202Version = {
+      id: `local-v-${localId}`,
+      createdAt: Date.now(),
+      authorName: ics202AuthorName,
+      authorColor: ics202LocalAuthorColor,
+      snapshot: cloneIcs202FormState(form),
+      signatures: [],
+    }
+    setIcs202Form(form)
+    setIcs202Versions([initialVersion])
+  }, [
+    ics202AuthorName,
+    ics202Form,
+    ics202LocalAuthorColor,
+    ics202WorkspaceDefaults,
+    isInExerciseWorkspace,
+    isInIncidentWorkspace,
+    isSupabaseEnabled,
+  ])
   const addWorkspaceRosterMember = async (confirmPasswordOverwrite = false) => {
     if (activeWorkspaceRosterKey === null) return
     const email = rosterMemberEmailDraft.trim().toLowerCase()
@@ -15441,6 +15815,494 @@ function App() {
     if (!trimmedMessage) {
       return
     }
+    if (pratusAiIntent === 'ics204-section-generation' && pratusAiIcs204Context) {
+      const { formId, section } = pratusAiIcs204Context
+      const targetForm = ics204Forms.find((entry) => entry.id === formId)
+      if (!targetForm) {
+        setPratusAiIntent('default')
+        setPratusAiIcs204Context(null)
+        setPratusAiDraftMessage('')
+        return
+      }
+      startIcs204SectionEdit(formId, section, targetForm)
+      setIsPratusAiDrawerOpen(false)
+      setPratusAiIntent('default')
+      setPratusAiIcs204Context(null)
+      setPratusAiDraftMessage('')
+      setIsPratusAiLoading(true)
+      if (pratusAiLoadingTimerRef.current) {
+        window.clearTimeout(pratusAiLoadingTimerRef.current)
+        pratusAiLoadingTimerRef.current = null
+      }
+      pratusAiLoadingTimerRef.current = window.setTimeout(() => {
+        const unitLabel = targetForm.assignedUnit || 'assigned unit'
+        switch (section) {
+          case 'assignment-info':
+            patchIcs204SectionDraft(formId, section, {
+              sectionChief: targetForm.sectionChief || 'Operations Section Chief',
+              branchDirector: targetForm.branchDirector || 'Branch Director',
+              divisionGroupSupervisor:
+                targetForm.divisionGroupSupervisor || 'Division/Group Supervisor',
+              branch: targetForm.branch || 'Operations Branch',
+              division: targetForm.division || 'Division A',
+              group: targetForm.group || 'Search & Rescue Group',
+              stagingArea: targetForm.stagingArea || 'North Staging',
+            })
+            break
+          case 'resources-assigned':
+            patchIcs204SectionDraft(formId, section, [
+              createIcs204ResourceAssignedRow(
+                1,
+                buildDemoIcs204ResourceSnapshot({
+                  id: 801,
+                  name: 'Urban Search Team Alpha',
+                  teamLead: 'Capt. J. Nguyen',
+                  quantity: 12,
+                  pointOfContact: '555-0142 / Tac Channel 3',
+                  currentLocation: 'North Staging',
+                }),
+                'Report to North Staging at 13:00. Briefing complete.',
+                true
+              ),
+              createIcs204ResourceAssignedRow(
+                2,
+                buildDemoIcs204ResourceSnapshot({
+                  id: 802,
+                  name: 'Engine Co. 7',
+                  teamLead: 'Lt. M. Ortega',
+                  quantity: 4,
+                  pointOfContact: '555-0118 / Command Net 1',
+                  currentLocation: 'River Bend Corridor',
+                }),
+                'River Bend Corridor — standby for branch re-entry approval.',
+                false
+              ),
+            ])
+            break
+          case 'work-assignments':
+            patchIcs204SectionDraft(formId, section, [
+              {
+                id: 1,
+                assignment: `Conduct life-safety sweeps and accountability checks for ${unitLabel}.`,
+                priority: 'High',
+                resourceRequirements: [
+                  { id: 1, resource: 'USAR Team', required: '2', have: '2', need: '0' },
+                ],
+                overheadPositions: 'Task Force Leader, Safety Officer',
+                specialEquipmentSupplies: 'Confined-space kit, lighting trailer',
+                reportingLocation: targetForm.stagingArea || 'North Staging',
+                requestedArrivalTime: '13:00',
+              },
+            ])
+            break
+          case 'special-instructions':
+            patchIcs204SectionDraft(
+              formId,
+              section,
+              `Maintain responder accountability every 60 minutes for ${unitLabel}. Coordinate branch-level re-entry approvals before structure access. Escalate uncovered resource needs to the Operations Section Chief immediately.`
+            )
+            break
+          case 'communications':
+            patchIcs204SectionDraft(formId, section, {
+              communications:
+                'Primary: Tac Channel 3 (155.160). Alternate: Command Net 1. Report status changes to Branch Director every 30 minutes.',
+              emergencyCommunications:
+                'Medical: 555-0199 / MED-ALPHA. Evacuation: 555-0188 / EVAC-1. Other: Command Net 1.',
+            })
+            break
+          default:
+            break
+        }
+        setIsPratusAiLoading(false)
+        pratusAiLoadingTimerRef.current = null
+        toast.success(
+          `PRATUS AI drafted ${ICS204_SECTION_LABELS[section]}. Review and click Save to commit.`
+        )
+      }, 1400)
+      return
+    }
+    if (pratusAiIntent === 'ics202-section-generation' && pratusAiIcs202Section) {
+      const section = pratusAiIcs202Section
+      if (!ics202Form) {
+        setPratusAiIntent('default')
+        setPratusAiIcs202Section(null)
+        setPratusAiDraftMessage('')
+        return
+      }
+      startIcs202SectionEdit(section)
+      setIsPratusAiDrawerOpen(false)
+      setPratusAiIntent('default')
+      setPratusAiIcs202Section(null)
+      setPratusAiDraftMessage('')
+      setIsPratusAiLoading(true)
+      if (pratusAiLoadingTimerRef.current) {
+        window.clearTimeout(pratusAiLoadingTimerRef.current)
+        pratusAiLoadingTimerRef.current = null
+      }
+      const incidentLabel =
+        ics202Form.incidentName ||
+        activeIncidentWorkspace?.name ||
+        activeExerciseWorkspace?.name ||
+        'this incident'
+      pratusAiLoadingTimerRef.current = window.setTimeout(() => {
+        switch (section) {
+          case 'incident-info':
+            patchIcs202SectionDraft(section, {
+              incidentName: incidentLabel,
+              incidentLocation: ics202Form.incidentLocation || 'Primary incident area',
+              operationalPeriodFrom:
+                ics202Form.operationalPeriodFrom ||
+                new Date().toISOString().slice(0, 16),
+              operationalPeriodTo:
+                ics202Form.operationalPeriodTo ||
+                new Date(Date.now() + 12 * 60 * 60 * 1000).toISOString().slice(0, 16),
+            })
+            break
+          case 'objectives':
+            patchIcs202SectionDraft(section, [
+              {
+                id: 1,
+                kind: 'O',
+                label: 'A',
+                objective: `Protect life safety and stabilize conditions for ${incidentLabel}.`,
+              },
+              {
+                id: 2,
+                kind: 'O',
+                label: 'B',
+                objective: 'Establish unified command objectives and maintain situational awareness.',
+              },
+              {
+                id: 3,
+                kind: 'M',
+                label: 'C',
+                objective: 'Provide accurate incident information to command and cooperating agencies.',
+              },
+            ])
+            break
+          case 'command-emphasis':
+            patchIcs202SectionDraft(
+              section,
+              `Safety is the top priority for ${incidentLabel}. Maintain accountability, use assigned channels, and escalate resource or life-safety issues immediately to the Planning Section Chief and Incident Commander.`
+            )
+            break
+          case 'site-safety-plan':
+            patchIcs202SectionDraft(section, {
+              siteSafetyPlanRequired: true,
+              siteSafetyPlanLocation: 'Command Post — Safety Officer desk / ICS-208 packet',
+            })
+            break
+          case 'prepared-by':
+            patchIcs202SectionDraft(section, {
+              preparedByName: ics202Form.preparedByName || 'Planning Section Chief',
+              preparedDateTime:
+                ics202Form.preparedDateTime || new Date().toISOString().slice(0, 16),
+            })
+            break
+          default:
+            break
+        }
+        setIsPratusAiLoading(false)
+        pratusAiLoadingTimerRef.current = null
+        toast.success(
+          `PRATUS AI drafted ICS-202 ${section.replace(/-/g, ' ')}. Review and click Save to commit.`
+        )
+      }, 1400)
+      return
+    }
+    if (pratusAiIntent === 'ics203-section-generation' && pratusAiIcs203Section) {
+      const section = pratusAiIcs203Section
+      if (!ics203Form) {
+        setPratusAiIntent('default')
+        setPratusAiIcs203Section(null)
+        setPratusAiDraftMessage('')
+        return
+      }
+      startIcs203SectionEdit(section)
+      setIsPratusAiDrawerOpen(false)
+      setPratusAiIntent('default')
+      setPratusAiIcs203Section(null)
+      setPratusAiDraftMessage('')
+      setIsPratusAiLoading(true)
+      if (pratusAiLoadingTimerRef.current) {
+        window.clearTimeout(pratusAiLoadingTimerRef.current)
+        pratusAiLoadingTimerRef.current = null
+      }
+      const incidentLabel =
+        ics203Form.incidentName ||
+        activeIncidentWorkspace?.name ||
+        activeExerciseWorkspace?.name ||
+        'this incident'
+      pratusAiLoadingTimerRef.current = window.setTimeout(() => {
+        switch (section) {
+          case 'incident-info':
+            patchIcs203SectionDraft(section, {
+              incidentName: incidentLabel,
+              operationalPeriodFrom:
+                ics203Form.operationalPeriodFrom ||
+                new Date().toISOString().slice(0, 16),
+              operationalPeriodTo:
+                ics203Form.operationalPeriodTo ||
+                new Date(Date.now() + 12 * 60 * 60 * 1000).toISOString().slice(0, 16),
+            })
+            break
+          case 'command-staff':
+            patchIcs203SectionDraft(section, {
+              icUcs: ics203Form.icUcs || 'Incident Commander',
+              commandDeputy: ics203Form.commandDeputy || 'Deputy IC',
+              safetyOfficer: ics203Form.safetyOfficer || 'Safety Officer',
+              publicInformationOfficer:
+                ics203Form.publicInformationOfficer || 'Public Information Officer',
+              liaisonOfficer: ics203Form.liaisonOfficer || 'Liaison Officer',
+            })
+            break
+          case 'agency-representatives':
+            patchIcs203SectionDraft(section, [
+              {
+                id: 1,
+                agencyOrganization: 'Local Emergency Management',
+                representativeName: 'J. Smith',
+              },
+              {
+                id: 2,
+                agencyOrganization: 'Cooperating Agency',
+                representativeName: 'A. Lee',
+              },
+            ])
+            break
+          case 'planning-section':
+            patchIcs203SectionDraft(section, {
+              planningChief: ics203Form.planningChief || 'Planning Section Chief',
+              planningDeputy: ics203Form.planningDeputy || 'Deputy Planning Chief',
+              resourcesUnit: ics203Form.resourcesUnit || 'Resources Unit Leader',
+              situationUnit: ics203Form.situationUnit || 'Situation Unit Leader',
+              documentationUnit: ics203Form.documentationUnit || 'Documentation Unit Leader',
+              demobilizationUnit: ics203Form.demobilizationUnit || 'Demobilization Unit Leader',
+              technicalSpecialists: ics203Form.technicalSpecialists || 'Technical Specialist (GIS)',
+              planningDivisionGroups: [
+                { id: 1, identifier: 'Div A', supervisorName: 'Division Supervisor A' },
+              ],
+            })
+            break
+          case 'logistics-section':
+            patchIcs203SectionDraft(section, {
+              logisticsChief: ics203Form.logisticsChief || 'Logistics Section Chief',
+              logisticsDeputy: ics203Form.logisticsDeputy || 'Deputy Logistics Chief',
+              supportBranchDirector: ics203Form.supportBranchDirector || 'Support Branch Director',
+              supplyUnit: ics203Form.supplyUnit || 'Supply Unit Leader',
+              facilitiesUnit: ics203Form.facilitiesUnit || 'Facilities Unit Leader',
+              groundSupportUnit: ics203Form.groundSupportUnit || 'Ground Support Unit Leader',
+              serviceBranchDirector: ics203Form.serviceBranchDirector || 'Service Branch Director',
+              communicationsUnit: ics203Form.communicationsUnit || 'Communications Unit Leader',
+              medicalUnit: ics203Form.medicalUnit || 'Medical Unit Leader',
+              foodUnit: ics203Form.foodUnit || 'Food Unit Leader',
+              airOperationsBranch: ics203Form.airOperationsBranch || 'Air Operations Branch',
+              airOpsBranchDirector: ics203Form.airOpsBranchDirector || 'Air Ops Branch Director',
+              logisticsDivisionGroups: [],
+            })
+            break
+          case 'operations-section':
+            patchIcs203SectionDraft(section, {
+              operationsChief: ics203Form.operationsChief || 'Operations Section Chief',
+              operationsDeputy: ics203Form.operationsDeputy || 'Deputy Operations Chief',
+              stagingArea: ics203Form.stagingArea || 'North Staging',
+              operationsAirOperationsBranch:
+                ics203Form.operationsAirOperationsBranch || 'Air Operations Branch',
+              operationsAirOpsBranchDirector:
+                ics203Form.operationsAirOpsBranchDirector || 'Air Ops Branch Director',
+              operationsBranches: [
+                {
+                  id: 1,
+                  branchDirector: 'Branch Director',
+                  deputy: 'Branch Deputy',
+                  divisionGroups: [
+                    { id: 1, identifier: 'Div 1', supervisorName: 'Division Supervisor' },
+                  ],
+                },
+              ],
+            })
+            break
+          case 'finance-section':
+            patchIcs203SectionDraft(section, {
+              financeChief: ics203Form.financeChief || 'Finance/Admin Section Chief',
+              financeDeputy: ics203Form.financeDeputy || 'Deputy Finance Chief',
+              timeUnit: ics203Form.timeUnit || 'Time Unit Leader',
+              procurementUnit: ics203Form.procurementUnit || 'Procurement Unit Leader',
+              compensationClaimsUnit:
+                ics203Form.compensationClaimsUnit || 'Compensation/Claims Unit Leader',
+              costUnit: ics203Form.costUnit || 'Cost Unit Leader',
+            })
+            break
+          case 'prepared-by':
+            patchIcs203SectionDraft(section, {
+              preparedByName: ics203Form.preparedByName || 'Resources Unit Leader',
+              preparedByPositionTitle:
+                ics203Form.preparedByPositionTitle || 'Planning Section / Resources Unit',
+              preparedBySignature: ics203Form.preparedBySignature || 'Resources Unit Leader',
+              preparedDateTime:
+                ics203Form.preparedDateTime || new Date().toISOString().slice(0, 16),
+            })
+            break
+          default:
+            break
+        }
+        setIsPratusAiLoading(false)
+        pratusAiLoadingTimerRef.current = null
+        toast.success(
+          `PRATUS AI drafted ICS-203 ${section.replace(/-/g, ' ')}. Review and click Save to commit.`
+        )
+      }, 1400)
+      return
+    }
+    if (pratusAiIntent === 'ics234-section-generation' && pratusAiIcs234Section) {
+      const section = pratusAiIcs234Section
+      if (!ics234Form) {
+        setPratusAiIntent('default')
+        setPratusAiIcs234Section(null)
+        setPratusAiDraftMessage('')
+        return
+      }
+      startIcs234SectionEdit(section)
+      setIsPratusAiDrawerOpen(false)
+      setPratusAiIntent('default')
+      setPratusAiIcs234Section(null)
+      setPratusAiDraftMessage('')
+      setIsPratusAiLoading(true)
+      if (pratusAiLoadingTimerRef.current) {
+        window.clearTimeout(pratusAiLoadingTimerRef.current)
+        pratusAiLoadingTimerRef.current = null
+      }
+      const incidentLabel =
+        ics234Form.incidentName ||
+        activeIncidentWorkspace?.name ||
+        activeExerciseWorkspace?.name ||
+        'this incident'
+      pratusAiLoadingTimerRef.current = window.setTimeout(() => {
+        switch (section) {
+          case 'incident-info':
+            patchIcs234SectionDraft(section, {
+              incidentName: incidentLabel,
+              incidentLocation: ics234Form.incidentLocation || 'Primary incident area',
+              operationalPeriodFrom:
+                ics234Form.operationalPeriodFrom ||
+                new Date().toISOString().slice(0, 16),
+              operationalPeriodTo:
+                ics234Form.operationalPeriodTo ||
+                new Date(Date.now() + 12 * 60 * 60 * 1000).toISOString().slice(0, 16),
+            })
+            break
+          case 'work-analysis-matrix':
+            patchIcs234SectionDraft(section, [
+              {
+                id: 1,
+                name: `Protect life safety and stabilize conditions for ${incidentLabel}.`,
+                strategies: [
+                  {
+                    id: 1,
+                    name: 'Deploy response teams to high-priority areas and establish perimeter control.',
+                    tactics: [
+                      {
+                        id: 1,
+                        name: 'Conduct area sweeps and accountability checks',
+                      },
+                    ],
+                  },
+                ],
+              },
+              {
+                id: 2,
+                name: 'Maintain unified command and operational coordination.',
+                strategies: [
+                  {
+                    id: 1,
+                    name: 'Establish unified command structure and briefing rhythm.',
+                    tactics: [
+                      {
+                        id: 1,
+                        name: 'Conduct operational period briefings',
+                      },
+                    ],
+                  },
+                ],
+              },
+            ])
+            break
+          case 'prepared-by':
+            patchIcs234SectionDraft(section, {
+              preparedByName: ics234Form.preparedByName || 'Operations Section Chief',
+              preparedByPositionTitle:
+                ics234Form.preparedByPositionTitle || 'Operations Section Chief',
+              preparedBySignature: ics234Form.preparedBySignature || 'Operations Section Chief',
+              preparedDateTime:
+                ics234Form.preparedDateTime || new Date().toISOString().slice(0, 16),
+            })
+            break
+          default:
+            break
+        }
+        setIsPratusAiLoading(false)
+        pratusAiLoadingTimerRef.current = null
+        toast.success(
+          `PRATUS AI drafted ICS-234 ${section.replace(/-/g, ' ')}. Review and click Save to commit.`
+        )
+      }, 1400)
+      return
+    }
+    if (pratusAiIntent === 'ics234-matrix-item-generation' && pratusAiIcs234MatrixItem) {
+      const itemRef = pratusAiIcs234MatrixItem
+      if (!ics234Form) {
+        setPratusAiIntent('default')
+        setPratusAiIcs234MatrixItem(null)
+        setPratusAiDraftMessage('')
+        return
+      }
+      const draft = extractIcs234MatrixItemDraft(ics234Form.objectives, itemRef)
+      if (draft) {
+        setIcs234EditingMatrixItem({ ref: itemRef, draft })
+      }
+      setIsPratusAiDrawerOpen(false)
+      setPratusAiIntent('default')
+      setPratusAiIcs234MatrixItem(null)
+      setPratusAiDraftMessage('')
+      setIsPratusAiLoading(true)
+      if (pratusAiLoadingTimerRef.current) {
+        window.clearTimeout(pratusAiLoadingTimerRef.current)
+        pratusAiLoadingTimerRef.current = null
+      }
+      const incidentLabel =
+        ics234Form.incidentName ||
+        activeIncidentWorkspace?.name ||
+        activeExerciseWorkspace?.name ||
+        'this incident'
+      pratusAiLoadingTimerRef.current = window.setTimeout(() => {
+        switch (itemRef.kind) {
+          case 'objective':
+            patchIcs234MatrixItemDraft({
+              kind: 'objective',
+              name: `Protect life safety and stabilize conditions for ${incidentLabel}.`,
+            })
+            break
+          case 'strategy':
+            patchIcs234MatrixItemDraft({
+              kind: 'strategy',
+              name: 'Deploy response teams to high-priority areas and establish perimeter control.',
+            })
+            break
+          case 'tactic':
+            patchIcs234MatrixItemDraft({
+              kind: 'tactic',
+              name: 'Conduct area sweeps and accountability checks',
+            })
+            break
+        }
+        setIsPratusAiLoading(false)
+        pratusAiLoadingTimerRef.current = null
+        toast.success(
+          `PRATUS AI drafted ICS-234 ${itemRef.kind}. Review and click Save to commit.`
+        )
+      }, 1400)
+      return
+    }
     if (pratusAiIntent === 'ics201-section-generation' && pratusAiIcs201Section) {
       const section = pratusAiIcs201Section
       const sectionLabel = ICS201_SECTION_LABELS[section]
@@ -16184,34 +17046,51 @@ function App() {
     )
   }
   const addIcs204ResourceAssigned = (formId: string, resource: ResourceItem) => {
-    setIcs204Forms((previous) =>
-      previous.map((form) =>
-        form.id === formId
-          ? {
-              ...form,
-              resourcesAssigned: [
-                ...form.resourcesAssigned,
-                {
-                  id:
-                    form.resourcesAssigned.length === 0
-                      ? 1
-                      : Math.max(...form.resourcesAssigned.map((row) => row.id)) + 1,
-                  resourceIdentifier: resource.name,
-                  leader: resource.teamLead,
-                  contact:
-                    resource.pointOfContact && resource.pointOfContact !== '---'
-                      ? resource.pointOfContact
-                      : resource.owner,
-                  location:
-                    resource.currentLocation && resource.currentLocation !== '---'
-                      ? resource.currentLocation
-                      : resource.location,
-                },
-              ],
-            }
-          : form
-      )
+    const newRow = createIcs204ResourceAssignedRow(
+      1,
+      resource as ResourceListItemData,
+      resource.notes && resource.notes !== '---'
+        ? resource.notes
+        : resource.currentLocation && resource.currentLocation !== '---'
+          ? resource.currentLocation
+          : resource.location,
+      false
     )
+    if (ics204EditingSectionsByFormId[formId]?.['resources-assigned']) {
+      const currentDraft =
+        ics204SectionDraftsByFormId[formId]?.['resources-assigned'] ??
+        ics204Forms.find((entry) => entry.id === formId)?.resourcesAssigned ??
+        []
+      newRow.id =
+        currentDraft.length === 0 ? 1 : Math.max(...currentDraft.map((row) => row.id)) + 1
+      setIcs204SectionDraftsByFormId((previous) => ({
+        ...previous,
+        [formId]: {
+          ...previous[formId],
+          'resources-assigned': [...currentDraft, newRow],
+        },
+      }))
+    } else {
+      setIcs204Forms((previous) =>
+        previous.map((form) =>
+          form.id === formId
+            ? {
+                ...form,
+                resourcesAssigned: [
+                  ...form.resourcesAssigned,
+                  {
+                    ...newRow,
+                    id:
+                      form.resourcesAssigned.length === 0
+                        ? 1
+                        : Math.max(...form.resourcesAssigned.map((row) => row.id)) + 1,
+                  },
+                ],
+              }
+            : form
+        )
+      )
+    }
     setIcs204ResourcePickerFormId(null)
   }
   const deleteIcs204ResourceAssignedRow = (formId: string, rowId: number) => {
@@ -16365,6 +17244,150 @@ function App() {
       )
     )
   }
+  const openIcs204SectionGeneration = (formId: string, section: Ics204SectionId) => {
+    setPratusAiIntent('ics204-section-generation')
+    setPratusAiIcs204Context({ formId, section })
+    setPratusAiDraftMessage(ICS204_SECTION_PROMPTS[section])
+    setIsPratusAiDrawerOpen(true)
+  }
+  const startIcs204SectionEdit = (
+    formId: string,
+    section: Ics204SectionId,
+    form: Ics204FormState
+  ) => {
+    if (!canEditIcs201Form) return
+    setIcs204SectionDraftsByFormId((previous) => ({
+      ...previous,
+      [formId]: {
+        ...previous[formId],
+        [section]: extractIcs204SectionDraft(form, section),
+      },
+    }))
+    setIcs204EditingSectionsByFormId((previous) => ({
+      ...previous,
+      [formId]: {
+        ...previous[formId],
+        [section]: true,
+      },
+    }))
+  }
+  const cancelIcs204SectionEdit = (formId: string, section: Ics204SectionId) => {
+    setIcs204EditingSectionsByFormId((previous) => {
+      const next = { ...previous }
+      if (next[formId]) {
+        const sections = { ...next[formId] }
+        delete sections[section]
+        next[formId] = sections
+      }
+      return next
+    })
+    setIcs204SectionDraftsByFormId((previous) => {
+      const next = { ...previous }
+      if (next[formId]) {
+        const drafts = { ...next[formId] }
+        delete drafts[section]
+        next[formId] = drafts
+      }
+      return next
+    })
+  }
+  const patchIcs204SectionDraft = <S extends Ics204SectionId>(
+    formId: string,
+    section: S,
+    value: Ics204FormSectionDrafts[S]
+  ) => {
+    setIcs204SectionDraftsByFormId((previous) => ({
+      ...previous,
+      [formId]: {
+        ...previous[formId],
+        [section]: value,
+      },
+    }))
+  }
+  const saveIcs204Section = (formId: string, section: Ics204SectionId) => {
+    if (!canEditIcs201Form) {
+      toast.error('Your ICS position does not include permission to edit ICS-204 forms.')
+      return
+    }
+    const draft = ics204SectionDraftsByFormId[formId]?.[section]
+    if (draft === undefined) return
+    const currentForm = ics204Forms.find((entry) => entry.id === formId)
+    if (!currentForm) return
+    const nextForm = applyIcs204SectionDraft(currentForm, section, draft)
+    setIcs204Forms((previous) =>
+      previous.map((entry) => (entry.id === formId ? cloneIcs204FormState(nextForm) : entry))
+    )
+    const latestVersion = ics204VersionsById[formId]?.[ics204VersionsById[formId].length - 1]
+    if (latestVersion && latestVersion.signatures.length === 0) {
+      handleIcs204SaveDraft(formId, nextForm, latestVersion)
+    }
+    cancelIcs204SectionEdit(formId, section)
+  }
+  const handleIcs204AssignedUnitChange = (
+    formId: string,
+    value: string,
+    latestVersion: Ics204Version | null
+  ) => {
+    if (!canEditIcs201Form) return
+    let nextForm: Ics204FormState | null = null
+    setIcs204Forms((previous) =>
+      previous.map((entry) => {
+        if (entry.id !== formId) return entry
+        nextForm = { ...entry, assignedUnit: value }
+        return nextForm
+      })
+    )
+    if (!nextForm) return
+    if (latestVersion && latestVersion.signatures.length === 0) {
+      handleIcs204SaveDraft(formId, nextForm, latestVersion)
+    }
+  }
+  const getIcs204ExportContext = () => ({
+    incidentName: activeIncidentWorkspace?.name ?? activeExerciseWorkspace?.name ?? '',
+  })
+  const openIcs204Preview = (formId: string) => {
+    const exportForm = getIcs204FormForExport(
+      formId,
+      ics204Forms,
+      ics204SectionDraftsByFormId
+    )
+    if (!exportForm) return
+    const context = getIcs204ExportContext()
+    setIcs204PreviewFormId(formId)
+    setIcs204PreviewBlocks(buildIcs204DocxBlocks(exportForm, context) as DocxBlock[])
+    setIcs204PreviewTitle(`ICS-204 Preview — ${resolveIcs204ListTitle(exportForm)}`)
+    setIsIcs204PreviewOpen(true)
+  }
+  const exportIcs204Word = (formId: string, blocks?: DocxBlock[]) => {
+    const exportForm = getIcs204FormForExport(
+      formId,
+      ics204Forms,
+      ics204SectionDraftsByFormId
+    )
+    if (!exportForm) return
+    const context = getIcs204ExportContext()
+    const stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-')
+    downloadDocx(
+      `ICS-204_${ics204ExportFilenameBase(exportForm)}_${stamp}.docx`,
+      (blocks ?? buildIcs204DocxBlocks(exportForm, context)) as DocxBlock[],
+      buildIcs204ExportOptions(exportForm, context) as DocxOptions
+    )
+  }
+  const exportIcs204Pdf = (formId: string, blocks?: DocxBlock[]) => {
+    const exportForm = getIcs204FormForExport(
+      formId,
+      ics204Forms,
+      ics204SectionDraftsByFormId
+    )
+    if (!exportForm) return
+    const context = getIcs204ExportContext()
+    const stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-')
+    downloadPdf(
+      `ICS-204_${ics204ExportFilenameBase(exportForm)}_${stamp}.pdf`,
+      (blocks ?? buildIcs204DocxBlocks(exportForm, context)) as DocxBlock[],
+      buildIcs204ExportOptions(exportForm, context) as DocxOptions
+    )
+  }
   const mergePersistedIcs204Version = (
     formId: string,
     previous: Record<string, Ics204Version[]>,
@@ -16453,6 +17476,604 @@ function App() {
       }
     )
   }
+  const mergePersistedIcs202Version = (
+    previous: Ics202Version[],
+    latestVersion: Ics202Version | null,
+    persisted: Ics202Version
+  ): Ics202Version[] => {
+    if (previous.length === 0) {
+      return [persisted]
+    }
+    const next = [...previous]
+    const lastIndex = next.length - 1
+    if (latestVersion && next[lastIndex]?.id === latestVersion.id) {
+      next[lastIndex] = persisted
+    } else if (next.some((entry) => entry.id === persisted.id)) {
+      const index = next.findIndex((entry) => entry.id === persisted.id)
+      next[index] = persisted
+    } else {
+      next.push(persisted)
+    }
+    return next.slice(-100)
+  }
+  const openIcs202SectionGeneration = (section: Ics202SectionId) => {
+    setPratusAiIntent('ics202-section-generation')
+    setPratusAiIcs202Section(section)
+    setPratusAiDraftMessage(ICS202_SECTION_PROMPTS[section])
+    setIsPratusAiDrawerOpen(true)
+  }
+  const startIcs202SectionEdit = (section: Ics202SectionId) => {
+    if (!canEditIcs201Form || !ics202Form) return
+    setIcs202SectionDrafts((previous) => ({
+      ...previous,
+      [section]: extractIcs202SectionDraft(ics202Form, section),
+    }))
+    setIcs202EditingSections((previous) => ({
+      ...previous,
+      [section]: true,
+    }))
+  }
+  const cancelIcs202SectionEdit = (section: Ics202SectionId) => {
+    setIcs202EditingSections((previous) => {
+      const next = { ...previous }
+      delete next[section]
+      return next
+    })
+    setIcs202SectionDrafts((previous) => {
+      const next = { ...previous }
+      delete next[section]
+      return next
+    })
+  }
+  const patchIcs202SectionDraft = <S extends Ics202SectionId>(
+    section: S,
+    value: Ics202FormSectionDrafts[S]
+  ) => {
+    setIcs202SectionDrafts((previous) => ({
+      ...previous,
+      [section]: value,
+    }))
+  }
+  const saveIcs202Section = (section: Ics202SectionId) => {
+    if (!canEditIcs201Form) {
+      toast.error('Your ICS position does not include permission to edit ICS-202 forms.')
+      return
+    }
+    const draft = ics202SectionDrafts[section]
+    if (draft === undefined || !ics202Form) return
+    const nextForm = applyIcs202SectionDraft(ics202Form, section, draft)
+    setIcs202Form(cloneIcs202FormState(nextForm))
+    const latestVersion = ics202Versions[ics202Versions.length - 1]
+    if (latestVersion && latestVersion.signatures.length === 0) {
+      handleIcs202SaveDraft(nextForm, latestVersion)
+    }
+    cancelIcs202SectionEdit(section)
+  }
+  const handleIcs202SaveDraft = (form: Ics202FormState, latestVersion: Ics202Version) => {
+    const optimisticVersion: Ics202Version = {
+      ...latestVersion,
+      createdAt: Date.now(),
+      authorName: ics202AuthorName,
+      authorColor: ics202LocalAuthorColor,
+      snapshot: cloneIcs202FormState(form),
+    }
+    setIcs202Versions((previous) =>
+      mergePersistedIcs202Version(previous, latestVersion, optimisticVersion)
+    )
+    void saveIcs202DraftToServer(form.id, form, latestVersion).then((persisted) => {
+      if (!persisted) return
+      setIcs202Versions((previous) =>
+        mergePersistedIcs202Version(previous, latestVersion, persisted)
+      )
+    })
+  }
+  const handleIcs202AppendVersion = (
+    form: Ics202FormState,
+    signatures: Ics201VersionSignature[] = [],
+    authorNameOverride?: string
+  ) => {
+    const authorName = authorNameOverride ?? ics202AuthorName
+    const optimisticVersion: Ics202Version = {
+      id: `local-v-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      createdAt: Date.now(),
+      authorName,
+      authorColor: ics202LocalAuthorColor,
+      snapshot: cloneIcs202FormState(form),
+      signatures,
+    }
+    setIcs202Versions((previous) => [...previous, optimisticVersion].slice(-100))
+    void appendIcs202VersionToServer(form.id, form, signatures).then((persisted) => {
+      if (!persisted) return
+      setIcs202Versions((previous) =>
+        previous
+          .map((entry) => (entry.id === optimisticVersion.id ? persisted : entry))
+          .slice(-100)
+      )
+    })
+  }
+  const handleIcs202SignReview = (
+    form: Ics202FormState,
+    latestVersion: Ics202Version,
+    signature: Ics201VersionSignature
+  ) => {
+    const nextVersion: Ics202Version = {
+      ...latestVersion,
+      signatures: [...latestVersion.signatures, signature],
+    }
+    setIcs202Versions((previous) =>
+      mergePersistedIcs202Version(previous, latestVersion, nextVersion)
+    )
+    void saveIcs202SignedReviewToServer(
+      form.id,
+      form,
+      latestVersion.id,
+      nextVersion.signatures
+    ).then((persisted) => {
+      if (!persisted) return
+      setIcs202Versions((previous) =>
+        mergePersistedIcs202Version(previous, latestVersion, persisted)
+      )
+    })
+  }
+  const mergePersistedIcs203Version = (
+    previous: Ics203Version[],
+    latestVersion: Ics203Version | null,
+    persisted: Ics203Version
+  ): Ics203Version[] => {
+    if (previous.length === 0) {
+      return [persisted]
+    }
+    const next = [...previous]
+    const lastIndex = next.length - 1
+    if (latestVersion && next[lastIndex]?.id === latestVersion.id) {
+      next[lastIndex] = persisted
+    } else if (next.some((entry) => entry.id === persisted.id)) {
+      const index = next.findIndex((entry) => entry.id === persisted.id)
+      next[index] = persisted
+    } else {
+      next.push(persisted)
+    }
+    return next.slice(-100)
+  }
+  const openIcs203SectionGeneration = (section: Ics203SectionId) => {
+    setPratusAiIntent('ics203-section-generation')
+    setPratusAiIcs203Section(section)
+    setPratusAiDraftMessage(ICS203_SECTION_PROMPTS[section])
+    setIsPratusAiDrawerOpen(true)
+  }
+  const startIcs203SectionEdit = (section: Ics203SectionId) => {
+    if (!canEditIcs201Form || !ics203Form) return
+    setIcs203SectionDrafts((previous) => ({
+      ...previous,
+      [section]: extractIcs203SectionDraft(ics203Form, section),
+    }))
+    setIcs203EditingSections((previous) => ({
+      ...previous,
+      [section]: true,
+    }))
+  }
+  const cancelIcs203SectionEdit = (section: Ics203SectionId) => {
+    setIcs203EditingSections((previous) => {
+      const next = { ...previous }
+      delete next[section]
+      return next
+    })
+    setIcs203SectionDrafts((previous) => {
+      const next = { ...previous }
+      delete next[section]
+      return next
+    })
+  }
+  const patchIcs203SectionDraft = <S extends Ics203SectionId>(
+    section: S,
+    value: Ics203FormSectionDrafts[S]
+  ) => {
+    setIcs203SectionDrafts((previous) => ({
+      ...previous,
+      [section]: value,
+    }))
+  }
+  const saveIcs203Section = (section: Ics203SectionId) => {
+    if (!canEditIcs201Form) {
+      toast.error('Your ICS position does not include permission to edit ICS-203 forms.')
+      return
+    }
+    const draft = ics203SectionDrafts[section]
+    if (draft === undefined || !ics203Form) return
+    const nextForm = applyIcs203SectionDraft(ics203Form, section, draft)
+    setIcs203Form(cloneIcs203FormState(nextForm))
+    const latestVersion = ics203Versions[ics203Versions.length - 1]
+    if (latestVersion && latestVersion.signatures.length === 0) {
+      handleIcs203SaveDraft(nextForm, latestVersion)
+    }
+    cancelIcs203SectionEdit(section)
+  }
+  const handleIcs203SaveDraft = (form: Ics203FormState, latestVersion: Ics203Version) => {
+    const optimisticVersion: Ics203Version = {
+      ...latestVersion,
+      createdAt: Date.now(),
+      authorName: ics203AuthorName,
+      authorColor: ics203LocalAuthorColor,
+      snapshot: cloneIcs203FormState(form),
+    }
+    setIcs203Versions((previous) =>
+      mergePersistedIcs203Version(previous, latestVersion, optimisticVersion)
+    )
+    void saveIcs203DraftToServer(form.id, form, latestVersion).then((persisted) => {
+      if (!persisted) return
+      setIcs203Versions((previous) =>
+        mergePersistedIcs203Version(previous, latestVersion, persisted)
+      )
+    })
+  }
+  const handleIcs203AppendVersion = (
+    form: Ics203FormState,
+    signatures: Ics201VersionSignature[] = [],
+    authorNameOverride?: string
+  ) => {
+    const authorName = authorNameOverride ?? ics203AuthorName
+    const optimisticVersion: Ics203Version = {
+      id: `local-v-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      createdAt: Date.now(),
+      authorName,
+      authorColor: ics203LocalAuthorColor,
+      snapshot: cloneIcs203FormState(form),
+      signatures,
+    }
+    setIcs203Versions((previous) => [...previous, optimisticVersion].slice(-100))
+    void appendIcs203VersionToServer(form.id, form, signatures).then((persisted) => {
+      if (!persisted) return
+      setIcs203Versions((previous) =>
+        previous
+          .map((entry) => (entry.id === optimisticVersion.id ? persisted : entry))
+          .slice(-100)
+      )
+    })
+  }
+  const handleIcs203SignReview = (
+    form: Ics203FormState,
+    latestVersion: Ics203Version,
+    signature: Ics201VersionSignature
+  ) => {
+    const nextVersion: Ics203Version = {
+      ...latestVersion,
+      signatures: [...latestVersion.signatures, signature],
+    }
+    setIcs203Versions((previous) =>
+      mergePersistedIcs203Version(previous, latestVersion, nextVersion)
+    )
+    void saveIcs203SignedReviewToServer(
+      form.id,
+      form,
+      latestVersion.id,
+      nextVersion.signatures
+    ).then((persisted) => {
+      if (!persisted) return
+      setIcs203Versions((previous) =>
+        mergePersistedIcs203Version(previous, latestVersion, persisted)
+      )
+    })
+  }
+  const mergePersistedIcs234Version = (
+    previous: Ics234Version[],
+    latestVersion: Ics234Version | null,
+    persisted: Ics234Version
+  ): Ics234Version[] => {
+    if (previous.length === 0) return [persisted]
+    const next = [...previous]
+    const lastIndex = next.length - 1
+    if (latestVersion && next[lastIndex]?.id === latestVersion.id) {
+      next[lastIndex] = persisted
+    } else if (next.some((entry) => entry.id === persisted.id)) {
+      next[next.findIndex((entry) => entry.id === persisted.id)] = persisted
+    } else {
+      next.push(persisted)
+    }
+    return next.slice(-100)
+  }
+  const openIcs234SectionGeneration = (section: Ics234SectionId) => {
+    setPratusAiIntent('ics234-section-generation')
+    setPratusAiIcs234Section(section)
+    setPratusAiDraftMessage(ICS234_SECTION_PROMPTS[section])
+    setIsPratusAiDrawerOpen(true)
+  }
+  const startIcs234SectionEdit = (section: Ics234SectionId) => {
+    if (!canEditIcs201Form || !ics234Form) return
+    setIcs234SectionDrafts((previous) => ({
+      ...previous,
+      [section]: extractIcs234SectionDraft(ics234Form, section),
+    }))
+    setIcs234EditingSections((previous) => ({ ...previous, [section]: true }))
+  }
+  const cancelIcs234SectionEdit = (section: Ics234SectionId) => {
+    setIcs234EditingSections((previous) => {
+      const next = { ...previous }
+      delete next[section]
+      return next
+    })
+    setIcs234SectionDrafts((previous) => {
+      const next = { ...previous }
+      delete next[section]
+      return next
+    })
+  }
+  const patchIcs234SectionDraft = <S extends Ics234SectionId>(
+    section: S,
+    value: Ics234FormSectionDrafts[S]
+  ) => {
+    setIcs234SectionDrafts((previous) => ({ ...previous, [section]: value }))
+  }
+  const saveIcs234Section = (section: Ics234SectionId) => {
+    if (!canEditIcs201Form) {
+      toast.error('Your ICS position does not include permission to edit ICS-234 forms.')
+      return
+    }
+    const draft = ics234SectionDrafts[section]
+    if (draft === undefined || !ics234Form) return
+    const nextForm = applyIcs234SectionDraft(ics234Form, section, draft)
+    setIcs234Form(cloneIcs234FormState(nextForm))
+    const latestVersion = ics234Versions[ics234Versions.length - 1]
+    if (latestVersion && latestVersion.signatures.length === 0) {
+      handleIcs234SaveDraft(nextForm, latestVersion)
+    }
+    cancelIcs234SectionEdit(section)
+  }
+  const persistIcs234Objectives = (objectives: Ics234ObjectiveRow[]) => {
+    if (!ics234Form) return
+    const nextForm = cloneIcs234FormState({
+      ...ics234Form,
+      objectives: cloneIcs234ObjectiveRows(objectives),
+    })
+    setIcs234Form(nextForm)
+    const latestVersion = ics234Versions[ics234Versions.length - 1]
+    if (latestVersion && latestVersion.signatures.length === 0) {
+      handleIcs234SaveDraft(nextForm, latestVersion)
+    }
+  }
+  const startIcs234MatrixItemEdit = (ref: Ics234MatrixItemRef) => {
+    if (!canEditIcs201Form || !ics234Form) return
+    const draft = extractIcs234MatrixItemDraft(ics234Form.objectives, ref)
+    if (!draft) return
+    setIcs234EditingMatrixItem({ ref, draft })
+  }
+  const cancelIcs234MatrixItemEdit = () => {
+    setIcs234EditingMatrixItem(null)
+  }
+  const patchIcs234MatrixItemDraft = (draft: Ics234MatrixItemDraft) => {
+    setIcs234EditingMatrixItem((previous) =>
+      previous ? { ...previous, draft } : previous
+    )
+  }
+  const saveIcs234MatrixItem = () => {
+    if (!canEditIcs201Form) {
+      toast.error('Your ICS position does not include permission to edit ICS-234 forms.')
+      return
+    }
+    if (!ics234Form || !ics234EditingMatrixItem) return
+    const nextObjectives = applyIcs234MatrixItemDraft(
+      ics234Form.objectives,
+      ics234EditingMatrixItem.ref,
+      ics234EditingMatrixItem.draft
+    )
+    persistIcs234Objectives(nextObjectives)
+    setIcs234EditingMatrixItem(null)
+  }
+  const openIcs234MatrixItemGeneration = (ref: Ics234MatrixItemRef) => {
+    if (!ics234Form) return
+    if (
+      !ics234EditingMatrixItem ||
+      !ics234MatrixItemRefsMatch(ics234EditingMatrixItem.ref, ref)
+    ) {
+      startIcs234MatrixItemEdit(ref)
+    }
+    setPratusAiIntent('ics234-matrix-item-generation')
+    setPratusAiIcs234MatrixItem(ref)
+    setPratusAiDraftMessage(ICS234_MATRIX_ITEM_PROMPTS[ref.kind])
+    setIsPratusAiDrawerOpen(true)
+  }
+  const addIcs234MatrixObjective = () => {
+    if (!canEditIcs201Form || !ics234Form) return
+    const objectives = ics234Form.objectives
+    const nextId = nextRowId(objectives)
+    persistIcs234Objectives([
+      ...objectives,
+      {
+        id: nextId,
+        name: '',
+        strategies: [],
+      },
+    ])
+    setIcs234EditingMatrixItem({
+      ref: { kind: 'objective', objectiveId: nextId },
+      draft: { kind: 'objective', name: '' },
+    })
+  }
+  const addIcs234MatrixStrategy = (objectiveId: number) => {
+    if (!canEditIcs201Form || !ics234Form) return
+    const objective = ics234Form.objectives.find((entry) => entry.id === objectiveId)
+    if (!objective) return
+    const nextId = nextRowId(objective.strategies)
+    persistIcs234Objectives(
+      ics234Form.objectives.map((entry) =>
+        entry.id === objectiveId
+          ? {
+              ...entry,
+              strategies: [
+                ...entry.strategies,
+                { id: nextId, name: '', tactics: [] },
+              ],
+            }
+          : entry
+      )
+    )
+    setIcs234EditingMatrixItem({
+      ref: { kind: 'strategy', objectiveId, strategyId: nextId },
+      draft: { kind: 'strategy', name: '' },
+    })
+  }
+  const addIcs234MatrixTactic = (objectiveId: number, strategyId: number) => {
+    if (!canEditIcs201Form || !ics234Form) return
+    const objective = ics234Form.objectives.find((entry) => entry.id === objectiveId)
+    const strategy = objective?.strategies.find((entry) => entry.id === strategyId)
+    if (!objective || !strategy) return
+    const nextId = nextRowId(strategy.tactics)
+    persistIcs234Objectives(
+      ics234Form.objectives.map((entry) =>
+        entry.id === objectiveId
+          ? {
+              ...entry,
+              strategies: entry.strategies.map((strategyRow) =>
+                strategyRow.id === strategyId
+                  ? {
+                      ...strategyRow,
+                      tactics: [
+                        ...strategyRow.tactics,
+                        { id: nextId, name: '' },
+                      ],
+                    }
+                  : strategyRow
+              ),
+            }
+          : entry
+      )
+    )
+    setIcs234EditingMatrixItem({
+      ref: { kind: 'tactic', objectiveId, strategyId, tacticId: nextId },
+      draft: { kind: 'tactic', name: '' },
+    })
+  }
+  const deleteIcs234MatrixObjective = (objectiveId: number) => {
+    if (!canEditIcs201Form || !ics234Form) return
+    persistIcs234Objectives(ics234Form.objectives.filter((entry) => entry.id !== objectiveId))
+    if (
+      ics234EditingMatrixItem &&
+      (ics234EditingMatrixItem.ref.objectiveId === objectiveId ||
+        (ics234EditingMatrixItem.ref.kind !== 'objective' &&
+          ics234EditingMatrixItem.ref.objectiveId === objectiveId))
+    ) {
+      setIcs234EditingMatrixItem(null)
+    }
+  }
+  const deleteIcs234MatrixStrategy = (objectiveId: number, strategyId: number) => {
+    if (!canEditIcs201Form || !ics234Form) return
+    persistIcs234Objectives(
+      ics234Form.objectives.map((entry) =>
+        entry.id === objectiveId
+          ? {
+              ...entry,
+              strategies: entry.strategies.filter((strategy) => strategy.id !== strategyId),
+            }
+          : entry
+      )
+    )
+    if (
+      ics234EditingMatrixItem &&
+      ics234EditingMatrixItem.ref.objectiveId === objectiveId &&
+      (ics234EditingMatrixItem.ref.kind === 'strategy'
+        ? ics234EditingMatrixItem.ref.strategyId === strategyId
+        : ics234EditingMatrixItem.ref.kind === 'tactic' &&
+          ics234EditingMatrixItem.ref.strategyId === strategyId)
+    ) {
+      setIcs234EditingMatrixItem(null)
+    }
+  }
+  const deleteIcs234MatrixTactic = (
+    objectiveId: number,
+    strategyId: number,
+    tacticId: number
+  ) => {
+    if (!canEditIcs201Form || !ics234Form) return
+    persistIcs234Objectives(
+      ics234Form.objectives.map((entry) =>
+        entry.id === objectiveId
+          ? {
+              ...entry,
+              strategies: entry.strategies.map((strategy) =>
+                strategy.id === strategyId
+                  ? {
+                      ...strategy,
+                      tactics: strategy.tactics.filter((tactic) => tactic.id !== tacticId),
+                    }
+                  : strategy
+              ),
+            }
+          : entry
+      )
+    )
+    if (
+      ics234EditingMatrixItem &&
+      ics234EditingMatrixItem.ref.kind === 'tactic' &&
+      ics234EditingMatrixItem.ref.objectiveId === objectiveId &&
+      ics234EditingMatrixItem.ref.strategyId === strategyId &&
+      ics234EditingMatrixItem.ref.tacticId === tacticId
+    ) {
+      setIcs234EditingMatrixItem(null)
+    }
+  }
+  const handleIcs234SaveDraft = (form: Ics234FormState, latestVersion: Ics234Version) => {
+    const optimisticVersion: Ics234Version = {
+      ...latestVersion,
+      createdAt: Date.now(),
+      authorName: ics234AuthorName,
+      authorColor: ics234LocalAuthorColor,
+      snapshot: cloneIcs234FormState(form),
+    }
+    setIcs234Versions((previous) =>
+      mergePersistedIcs234Version(previous, latestVersion, optimisticVersion)
+    )
+    void saveIcs234DraftToServer(form.id, form, latestVersion).then((persisted) => {
+      if (!persisted) return
+      setIcs234Versions((previous) =>
+        mergePersistedIcs234Version(previous, latestVersion, persisted)
+      )
+    })
+  }
+  const handleIcs234AppendVersion = (
+    form: Ics234FormState,
+    signatures: Ics201VersionSignature[] = [],
+    authorNameOverride?: string
+  ) => {
+    const authorName = authorNameOverride ?? ics234AuthorName
+    const optimisticVersion: Ics234Version = {
+      id: `local-v-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      createdAt: Date.now(),
+      authorName,
+      authorColor: ics234LocalAuthorColor,
+      snapshot: cloneIcs234FormState(form),
+      signatures,
+    }
+    setIcs234Versions((previous) => [...previous, optimisticVersion].slice(-100))
+    void appendIcs234VersionToServer(form.id, form, signatures).then((persisted) => {
+      if (!persisted) return
+      setIcs234Versions((previous) =>
+        previous.map((entry) => (entry.id === optimisticVersion.id ? persisted : entry)).slice(-100)
+      )
+    })
+  }
+  const handleIcs234SignReview = (
+    form: Ics234FormState,
+    latestVersion: Ics234Version,
+    signature: Ics201VersionSignature
+  ) => {
+    const nextVersion: Ics234Version = {
+      ...latestVersion,
+      signatures: [...latestVersion.signatures, signature],
+    }
+    setIcs234Versions((previous) =>
+      mergePersistedIcs234Version(previous, latestVersion, nextVersion)
+    )
+    void saveIcs234SignedReviewToServer(
+      form.id,
+      form,
+      latestVersion.id,
+      nextVersion.signatures
+    ).then((persisted) => {
+      if (!persisted) return
+      setIcs234Versions((previous) =>
+        mergePersistedIcs234Version(previous, latestVersion, persisted)
+      )
+    })
+  }
   const applyDraftIcs204Recommendations = async () => {
     const templates: Partial<Ics204FormState>[] = [
       {
@@ -16465,20 +18086,32 @@ function App() {
         branchDirector: 'R. Patel',
         divisionGroupSupervisor: 'K. Simmons',
         resourcesAssigned: [
-          {
-            id: 1,
-            resourceIdentifier: 'Urban Search Team Alpha',
-            leader: 'Capt. J. Nguyen',
-            contact: '555-0142',
-            location: 'North Levee Sector',
-          },
-          {
-            id: 2,
-            resourceIdentifier: 'Engine Co. 7',
-            leader: 'Lt. M. Ortega',
-            contact: '555-0118',
-            location: 'River Bend Corridor',
-          },
+          createIcs204ResourceAssignedRow(
+            1,
+            buildDemoIcs204ResourceSnapshot({
+              id: 801,
+              name: 'Urban Search Team Alpha',
+              teamLead: 'Capt. J. Nguyen',
+              quantity: 12,
+              pointOfContact: '555-0142 / Tac Channel 3',
+              currentLocation: 'North Staging',
+            }),
+            'Report to North Staging at 13:00. Briefing complete.',
+            true
+          ),
+          createIcs204ResourceAssignedRow(
+            2,
+            buildDemoIcs204ResourceSnapshot({
+              id: 802,
+              name: 'Engine Co. 7',
+              teamLead: 'Lt. M. Ortega',
+              quantity: 4,
+              pointOfContact: '555-0118 / Command Net 1',
+              currentLocation: 'River Bend Corridor',
+            }),
+            'River Bend Corridor — standby for branch re-entry approval.',
+            false
+          ),
         ],
         workAssignments: [
           {
@@ -16512,7 +18145,9 @@ function App() {
         specialInstructions:
           'Maintain responder accountability checks every 60 minutes. Coordinate sweeps with Branch Director before re-entry to flagged structures.',
         communications:
-          'Primary: Tac Channel 3 (155.160). Alternate: Command Net 1. Medical emergency code: MED-ALPHA.',
+          'Primary: Tac Channel 3 (155.160). Alternate: Command Net 1.',
+        emergencyCommunications:
+          'Medical: 555-0199 / MED-ALPHA. Evacuation: 555-0188 / EVAC-1.',
       },
       {
         assignedUnit: 'Branch Staffing Coordination Unit',
@@ -16524,20 +18159,32 @@ function App() {
         branchDirector: 'R. Patel',
         divisionGroupSupervisor: 'M. Wells',
         resourcesAssigned: [
-          {
-            id: 1,
-            resourceIdentifier: 'Mobile Command Unit MCU-1',
-            leader: 'Cmdr. L. Park',
-            contact: '555-0173',
-            location: 'Central Command Post',
-          },
-          {
-            id: 2,
-            resourceIdentifier: 'Logistics Liaison Team',
-            leader: 'A. Banks',
-            contact: '555-0155',
-            location: 'Central Command Post',
-          },
+          createIcs204ResourceAssignedRow(
+            1,
+            buildDemoIcs204ResourceSnapshot({
+              id: 803,
+              name: 'Mobile Command Unit MCU-1',
+              teamLead: 'Cmdr. L. Park',
+              quantity: 6,
+              pointOfContact: '555-0173 / Command Net 1',
+              currentLocation: 'Central Command Post',
+            }),
+            'Central Command Post — coordinate relief handoffs.',
+            false
+          ),
+          createIcs204ResourceAssignedRow(
+            2,
+            buildDemoIcs204ResourceSnapshot({
+              id: 804,
+              name: 'Logistics Liaison Team',
+              teamLead: 'A. Banks',
+              quantity: 3,
+              pointOfContact: '555-0155 / Logistics Net 2',
+              currentLocation: 'Central Command Post',
+            }),
+            'Central Command Post — staffing boards on site.',
+            false
+          ),
         ],
         workAssignments: [
           {
@@ -16572,6 +18219,8 @@ function App() {
           'Confirm relief shift coverage 30 minutes before handoff. Escalate uncovered positions to Operations Section Chief immediately.',
         communications:
           'Primary: Command Net 1 (154.265). Alternate: Logistics Net 2. Notification path: MCU-1 → Branch Director → Section Chief.',
+        emergencyCommunications:
+          'Medical: 555-0199. Evacuation: 555-0188. Other: Command Net 1.',
       },
       {
         assignedUnit: 'Medical Strike Team Bravo',
@@ -16583,20 +18232,32 @@ function App() {
         branchDirector: 'R. Patel',
         divisionGroupSupervisor: 'D. Ortiz',
         resourcesAssigned: [
-          {
-            id: 1,
-            resourceIdentifier: 'Medical Strike Team Bravo',
-            leader: 'Dr. S. Kapoor',
-            contact: '555-0167',
-            location: 'South Aid Station',
-          },
-          {
-            id: 2,
-            resourceIdentifier: 'Mobile Triage Unit',
-            leader: 'EMT P. Lopez',
-            contact: '555-0192',
-            location: 'South Aid Station',
-          },
+          createIcs204ResourceAssignedRow(
+            1,
+            buildDemoIcs204ResourceSnapshot({
+              id: 805,
+              name: 'Medical Strike Team Bravo',
+              teamLead: 'Dr. S. Kapoor',
+              quantity: 8,
+              pointOfContact: '555-0167 / Med-Comm Channel 7',
+              currentLocation: 'South Aid Station',
+            }),
+            'South Aid Station — triage and patient transport coordination.',
+            true
+          ),
+          createIcs204ResourceAssignedRow(
+            2,
+            buildDemoIcs204ResourceSnapshot({
+              id: 806,
+              name: 'Mobile Triage Unit',
+              teamLead: 'EMT P. Lopez',
+              quantity: 4,
+              pointOfContact: '555-0192 / Med-Comm Channel 7',
+              currentLocation: 'South Aid Station',
+            }),
+            'South Aid Station — HEAR radio for hospital handoff.',
+            false
+          ),
         ],
         workAssignments: [
           {
@@ -16630,7 +18291,9 @@ function App() {
         specialInstructions:
           'Coordinate with Hospital Liaison before patient transport. Update Med-Comm every 30 minutes with patient counts and acuity.',
         communications:
-          'Primary: Med-Comm Channel 7 (155.340). Alternate: Tac Channel 5. Emergency code: MED-ALPHA. HEAR radio for hospital handoff.',
+          'Primary: Med-Comm Channel 7 (155.340). Alternate: Tac Channel 5. HEAR radio for hospital handoff.',
+        emergencyCommunications:
+          'Medical: 555-0199 / MED-ALPHA. Evacuation: 555-0188 / EVAC-1. Other: Med-Comm Channel 7.',
       },
     ]
     const results = await Promise.all(templates.map((template) => createIcs204Form(template)))
@@ -17822,7 +19485,14 @@ function App() {
                   {activeTab === 'seerist' && 'Seerist'}
                   {activeTab === 'files' && 'Incident Files'}
                   {activeTab === 'form-ICS-204' && 'ICS-204 Assignment List'}
-                  {activeTab !== 'form-ICS-204' && activeFormTabLabel}
+                  {activeTab === 'form-ICS-202' && 'ICS-202 Incident Objectives'}
+                  {activeTab === 'form-ICS-203' && 'ICS-203 Organization Assignment List'}
+                  {activeTab === 'form-ICS-234' && 'ICS-234 Work Analysis Matrix'}
+                  {activeTab !== 'form-ICS-204' &&
+                    activeTab !== 'form-ICS-202' &&
+                    activeTab !== 'form-ICS-203' &&
+                    activeTab !== 'form-ICS-234' &&
+                    activeFormTabLabel}
                 </CardTitle>
                 {activeTab === 'roster' && (isInIncidentWorkspace || isInExerciseWorkspace) && (
                   <div className="flex flex-wrap items-center justify-end gap-2">
@@ -19038,140 +20708,19 @@ function App() {
                     const key = `resource-${resource.id}`
                     const isOpen = expandedItemId === key
                     return (
-                      <Item
+                      <ResourceListItemCard
                         key={resource.id}
-                        variant="outline"
-                        className={cn(
-                          'flex-col items-stretch p-0',
-                          glassItemBorderClasses,
-                          selectedPanelItemId === key && 'ring-2 ring-primary/60 bg-primary/5'
-                        )}
-                      >
-                        <Collapsible
-                          open={isOpen}
-                          onOpenChange={(open) => setExpandedItemId(open ? key : null)}
-                        >
-                          <div
-                            className="flex cursor-pointer items-center gap-2 px-3 py-2.5"
-                            onClick={() => toggleExpandedItem(key)}
-                          >
-                            <ItemContent>
-                              <ItemTitle>{resource.name}</ItemTitle>
-                              {getResourceIncidentAssignmentLabel(resource) ? (
-                                <ItemDescription>
-                                  {getResourceIncidentAssignmentLabel(resource)}
-                                </ItemDescription>
-                              ) : null}
-                            </ItemContent>
-                            <ItemActions>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                aria-label="Zoom map to asset"
-                                onClick={(event) => {
-                                  event.stopPropagation()
-                                  setSelectedPanelItemId(key)
-                                  void
-                                  focusMapItem(`resource-${resource.id}`, resource.mapLocation, 30000)
-                                }}
-                              >
-                                <MapIcon className="h-4 w-4" />
-                              </Button>
-                              <CollapsibleTrigger asChild>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  aria-label="Toggle asset details"
-                                  onClick={(event) => event.stopPropagation()}
-                                >
-                                  <ChevronDown
-                                    className={cn('h-4 w-4 transition-transform', isOpen && 'rotate-180')}
-                                  />
-                                </Button>
-                              </CollapsibleTrigger>
-                            </ItemActions>
-                          </div>
-                          <CollapsibleContent>
-                            <div className="border-t px-3 py-2 text-sm">
-                              <div className="grid grid-cols-2 gap-2">
-                                <p>
-                                  <span className="font-medium">Current Location:</span>{' '}
-                                  {resource.currentLocation}
-                                </p>
-                                <p>
-                                  <span className="font-medium">Datetime Ordered:</span>{' '}
-                                  {resource.datetimeOrdered}
-                                </p>
-                                <p>
-                                  <span className="font-medium">OPCON:</span> {resource.opcon}
-                                </p>
-                                <p>
-                                  <span className="font-medium">TACON:</span> {resource.tacon}
-                                </p>
-                                <p>
-                                  <span className="font-medium">Point of Contact:</span>{' '}
-                                  {resource.pointOfContact}
-                                </p>
-                                <p>
-                                  <span className="font-medium">Owning Organization:</span>{' '}
-                                  {resource.owningOrganization}
-                                </p>
-                                <p>
-                                  <span className="font-medium">Quantity:</span> {resource.quantity}
-                                </p>
-                                <p>
-                                  <span className="font-medium">Unit:</span> {resource.unit}
-                                </p>
-                                <p>
-                                  <span className="font-medium">Cost Unit Type:</span>{' '}
-                                  {formatResourceCostUnitType(resource.costUnitType)}
-                                </p>
-                                <p>
-                                  <span className="font-medium">Cost per Unit:</span>{' '}
-                                  {formatResourceCostPerUnit(resource.costPerUnit)}
-                                </p>
-                                <p>
-                                  <span className="font-medium">Hull/Tail Number:</span>{' '}
-                                  {resource.hullTailNumber}
-                                </p>
-                                <p>
-                                  <span className="font-medium">Symbology:</span> {resource.symbology}
-                                </p>
-                                <p>
-                                  <span className="font-medium">Lat:</span> {resource.latitude}
-                                </p>
-                                <p>
-                                  <span className="font-medium">Long:</span> {resource.longitude}
-                                </p>
-                                <p className="col-span-2">
-                                  <span className="font-medium">Capabilities:</span>{' '}
-                                  {resource.capabilities}
-                                </p>
-                                <p>
-                                  <span className="font-medium">Current Op Period:</span>{' '}
-                                  {resource.currentOpPeriod}
-                                </p>
-                                <p>
-                                  <span className="font-medium">Next Op Period:</span>{' '}
-                                  {resource.nextOpPeriod}
-                                </p>
-                                <p>
-                                  <span className="font-medium">Current Op Period Assignment:</span>{' '}
-                                  {resource.currentOpPeriodAssignment}
-                                </p>
-                                <p>
-                                  <span className="font-medium">Next Op Period Assignment:</span>{' '}
-                                  {resource.nextOpPeriodAssignment}
-                                </p>
-                                <p>
-                                  <span className="font-medium">Check-in Status:</span>{' '}
-                                  {resource.checkInStatus}
-                                </p>
-                              </div>
-                            </div>
-                          </CollapsibleContent>
-                        </Collapsible>
-                      </Item>
+                        resource={resource as ResourceListItemData}
+                        glassItemBorderClasses={glassItemBorderClasses}
+                        selected={selectedPanelItemId === key}
+                        open={isOpen}
+                        onOpenChange={(open) => setExpandedItemId(open ? key : null)}
+                        onHeaderClick={() => toggleExpandedItem(key)}
+                        onFocusMap={() => {
+                          setSelectedPanelItemId(key)
+                          void focusMapItem(`resource-${resource.id}`, resource.mapLocation, 30000)
+                        }}
+                      />
                     )
                   })}
 
@@ -25998,6 +27547,96 @@ function App() {
                   </div>
                 )}
 
+                {activeTab === 'form-ICS-234' && (isInIncidentWorkspace || isInExerciseWorkspace) && (
+                  <Ics234WorkspacePanel
+                    form={ics234Form}
+                    setForm={setIcs234Form}
+                    versions={ics234Versions}
+                    canEdit={canEditIcs201Form}
+                    isLoading={isIcs234Loading}
+                    isSaving={isIcs234Saving}
+                    glassItemBorderClasses={glassItemBorderClasses}
+                    incidentName={
+                      activeIncidentWorkspace?.name ?? activeExerciseWorkspace?.name ?? ''
+                    }
+                    editingSections={ics234EditingSections}
+                    sectionDrafts={ics234SectionDrafts}
+                    editingMatrixItem={ics234EditingMatrixItem}
+                    onStartSectionEdit={startIcs234SectionEdit}
+                    onCancelSectionEdit={cancelIcs234SectionEdit}
+                    onSaveSection={saveIcs234Section}
+                    onGenerateSection={openIcs234SectionGeneration}
+                    onPatchSectionDraft={patchIcs234SectionDraft}
+                    onStartMatrixItemEdit={startIcs234MatrixItemEdit}
+                    onCancelMatrixItemEdit={cancelIcs234MatrixItemEdit}
+                    onPatchMatrixItemDraft={patchIcs234MatrixItemDraft}
+                    onSaveMatrixItem={saveIcs234MatrixItem}
+                    onGenerateMatrixItem={openIcs234MatrixItemGeneration}
+                    onAddMatrixObjective={addIcs234MatrixObjective}
+                    onAddMatrixStrategy={addIcs234MatrixStrategy}
+                    onAddMatrixTactic={addIcs234MatrixTactic}
+                    onDeleteMatrixObjective={deleteIcs234MatrixObjective}
+                    onDeleteMatrixStrategy={deleteIcs234MatrixStrategy}
+                    onDeleteMatrixTactic={deleteIcs234MatrixTactic}
+                    onAppendVersion={handleIcs234AppendVersion}
+                    onSignReview={handleIcs234SignReview}
+                    downloadDocx={downloadDocx}
+                    downloadPdf={downloadPdf}
+                  />
+                )}
+
+                {activeTab === 'form-ICS-203' && (isInIncidentWorkspace || isInExerciseWorkspace) && (
+                  <Ics203WorkspacePanel
+                    form={ics203Form}
+                    setForm={setIcs203Form}
+                    versions={ics203Versions}
+                    canEdit={canEditIcs201Form}
+                    isLoading={isIcs203Loading}
+                    isSaving={isIcs203Saving}
+                    glassItemBorderClasses={glassItemBorderClasses}
+                    incidentName={
+                      activeIncidentWorkspace?.name ?? activeExerciseWorkspace?.name ?? ''
+                    }
+                    editingSections={ics203EditingSections}
+                    sectionDrafts={ics203SectionDrafts}
+                    onStartSectionEdit={startIcs203SectionEdit}
+                    onCancelSectionEdit={cancelIcs203SectionEdit}
+                    onSaveSection={saveIcs203Section}
+                    onGenerateSection={openIcs203SectionGeneration}
+                    onPatchSectionDraft={patchIcs203SectionDraft}
+                    onAppendVersion={handleIcs203AppendVersion}
+                    onSignReview={handleIcs203SignReview}
+                    downloadDocx={downloadDocx}
+                    downloadPdf={downloadPdf}
+                  />
+                )}
+
+                {activeTab === 'form-ICS-202' && (isInIncidentWorkspace || isInExerciseWorkspace) && (
+                  <Ics202WorkspacePanel
+                    form={ics202Form}
+                    setForm={setIcs202Form}
+                    versions={ics202Versions}
+                    canEdit={canEditIcs201Form}
+                    isLoading={isIcs202Loading}
+                    isSaving={isIcs202Saving}
+                    glassItemBorderClasses={glassItemBorderClasses}
+                    incidentName={
+                      activeIncidentWorkspace?.name ?? activeExerciseWorkspace?.name ?? ''
+                    }
+                    editingSections={ics202EditingSections}
+                    sectionDrafts={ics202SectionDrafts}
+                    onStartSectionEdit={startIcs202SectionEdit}
+                    onCancelSectionEdit={cancelIcs202SectionEdit}
+                    onSaveSection={saveIcs202Section}
+                    onGenerateSection={openIcs202SectionGeneration}
+                    onPatchSectionDraft={patchIcs202SectionDraft}
+                    onAppendVersion={handleIcs202AppendVersion}
+                    onSignReview={handleIcs202SignReview}
+                    downloadDocx={downloadDocx}
+                    downloadPdf={downloadPdf}
+                  />
+                )}
+
                 {activeTab === 'form-ICS-204' && (isInIncidentWorkspace || isInExerciseWorkspace) && (
                   <div className="space-y-3">
                     <div className="flex items-center justify-end gap-2">
@@ -26042,6 +27681,13 @@ function App() {
                           const isFormFullySigned =
                             !!latestFormSignature && hasPlanningReview && hasOperationsReview
                           const isFormAssigned = !!ics204AssignedByFormId[form.id]
+                          const ics204ListTitle = resolveIcs204ListTitle(form)
+                          const assignedUnitEditable =
+                            canEditIcs201Form &&
+                            !formIsLocked &&
+                            !viewingPastFormVersion &&
+                            !isDraftingFormSigned &&
+                            !isLatestFormSigned
                           return (
                             <Item
                               key={form.id}
@@ -26055,10 +27701,25 @@ function App() {
                                 open={isFormOpen}
                                 onOpenChange={(open) => setExpandedIcs204FormId(open ? form.id : null)}
                               >
-                                <div className="relative px-3 py-2.5 pr-32">
+                                <div className="relative px-3 py-2.5 pr-40">
                                   <ItemContent className="min-w-0">
-                                    <ItemTitle>{form.assignedUnit || `ICS-204 #${form.id}`}</ItemTitle>
-                                    <ItemDescription>
+                                    <div className="space-y-1">
+                                      <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                                        Assigned Unit
+                                      </p>
+                                      <Ics204AssignedUnitField
+                                        value={form.assignedUnit}
+                                        editable={assignedUnitEditable}
+                                        onChange={(value) =>
+                                          handleIcs204AssignedUnitChange(
+                                            form.id,
+                                            value,
+                                            latestFormVersion ?? null
+                                          )
+                                        }
+                                      />
+                                    </div>
+                                    <ItemDescription className="mt-1.5">
                                       Leader:{' '}
                                       {form.divisionGroupSupervisor ||
                                         form.branchDirector ||
@@ -26068,6 +27729,44 @@ function App() {
                                     </ItemDescription>
                                   </ItemContent>
                                   <ItemActions className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2 justify-end">
+                                    <DropdownMenu>
+                                      <DropdownMenuTrigger asChild>
+                                        <Button
+                                          type="button"
+                                          size="icon"
+                                          variant="ghost"
+                                          className="h-8 w-8"
+                                          aria-label="Export ICS-204"
+                                          title="Export ICS-204"
+                                          onClick={(event) => event.stopPropagation()}
+                                        >
+                                          <DownloadIcon className="h-4 w-4" />
+                                        </Button>
+                                      </DropdownMenuTrigger>
+                                      <DropdownMenuContent align="end" className="w-48">
+                                        <DropdownMenuLabel>Export ICS-204</DropdownMenuLabel>
+                                        <DropdownMenuSeparator />
+                                        <DropdownMenuItem
+                                          onSelect={() => openIcs204Preview(form.id)}
+                                        >
+                                          <Eye className="mr-2 h-4 w-4" />
+                                          Preview
+                                        </DropdownMenuItem>
+                                        <DropdownMenuSeparator />
+                                        <DropdownMenuItem
+                                          onSelect={() => exportIcs204Word(form.id)}
+                                        >
+                                          <FileText className="mr-2 h-4 w-4" />
+                                          Word (.docx)
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem
+                                          onSelect={() => exportIcs204Pdf(form.id)}
+                                        >
+                                          <FileText className="mr-2 h-4 w-4" />
+                                          PDF (.pdf)
+                                        </DropdownMenuItem>
+                                      </DropdownMenuContent>
+                                    </DropdownMenu>
                                     {canEditIcs201Form ? (
                                       <Button
                                         type="button"
@@ -26079,7 +27778,7 @@ function App() {
                                           event.stopPropagation()
                                           setIcs204DeleteConfirmDialog({
                                             formId: form.id,
-                                            label: form.assignedUnit || `ICS-204`,
+                                            label: ics204ListTitle,
                                           })
                                         }}
                                       >
@@ -26244,8 +27943,8 @@ function App() {
                                           </div>
                                         ) : (
                                           <div className="text-muted-foreground">
-                                            Draft is editable. Save to update the latest draft or
-                                            sign to promote it.
+                                            Draft is editable. Use each section&apos;s Save button to
+                                            update the latest draft, or sign to promote it.
                                           </div>
                                         )}
                                         <div className="flex items-center gap-2">
@@ -26297,22 +27996,6 @@ function App() {
                                     )}
                                     {!viewingPastFormVersion && !isDraftingFormSigned && (
                                       <div className="flex items-center justify-start gap-2">
-                                        {!isLatestFormSigned && (
-                                          <Button
-                                            type="button"
-                                            size="sm"
-                                            variant="outline"
-                                            className="h-7 gap-1 text-xs"
-                                            disabled={!latestFormVersion || !canEditIcs201Form || isIcs204Saving}
-                                            onClick={() => {
-                                              if (!latestFormVersion) return
-                                              handleIcs204SaveDraft(form.id, form, latestFormVersion)
-                                            }}
-                                          >
-                                            Save
-                                            {isIcs204Saving ? '…' : null}
-                                          </Button>
-                                        )}
                                         <Button
                                           type="button"
                                           size="sm"
@@ -26374,493 +28057,34 @@ function App() {
                                           'pointer-events-none opacity-70 select-none'
                                       )}
                                     >
-                                    <div className="grid grid-cols-1 gap-2 xl:grid-cols-2">
-                                      <div className="space-y-1">
-                                        <p className="text-xs font-semibold">Assigned Unit</p>
-                                        <select
-                                          value={form.assignedUnit}
-                                          onChange={(event) =>
-                                            updateIcs204Field(form.id, 'assignedUnit', event.target.value)
-                                          }
-                                          className="h-8 w-full rounded-md border bg-transparent px-2 text-xs outline-none"
-                                        >
-                                          <option value="Division A Task Force">Division A Task Force</option>
-                                          <option value="Division B Task Force">Division B Task Force</option>
-                                          <option value="Medical Group">Medical Group</option>
-                                          <option value="Evacuation Group">Evacuation Group</option>
-                                          <option value="Infrastructure Group">Infrastructure Group</option>
-                                        </select>
-                                      </div>
-                                      <div className="space-y-1">
-                                        <p className="text-xs font-semibold">Section Chief</p>
-                                        <input
-                                          value={form.sectionChief}
-                                          onChange={(event) =>
-                                            updateIcs204Field(form.id, 'sectionChief', event.target.value)
-                                          }
-                                          className="h-8 rounded-md border bg-transparent px-2 text-xs outline-none"
-                                        />
-                                      </div>
-                                      <div className="space-y-1">
-                                        <p className="text-xs font-semibold">Branch Director</p>
-                                        <input
-                                          value={form.branchDirector}
-                                          onChange={(event) =>
-                                            updateIcs204Field(form.id, 'branchDirector', event.target.value)
-                                          }
-                                          className="h-8 rounded-md border bg-transparent px-2 text-xs outline-none"
-                                        />
-                                      </div>
-                                      <div className="space-y-1">
-                                        <p className="text-xs font-semibold">Division/Group Supervisor</p>
-                                        <input
-                                          value={form.divisionGroupSupervisor}
-                                          onChange={(event) =>
-                                            updateIcs204Field(
-                                              form.id,
-                                              'divisionGroupSupervisor',
-                                              event.target.value
-                                            )
-                                          }
-                                          className="h-8 rounded-md border bg-transparent px-2 text-xs outline-none"
-                                        />
-                                      </div>
-                                    </div>
-                                    <div className="grid grid-cols-1 gap-2 xl:grid-cols-2">
-                                      <div className="space-y-1">
-                                        <p className="text-xs font-semibold">Branch</p>
-                                        <select
-                                          value={form.branch}
-                                          onChange={(event) =>
-                                            updateIcs204Field(form.id, 'branch', event.target.value)
-                                          }
-                                          className="h-8 w-full rounded-md border bg-transparent px-2 text-xs outline-none"
-                                        >
-                                          <option value="">Select Branch</option>
-                                          <option value="Operations Branch">Operations Branch</option>
-                                          <option value="Planning Branch">Planning Branch</option>
-                                          <option value="Logistics Branch">Logistics Branch</option>
-                                          <option value="Medical Branch">Medical Branch</option>
-                                        </select>
-                                      </div>
-                                      <div className="space-y-1 xl:pr-3">
-                                        <p className="text-xs font-semibold">Division</p>
-                                        <select
-                                          value={form.division}
-                                          onChange={(event) =>
-                                            updateIcs204Field(form.id, 'division', event.target.value)
-                                          }
-                                          className="h-8 w-full rounded-md border bg-transparent px-2 text-xs outline-none"
-                                        >
-                                          <option value="">Select Division</option>
-                                          <option value="Division A">Division A</option>
-                                          <option value="Division B">Division B</option>
-                                          <option value="Division C">Division C</option>
-                                          <option value="Division D">Division D</option>
-                                        </select>
-                                      </div>
-                                      <div className="space-y-1">
-                                        <p className="text-xs font-semibold">Group</p>
-                                        <select
-                                          value={form.group}
-                                          onChange={(event) =>
-                                            updateIcs204Field(form.id, 'group', event.target.value)
-                                          }
-                                          className="h-8 w-full rounded-md border bg-transparent px-2 text-xs outline-none"
-                                        >
-                                          <option value="">Select Group</option>
-                                          <option value="Evacuation Group">Evacuation Group</option>
-                                          <option value="Infrastructure Group">Infrastructure Group</option>
-                                          <option value="Medical Group">Medical Group</option>
-                                          <option value="Shelter Group">Shelter Group</option>
-                                        </select>
-                                      </div>
-                                      <div className="space-y-1 xl:pr-3">
-                                        <p className="text-xs font-semibold">Staging Area</p>
-                                        <select
-                                          value={form.stagingArea}
-                                          onChange={(event) =>
-                                            updateIcs204Field(form.id, 'stagingArea', event.target.value)
-                                          }
-                                          className="h-8 w-full rounded-md border bg-transparent px-2 text-xs outline-none"
-                                        >
-                                          <option value="">Select Staging Area</option>
-                                          <option value="North Staging">North Staging</option>
-                                          <option value="South Staging">South Staging</option>
-                                          <option value="East Staging">East Staging</option>
-                                          <option value="West Staging">West Staging</option>
-                                        </select>
-                                      </div>
-                                    </div>
-
-                                    <div className="space-y-2 xl:pr-3">
-                                      <div className="flex items-center justify-between">
-                                        <p className="text-xs font-semibold">Resources Assigned</p>
-                                        <Button
-                                          type="button"
-                                          size="sm"
-                                          variant="outline"
-                                          onClick={() => setIcs204ResourcePickerFormId(form.id)}
-                                        >
-                                          + Add Resource
-                                        </Button>
-                                      </div>
-                                      <div className="min-w-0 max-w-full rounded-md border p-2">
-                                        <div className="max-w-full overflow-x-auto pr-1 [scrollbar-gutter:stable_both-edges]">
-                                          <div className="w-full min-w-0 space-y-2">
-                                            <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto] gap-2 text-[11px] font-semibold text-muted-foreground">
-                                              <span>Resource Identifier</span>
-                                              <span>Leader</span>
-                                              <span>Contact</span>
-                                              <span>Location</span>
-                                              <span className="text-right">Actions</span>
-                                            </div>
-                                            {form.resourcesAssigned.map((row) => (
-                                              <div
-                                                key={row.id}
-                                                className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto] gap-2"
-                                              >
-                                                <input
-                                                  value={row.resourceIdentifier}
-                                                  onChange={(event) =>
-                                                    updateIcs204ResourceAssigned(
-                                                      form.id,
-                                                      row.id,
-                                                      'resourceIdentifier',
-                                                      event.target.value
-                                                    )
-                                                  }
-                                                  className="h-8 w-full min-w-0 rounded-md border bg-transparent px-2 text-xs outline-none"
-                                                />
-                                                <input
-                                                  value={row.leader}
-                                                  onChange={(event) =>
-                                                    updateIcs204ResourceAssigned(
-                                                      form.id,
-                                                      row.id,
-                                                      'leader',
-                                                      event.target.value
-                                                    )
-                                                  }
-                                                  className="h-8 w-full min-w-0 rounded-md border bg-transparent px-2 text-xs outline-none"
-                                                />
-                                                <input
-                                                  value={row.contact}
-                                                  onChange={(event) =>
-                                                    updateIcs204ResourceAssigned(
-                                                      form.id,
-                                                      row.id,
-                                                      'contact',
-                                                      event.target.value
-                                                    )
-                                                  }
-                                                  className="h-8 w-full min-w-0 rounded-md border bg-transparent px-2 text-xs outline-none"
-                                                />
-                                                <input
-                                                  value={row.location}
-                                                  onChange={(event) =>
-                                                    updateIcs204ResourceAssigned(
-                                                      form.id,
-                                                      row.id,
-                                                      'location',
-                                                      event.target.value
-                                                    )
-                                                  }
-                                                  className="h-8 w-full min-w-0 rounded-md border bg-transparent px-2 text-xs outline-none"
-                                                />
-                                                <Button
-                                                  type="button"
-                                                  variant="ghost"
-                                                  size="icon"
-                                                  aria-label="Delete assigned resource row"
-                                                  className="h-8 w-8 text-destructive hover:text-destructive"
-                                                  onClick={() => deleteIcs204ResourceAssignedRow(form.id, row.id)}
-                                                >
-                                                  <Trash2 className="h-4 w-4" />
-                                                </Button>
-                                              </div>
-                                            ))}
-                                          </div>
-                                        </div>
-                                      </div>
-                                    </div>
-
-                                    <div className="space-y-2 xl:pr-3">
-                                      <div className="flex items-center justify-between">
-                                        <p className="text-xs font-semibold">Work Assignments</p>
-                                        <Button
-                                          type="button"
-                                          size="sm"
-                                          variant="outline"
-                                          onClick={() => addIcs204WorkAssignment(form.id)}
-                                        >
-                                          + Add Assignment
-                                        </Button>
-                                      </div>
-                                      <div className="space-y-2">
-                                        {form.workAssignments.map((row) => {
-                                          const workAssignmentKey = `${form.id}-${row.id}`
-                                          const isWorkAssignmentOpen =
-                                            expandedIcs204WorkAssignmentKey === workAssignmentKey
-                                          return (
-                                            <Item
-                                              key={row.id}
-                                              variant="outline"
-                                              className={cn(
-                                                'relative min-w-0 w-full max-w-full flex-col items-stretch overflow-hidden p-0 [contain:layout]',
-                                                glassItemBorderClasses
-                                              )}
-                                            >
-                                              <Collapsible
-                                                open={isWorkAssignmentOpen}
-                                                onOpenChange={(open) =>
-                                                  setExpandedIcs204WorkAssignmentKey(
-                                                    open ? workAssignmentKey : null
-                                                  )
-                                                }
-                                              >
-                                                <div className="relative px-3 py-2.5 pr-12">
-                                                  <ItemContent className="min-w-0">
-                                                    <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
-                                                      <input
-                                                        value={row.assignment}
-                                                        onChange={(event) =>
-                                                          updateIcs204WorkAssignment(
-                                                            form.id,
-                                                            row.id,
-                                                            'assignment',
-                                                            event.target.value
-                                                          )
-                                                        }
-                                                        placeholder="Work Assignment"
-                                                        className="col-span-2 h-8 rounded-md border bg-transparent px-2 text-xs outline-none"
-                                                      />
-                                                      <input
-                                                        value={row.priority}
-                                                        onChange={(event) =>
-                                                          updateIcs204WorkAssignment(
-                                                            form.id,
-                                                            row.id,
-                                                            'priority',
-                                                            event.target.value
-                                                          )
-                                                        }
-                                                        placeholder="Priority"
-                                                        className="h-8 rounded-md border bg-transparent px-2 text-xs outline-none"
-                                                      />
-                                                    </div>
-                                                  </ItemContent>
-                                                  <ItemActions className="absolute right-3 top-1/2 w-8 -translate-y-1/2 justify-end">
-                                                    <CollapsibleTrigger asChild>
-                                                      <Button
-                                                        type="button"
-                                                        variant="ghost"
-                                                        size="icon"
-                                                        aria-label="Toggle work assignment details"
-                                                        onClick={(event) => event.stopPropagation()}
-                                                      >
-                                                        <ChevronDown
-                                                          className={cn(
-                                                            'h-4 w-4 transition-transform',
-                                                            isWorkAssignmentOpen && 'rotate-180'
-                                                          )}
-                                                        />
-                                                      </Button>
-                                                    </CollapsibleTrigger>
-                                                  </ItemActions>
-                                                </div>
-                                                <CollapsibleContent>
-                                                  <div className="min-w-0 max-w-full space-y-2 border-t px-3 py-2.5 pr-6">
-                                                    <input
-                                                      value={row.requestedArrivalTime}
-                                                      onChange={(event) =>
-                                                        updateIcs204WorkAssignment(
-                                                          form.id,
-                                                          row.id,
-                                                          'requestedArrivalTime',
-                                                          event.target.value
-                                                        )
-                                                      }
-                                                      placeholder="Requested Arrival Time"
-                                                      className="h-8 w-full rounded-md border bg-transparent px-2 text-xs outline-none"
-                                                    />
-                                                    <div className="space-y-2 rounded-md border p-2">
-                                                      <div className="flex items-center justify-between">
-                                                        <p className="text-xs font-semibold">
-                                                          Resource Requirements
-                                                        </p>
-                                                        <Button
-                                                          type="button"
-                                                          size="sm"
-                                                          variant="outline"
-                                                          onClick={() =>
-                                                            addIcs204ResourceRequirementRow(form.id, row.id)
-                                                          }
-                                                        >
-                                                          + Add Requirement
-                                                        </Button>
-                                                      </div>
-                                                      <div className="grid grid-cols-4 gap-2 text-[11px] font-semibold text-muted-foreground">
-                                                        <span>Resource</span>
-                                                        <span>Required</span>
-                                                        <span>Have</span>
-                                                        <span>Need</span>
-                                                      </div>
-                                                      <div className="max-w-full overflow-x-auto pr-1">
-                                                        <div className="w-full min-w-0 space-y-2">
-                                                          {row.resourceRequirements.map((requirement) => (
-                                                            <div
-                                                              key={requirement.id}
-                                                              className="flex items-center gap-2"
-                                                            >
-                                                              <div className="grid flex-1 grid-cols-4 gap-2">
-                                                                <input
-                                                                  value={requirement.resource}
-                                                                  onChange={(event) =>
-                                                                    updateIcs204ResourceRequirementCell(
-                                                                      form.id,
-                                                                      row.id,
-                                                                      requirement.id,
-                                                                      'resource',
-                                                                      event.target.value
-                                                                    )
-                                                                  }
-                                                                  className="h-8 rounded-md border bg-transparent px-2 text-xs outline-none"
-                                                                />
-                                                                <input
-                                                                  value={requirement.required}
-                                                                  onChange={(event) =>
-                                                                    updateIcs204ResourceRequirementCell(
-                                                                      form.id,
-                                                                      row.id,
-                                                                      requirement.id,
-                                                                      'required',
-                                                                      event.target.value
-                                                                    )
-                                                                  }
-                                                                  className="h-8 rounded-md border bg-transparent px-2 text-xs outline-none"
-                                                                />
-                                                                <input
-                                                                  value={requirement.have}
-                                                                  onChange={(event) =>
-                                                                    updateIcs204ResourceRequirementCell(
-                                                                      form.id,
-                                                                      row.id,
-                                                                      requirement.id,
-                                                                      'have',
-                                                                      event.target.value
-                                                                    )
-                                                                  }
-                                                                  className="h-8 rounded-md border bg-transparent px-2 text-xs outline-none"
-                                                                />
-                                                                <input
-                                                                  value={requirement.need}
-                                                                  onChange={(event) =>
-                                                                    updateIcs204ResourceRequirementCell(
-                                                                      form.id,
-                                                                      row.id,
-                                                                      requirement.id,
-                                                                      'need',
-                                                                      event.target.value
-                                                                    )
-                                                                  }
-                                                                  className="h-8 rounded-md border bg-transparent px-2 text-xs outline-none"
-                                                                />
-                                                              </div>
-                                                              <Button
-                                                                type="button"
-                                                                variant="ghost"
-                                                                size="icon"
-                                                                aria-label="Delete resource requirement"
-                                                                className="h-8 w-8 text-destructive hover:text-destructive"
-                                                                onClick={() =>
-                                                                  deleteIcs204ResourceRequirementRow(
-                                                                    form.id,
-                                                                    row.id,
-                                                                    requirement.id
-                                                                  )
-                                                                }
-                                                              >
-                                                                <Trash2 className="h-4 w-4" />
-                                                              </Button>
-                                                            </div>
-                                                          ))}
-                                                        </div>
-                                                      </div>
-                                                    </div>
-                                                    <Textarea
-                                                      value={row.overheadPositions}
-                                                      onChange={(event) =>
-                                                        updateIcs204WorkAssignment(
-                                                          form.id,
-                                                          row.id,
-                                                          'overheadPositions',
-                                                          event.target.value
-                                                        )
-                                                      }
-                                                      className="min-h-16 text-xs"
-                                                      placeholder="Overhead Positions"
-                                                    />
-                                                    <Textarea
-                                                      value={row.specialEquipmentSupplies}
-                                                      onChange={(event) =>
-                                                        updateIcs204WorkAssignment(
-                                                          form.id,
-                                                          row.id,
-                                                          'specialEquipmentSupplies',
-                                                          event.target.value
-                                                        )
-                                                      }
-                                                      className="min-h-16 text-xs"
-                                                      placeholder="Special Equipment & Supplies"
-                                                    />
-                                                    <input
-                                                      value={row.reportingLocation}
-                                                      onChange={(event) =>
-                                                        updateIcs204WorkAssignment(
-                                                          form.id,
-                                                          row.id,
-                                                          'reportingLocation',
-                                                          event.target.value
-                                                        )
-                                                      }
-                                                      placeholder="Reporting Location"
-                                                      className="h-8 w-full rounded-md border bg-transparent px-2 text-xs outline-none"
-                                                    />
-                                                  </div>
-                                                </CollapsibleContent>
-                                              </Collapsible>
-                                            </Item>
-                                          )
-                                        })}
-                                      </div>
-                                    </div>
-
-                                    <div className="space-y-2">
-                                      <p className="text-xs font-semibold">Special Instructions</p>
-                                      <Textarea
-                                        value={form.specialInstructions}
-                                        onChange={(event) =>
-                                          updateIcs204Field(
-                                            form.id,
-                                            'specialInstructions',
-                                            event.target.value
-                                          )
-                                        }
-                                        className="min-h-20 text-xs"
-                                      />
-                                    </div>
-
-                                    <div className="space-y-2">
-                                      <p className="text-xs font-semibold">Communications</p>
-                                      <Textarea
-                                        value={form.communications}
-                                        onChange={(event) =>
-                                          updateIcs204Field(form.id, 'communications', event.target.value)
-                                        }
-                                        className="min-h-20 text-xs"
-                                      />
-                                    </div>
+                                    <Ics204FormSections
+                                      form={form}
+                                      canEdit={canEditIcs201Form}
+                                      formIsLocked={formIsLocked}
+                                      isSaving={isIcs204Saving}
+                                      glassItemBorderClasses={glassItemBorderClasses}
+                                      editingSections={ics204EditingSectionsByFormId[form.id] ?? {}}
+                                      drafts={ics204SectionDraftsByFormId[form.id] ?? {}}
+                                      expandedWorkAssignmentKey={expandedIcs204WorkAssignmentKey}
+                                      onExpandedWorkAssignmentKeyChange={setExpandedIcs204WorkAssignmentKey}
+                                      onStartSectionEdit={(section) =>
+                                        startIcs204SectionEdit(form.id, section, form)
+                                      }
+                                      onCancelSectionEdit={(section) =>
+                                        cancelIcs204SectionEdit(form.id, section)
+                                      }
+                                      onSaveSection={(section) => saveIcs204Section(form.id, section)}
+                                      onGenerateSection={(section) =>
+                                        openIcs204SectionGeneration(form.id, section)
+                                      }
+                                      onPatchDraft={(section, value) =>
+                                        patchIcs204SectionDraft(form.id, section, value)
+                                      }
+                                      onOpenResourcePicker={() => setIcs204ResourcePickerFormId(form.id)}
+                                      onFocusResourceMap={(resourceId, mapLocation) => {
+                                        void focusMapItem(`resource-${resourceId}`, mapLocation, 30000)
+                                      }}
+                                    />
                                     </div>
                                     {!viewingPastFormVersion &&
                                       !isDraftingFormSigned &&
@@ -28380,6 +29604,9 @@ function App() {
                   activeFormTabLabel &&
                   (isInIncidentWorkspace || isInExerciseWorkspace) &&
                   activeTab !== 'form-ICS-204' &&
+                  activeTab !== 'form-ICS-202' &&
+                  activeTab !== 'form-ICS-203' &&
+                  activeTab !== 'form-ICS-234' &&
                   activeTab !== 'form-ICS-233' && (
                   <Item variant="outline" className={cn('flex-col items-stretch p-0', glassItemBorderClasses)}>
                     <div className="px-3 py-2.5">
@@ -28433,6 +29660,11 @@ function App() {
                   if (
                     pratusAiIntent === 'ics201-generation' ||
                     pratusAiIntent === 'ics201-section-generation' ||
+                    pratusAiIntent === 'ics204-section-generation' ||
+                    pratusAiIntent === 'ics202-section-generation' ||
+                    pratusAiIntent === 'ics203-section-generation' ||
+                    pratusAiIntent === 'ics234-section-generation' ||
+                    pratusAiIntent === 'ics234-matrix-item-generation' ||
                     pratusAiIntent === 'sitrep-generation' ||
                     pratusAiIntent === 'event-rule-generation' ||
                     pratusAiIntent === 'notification-rule-generation'
@@ -29520,6 +30752,20 @@ function App() {
           )}
         </DialogContent>
       </Dialog>
+      <Ics204ExportPreviewDialog
+        open={isIcs204PreviewOpen}
+        onOpenChange={setIsIcs204PreviewOpen}
+        title={ics204PreviewTitle}
+        blocks={ics204PreviewBlocks as Ics204DocxBlock[]}
+        onExportWord={() => {
+          if (!ics204PreviewFormId) return
+          exportIcs204Word(ics204PreviewFormId, ics204PreviewBlocks)
+        }}
+        onExportPdf={() => {
+          if (!ics204PreviewFormId) return
+          exportIcs204Pdf(ics204PreviewFormId, ics204PreviewBlocks)
+        }}
+      />
       <Dialog open={isIcs201PreviewOpen} onOpenChange={setIsIcs201PreviewOpen}>
         <DialogContent className="!w-[70vw] !max-w-[70vw] sm:!max-w-[70vw]">
           <DialogHeader>
