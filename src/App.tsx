@@ -329,6 +329,26 @@ import {
   ics205aAuthorColor,
 } from '@/features/ics205a/utils'
 import { useIcs205aWorkspaceForm } from '@/hooks/useIcs205aWorkspaceForm'
+import { ICS206_SECTION_PROMPTS } from '@/features/ics206/constants'
+import { Ics206WorkspacePanel } from '@/features/ics206/Ics206WorkspacePanel'
+import type {
+  Ics206FormSectionDrafts,
+  Ics206FormState,
+  Ics206SectionId,
+  Ics206Version,
+} from '@/features/ics206/types'
+import {
+  applyIcs206SectionDraft,
+  cloneIcs206FormState,
+  createDefaultIcs206HospitalRows,
+  createDefaultIcs206MedicalAidStationRows,
+  createDefaultIcs206TransportationRows,
+  createEmptyIcs206Form,
+  createLocalIcs206DocumentId,
+  extractIcs206SectionDraft,
+  ics206AuthorColor,
+} from '@/features/ics206/utils'
+import { useIcs206WorkspaceForm } from '@/hooks/useIcs206WorkspaceForm'
 import {
   buildIcs204DocxBlocks,
   buildIcs204ExportOptions,
@@ -3849,6 +3869,7 @@ const WORKSPACE_FORMS_MENU: Array<{ id: string; tab: LeftTab; label: string }> =
   { id: 'ICS-215', tab: 'form-ICS-215', label: 'Operational Planning Worksheet / ICS-215' },
   { id: 'ICS-205', tab: 'form-ICS-205', label: 'Incident Radio Communications Plan / ICS-205' },
   { id: 'ICS-205A', tab: 'form-ICS-205A', label: 'Communications List / ICS-205A' },
+  { id: 'ICS-206', tab: 'form-ICS-206', label: 'Medical Plan / ICS-206' },
   { id: 'ICS-204', tab: 'form-ICS-204', label: 'Assignment List / ICS-204' },
   { id: 'ICS-233', tab: 'form-ICS-233', label: 'Open Actions / ICS-233' },
   { id: 'ICS-208', tab: 'form-ICS-208', label: 'Safety Message / ICS-208' },
@@ -6947,6 +6968,7 @@ function App() {
     | 'ics215-section-generation'
     | 'ics205-section-generation'
     | 'ics205a-section-generation'
+    | 'ics206-section-generation'
     | 'event-rule-generation'
     | 'notification-rule-generation'
   >('default')
@@ -6961,6 +6983,7 @@ function App() {
   const [pratusAiIcs215Section, setPratusAiIcs215Section] = useState<Ics215SectionId | null>(null)
   const [pratusAiIcs205Section, setPratusAiIcs205Section] = useState<Ics205SectionId | null>(null)
   const [pratusAiIcs205aSection, setPratusAiIcs205aSection] = useState<Ics205aSectionId | null>(null)
+  const [pratusAiIcs206Section, setPratusAiIcs206Section] = useState<Ics206SectionId | null>(null)
   const [pratusAiIcs234MatrixItem, setPratusAiIcs234MatrixItem] =
     useState<Ics234MatrixItemRef | null>(null)
   const [ics234EditingMatrixItem, setIcs234EditingMatrixItem] =
@@ -8365,6 +8388,16 @@ function App() {
   ics205aFormRef.current = ics205aForm
   const ics205aVersionsRef = useRef(ics205aVersions)
   ics205aVersionsRef.current = ics205aVersions
+  const [ics206Form, setIcs206Form] = useState<Ics206FormState | null>(null)
+  const [ics206Versions, setIcs206Versions] = useState<Ics206Version[]>([])
+  const [ics206EditingSections, setIcs206EditingSections] = useState<
+    Partial<Record<Ics206SectionId, boolean>>
+  >({})
+  const [ics206SectionDrafts, setIcs206SectionDrafts] = useState<Ics206FormSectionDrafts>({})
+  const ics206FormRef = useRef(ics206Form)
+  ics206FormRef.current = ics206Form
+  const ics206VersionsRef = useRef(ics206Versions)
+  ics206VersionsRef.current = ics206Versions
   const liveIcs204FormsRef = useRef<Record<string, Ics204FormState>>({})
   const [ics233Rows, setIcs233Rows] = useState<Ics233TaskRow[]>([])
   const [activeIcs233CellEdit, setActiveIcs233CellEdit] = useState<{
@@ -8417,6 +8450,8 @@ function App() {
         ics205Versions: Ics205Version[]
         ics205aForm: Ics205aFormState | null
         ics205aVersions: Ics205aVersion[]
+        ics206Form: Ics206FormState | null
+        ics206Versions: Ics206Version[]
         ics233Rows: Ics233TaskRow[]
       }
     >
@@ -10598,6 +10633,7 @@ function App() {
     if (tab === 'form-ICS-215') return 'ICS-215 Operational Planning Worksheet'
     if (tab === 'form-ICS-205') return 'ICS-205 Incident Radio Communications Plan'
     if (tab === 'form-ICS-205A') return 'ICS-205A Communications List'
+    if (tab === 'form-ICS-206') return 'ICS-206 Medical Plan'
     if (tab.startsWith('form-')) return tab.replace('form-', '')
     return 'Panel Content'
   }
@@ -11745,6 +11781,8 @@ function App() {
       ics205Versions: isSupabaseEnabled ? [] : ics205VersionsRef.current,
       ics205aForm: isSupabaseEnabled ? null : ics205aFormRef.current,
       ics205aVersions: isSupabaseEnabled ? [] : ics205aVersionsRef.current,
+      ics206Form: isSupabaseEnabled ? null : ics206FormRef.current,
+      ics206Versions: isSupabaseEnabled ? [] : ics206VersionsRef.current,
       ics233Rows: ics233RowsRef.current,
     }
   }
@@ -11764,6 +11802,8 @@ function App() {
       setIcs205Versions([])
       setIcs205aForm(null)
       setIcs205aVersions([])
+      setIcs206Form(null)
+      setIcs206Versions([])
       setIcs233Rows([])
       setExpandedIcs204FormId(null)
       return
@@ -11783,6 +11823,8 @@ function App() {
       setIcs205Versions([])
       setIcs205aForm(null)
       setIcs205aVersions([])
+      setIcs206Form(null)
+      setIcs206Versions([])
       setIcs233Rows([])
       setExpandedIcs204FormId(null)
       return
@@ -11802,6 +11844,8 @@ function App() {
     setIcs205Versions(cached?.ics205Versions ?? [])
     setIcs205aForm(cached?.ics205aForm ?? null)
     setIcs205aVersions(cached?.ics205aVersions ?? [])
+    setIcs206Form(cached?.ics206Form ?? null)
+    setIcs206Versions(cached?.ics206Versions ?? [])
     setIcs233Rows((cached?.ics233Rows ?? []).map((row) => normalizeIcs233Row(row)))
     setExpandedIcs204FormId(cached?.ics204Forms[0]?.id ?? null)
   }
@@ -12091,6 +12135,18 @@ function App() {
       })))
       setIcs205aEditingSections({})
       setIcs205aSectionDrafts({})
+    },
+    []
+  )
+  const handleIcs206Loaded = useCallback(
+    (payload: { form: Ics206FormState; versions: Ics206Version[] }) => {
+      setIcs206Form(cloneIcs206FormState(payload.form))
+      setIcs206Versions(payload.versions.map((version) => ({
+        ...version,
+        snapshot: cloneIcs206FormState(version.snapshot),
+      })))
+      setIcs206EditingSections({})
+      setIcs206SectionDrafts({})
     },
     []
   )
@@ -12689,6 +12745,30 @@ function App() {
     workspaceDefaults: ics205aWorkspaceDefaults,
     onLoaded: handleIcs205aLoaded,
   })
+  const ics206WorkspaceDefaults = useMemo(
+    (): Partial<Ics206FormState> => ({
+      incidentName: activeIncidentWorkspace?.name ?? activeExerciseWorkspace?.name ?? '',
+    }),
+    [activeIncidentWorkspace?.name, activeExerciseWorkspace?.name]
+  )
+  const {
+    loading: isIcs206Loading,
+    error: ics206SyncError,
+    isSaving: isIcs206Saving,
+    saveDraft: saveIcs206DraftToServer,
+    appendVersion: appendIcs206VersionToServer,
+    saveSignedReview: saveIcs206SignedReviewToServer,
+  } = useIcs206WorkspaceForm({
+    enabled:
+      isSupabaseEnabled &&
+      (isInIncidentWorkspace || isInExerciseWorkspace) &&
+      activeWorkspaceSupabaseId !== null,
+    workspaceId: activeWorkspaceSupabaseId,
+    userId: user?.id ?? null,
+    profileEmail,
+    workspaceDefaults: ics206WorkspaceDefaults,
+    onLoaded: handleIcs206Loaded,
+  })
   const { canEditIcs201Form, refresh: refreshWorkspacePermissions } = useWorkspacePermissions(
     isInIncidentWorkspace || isInExerciseWorkspace ? activeWorkspaceSupabaseId : null,
     isOrgAdmin
@@ -12752,6 +12832,8 @@ function App() {
     setIcs205SectionDrafts({})
     setIcs205aEditingSections({})
     setIcs205aSectionDrafts({})
+    setIcs206EditingSections({})
+    setIcs206SectionDrafts({})
   }, [canEditIcs201Form])
   const currentUserRosterMember = activeWorkspaceRoster.find(
     (member) => member.email.toLowerCase() === (profileEmail ?? '').toLowerCase()
@@ -12885,6 +12967,8 @@ function App() {
   const ics205LocalAuthorColor = ics205AuthorColor(user?.id ?? null)
   const ics205aAuthorName = profileEmail ?? 'You'
   const ics205aLocalAuthorColor = ics205aAuthorColor(user?.id ?? null)
+  const ics206AuthorName = profileEmail ?? 'You'
+  const ics206LocalAuthorColor = ics206AuthorColor(user?.id ?? null)
   useEffect(() => {
     if (ics204SyncError) {
       toast.error(ics204SyncError)
@@ -12920,6 +13004,11 @@ function App() {
       toast.error(ics205aSyncError)
     }
   }, [ics205aSyncError])
+  useEffect(() => {
+    if (ics206SyncError) {
+      toast.error(ics206SyncError)
+    }
+  }, [ics206SyncError])
   useEffect(() => {
     if (isSupabaseEnabled) return
     if (!isInIncidentWorkspace && !isInExerciseWorkspace) return
@@ -12966,6 +13055,31 @@ function App() {
     ics205aForm,
     ics205aLocalAuthorColor,
     ics205aWorkspaceDefaults,
+    isInExerciseWorkspace,
+    isInIncidentWorkspace,
+    isSupabaseEnabled,
+  ])
+  useEffect(() => {
+    if (isSupabaseEnabled) return
+    if (!isInIncidentWorkspace && !isInExerciseWorkspace) return
+    if (ics206Form) return
+    const localId = createLocalIcs206DocumentId()
+    const form = createEmptyIcs206Form(localId, ics206WorkspaceDefaults)
+    const initialVersion: Ics206Version = {
+      id: `local-v-${localId}`,
+      createdAt: Date.now(),
+      authorName: ics206AuthorName,
+      authorColor: ics206LocalAuthorColor,
+      snapshot: cloneIcs206FormState(form),
+      signatures: [],
+    }
+    setIcs206Form(form)
+    setIcs206Versions([initialVersion])
+  }, [
+    ics206AuthorName,
+    ics206Form,
+    ics206LocalAuthorColor,
+    ics206WorkspaceDefaults,
     isInExerciseWorkspace,
     isInIncidentWorkspace,
     isSupabaseEnabled,
@@ -16525,6 +16639,120 @@ function App() {
       }, 1400)
       return
     }
+    if (pratusAiIntent === 'ics206-section-generation' && pratusAiIcs206Section) {
+      const section = pratusAiIcs206Section
+      if (!ics206Form) {
+        setPratusAiIntent('default')
+        setPratusAiIcs206Section(null)
+        setPratusAiDraftMessage('')
+        return
+      }
+      startIcs206SectionEdit(section)
+      setIsPratusAiDrawerOpen(false)
+      setPratusAiIntent('default')
+      setPratusAiIcs206Section(null)
+      setPratusAiDraftMessage('')
+      setIsPratusAiLoading(true)
+      if (pratusAiLoadingTimerRef.current) {
+        window.clearTimeout(pratusAiLoadingTimerRef.current)
+        pratusAiLoadingTimerRef.current = null
+      }
+      const incidentLabel =
+        ics206Form.incidentName ||
+        activeIncidentWorkspace?.name ||
+        activeExerciseWorkspace?.name ||
+        'this incident'
+      const now = new Date()
+      const later = new Date(Date.now() + 12 * 60 * 60 * 1000)
+      pratusAiLoadingTimerRef.current = window.setTimeout(() => {
+        switch (section) {
+          case 'incident-info':
+            patchIcs206SectionDraft(section, {
+              incidentName: incidentLabel,
+              operationalPeriodDateFrom:
+                ics206Form.operationalPeriodDateFrom || now.toISOString().slice(0, 10),
+              operationalPeriodDateTo:
+                ics206Form.operationalPeriodDateTo || later.toISOString().slice(0, 10),
+              operationalPeriodTimeFrom:
+                ics206Form.operationalPeriodTimeFrom || now.toTimeString().slice(0, 5),
+              operationalPeriodTimeTo:
+                ics206Form.operationalPeriodTimeTo || later.toTimeString().slice(0, 5),
+            })
+            break
+          case 'medical-aid-stations':
+            patchIcs206SectionDraft(section, [
+              {
+                id: 1,
+                name: 'Incident Medical Aid Station',
+                location: 'Staging Area / Base Camp',
+                contactNumbersFrequency: 'Radio: Medical Net · Phone: (555) 020-0101',
+                paramedicsOnSite: 'yes',
+              },
+              ...createDefaultIcs206MedicalAidStationRows().slice(1),
+            ])
+            break
+          case 'transportation':
+            patchIcs206SectionDraft(section, [
+              {
+                id: 1,
+                ambulanceService: 'County EMS',
+                location: 'North Staging Area',
+                contactNumbersFrequency: 'Radio: Medical Net · Phone: (555) 020-0201',
+                levelOfService: 'ALS',
+              },
+              ...createDefaultIcs206TransportationRows().slice(1),
+            ])
+            break
+          case 'hospitals':
+            patchIcs206SectionDraft(section, [
+              {
+                id: 1,
+                hospitalName: 'Regional Trauma Center',
+                addressLatLong: '100 Medical Center Dr · 38.9072, -77.0369',
+                contactNumbersFrequency: 'Phone: (555) 020-0301 · Freq: MedEvac 123.45',
+                travelTimeAir: '15 min',
+                travelTimeGround: '35 min',
+                traumaCenterYes: 'yes',
+                traumaCenterLevel: 'Level I',
+                burnCenterYes: 'yes',
+                helipadYes: 'yes',
+              },
+              ...createDefaultIcs206HospitalRows().slice(1),
+            ])
+            break
+          case 'special-medical-emergency-procedures':
+            patchIcs206SectionDraft(section, {
+              specialMedicalEmergencyProcedures: `Report all medical emergencies to the Medical Unit Leader on Medical Net. For rescue-related injuries, notify Safety Officer and establish an incident-within-incident branch for ${incidentLabel}.`,
+              aviationAssetsUtilized: true,
+            })
+            break
+          case 'prepared-by':
+            patchIcs206SectionDraft(section, {
+              preparedByName: ics206Form.preparedByName || 'Medical Unit Leader',
+              preparedBySignature: ics206Form.preparedBySignature || 'Medical Unit Leader',
+              preparedByDateTime:
+                ics206Form.preparedByDateTime || new Date().toISOString().slice(0, 16),
+            })
+            break
+          case 'approved-by':
+            patchIcs206SectionDraft(section, {
+              approvedByName: ics206Form.approvedByName || 'Safety Officer',
+              approvedBySignature: ics206Form.approvedBySignature || 'Safety Officer',
+              approvedByDateTime:
+                ics206Form.approvedByDateTime || new Date().toISOString().slice(0, 16),
+            })
+            break
+          default:
+            break
+        }
+        setIsPratusAiLoading(false)
+        pratusAiLoadingTimerRef.current = null
+        toast.success(
+          `PRATUS AI drafted ICS-206 ${section.replace(/-/g, ' ')}. Review and click Save to commit.`
+        )
+      }, 1400)
+      return
+    }
     if (pratusAiIntent === 'ics201-section-generation' && pratusAiIcs201Section) {
       const section = pratusAiIcs201Section
       const sectionLabel = ICS201_SECTION_LABELS[section]
@@ -18701,6 +18929,141 @@ function App() {
       )
     })
   }
+  const mergePersistedIcs206Version = (
+    previous: Ics206Version[],
+    latestVersion: Ics206Version,
+    persisted: Ics206Version
+  ) => {
+    const next = [...previous]
+    const lastIndex = next.length - 1
+    if (latestVersion && next[lastIndex]?.id === latestVersion.id) {
+      next[lastIndex] = persisted
+    } else if (next.some((entry) => entry.id === persisted.id)) {
+      next[next.findIndex((entry) => entry.id === persisted.id)] = persisted
+    } else {
+      next.push(persisted)
+    }
+    return next.slice(-100)
+  }
+  const openIcs206SectionGeneration = (section: Ics206SectionId) => {
+    setPratusAiIntent('ics206-section-generation')
+    setPratusAiIcs206Section(section)
+    setPratusAiDraftMessage(ICS206_SECTION_PROMPTS[section])
+    setIsPratusAiDrawerOpen(true)
+  }
+  const startIcs206SectionEdit = (section: Ics206SectionId) => {
+    if (!canEditIcs201Form || !ics206Form) return
+    setIcs206SectionDrafts((previous) => ({
+      ...previous,
+      [section]: extractIcs206SectionDraft(ics206Form, section),
+    }))
+    setIcs206EditingSections((previous) => ({
+      ...previous,
+      [section]: true,
+    }))
+  }
+  const cancelIcs206SectionEdit = (section: Ics206SectionId) => {
+    setIcs206EditingSections((previous) => {
+      const next = { ...previous }
+      delete next[section]
+      return next
+    })
+    setIcs206SectionDrafts((previous) => {
+      const next = { ...previous }
+      delete next[section]
+      return next
+    })
+  }
+  const patchIcs206SectionDraft = <S extends Ics206SectionId>(
+    section: S,
+    value: Ics206FormSectionDrafts[S]
+  ) => {
+    setIcs206SectionDrafts((previous) => ({
+      ...previous,
+      [section]: value,
+    }))
+  }
+  const saveIcs206Section = (section: Ics206SectionId) => {
+    if (!canEditIcs201Form) {
+      toast.error('Your ICS position does not include permission to edit ICS-206 forms.')
+      return
+    }
+    const draft = ics206SectionDrafts[section]
+    if (draft === undefined || !ics206Form) return
+    const nextForm = applyIcs206SectionDraft(ics206Form, section, draft)
+    setIcs206Form(cloneIcs206FormState(nextForm))
+    const latestVersion = ics206Versions[ics206Versions.length - 1]
+    if (latestVersion && latestVersion.signatures.length === 0) {
+      handleIcs206SaveDraft(nextForm, latestVersion)
+    }
+    cancelIcs206SectionEdit(section)
+  }
+  const handleIcs206SaveDraft = (form: Ics206FormState, latestVersion: Ics206Version) => {
+    const optimisticVersion: Ics206Version = {
+      ...latestVersion,
+      createdAt: Date.now(),
+      authorName: ics206AuthorName,
+      authorColor: ics206LocalAuthorColor,
+      snapshot: cloneIcs206FormState(form),
+    }
+    setIcs206Versions((previous) =>
+      mergePersistedIcs206Version(previous, latestVersion, optimisticVersion)
+    )
+    void saveIcs206DraftToServer(form.id, form, latestVersion).then((persisted) => {
+      if (!persisted) return
+      setIcs206Versions((previous) =>
+        mergePersistedIcs206Version(previous, latestVersion, persisted)
+      )
+    })
+  }
+  const handleIcs206AppendVersion = (
+    form: Ics206FormState,
+    signatures: Ics201VersionSignature[] = [],
+    authorNameOverride?: string
+  ) => {
+    const authorName = authorNameOverride ?? ics206AuthorName
+    const optimisticVersion: Ics206Version = {
+      id: `local-v-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      createdAt: Date.now(),
+      authorName,
+      authorColor: ics206LocalAuthorColor,
+      snapshot: cloneIcs206FormState(form),
+      signatures,
+    }
+    setIcs206Versions((previous) => [...previous, optimisticVersion].slice(-100))
+    void appendIcs206VersionToServer(form.id, form, signatures).then((persisted) => {
+      if (!persisted) return
+      setIcs206Versions((previous) =>
+        previous
+          .map((entry) => (entry.id === optimisticVersion.id ? persisted : entry))
+          .slice(-100)
+      )
+    })
+  }
+  const handleIcs206SignReview = (
+    form: Ics206FormState,
+    latestVersion: Ics206Version,
+    signature: Ics201VersionSignature
+  ) => {
+    const nextVersion: Ics206Version = {
+      ...latestVersion,
+      signatures: [...latestVersion.signatures, signature],
+    }
+    setIcs206Versions((previous) =>
+      mergePersistedIcs206Version(previous, latestVersion, nextVersion)
+    )
+    void saveIcs206SignedReviewToServer(
+      form.id,
+      form,
+      latestVersion.id,
+      nextVersion.signatures
+    ).then((persisted) => {
+      if (!persisted) return
+      setIcs206Versions((previous) =>
+        mergePersistedIcs206Version(previous, latestVersion, persisted)
+      )
+    })
+  }
   const applyDraftIcs204Recommendations = async () => {
     const templates: Partial<Ics204FormState>[] = [
       {
@@ -20118,6 +20481,7 @@ function App() {
                   {activeTab === 'form-ICS-215' && 'ICS-215 Operational Planning Worksheet'}
                   {activeTab === 'form-ICS-205' && 'ICS-205 Incident Radio Communications Plan'}
                   {activeTab === 'form-ICS-205A' && 'ICS-205A Communications List'}
+                  {activeTab === 'form-ICS-206' && 'ICS-206 Medical Plan'}
                   {activeTab !== 'form-ICS-204' &&
                     activeTab !== 'form-ICS-202' &&
                     activeTab !== 'form-ICS-203' &&
@@ -20125,6 +20489,7 @@ function App() {
                     activeTab !== 'form-ICS-215' &&
                     activeTab !== 'form-ICS-205' &&
                     activeTab !== 'form-ICS-205A' &&
+                    activeTab !== 'form-ICS-206' &&
                     activeFormTabLabel}
                 </CardTitle>
                 {activeTab === 'roster' && (isInIncidentWorkspace || isInExerciseWorkspace) && (
@@ -28296,6 +28661,32 @@ function App() {
                   />
                 )}
 
+                {activeTab === 'form-ICS-206' && (isInIncidentWorkspace || isInExerciseWorkspace) && (
+                  <Ics206WorkspacePanel
+                    form={ics206Form}
+                    setForm={setIcs206Form}
+                    versions={ics206Versions}
+                    canEdit={canEditIcs201Form}
+                    isLoading={isIcs206Loading}
+                    isSaving={isIcs206Saving}
+                    glassItemBorderClasses={glassItemBorderClasses}
+                    incidentName={
+                      activeIncidentWorkspace?.name ?? activeExerciseWorkspace?.name ?? ''
+                    }
+                    editingSections={ics206EditingSections}
+                    sectionDrafts={ics206SectionDrafts}
+                    onStartSectionEdit={startIcs206SectionEdit}
+                    onCancelSectionEdit={cancelIcs206SectionEdit}
+                    onSaveSection={saveIcs206Section}
+                    onGenerateSection={openIcs206SectionGeneration}
+                    onPatchSectionDraft={patchIcs206SectionDraft}
+                    onAppendVersion={handleIcs206AppendVersion}
+                    onSignReview={handleIcs206SignReview}
+                    downloadDocx={downloadDocx}
+                    downloadPdf={downloadPdf}
+                  />
+                )}
+
                 {activeTab === 'form-ICS-203' && (isInIncidentWorkspace || isInExerciseWorkspace) && (
                   <Ics203WorkspacePanel
                     form={ics203Form}
@@ -30321,6 +30712,7 @@ function App() {
                   activeTab !== 'form-ICS-215' &&
                   activeTab !== 'form-ICS-205' &&
                   activeTab !== 'form-ICS-205A' &&
+                  activeTab !== 'form-ICS-206' &&
                   activeTab !== 'form-ICS-233' && (
                   <Item variant="outline" className={cn('flex-col items-stretch p-0', glassItemBorderClasses)}>
                     <div className="px-3 py-2.5">
