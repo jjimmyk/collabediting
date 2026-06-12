@@ -439,6 +439,7 @@ import {
   resolveIcs204ListTitle,
 } from '@/features/ics204/utils'
 import { ResourceListItemCard } from '@/features/resources/ResourceListItemCard'
+import { AssetListHeaderRow } from '@/features/resources/AssetListHeaderRow'
 import type { ResourceListItemData } from '@/features/resources/types'
 import {
   formatResourceCostPerUnit,
@@ -456,6 +457,8 @@ import {
   type PositionPermissionMap,
 } from '@/features/roster/workspace-position-roster'
 import { femaRegionGeometries } from '@/data/fema-regions'
+import { filterCoastGuardAreaAssets } from '@/data/uscg-coast-guard-area-assets'
+import { USCG_COAST_GUARD_AREA_SITREPS } from '@/data/uscg-coast-guard-area-sitreps'
 import {
   DEFAULT_EVENT_CREATION_RULES,
   type EventCreationRule,
@@ -569,17 +572,17 @@ type NotificationTaskResource = {
 }
 
 const NOTIFICATION_TASK_RESOURCE_CATALOG: Record<string, NotificationTaskResource[]> = {
-  'Activate Marathon Garyville refinery ERP and unified command; notify St. James Parish OEM, LDEQ, and USCG Sector New Orleans.':
+  'Activate United States Coast Guard Garyville refinery ERP and unified command; notify St. James Parish OEM, LDEQ, and USCG Sector New Orleans.':
     [
       {
         id: 'mpc-garyville-uc',
-        name: 'Marathon Garyville Refinery Unified Command',
+        name: 'United States Coast Guard Garyville Refinery Unified Command',
         availability: 'Available',
         location: 'Garyville, LA',
       },
       {
         id: 'mpc-emergency-response',
-        name: 'Marathon Emergency Response Team — Gulf Coast',
+        name: 'United States Coast Guard Emergency Response Team — Gulf Coast',
         availability: 'Available',
         location: 'Garyville, LA',
       },
@@ -603,7 +606,7 @@ const NOTIFICATION_TASK_RESOURCE_CATALOG: Record<string, NotificationTaskResourc
       },
       {
         id: 'mpc-ert-gulf',
-        name: 'Marathon Emergency Response Team — Gulf Coast',
+        name: 'United States Coast Guard Emergency Response Team — Gulf Coast',
         availability: 'Available',
         location: 'Garyville, LA',
       },
@@ -618,7 +621,7 @@ const NOTIFICATION_TASK_RESOURCE_CATALOG: Record<string, NotificationTaskResourc
       },
       {
         id: 'mpc-fire-brigade-garyville',
-        name: 'Marathon Industrial Fire Brigade — Garyville',
+        name: 'United States Coast Guard Industrial Fire Brigade — Garyville',
         availability: 'Assigned',
         location: 'Garyville Refinery',
       },
@@ -636,7 +639,7 @@ const NOTIFICATION_TASK_RESOURCE_CATALOG: Record<string, NotificationTaskResourc
       },
       {
         id: 'mpc-hazmat-monitoring',
-        name: 'Marathon Refinery Fixed Gas Detection Network',
+        name: 'United States Coast Guard Refinery Fixed Gas Detection Network',
         availability: 'Assigned',
         location: 'Garyville Refinery',
       },
@@ -657,7 +660,7 @@ const NOTIFICATION_TASK_RESOURCE_CATALOG: Record<string, NotificationTaskResourc
       },
       {
         id: 'mpc-emergency-response-gulf',
-        name: 'Marathon Emergency Response Advisor on Duty — Gulf Coast',
+        name: 'United States Coast Guard Emergency Response Advisor on Duty — Gulf Coast',
         availability: 'Available',
         location: 'Houston, TX',
       },
@@ -681,7 +684,7 @@ const NOTIFICATION_TASK_RESOURCE_CATALOG: Record<string, NotificationTaskResourc
       },
       {
         id: 'mpc-ert-gulf-pipeline',
-        name: 'Marathon Emergency Response Team — Gulf Coast',
+        name: 'United States Coast Guard Emergency Response Team — Gulf Coast',
         availability: 'Available',
         location: 'Houston, TX',
       },
@@ -733,6 +736,8 @@ type ResourceDeploymentKind = 'available' | 'incident' | 'exercise'
 type ResourceItem = {
   id: number
   name: string
+  assetStatus: 'FMC' | 'PMC' | 'NMC'
+  assetStatusUpdatedAt: string
   owner: string
   status: 'Assigned' | 'Staged' | 'Available'
   type: string
@@ -748,7 +753,8 @@ type ResourceItem = {
   pointOfContact: string
   owningOrganization: string
   quantity: number
-  unit: string
+  unitType: string
+  unitName: string
   hullTailNumber: string
   symbology: string
   latitude: string
@@ -792,6 +798,7 @@ type ResourcesFieldFilterRule = {
 
 const RESOURCE_FILTER_FIELD_OPTIONS = [
   { id: 'name', label: 'Name' },
+  { id: 'assetStatus', label: 'Asset Status' },
   { id: 'owner', label: 'Owner' },
   { id: 'status', label: 'Status' },
   { id: 'assignment', label: 'Incident Assignment' },
@@ -807,7 +814,8 @@ const RESOURCE_FILTER_FIELD_OPTIONS = [
   { id: 'pointOfContact', label: 'Point of Contact' },
   { id: 'owningOrganization', label: 'Owning Organization' },
   { id: 'quantity', label: 'Quantity' },
-  { id: 'unit', label: 'Unit' },
+  { id: 'unitType', label: 'Unit Type' },
+  { id: 'unitName', label: 'Unit Name' },
   { id: 'hullTailNumber', label: 'Hull/Tail Number' },
   { id: 'symbology', label: 'Symbology' },
   { id: 'latitude', label: 'Lat' },
@@ -826,6 +834,8 @@ const getResourceItemFieldValue = (item: ResourceItem, field: string) => {
   switch (field) {
     case 'name':
       return item.name
+    case 'assetStatus':
+      return item.assetStatus
     case 'owner':
       return item.owner
     case 'status':
@@ -856,8 +866,10 @@ const getResourceItemFieldValue = (item: ResourceItem, field: string) => {
       return item.owningOrganization
     case 'quantity':
       return String(item.quantity)
-    case 'unit':
-      return item.unit
+    case 'unitType':
+      return item.unitType
+    case 'unitName':
+      return item.unitName
     case 'hullTailNumber':
       return item.hullTailNumber
     case 'symbology':
@@ -947,6 +959,28 @@ type FemaAorItem = {
   sitrepSources: string[]
   location: [number, number]
 }
+
+type UscgCoastGuardArea = {
+  key: 'atlantic' | 'pacific'
+  name: 'Atlantic Area' | 'Pacific Area'
+  districtIds: number[]
+  location: [number, number]
+}
+
+const USCG_COAST_GUARD_AREAS: UscgCoastGuardArea[] = [
+  {
+    key: 'atlantic',
+    name: 'Atlantic Area',
+    districtIds: [1, 2, 3, 4, 5, 6, 7],
+    location: [-76.5, 36.8],
+  },
+  {
+    key: 'pacific',
+    name: 'Pacific Area',
+    districtIds: [8, 9, 10],
+    location: [-140.0, 42.0],
+  },
+]
 
 type RosterPositionItem = {
   id: number
@@ -1289,18 +1323,18 @@ const DEFAULT_EVENT_LIST: EventListItem[] = (
     severity: 'High',
     region: 'Gulf Coast — Texas & Louisiana',
     location: [-95.37, 29.76],
-    lead: 'Marathon Gulf Coast Weather Cell · NWS Houston/Galveston Liaison',
+    lead: 'United States Coast Guard Gulf Coast Weather Cell · NWS Houston/Galveston Liaison',
     startedAt: '2026-05-08 18:00 CST',
     lastUpdate: '2026-05-09 10:30 CST',
     summary:
-      'Hurricane Edgar approaching upper Texas and southwest Louisiana coast. Marathon initiating controlled shutdowns at Texas City, Galveston Bay, and Louisiana refining assets; MPLX pipeline segment isolation and storm hardening in progress. Storm surge and flooding risk to coastal terminals.',
+      'Hurricane Edgar approaching upper Texas and southwest Louisiana coast. United States Coast Guard initiating controlled shutdowns at Texas City, Galveston Bay, and Louisiana refining assets; MPLX pipeline segment isolation and storm hardening in progress. Storm surge and flooding risk to coastal terminals.',
     resourcesCommitted:
-      'Marathon weather cell, refinery EOC teams, MPLX control center, contractor pre-positioning, parish/county OEM liaisons',
+      'United States Coast Guard weather cell, refinery EOC teams, MPLX control center, contractor pre-positioning, parish/county OEM liaisons',
     businessUnit: 'Gulf Coast — Texas & Louisiana',
     creationKind: 'threshold',
     createdByUser: null,
     thresholdDescription:
-      'Hurricane watch threshold reached for Marathon Gulf Coast refining and MPLX corridor assets',
+      'Hurricane watch threshold reached for United States Coast Guard Gulf Coast refining and MPLX corridor assets',
   },
   {
     id: 2,
@@ -1369,18 +1403,18 @@ const DEFAULT_EVENT_LIST: EventListItem[] = (
     severity: 'High',
     region: 'Gulf Coast — Texas',
     location: [-95.2695, 29.7355],
-    lead: 'Marathon Texas City Terminal · Harris County OEM Liaison',
+    lead: 'United States Coast Guard Texas City Terminal · Harris County OEM Liaison',
     startedAt: '2026-05-08 22:00 CST',
     lastUpdate: '2026-05-09 06:30 CST',
     summary:
-      'Storm surge and tidal flooding watch for Galveston Bay and Houston Ship Channel approaches ahead of Hurricane Edgar landfall. Marathon terminal loadings curtailed; TxDOT gates staged; MPLX marine terminal transfer suspended.',
+      'Storm surge and tidal flooding watch for Galveston Bay and Houston Ship Channel approaches ahead of Hurricane Edgar landfall. United States Coast Guard terminal loadings curtailed; TxDOT gates staged; MPLX marine terminal transfer suspended.',
     resourcesCommitted:
-      'Marathon terminal operations, Harris County OEM hydrology desk, TxDOT Houston District flood monitors, USCG VTS Houston',
+      'United States Coast Guard terminal operations, Harris County OEM hydrology desk, TxDOT Houston District flood monitors, USCG VTS Houston',
     businessUnit: 'Gulf Coast — Texas',
     creationKind: 'threshold',
     createdByUser: null,
     thresholdDescription:
-      'Storm surge watch threshold reached for Marathon Galveston Bay terminal and ship channel assets',
+      'Storm surge watch threshold reached for United States Coast Guard Galveston Bay terminal and ship channel assets',
   },
   {
     id: 6,
@@ -1488,24 +1522,24 @@ const DEFAULT_EVENT_LIST: EventListItem[] = (
     severity: 'High',
     region: 'Gulf Coast Refining — Louisiana',
     location: [-90.615, 30.054],
-    lead: 'Marathon Garyville Unified Command · St. James Parish OEM Liaison',
+    lead: 'United States Coast Guard Garyville Unified Command · St. James Parish OEM Liaison',
     startedAt: '2026-05-09 07:00 CST',
     lastUpdate: '2026-05-09 09:46 CST',
     summary:
-      'Fired heater tube rupture during startup at Marathon Garyville Refinery. Hydrocarbon release and fire in crude/vacuum unit area; emergency shutdown initiated; all personnel accounted for; downwind air monitoring and community notification per refinery ERP.',
+      'Fired heater tube rupture during startup at United States Coast Guard Garyville Refinery. Hydrocarbon release and fire in crude/vacuum unit area; emergency shutdown initiated; all personnel accounted for; downwind air monitoring and community notification per refinery ERP.',
     resourcesCommitted:
-      'Marathon industrial fire brigade, St. James Parish mutual aid, LDEQ air monitoring, foam strike teams, MPLX terminal liaison',
+      'United States Coast Guard industrial fire brigade, St. James Parish mutual aid, LDEQ air monitoring, foam strike teams, MPLX terminal liaison',
     businessUnit: 'Gulf Coast Refining — Louisiana',
-    creationKind: 'user',
-    createdByUser: 'Site Emergency Manager · garyville.emergency@marathon.com',
+    creationKind: 'threshold',
+    createdByUser: null,
     thresholdDescription:
-      'Industrial fire threshold crossed for Marathon Garyville refinery process safety ERP',
+      'Sensor Alpha fixed gas detection threshold exceeded — crude/vacuum unit LEL and thermal plume alert at United States Coast Guard Garyville',
     sourceReport: {
       shortDescription: 'Garyville Refinery Fire — Fired Heater Tube Rupture',
       reportDate: '2026-05-09',
       reportTime: '07:00',
       facilityLocations: [],
-      facilityLocationOther: 'Marathon Garyville Refinery — Crude/Vacuum Unit, Garyville, LA',
+      facilityLocationOther: 'United States Coast Guard Garyville Refinery — Crude/Vacuum Unit, Garyville, LA',
       ccmerAdvisors: [],
       callerName: 'Garyville Site Emergency Manager',
       callbackNumber: 'garyville.emergency@marathon.com',
@@ -1517,8 +1551,8 @@ const DEFAULT_EVENT_LIST: EventListItem[] = (
       assistanceNeeded: 'yes',
       qiDrill: 'no',
       icNotified: 'yes',
-      icNotifiedName: 'Marathon Garyville Unified Command',
-      rpName: 'Marathon Petroleum Corporation',
+      icNotifiedName: 'United States Coast Guard Garyville Unified Command',
+      rpName: 'United States Coast Guard Petroleum Corporation',
       materialReleased: 'Hydrocarbon vapor and liquid — quantity under assessment',
       enterWater: 'no',
       releaseDischargeRate: 'Under assessment',
@@ -6341,7 +6375,7 @@ function App() {
   const incidentCategoryOptions = INCIDENT_CATEGORY_OPTIONS
   const incidentWorkflowOptions = [
     { value: 'ipieca-ims', label: 'IPIECA IMS' },
-    { value: 'uscg-ics', label: 'Marathon ICS' },
+    { value: 'uscg-ics', label: 'United States Coast Guard ICS' },
     { value: 'epa-ics', label: 'Environmental Protection Agency ICS' },
     { value: 'bsee-ics', label: 'Bureau of Safety and Environmental Enforcement ICS' },
     { value: 'california-ics', label: 'California ICS' },
@@ -6841,6 +6875,10 @@ function App() {
     setIsPratusAiDrawerOpen(true)
   }
   const [expandedItemId, setExpandedItemId] = useState<string | null>(null)
+  const [expandedAorAreaKey, setExpandedAorAreaKey] = useState<string | null>(null)
+  const [visibleAorAreaSitrepKeys, setVisibleAorAreaSitrepKeys] = useState<Set<string>>(
+    () => new Set()
+  )
   const [expandedThreats, setExpandedThreats] = useState<Set<string>>(new Set())
   const [visibleThreatLiveFeeds, setVisibleThreatLiveFeeds] = useState<Set<string>>(new Set())
   const [completedResponseActions, setCompletedResponseActions] = useState<Set<string>>(
@@ -8050,14 +8088,14 @@ function App() {
   const [notifications, setNotifications] = useState<NotificationItem[]>([
     {
       id: 0,
-      title: 'Refinery fire reported at Marathon Garyville, Louisiana',
+      title: 'Refinery fire reported at United States Coast Guard Garyville, Louisiana',
       severity: 'Critical',
       status: 'New',
       category: 'Hazmat',
       timestamp: '2026-05-09 07:00',
       owner: 'Sensor Alpha',
       summary:
-        'Fired heater tube rupture during startup at Marathon Garyville Refinery. Unified command activating ERP; St. James Parish OEM and LDEQ notified per standing protocol. Hydrocarbon release with active fire in crude/vacuum unit area.',
+        'Fired heater tube rupture during startup at United States Coast Guard Garyville Refinery. Unified command activating ERP; St. James Parish OEM and LDEQ notified per standing protocol. Hydrocarbon release with active fire in crude/vacuum unit area.',
       impact:
         'Crude and vacuum unit curtailment, MPLX terminal load suspensions, and downwind air quality monitoring across St. James Parish and the Mississippi River corridor.',
       location: [-90.615, 30.054],
@@ -8065,11 +8103,11 @@ function App() {
       regionalThreats: {
         region: 'Gulf Coast Refining — Louisiana',
         description:
-          'Active refinery fire, thermal plume, and hydrocarbon release place the following Marathon assets and adjacent receptors at elevated risk:',
+          'Active refinery fire, thermal plume, and hydrocarbon release place the following United States Coast Guard assets and adjacent receptors at elevated risk:',
         threats: [
           {
             id: 'GV-REF-CVU-001',
-            resource: 'Marathon Garyville Refinery — Crude/Vacuum Unit',
+            resource: 'United States Coast Guard Garyville Refinery — Crude/Vacuum Unit',
             risk: 'Fired heater tube rupture with hydrocarbon fire requires full unit isolation, foam application, and perimeter cooling; adjacent units on controlled shutdown with potential cascade impact to reformer and alkylation trains.',
             location: [-90.615, 30.054],
             operationalStatus: 'Partially Operational',
@@ -8099,7 +8137,7 @@ function App() {
         responseChecklist: [
           {
             label:
-              'Activate Marathon Garyville refinery ERP and unified command; notify St. James Parish OEM, LDEQ, and USCG Sector New Orleans.',
+              'Activate United States Coast Guard Garyville refinery ERP and unified command; notify St. James Parish OEM, LDEQ, and USCG Sector New Orleans.',
           },
           {
             label:
@@ -8119,13 +8157,13 @@ function App() {
       summary:
         'MPLX pipeline control center reported crude release from a rupture near Sabine River crossing. Emergency response plan activated; PHMSA, USCG Sector Houston-Galveston, and LDEQ notified per standing protocol.',
       impact:
-        'Crude product reaching vegetated shoreline and sensitive waterway areas; pipeline segment isolated; vacuum recovery and boom deployment underway; potential impact to Marathon Galveston Bay terminal logistics.',
+        'Crude product reaching vegetated shoreline and sensitive waterway areas; pipeline segment isolated; vacuum recovery and boom deployment underway; potential impact to United States Coast Guard Galveston Bay terminal logistics.',
       location: [-93.92, 29.98],
       relatedEventId: 3,
       regionalThreats: {
         region: 'Gulf Coast Pipelines — Texas/Louisiana',
         description:
-          'Active pipeline rupture and product release place the following Marathon/MPLX assets and adjacent receptors at elevated risk:',
+          'Active pipeline rupture and product release place the following United States Coast Guard/MPLX assets and adjacent receptors at elevated risk:',
         threats: [
           {
             id: 'MPLX-PL-001',
@@ -8177,7 +8215,7 @@ function App() {
       timestamp: '2026-05-09 08:27',
       owner: 'Marcus Webb · marcus.webb@marathon.com',
       summary:
-        'Marathon Texas City refinery initiating controlled shutdown ahead of Hurricane Edgar landfall. Galveston Bay terminal loadings curtailed; essential personnel only on-site.',
+        'United States Coast Guard Texas City refinery initiating controlled shutdown ahead of Hurricane Edgar landfall. Galveston Bay terminal loadings curtailed; essential personnel only on-site.',
       impact:
         'Production curtailment at Texas City; MPLX marine transfers suspended; storm hardening and generator fuel checks in progress across Gulf Coast assets.',
       location: [-95.0, 29.38],
@@ -8196,110 +8234,127 @@ function App() {
       location: [-90.82, 30.02],
     },
   ])
-  const [resources] = useState<ResourceItem[]>([
+  const [resources, setResources] = useState<ResourceItem[]>([
     {
       id: 1,
-      name: 'Gulf Coast Regional Foam Strike Team',
-      owner: 'St. James Parish Industrial Mutual Aid',
+      name: 'CGC Forward',
+      assetStatus: 'FMC',
+      assetStatusUpdatedAt: '06/08/2026 08:45 UTC',
+      owner: 'USCG Sector Virginia',
       status: 'Assigned',
-      type: 'Industrial Firefighting / Foam',
-      teamLead: 'Battalion Chief M. Reeves',
+      type: 'Medium Endurance Cutter (WMEC)',
+      teamLead: 'CDR J. Whitfield',
       eta: 'On-site',
-      location: 'Garyville Refinery — crude/vacuum unit perimeter',
-      notes: 'Supporting Marathon industrial fire brigade with high-expansion foam application and cooling water on adjacent process equipment.',
-      mapLocation: [-90.615, 30.054],
-      currentLocation: 'Marathon Garyville Refinery',
-      datetimeOrdered: '05/09/2026 12:15 UTC',
-      opcon: 'Marathon Garyville Unified Command',
-      tacon: 'St. James Parish Industrial Mutual Aid',
-      pointOfContact: 'Battalion Chief M. Reeves',
-      owningOrganization: 'St. James Parish Industrial Mutual Aid',
-      quantity: 2,
-      unit: 'teams',
-      hullTailNumber: '---',
-      symbology: 'Industrial firefighting',
-      latitude: '30.054',
-      longitude: '-90.615',
-      capabilities: 'High-expansion foam; aerial monitor ops; refinery mutual-aid coordination',
+      location: 'Hampton Roads — Chesapeake Bay patrol area',
+      notes:
+        'USCGC Forward (WMEC-911) providing port and waterway security, maritime domain awareness, and hurricane sortie readiness in Sector Virginia AOR.',
+      mapLocation: [-76.298, 36.835],
+      currentLocation: '4000 Coast Guard Boulevard Portsmouth VA',
+      datetimeOrdered: '06/01/2026 14:00 UTC',
+      opcon: 'USCG Atlantic Area',
+      tacon: 'USCG Sector Virginia',
+      pointOfContact: 'Sector Virginia Command Center (757-398-6390)',
+      owningOrganization: 'U.S. Coast Guard',
+      quantity: 1,
+      unitType: 'cutter',
+      unitName: 'USCGC Forward (WMEC-911)',
+      hullTailNumber: 'WMEC-911',
+      symbology: 'Coast Guard cutter',
+      latitude: '36.835',
+      longitude: '-76.298',
+      capabilities:
+        'Law enforcement; fisheries enforcement; search and rescue; port and waterway security; hurricane response sortie',
       currentOpPeriod: 'Op Period 1',
       nextOpPeriod: 'Op Period 2',
-      currentOpPeriodAssignment: 'Crude/vacuum unit perimeter foam and cooling operations',
-      nextOpPeriodAssignment: 'Tank farm secondary containment standby',
+      currentOpPeriodAssignment:
+        'Hampton Roads port security patrol and hurricane pre-landfall sortie staging',
+      nextOpPeriodAssignment: 'Post-storm SAR, navigational hazard assessment, and channel clearance support',
       checkInStatus: 'Onsite',
-      costUnitType: 'per hour',
-      costPerUnit: 2800,
+      costUnitType: 'per day',
+      costPerUnit: 18500,
       deploymentKind: 'incident',
-      assignedIncidentName: 'Garyville Refinery Fire — Fired Heater Tube Rupture',
+      assignedIncidentName: 'Hurricane Edgar — Gulf Coast Refinery & Pipeline Watch',
       assignedExerciseName: null,
     },
     {
       id: 2,
-      name: 'EPA Region 6 — Portable Air Monitoring Suite',
-      owner: 'EPA Region 6',
+      name: 'C20B',
+      assetStatus: 'PMC',
+      assetStatusUpdatedAt: '06/08/2026 07:30 UTC',
+      owner: 'USCG Aviation Forces Atlantic',
       status: 'Staged',
-      type: 'Air Monitoring / Environmental',
-      teamLead: 'Dr. A. Chen',
-      eta: '45 min',
-      location: 'Downwind monitoring corridor — Laplace, LA',
-      notes: 'Deploying particulate and VOC monitors along LA-44 and Convent receptor points per unified command air modeling.',
-      mapLocation: [-90.82, 30.02],
-      currentLocation: 'Laplace staging area, LA',
-      datetimeOrdered: '05/09/2026 11:00 UTC',
-      opcon: 'Marathon Garyville Unified Command',
-      tacon: 'Louisiana DEQ',
-      pointOfContact: 'EPA Region 6 Air Monitoring Cell',
-      owningOrganization: 'U.S. Environmental Protection Agency',
-      quantity: 4,
-      unit: 'monitoring stations',
-      hullTailNumber: '---',
-      symbology: 'Environmental monitoring',
-      latitude: '30.02',
-      longitude: '-90.82',
-      capabilities: 'PM2.5/PM10; benzene and VOC speciation; real-time telemetry to unified command',
+      type: 'Fixed-Wing Aircraft (Gulfstream C-20B)',
+      teamLead: 'LT C. Morales',
+      eta: '2 hr',
+      location: 'Coast Guard Air Station Elizabeth City, NC',
+      notes:
+        'Gulfstream C-20B staged for district staff transport, hurricane liaison flights, and priority logistics support to Gulf Coast sector commands.',
+      mapLocation: [-76.174, 36.261],
+      currentLocation: '4000 Coast Guard Boulevard Portsmouth VA',
+      datetimeOrdered: '06/02/2026 09:30 UTC',
+      opcon: 'USCG Atlantic Area',
+      tacon: 'USCG Aviation Forces Atlantic',
+      pointOfContact: 'AIRSTA Elizabeth City Ops (252-335-3300)',
+      owningOrganization: 'U.S. Coast Guard',
+      quantity: 1,
+      unitType: 'aircraft',
+      unitName: 'Gulfstream C-20B — CG-0202',
+      hullTailNumber: 'CG-0202',
+      symbology: 'Coast Guard fixed-wing',
+      latitude: '36.261',
+      longitude: '-76.174',
+      capabilities:
+        'Long-range transport; command liaison; priority cargo; hurricane response air support',
       currentOpPeriod: 'Op Period 1',
       nextOpPeriod: 'Op Period 2',
-      currentOpPeriodAssignment: 'Laplace downwind perimeter monitoring',
-      nextOpPeriodAssignment: 'Garyville community receptor expansion',
+      currentOpPeriodAssignment:
+        'District staff transport and hurricane recon staging — Elizabeth City AIRSTA',
+      nextOpPeriodAssignment: 'Air liaison support to Sector Mobile and Sector New Orleans',
       checkInStatus: 'Staged',
-      costUnitType: 'per day',
-      costPerUnit: 9200,
+      costUnitType: 'per hour',
+      costPerUnit: 4200,
       deploymentKind: 'incident',
-      assignedIncidentName: 'Garyville Refinery Fire — Fired Heater Tube Rupture',
+      assignedIncidentName: 'Hurricane Edgar — Gulf Coast Refinery & Pipeline Watch',
       assignedExerciseName: null,
     },
     {
       id: 3,
-      name: 'Marathon Emergency Response Team — Gulf Coast',
-      owner: 'Marathon Emergency Response',
+      name: 'VC4',
+      assetStatus: 'FMC',
+      assetStatusUpdatedAt: '06/07/2026 22:10 UTC',
+      owner: 'USCG Station Portsmouth',
       status: 'Available',
-      type: 'Emergency Response Team',
-      teamLead: 'C. Landry',
+      type: 'Response Boat — Medium (RB-M)',
+      teamLead: 'BM1 R. Santos',
       eta: 'On-site',
-      location: 'Garyville refinery EOC',
-      notes: 'Available for process-safety support, ERP documentation, and unified command liaison with St. James Parish OEM and LDEQ.',
-      mapLocation: [-90.615, 30.054],
-      currentLocation: 'Marathon Garyville Refinery EOC',
-      datetimeOrdered: '05/09/2026 10:30 UTC',
-      opcon: 'Marathon Emergency Response Program',
-      tacon: 'Marathon Garyville Unified Command',
-      pointOfContact: 'Marathon Emergency Response Advisor on Duty',
-      owningOrganization: 'Marathon',
+      location: 'Sector Virginia small-boat facility — Portsmouth, VA',
+      notes:
+        'RB-M patrol boat available for near-shore SAR, escort operations, and security zone enforcement supporting hurricane response tasking.',
+      mapLocation: [-76.298, 36.835],
+      currentLocation: '4000 Coast Guard Boulevard Portsmouth VA',
+      datetimeOrdered: '06/01/2026 08:00 UTC',
+      opcon: 'USCG Sector Virginia',
+      tacon: 'USCG Station Portsmouth',
+      pointOfContact: 'Station Portsmouth Ops (757-398-6231)',
+      owningOrganization: 'U.S. Coast Guard',
       quantity: 1,
-      unit: 'team',
-      hullTailNumber: '---',
-      symbology: 'ERT/Emergency Response',
-      latitude: '30.054',
-      longitude: '-90.615',
-      capabilities: 'Process area assessment; incident command support; regulatory liaison; ERP scenario coordination',
+      unitType: 'boat',
+      unitName: 'Response Boat-Medium — VC4',
+      hullTailNumber: 'VC4',
+      symbology: 'Coast Guard response boat',
+      latitude: '36.835',
+      longitude: '-76.298',
+      capabilities:
+        'Near-shore SAR; maritime law enforcement; escort operations; security zone enforcement',
       currentOpPeriod: 'Op Period 1',
       nextOpPeriod: 'Op Period 2',
-      currentOpPeriodAssignment: 'Garyville unified command advisory support',
-      nextOpPeriodAssignment: 'Post-fire process safety review support',
+      currentOpPeriodAssignment: 'Portsmouth small-boat SAR standby and security zone patrol',
+      nextOpPeriodAssignment: 'Hurricane post-landfall shallow-water response support',
       checkInStatus: 'Onsite',
       costUnitType: 'per day',
-      costPerUnit: 8900,
+      costPerUnit: 2400,
       deploymentKind: 'incident',
-      assignedIncidentName: 'Garyville Refinery Fire — Fired Heater Tube Rupture',
+      assignedIncidentName: 'Hurricane Edgar — Gulf Coast Refinery & Pipeline Watch',
       assignedExerciseName: null,
     },
   ])
@@ -8316,6 +8371,7 @@ function App() {
     ResourcesFieldFilterRule[]
   >([])
   const [isResourcesFilterOpen, setIsResourcesFilterOpen] = useState(false)
+  const [resourcesSearchQuery, setResourcesSearchQuery] = useState('')
   const [openResourceRequestPreviewId, setOpenResourceRequestPreviewId] = useState<number | null>(
     null
   )
@@ -8329,13 +8385,13 @@ function App() {
       severity: 'High',
       region: 'Gulf Coast Refining — Louisiana',
       location: [-90.615, 30.054],
-      lead: 'Marathon Garyville Unified Command · Site Emergency Manager',
+      lead: 'United States Coast Guard Garyville Unified Command · Site Emergency Manager',
       startedAt: '2026-05-09 07:00 CST',
       lastUpdate: '2026-05-09 09:46 CST',
       summary:
-        'Fired heater tube rupture during startup at Marathon Garyville Refinery (528,000 bpd). Hydrocarbon release and fire in crude/vacuum unit area; emergency shutdown initiated; all personnel accounted for; LP flare and fixed monitors deployed; downwind air quality monitoring and community notification per refinery ERP.',
+        'Fired heater tube rupture during startup at United States Coast Guard Garyville Refinery (528,000 bpd). Hydrocarbon release and fire in crude/vacuum unit area; emergency shutdown initiated; all personnel accounted for; LP flare and fixed monitors deployed; downwind air quality monitoring and community notification per refinery ERP.',
       resourcesCommitted:
-        'Marathon industrial fire brigade, St. James Parish mutual aid, LDEQ air monitoring, Gulf Coast foam strike teams, MPLX terminal liaison',
+        'United States Coast Guard industrial fire brigade, St. James Parish mutual aid, LDEQ air monitoring, Gulf Coast foam strike teams, MPLX terminal liaison',
       relatedEventIds: [11],
     },
     {
@@ -8365,13 +8421,13 @@ function App() {
       severity: 'High',
       region: 'Gulf Coast — Texas & Louisiana',
       location: [-95.37, 29.76],
-      lead: 'Marathon Gulf Coast Weather Cell · Enterprise Crisis Manager',
+      lead: 'United States Coast Guard Gulf Coast Weather Cell · Enterprise Crisis Manager',
       startedAt: '2026-05-08 18:00 CST',
       lastUpdate: '2026-05-09 10:30 CST',
       summary:
         'Hurricane Edgar tracking toward upper Texas and southwest Louisiana coast. Controlled shutdown and storm hardening underway at Texas City, Galveston Bay, and Louisiana refining/logistics assets; MPLX pipeline segment isolation and generator fuel checks in progress; flooding and wind damage risk to Gulf Coast terminals.',
       resourcesCommitted:
-        'Marathon weather cell, refinery EOC teams (TX/LA), MPLX control center, mutual-aid contractor pre-positioning, parish/county OEM liaisons',
+        'United States Coast Guard weather cell, refinery EOC teams (TX/LA), MPLX control center, mutual-aid contractor pre-positioning, parish/county OEM liaisons',
       relatedEventIds: [1, 5],
     },
   ])
@@ -8563,12 +8619,12 @@ function App() {
       lastUpdate: '2026-05-09 10:30 CST',
       evacuationStatus: 'Recommended',
       notes:
-        'AR, LA, NM, OK, TX — Marathon Garyville refinery fire, MPLX pipeline release, and Hurricane Edgar Gulf Coast asset protection active.',
+        'AR, LA, NM, OK, TX — United States Coast Guard Garyville refinery fire, MPLX pipeline release, and Hurricane Edgar Gulf Coast asset protection active.',
       sitrep:
-        'Marathon Garyville refinery fire in crude/vacuum unit; MPLX crude pipeline release at Sabine River crossing with USCG spill coordination; Hurricane Edgar driving controlled shutdowns at Texas City and Louisiana assets. PHMSA and LDEQ on-scene.',
+        'United States Coast Guard Garyville refinery fire in crude/vacuum unit; MPLX crude pipeline release at Sabine River crossing with USCG spill coordination; Hurricane Edgar driving controlled shutdowns at Texas City and Louisiana assets. PHMSA and LDEQ on-scene.',
       sitrepUpdatedBy: 'District Commander Denton, TX',
       sitrepSources: [
-        'Marathon Garyville unified command status board',
+        'United States Coast Guard Garyville unified command status board',
         'MPLX pipeline control center incident log',
         'PHMSA NRC hazmat incident log',
         'NWS WFO Houston/Galveston — Hurricane Edgar advisory',
@@ -8650,14 +8706,14 @@ function App() {
       population: '14.4M',
       lastUpdate: '2026-05-09 09:46 PST',
       evacuationStatus: 'None',
-      notes: 'AK, ID, OR, WA — steady-state operations; Marathon Martinez refinery in routine monitoring posture.',
+      notes: 'AK, ID, OR, WA — steady-state operations; United States Coast Guard Martinez refinery in routine monitoring posture.',
       sitrep:
-        'Steady-state operations across AK, ID, OR, WA. Marathon Martinez refinery conducting planned maintenance with no active ERP activations. NWS marine forecasts stable; no DOT transport disruptions reported.',
+        'Steady-state operations across AK, ID, OR, WA. United States Coast Guard Martinez refinery conducting planned maintenance with no active ERP activations. NWS marine forecasts stable; no DOT transport disruptions reported.',
       sitrepUpdatedBy: 'District Commander Bothell, WA',
       sitrepSources: [
         'NWS WFO Seattle / Portland marine forecast',
         'WSDOT traffic cameras — I-5 corridor',
-        'Marathon Martinez refinery operations status',
+        'United States Coast Guard Martinez refinery operations status',
         'USCG Sector Puget Sound marine safety broadcast',
       ],
       location: [-122.12, 38.02],
@@ -9208,7 +9264,7 @@ function App() {
     if (!femaRegionsLayerRef.current) {
       const femaLayer = new GraphicsLayer({
         id: 'fema-regions-layer',
-        title: 'USCG AORs',
+        title: 'Business Units',
         listMode: 'hide',
       })
       femaRegionGraphicsRef.current = new globalThis.Map<number, Graphic>()
@@ -10167,7 +10223,7 @@ function App() {
     if (tab === 'notifications') return 'Notifications'
     if (tab === 'resources') return 'Assets'
     if (tab === 'aors') return 'Objectives & Actions'
-    if (tab === 'fema-regions') return 'USCG AORs'
+    if (tab === 'fema-regions') return 'Business Units'
     if (tab === 'incident-list') return 'Incidents'
     if (tab === 'roster') return 'Roster'
     if (tab === 'exercises') return 'Exercises'
@@ -10505,6 +10561,11 @@ function App() {
       return
     }
 
+    const view = mapViewRef.current
+    if (!view) {
+      return
+    }
+
     await openMapGraphicPopupRef.current(targetGraphic, location, mapKey, scale)
   }
 
@@ -10640,7 +10701,8 @@ function App() {
       item.pointOfContact,
       item.owningOrganization,
       String(item.quantity),
-      item.unit,
+      item.unitType,
+      item.unitName,
       item.hullTailNumber,
       item.symbology,
       item.latitude,
@@ -10748,6 +10810,7 @@ function App() {
   })
   const normalizedAppliedFilterQuery = appliedFilterQuery?.trim().toLowerCase() ?? ''
   const activePanelSearchQuery = normalizedQuery || normalizedAppliedFilterQuery
+  const normalizedResourcesSearchQuery = resourcesSearchQuery.trim().toLowerCase()
   const cardFilteredNotifications = userVisibleNotifications.filter((item) => {
     if (!activePanelSearchQuery) {
       return true
@@ -10769,9 +10832,12 @@ function App() {
       .includes(activePanelSearchQuery)
   })
   const cardFilteredResources = resources.filter((item) => {
-    if (activePanelSearchQuery) {
+    const query = normalizedResourcesSearchQuery || activePanelSearchQuery
+    if (query) {
       const matchesSearch = [
         item.name,
+        item.assetStatus,
+        item.assetStatusUpdatedAt,
         item.owner,
         item.status,
         item.type,
@@ -10784,7 +10850,8 @@ function App() {
         item.pointOfContact,
         item.owningOrganization,
         String(item.quantity),
-        item.unit,
+        item.unitType,
+      item.unitName,
         item.hullTailNumber,
         item.symbology,
         item.latitude,
@@ -10801,7 +10868,7 @@ function App() {
       ]
         .join(' ')
         .toLowerCase()
-        .includes(activePanelSearchQuery)
+        .includes(query)
 
       if (!matchesSearch) {
         return false
@@ -10967,6 +11034,23 @@ function App() {
       .toLowerCase()
       .includes(activePanelSearchQuery)
   })
+  const cardFilteredFemaAorAreas = USCG_COAST_GUARD_AREAS.map((area) => {
+    const areaMatchesSearch =
+      !!activePanelSearchQuery &&
+      area.name.toLowerCase().includes(activePanelSearchQuery)
+    const districts = areaMatchesSearch
+      ? femaAors.filter((aor) => area.districtIds.includes(aor.id))
+      : cardFilteredFemaAors.filter((aor) => area.districtIds.includes(aor.id))
+    const assets = areaMatchesSearch
+      ? filterCoastGuardAreaAssets(area.key, '')
+      : filterCoastGuardAreaAssets(area.key, activePanelSearchQuery)
+
+    return {
+      ...area,
+      districts,
+      assets,
+    }
+  }).filter((area) => area.districts.length > 0 || area.assets.length > 0)
   const allIncidentsForWorkspace = useMemo(() => {
     const byId = new Map<number, IncidentListItem>()
     for (const incident of incidentList) {
@@ -14876,6 +14960,62 @@ function App() {
 
   const toggleExpandedItem = (key: string) => {
     setExpandedItemId((previous) => (previous === key ? null : key))
+  }
+
+  const toggleExpandedAorArea = (areaKey: string, areaItemKey: 'atlantic' | 'pacific') => {
+    setExpandedAorAreaKey((previous) => {
+      if (previous === areaKey) {
+        setExpandedItemId((itemPrevious) =>
+          itemPrevious?.startsWith(`aor-area-${areaItemKey}-`) ? null : itemPrevious
+        )
+        setVisibleAorAreaSitrepKeys((sitrepPrevious) => {
+          if (!sitrepPrevious.has(areaKey)) {
+            return sitrepPrevious
+          }
+          const next = new Set(sitrepPrevious)
+          next.delete(areaKey)
+          return next
+        })
+        return null
+      }
+      return areaKey
+    })
+  }
+
+  const handleExpandedAorAreaOpenChange = (
+    open: boolean,
+    areaKey: string,
+    areaItemKey: 'atlantic' | 'pacific'
+  ) => {
+    if (open) {
+      setExpandedAorAreaKey(areaKey)
+      return
+    }
+
+    setExpandedAorAreaKey((previous) => (previous === areaKey ? null : previous))
+    setExpandedItemId((itemPrevious) =>
+      itemPrevious?.startsWith(`aor-area-${areaItemKey}-`) ? null : itemPrevious
+    )
+    setVisibleAorAreaSitrepKeys((previous) => {
+      if (!previous.has(areaKey)) {
+        return previous
+      }
+      const next = new Set(previous)
+      next.delete(areaKey)
+      return next
+    })
+  }
+
+  const toggleAorAreaSitrep = (areaKey: string) => {
+    setVisibleAorAreaSitrepKeys((previous) => {
+      const next = new Set(previous)
+      if (next.has(areaKey)) {
+        next.delete(areaKey)
+      } else {
+        next.add(areaKey)
+      }
+      return next
+    })
   }
 
   const toggleExpandedThreat = (key: string) => {
@@ -20418,6 +20558,8 @@ function App() {
     {
       id: 901,
       name: 'Law Group 1',
+      assetStatus: 'FMC',
+      assetStatusUpdatedAt: '04/07/2026 21:00 UTC',
       owner: 'Operations Section',
       status: 'Assigned',
       type: 'Law Enforcement Team',
@@ -20426,14 +20568,15 @@ function App() {
       location: 'Division A Command Post',
       notes: 'Traffic and perimeter enforcement team.',
       mapLocation: [-96.7831, 32.7912],
-      currentLocation: 'Division A Command Post',
+      currentLocation: '4000 Coast Guard Boulevard Portsmouth VA',
       datetimeOrdered: '04/07/2026 21:00 UTC',
       opcon: 'Operations',
       tacon: 'Division A',
       pointOfContact: 'CAPT Wallace (555-0104)',
       owningOrganization: 'Metro Police',
       quantity: 1,
-      unit: 'Team',
+      unitType: 'Team',
+      unitName: 'Metro Police Law Group 1',
       hullTailNumber: 'N/A',
       symbology: 'Law',
       latitude: '32.7912',
@@ -20453,6 +20596,8 @@ function App() {
     {
       id: 902,
       name: 'Planning Section Staffing Cell',
+      assetStatus: 'PMC',
+      assetStatusUpdatedAt: '04/07/2026 20:45 UTC',
       owner: 'Planning Section',
       status: 'Available',
       type: 'Planning Support Team',
@@ -20461,14 +20606,15 @@ function App() {
       location: 'Planning Tent',
       notes: 'Staffing and handoff scheduling support.',
       mapLocation: [-96.7869, 32.7871],
-      currentLocation: 'Planning Tent',
+      currentLocation: '4000 Coast Guard Boulevard Portsmouth VA',
       datetimeOrdered: '04/07/2026 21:00 UTC',
       opcon: 'Planning',
       tacon: 'Planning',
       pointOfContact: 'M. Bennett (555-0113)',
       owningOrganization: 'SEOC',
       quantity: 1,
-      unit: 'Cell',
+      unitType: 'Cell',
+      unitName: 'Planning Section Staffing Cell',
       hullTailNumber: 'N/A',
       symbology: 'Staff',
       latitude: '32.7871',
@@ -20550,7 +20696,7 @@ function App() {
                   ? `Exercise ${activeExerciseWorkspace.name}`
                   : isInIncidentWorkspace && activeIncidentWorkspace
                     ? activeIncidentWorkspace.name
-                    : 'Marathon'}
+                    : 'United States Coast Guard'}
               </span>
               <StartHereButton
                 className={cn('ml-2 h-10', glassIconButtonClasses)}
@@ -20908,14 +21054,14 @@ function App() {
                           variant={isGlassMode ? 'outline' : activeTab === 'fema-regions' ? 'default' : 'outline'}
                           className={selectedGlassTabClasses(activeTab === 'fema-regions')}
                           onClick={() => setActiveTab('fema-regions')}
-                          aria-label="Open USCG AORs tab"
+                          aria-label="Open Business Units tab"
                           data-pratus-context-id="tab:fema-regions"
-                          data-pratus-context-label="USCG AORs"
+                          data-pratus-context-label="Business Units"
                         >
                           <MapPin className="h-4 w-4" />
                         </Button>
                       </TooltipTrigger>
-                      <TooltipContent side="bottom" sideOffset={6}>USCG AORs</TooltipContent>
+                      <TooltipContent side="bottom" sideOffset={6}>Business Units</TooltipContent>
                     </Tooltip>
                     {!isInExerciseWorkspace && !isInIncidentWorkspace && (
                       <Tooltip>
@@ -21283,7 +21429,7 @@ function App() {
                   {activeTab === 'resources' &&
                     (resourcesPanelView === 'resource-requests' ? 'Asset Requests' : 'Assets')}
                   {activeTab === 'aors' && 'Objectives & Actions'}
-                  {activeTab === 'fema-regions' && 'USCG AORs'}
+                  {activeTab === 'fema-regions' && 'Business Units'}
                   {activeTab === 'incident-list' && 'Incidents'}
                   {activeTab === 'roster' && 'Roster'}
                   {activeTab === 'exercises' && 'Exercises'}
@@ -21366,7 +21512,19 @@ function App() {
                   </div>
                 )}
                 {activeTab === 'resources' && (
-                  <div className="flex items-center gap-1">
+                  <div className="flex flex-wrap items-center justify-end gap-2">
+                    {resourcesPanelView === 'resources' && (
+                      <div className="flex w-56 items-center gap-2 rounded-md border px-2 py-1.5">
+                        <Search className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                        <input
+                          value={resourcesSearchQuery}
+                          onChange={(event) => setResourcesSearchQuery(event.target.value)}
+                          placeholder="Search assets"
+                          aria-label="Search assets"
+                          className="w-full bg-transparent text-xs outline-none placeholder:text-muted-foreground"
+                        />
+                      </div>
+                    )}
                     <ToggleGroup
                       type="single"
                       value={resourcesPanelView}
@@ -21811,8 +21969,8 @@ function App() {
                         <Button type="button" size="sm" variant="outline">
                           <span className="max-w-[12rem] truncate">
                             {eventBusinessUnitFilters.length > 0
-                              ? `USCG AORs: ${eventBusinessUnitFilters.length} selected`
-                              : 'USCG AOR: All'}
+                              ? `Business Units: ${eventBusinessUnitFilters.length} selected`
+                              : 'Business Units: All'}
                           </span>
                           <ChevronDown className="ml-1 h-4 w-4" />
                         </Button>
@@ -22060,11 +22218,21 @@ function App() {
                       >
                         <Collapsible
                           open={isOpen}
-                          onOpenChange={(open) => setExpandedItemId(open ? key : null)}
+                          onOpenChange={(open) => {
+                            setExpandedItemId(open ? key : null)
+                            if (open) {
+                              setSelectedPanelItemId(key)
+                              setSelectedNestedItemId(null)
+                            }
+                          }}
                         >
                           <div
                             className="flex cursor-pointer items-center gap-2 px-3 py-2.5"
-                            onClick={() => toggleExpandedItem(key)}
+                            onClick={() => {
+                              setSelectedPanelItemId(key)
+                              setSelectedNestedItemId(null)
+                              toggleExpandedItem(key)
+                            }}
                           >
                             <ItemContent>
                               <ItemTitle>{item.title}</ItemTitle>
@@ -22429,7 +22597,9 @@ function App() {
                     <Item variant="outline" className={glassItemBorderClasses}>
                       <ItemContent>
                         <ItemTitle>No matching assets</ItemTitle>
-                        <ItemDescription>Try a broader search term.</ItemDescription>
+                        <ItemDescription>
+                          Try a broader search term or adjust your filters.
+                        </ItemDescription>
                       </ItemContent>
                     </Item>
                   )}
@@ -22457,7 +22627,8 @@ function App() {
                             <th className="whitespace-nowrap px-2 py-2 font-semibold">Point of Contact</th>
                             <th className="whitespace-nowrap px-2 py-2 font-semibold">Owning Organization</th>
                             <th className="whitespace-nowrap px-2 py-2 font-semibold">Quantity</th>
-                            <th className="whitespace-nowrap px-2 py-2 font-semibold">Unit</th>
+                            <th className="whitespace-nowrap px-2 py-2 font-semibold">Unit Type</th>
+                            <th className="whitespace-nowrap px-2 py-2 font-semibold">Unit Name</th>
                             <th className="whitespace-nowrap px-2 py-2 font-semibold">Cost Unit Type</th>
                             <th className="whitespace-nowrap px-2 py-2 font-semibold">Cost per Unit</th>
                             <th className="whitespace-nowrap px-2 py-2 font-semibold">Hull/Tail Number</th>
@@ -22499,7 +22670,8 @@ function App() {
                                 <td className="px-2 py-2">{resource.pointOfContact}</td>
                                 <td className="px-2 py-2">{resource.owningOrganization}</td>
                                 <td className="px-2 py-2">{resource.quantity}</td>
-                                <td className="px-2 py-2">{resource.unit}</td>
+                                <td className="px-2 py-2">{resource.unitType}</td>
+                                <td className="px-2 py-2">{resource.unitName}</td>
                                 <td className="px-2 py-2">
                                   {formatResourceCostUnitType(resource.costUnitType)}
                                 </td>
@@ -22544,26 +22716,44 @@ function App() {
                 {activeTab === 'resources' &&
                   resourcesPanelView === 'resources' &&
                   cardFilteredResources.length > 0 &&
-                  resourcesDisplayMode === 'list' &&
-                  cardFilteredResources.map((resource) => {
-                    const key = `resource-${resource.id}`
-                    const isOpen = expandedItemId === key
-                    return (
-                      <ResourceListItemCard
-                        key={resource.id}
-                        resource={resource as ResourceListItemData}
-                        glassItemBorderClasses={glassItemBorderClasses}
-                        selected={selectedPanelItemId === key}
-                        open={isOpen}
-                        onOpenChange={(open) => setExpandedItemId(open ? key : null)}
-                        onHeaderClick={() => toggleExpandedItem(key)}
-                        onFocusMap={() => {
-                          setSelectedPanelItemId(key)
-                          void focusMapItem(`resource-${resource.id}`, resource.mapLocation, 30000)
-                        }}
-                      />
-                    )
-                  })}
+                  resourcesDisplayMode === 'list' && (
+                    <div className="flex flex-col gap-2 px-0.5 pt-1">
+                      <AssetListHeaderRow />
+                      {cardFilteredResources.map((resource) => {
+                        const key = `resource-${resource.id}`
+                        const isOpen = expandedItemId === key
+                        return (
+                          <ResourceListItemCard
+                            key={resource.id}
+                            resource={resource as ResourceListItemData}
+                            glassItemBorderClasses={glassItemBorderClasses}
+                            selected={selectedPanelItemId === key}
+                            open={isOpen}
+                            editable
+                            onOpenChange={(open) => setExpandedItemId(open ? key : null)}
+                            onHeaderClick={() => toggleExpandedItem(key)}
+                            onFocusMap={() => {
+                              setSelectedPanelItemId(key)
+                              void focusMapItem(
+                                `resource-${resource.id}`,
+                                resource.mapLocation,
+                                30000
+                              )
+                            }}
+                            onSave={(updatedResource) => {
+                              setResources((previous) =>
+                                previous.map((item) =>
+                                  item.id === updatedResource.id
+                                    ? { ...item, ...updatedResource }
+                                    : item
+                                )
+                              )
+                            }}
+                          />
+                        )
+                      })}
+                    </div>
+                  )}
 
                 {activeTab === 'resources' &&
                   resourcesPanelView === 'resource-requests' &&
@@ -24210,51 +24400,69 @@ function App() {
                 )}
 
                 {activeTab === 'fema-regions' && (
-                  cardFilteredFemaAors.length === 0 ? (
+                  cardFilteredFemaAorAreas.length === 0 ? (
                     <Item variant="outline" className={glassItemBorderClasses}>
                       <ItemContent>
-                        <ItemTitle>No matching USCG AORs</ItemTitle>
+                        <ItemTitle>No matching business units</ItemTitle>
                         <ItemDescription>Try a broader search term.</ItemDescription>
                       </ItemContent>
                     </Item>
                   ) : (
                     <>
-                    {cardFilteredFemaAors.map((aor) => {
-                      const key = `aor-${aor.id}`
-                      const isOpen = expandedItemId === key
+                    {cardFilteredFemaAorAreas.map((area) => {
+                      const areaKey = `aor-area-${area.key}`
+                      const isAreaOpen = expandedAorAreaKey === areaKey
                       return (
                         <Item
-                          key={aor.id}
+                          key={area.key}
                           variant="outline"
                           className={cn(
                             'flex-col items-stretch p-0',
                             glassItemBorderClasses,
-                            selectedPanelItemId === key && 'ring-2 ring-primary/60 bg-primary/5'
+                            selectedPanelItemId === areaKey && 'ring-2 ring-primary/60 bg-primary/5'
                           )}
                         >
                           <Collapsible
-                            open={isOpen}
-                            onOpenChange={(open) => setExpandedItemId(open ? key : null)}
+                            open={isAreaOpen}
+                            onOpenChange={(open) =>
+                              handleExpandedAorAreaOpenChange(open, areaKey, area.key)
+                            }
                           >
                             <div
                               className="flex cursor-pointer items-center gap-2 px-3 py-2.5"
-                              onClick={() => toggleExpandedItem(key)}
+                              onClick={() => toggleExpandedAorArea(areaKey, area.key)}
                             >
                               <ItemContent>
-                                <ItemTitle>{aor.name}</ItemTitle>
+                                <ItemTitle>{area.name}</ItemTitle>
+                                <ItemDescription>
+                                  {[
+                                    area.districts.length > 0
+                                      ? `${area.districts.length} ${
+                                          area.districts.length === 1 ? 'district' : 'districts'
+                                        }`
+                                      : null,
+                                    area.assets.length > 0
+                                      ? `${area.assets.length} ${
+                                          area.assets.length === 1 ? 'asset' : 'assets'
+                                        }`
+                                      : null,
+                                  ]
+                                    .filter(Boolean)
+                                    .join(' · ')}
+                                </ItemDescription>
                               </ItemContent>
                               <ItemActions>
                                 <Button
                                   variant="ghost"
                                   size="icon"
-                                  aria-label="Zoom map to area of responsibility"
+                                  aria-label={`Zoom map to ${area.name}`}
                                   onClick={(event) => {
                                     event.stopPropagation()
-                                    setSelectedPanelItemId(key)
+                                    setSelectedPanelItemId(areaKey)
                                     void focusMapItem(
-                                      `fema-aor-${aor.id}`,
-                                      aor.location,
-                                      10_000_000
+                                      `fema-aor-area-${area.key}`,
+                                      area.location,
+                                      20_000_000
                                     )
                                   }}
                                 >
@@ -24264,13 +24472,13 @@ function App() {
                                   <Button
                                     variant="ghost"
                                     size="icon"
-                                    aria-label="Toggle AOR details"
+                                    aria-label={`Toggle ${area.name} districts`}
                                     onClick={(event) => event.stopPropagation()}
                                   >
                                     <ChevronDown
                                       className={cn(
                                         'h-4 w-4 transition-transform',
-                                        isOpen && 'rotate-180'
+                                        isAreaOpen && 'rotate-180'
                                       )}
                                     />
                                   </Button>
@@ -24278,38 +24486,207 @@ function App() {
                               </ItemActions>
                             </div>
                             <CollapsibleContent>
-                              <div className="border-t px-3 py-2 text-sm">
-                                <div className="grid grid-cols-2 gap-2">
-                                  <p>
-                                    <span className="font-medium">Lead:</span> {aor.lead}
-                                  </p>
-                                  <p>
-                                    <span className="font-medium">Incidents:</span> {aor.incidents}
-                                  </p>
+                              <div className="space-y-4 border-t px-2 py-2">
+                                <div className="space-y-2">
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-8 w-1/2 text-xs"
+                                    onClick={(event) => {
+                                      event.stopPropagation()
+                                      toggleAorAreaSitrep(areaKey)
+                                    }}
+                                  >
+                                    {visibleAorAreaSitrepKeys.has(areaKey)
+                                      ? 'Hide SITREP'
+                                      : 'Show SITREP'}
+                                  </Button>
+                                  {visibleAorAreaSitrepKeys.has(areaKey) && (
+                                    <div
+                                      className={cn(
+                                        'space-y-2 rounded-md border px-3 py-2.5 text-sm',
+                                        glassItemBorderClasses
+                                      )}
+                                    >
+                                      {(() => {
+                                        const areaSitrep = USCG_COAST_GUARD_AREA_SITREPS[area.key]
+                                        return (
+                                          <>
+                                            <p>
+                                              <span className="font-medium">Reporting Period:</span>{' '}
+                                              {areaSitrep.reportingPeriod}
+                                            </p>
+                                            <p>
+                                              <span className="font-medium">Last Update:</span>{' '}
+                                              {areaSitrep.lastUpdate}
+                                            </p>
+                                            <p className="mt-2">
+                                              <span className="font-medium">Latest SITREP:</span>{' '}
+                                              {areaSitrep.sitrep}{' '}
+                                              <span className="italic text-muted-foreground">
+                                                (last updated by {areaSitrep.sitrepUpdatedBy})
+                                              </span>
+                                            </p>
+                                            <div className="mt-2">
+                                              <span className="font-medium">Data Sources:</span>
+                                              <ul className="mt-1 ml-5 list-disc text-xs text-muted-foreground">
+                                                {areaSitrep.sitrepSources.map((source) => (
+                                                  <li key={source}>{source}</li>
+                                                ))}
+                                              </ul>
+                                            </div>
+                                          </>
+                                        )
+                                      })()}
+                                    </div>
+                                  )}
                                 </div>
-                                <p className="mt-2">
-                                  <span className="font-medium">Last Update:</span>{' '}
-                                  {aor.lastUpdate}
-                                </p>
-                                <p className="mt-1">
-                                  <span className="font-medium">Population / Evac:</span>{' '}
-                                  {aor.population} / {aor.evacuationStatus}
-                                </p>
-                                <p className="mt-2">
-                                  <span className="font-medium">Latest SITREP:</span>{' '}
-                                  {aor.sitrep}{' '}
-                                  <span className="italic text-muted-foreground">
-                                    (last updated by {aor.sitrepUpdatedBy})
-                                  </span>
-                                </p>
-                                <div className="mt-2">
-                                  <span className="font-medium">Data Sources:</span>
-                                  <ul className="mt-1 ml-5 list-disc text-xs text-muted-foreground">
-                                    {aor.sitrepSources.map((source) => (
-                                      <li key={source}>{source}</li>
-                                    ))}
-                                  </ul>
-                                </div>
+                                {area.assets.length > 0 && (
+                                  <div className="space-y-2">
+                                    <p className="px-1 text-xs font-medium text-muted-foreground">
+                                      Assets
+                                    </p>
+                                    <div className="flex flex-col gap-2 px-0.5">
+                                      <AssetListHeaderRow />
+                                      {area.assets.map((asset) => {
+                                        const key = `aor-area-${area.key}-asset-${asset.id}`
+                                        const isOpen = expandedItemId === key
+                                        return (
+                                          <ResourceListItemCard
+                                            key={asset.id}
+                                            resource={asset}
+                                            glassItemBorderClasses={glassItemBorderClasses}
+                                            selected={selectedPanelItemId === key}
+                                            open={isOpen}
+                                            onOpenChange={(open) =>
+                                              setExpandedItemId(open ? key : null)
+                                            }
+                                            onHeaderClick={() => toggleExpandedItem(key)}
+                                            onFocusMap={() => {
+                                              setSelectedPanelItemId(key)
+                                              void focusMapItem(
+                                                `resource-${asset.id}`,
+                                                asset.mapLocation,
+                                                30000
+                                              )
+                                            }}
+                                          />
+                                        )
+                                      })}
+                                    </div>
+                                  </div>
+                                )}
+                                {area.districts.length > 0 && (
+                                  <div className="space-y-2">
+                                    <p className="px-1 text-xs font-medium text-muted-foreground">
+                                      Districts
+                                    </p>
+                                    {area.districts.map((aor) => {
+                                      const key = `aor-${aor.id}`
+                                      const isOpen = expandedItemId === key
+                                      return (
+                                        <Item
+                                          key={aor.id}
+                                          variant="outline"
+                                          className={cn(
+                                            'flex-col items-stretch p-0',
+                                            glassItemBorderClasses,
+                                            selectedPanelItemId === key &&
+                                              'ring-2 ring-primary/60 bg-primary/5'
+                                          )}
+                                        >
+                                          <Collapsible
+                                            open={isOpen}
+                                            onOpenChange={(open) =>
+                                              setExpandedItemId(open ? key : null)
+                                            }
+                                          >
+                                            <div
+                                              className="flex cursor-pointer items-center gap-2 px-3 py-2.5"
+                                              onClick={() => toggleExpandedItem(key)}
+                                            >
+                                              <ItemContent>
+                                                <ItemTitle className="text-sm">{aor.name}</ItemTitle>
+                                              </ItemContent>
+                                              <ItemActions>
+                                                <Button
+                                                  variant="ghost"
+                                                  size="icon"
+                                                  aria-label="Zoom map to area of responsibility"
+                                                  onClick={(event) => {
+                                                    event.stopPropagation()
+                                                    setSelectedPanelItemId(key)
+                                                    void focusMapItem(
+                                                      `fema-aor-${aor.id}`,
+                                                      aor.location,
+                                                      10_000_000
+                                                    )
+                                                  }}
+                                                >
+                                                  <MapIcon className="h-4 w-4" />
+                                                </Button>
+                                                <CollapsibleTrigger asChild>
+                                                  <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    aria-label="Toggle AOR details"
+                                                    onClick={(event) => event.stopPropagation()}
+                                                  >
+                                                    <ChevronDown
+                                                      className={cn(
+                                                        'h-4 w-4 transition-transform',
+                                                        isOpen && 'rotate-180'
+                                                      )}
+                                                    />
+                                                  </Button>
+                                                </CollapsibleTrigger>
+                                              </ItemActions>
+                                            </div>
+                                            <CollapsibleContent>
+                                              <div className="border-t px-3 py-2 text-sm">
+                                                <div className="grid grid-cols-2 gap-2">
+                                                  <p>
+                                                    <span className="font-medium">Lead:</span>{' '}
+                                                    {aor.lead}
+                                                  </p>
+                                                  <p>
+                                                    <span className="font-medium">Incidents:</span>{' '}
+                                                    {aor.incidents}
+                                                  </p>
+                                                </div>
+                                                <p className="mt-2">
+                                                  <span className="font-medium">Last Update:</span>{' '}
+                                                  {aor.lastUpdate}
+                                                </p>
+                                                <p className="mt-1">
+                                                  <span className="font-medium">
+                                                    Population / Evac:
+                                                  </span>{' '}
+                                                  {aor.population} / {aor.evacuationStatus}
+                                                </p>
+                                                <p className="mt-2">
+                                                  <span className="font-medium">Latest SITREP:</span>{' '}
+                                                  {aor.sitrep}{' '}
+                                                  <span className="italic text-muted-foreground">
+                                                    (last updated by {aor.sitrepUpdatedBy})
+                                                  </span>
+                                                </p>
+                                                <div className="mt-2">
+                                                  <span className="font-medium">Data Sources:</span>
+                                                  <ul className="mt-1 ml-5 list-disc text-xs text-muted-foreground">
+                                                    {aor.sitrepSources.map((source) => (
+                                                      <li key={source}>{source}</li>
+                                                    ))}
+                                                  </ul>
+                                                </div>
+                                              </div>
+                                            </CollapsibleContent>
+                                          </Collapsible>
+                                        </Item>
+                                      )
+                                    })}
+                                  </div>
+                                )}
                               </div>
                             </CollapsibleContent>
                           </Collapsible>
@@ -28035,7 +28412,7 @@ function App() {
                               <SelectContent className="text-xs">
                                 <SelectGroup>
                                   <SelectLabel className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                                    USCG AORs
+                                    Business Units
                                   </SelectLabel>
                                   {SITREP_SCOPE_OPTIONS.filter(
                                     (option) => option.kind === 'aor'
@@ -32500,7 +32877,10 @@ function App() {
                     <span className="font-medium">Quantity:</span> {selectedPratusResource.quantity}
                   </p>
                   <p>
-                    <span className="font-medium">Unit:</span> {selectedPratusResource.unit}
+                    <span className="font-medium">Unit Type:</span> {selectedPratusResource.unitType}
+                  </p>
+                  <p>
+                    <span className="font-medium">Unit Name:</span> {selectedPratusResource.unitName}
                   </p>
                   <p>
                     <span className="font-medium">Hull/Tail Number:</span>{' '}
@@ -34102,7 +34482,7 @@ function App() {
         >
           <div className="flex h-full flex-col">
             <SheetHeader className="gap-1 border-b border-border bg-muted/40 px-4 py-4">
-              <SheetTitle className="text-base font-semibold">Marathon</SheetTitle>
+              <SheetTitle className="text-base font-semibold">United States Coast Guard</SheetTitle>
               <span className="text-xs text-muted-foreground">Navigation</span>
             </SheetHeader>
             <nav className="flex-1 overflow-y-auto px-2 py-3">

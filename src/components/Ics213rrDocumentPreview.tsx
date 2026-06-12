@@ -64,7 +64,7 @@ export function Ics213rrDocumentPreview({ request }: { request: ResourceRequestI
           Resource Request (ICS 213RR-CG)
         </p>
         <p className="text-xs text-muted-foreground">
-          Marathon · Department of Homeland Security · ICS 213RR-CG (07/25)
+          United States Coast Guard · Department of Homeland Security · ICS 213RR-CG (07/25)
         </p>
       </div>
 

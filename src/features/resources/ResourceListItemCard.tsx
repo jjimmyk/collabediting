@@ -1,17 +1,28 @@
-import { useState } from 'react'
-import { ChevronDown, Map as MapIcon } from 'lucide-react'
+import { useEffect, useState, type ReactNode } from 'react'
+import { Check, ChevronDown, Map as MapIcon, Pencil, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible'
-import { Item, ItemActions, ItemContent, ItemDescription, ItemTitle } from '@/components/ui/item'
-import type { ResourceListItemData } from '@/features/resources/types'
+import { Input } from '@/components/ui/input'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { Textarea } from '@/components/ui/textarea'
+import { Item, ItemActions, ItemContent, ItemTitle } from '@/components/ui/item'
+import { AssetListHeaderRow, ASSET_LIST_ROW_GRID_CLASS } from '@/features/resources/AssetListHeaderRow'
+import { AssetStatusIndicator } from '@/features/resources/AssetStatusIndicator'
+import { AlmisDataSourceIcon } from '@/features/resources/AlmisDataSourceIcon'
+import type { ResourceCostUnitType, ResourceListItemData } from '@/features/resources/types'
 import {
   formatResourceCostPerUnit,
   formatResourceCostUnitType,
-  getResourceIncidentAssignmentLabel,
 } from '@/features/resources/utils'
 import { cn } from '@/lib/utils'
 
@@ -21,10 +32,52 @@ type ResourceListItemCardProps = {
   selected?: boolean
   open?: boolean
   defaultOpen?: boolean
+  editable?: boolean
   onOpenChange?: (open: boolean) => void
   onHeaderClick?: () => void
   onFocusMap?: () => void
+  onSave?: (resource: ResourceListItemData) => void
   showMapAction?: boolean
+}
+
+const COST_UNIT_TYPE_OPTIONS: ResourceCostUnitType[] = ['per day', 'per hour', 'to purchase']
+
+function ResourceFieldLabel({ children }: { children: ReactNode }) {
+  return <span className="font-medium">{children}</span>
+}
+
+function AlmisLockedValue({ children }: { children: ReactNode }) {
+  return (
+    <p className="flex flex-wrap items-center gap-1 text-muted-foreground">
+      {children}
+      <AlmisDataSourceIcon />
+    </p>
+  )
+}
+
+function IncidentAssignmentSubfield({
+  label,
+  isEditing,
+  value,
+  field,
+  onRenderInput,
+}: {
+  label: string
+  isEditing: boolean
+  value: string
+  field: keyof ResourceListItemData
+  onRenderInput: (
+    field: keyof ResourceListItemData,
+    value: string | number,
+    options?: { type?: 'text' | 'number'; className?: string }
+  ) => ReactNode
+}) {
+  return (
+    <div className="space-y-1">
+      <ResourceFieldLabel>{label}</ResourceFieldLabel>
+      {isEditing ? onRenderInput(field, value) : <p>{value || '—'}</p>}
+    </div>
+  )
 }
 
 export function ResourceListItemCard({
@@ -33,14 +86,24 @@ export function ResourceListItemCard({
   selected = false,
   open,
   defaultOpen = false,
+  editable = false,
   onOpenChange,
   onHeaderClick,
   onFocusMap,
+  onSave,
   showMapAction = true,
 }: ResourceListItemCardProps) {
   const [internalOpen, setInternalOpen] = useState(defaultOpen)
+  const [isEditing, setIsEditing] = useState(false)
+  const [draft, setDraft] = useState<ResourceListItemData | null>(null)
   const isOpen = open ?? internalOpen
-  const assignmentLabel = getResourceIncidentAssignmentLabel(resource)
+  const activeResource = isEditing && draft ? draft : resource
+
+  useEffect(() => {
+    if (!isEditing) {
+      setDraft(null)
+    }
+  }, [resource, isEditing])
 
   const handleOpenChange = (nextOpen: boolean) => {
     if (open === undefined) {
@@ -49,123 +112,368 @@ export function ResourceListItemCard({
     onOpenChange?.(nextOpen)
   }
 
+  const patchDraft = <K extends keyof ResourceListItemData>(
+    field: K,
+    value: ResourceListItemData[K]
+  ) => {
+    setDraft((previous) => (previous ? { ...previous, [field]: value } : previous))
+  }
+
+  const startEditing = (event: React.MouseEvent) => {
+    event.stopPropagation()
+    setDraft({
+      ...resource,
+      mapLocation: [...resource.mapLocation] as [number, number],
+    })
+    setIsEditing(true)
+    handleOpenChange(true)
+  }
+
+  const cancelEditing = (event: React.MouseEvent) => {
+    event.stopPropagation()
+    setIsEditing(false)
+    setDraft(null)
+  }
+
+  const saveEditing = (event: React.MouseEvent) => {
+    event.stopPropagation()
+    if (!draft || !onSave) {
+      return
+    }
+
+    onSave({
+      ...draft,
+      assetStatus: resource.assetStatus,
+      assetStatusUpdatedAt: resource.assetStatusUpdatedAt,
+      currentLocation: resource.currentLocation,
+      opcon: resource.opcon,
+      unitType: resource.unitType,
+      unitName: resource.unitName,
+      assignedIncidentName: draft.assignedIncidentName?.trim() || null,
+      quantity: Number(draft.quantity) || 0,
+      costPerUnit: Number(draft.costPerUnit) || 0,
+    })
+    setIsEditing(false)
+    setDraft(null)
+  }
+
+  const renderEditableInput = (
+    field: keyof ResourceListItemData,
+    value: string | number,
+    options?: { type?: 'text' | 'number'; className?: string }
+  ) => (
+    <Input
+      type={options?.type ?? 'text'}
+      value={value}
+      onClick={(event) => event.stopPropagation()}
+      onChange={(event) => {
+        const nextValue =
+          options?.type === 'number' ? Number(event.target.value) : event.target.value
+        patchDraft(field, nextValue as ResourceListItemData[typeof field])
+      }}
+      className={cn('h-8 text-xs', options?.className)}
+    />
+  )
+
   return (
     <Item
       variant="outline"
       className={cn(
         'flex-col items-stretch p-0',
         glassItemBorderClasses,
-        selected && 'ring-2 ring-primary/60 bg-primary/5'
+        selected &&
+          'relative z-10 ring-2 ring-primary/60 ring-offset-2 ring-offset-background bg-primary/5'
       )}
     >
       <Collapsible open={isOpen} onOpenChange={handleOpenChange}>
         <div
           className={cn(
             'flex items-center gap-2 px-3 py-2.5',
-            onHeaderClick && 'cursor-pointer'
+            onHeaderClick && !isEditing && 'cursor-pointer'
           )}
-          onClick={onHeaderClick}
+          onClick={isEditing ? undefined : onHeaderClick}
         >
-          <ItemContent>
-            <ItemTitle>{resource.name}</ItemTitle>
-            {assignmentLabel ? <ItemDescription>{assignmentLabel}</ItemDescription> : null}
+          <ItemContent className="min-w-0">
+            <div
+              className={ASSET_LIST_ROW_GRID_CLASS}
+              aria-label={`Asset status: ${resource.assetStatus}, last updated ${resource.assetStatusUpdatedAt}`}
+            >
+              <div className="min-w-0">
+                {isEditing ? (
+                  renderEditableInput('name', activeResource.name, { className: 'font-medium' })
+                ) : (
+                  <ItemTitle className="truncate">{resource.name}</ItemTitle>
+                )}
+              </div>
+              <AssetStatusIndicator
+                status={resource.assetStatus}
+                showLabel={false}
+                className="justify-self-center"
+              />
+              <span className="text-xs font-normal tabular-nums text-muted-foreground whitespace-nowrap">
+                {resource.assetStatusUpdatedAt}
+              </span>
+              <span className="justify-self-center">
+                <AlmisDataSourceIcon />
+              </span>
+            </div>
           </ItemContent>
           <ItemActions>
-            {showMapAction && onFocusMap ? (
-              <Button
-                variant="ghost"
-                size="icon"
-                aria-label="Zoom map to asset"
-                onClick={(event) => {
-                  event.stopPropagation()
-                  onFocusMap()
-                }}
-              >
-                <MapIcon className="h-4 w-4" />
-              </Button>
-            ) : null}
-            <CollapsibleTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                aria-label="Toggle asset details"
-                onClick={(event) => event.stopPropagation()}
-              >
-                <ChevronDown
-                  className={cn('h-4 w-4 transition-transform', isOpen && 'rotate-180')}
-                />
-              </Button>
-            </CollapsibleTrigger>
+            {isEditing ? (
+              <>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label="Save asset changes"
+                  onClick={saveEditing}
+                >
+                  <Check className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label="Cancel asset edits"
+                  onClick={cancelEditing}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </>
+            ) : (
+              <>
+                {editable ? (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    aria-label="Edit asset"
+                    onClick={startEditing}
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </Button>
+                ) : null}
+                {showMapAction && onFocusMap ? (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    aria-label="Zoom map to asset"
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      onFocusMap()
+                    }}
+                  >
+                    <MapIcon className="h-4 w-4" />
+                  </Button>
+                ) : null}
+                <CollapsibleTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    aria-label="Toggle asset details"
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    <ChevronDown
+                      className={cn('h-4 w-4 transition-transform', isOpen && 'rotate-180')}
+                    />
+                  </Button>
+                </CollapsibleTrigger>
+              </>
+            )}
           </ItemActions>
         </div>
         <CollapsibleContent>
-          <div className="border-t px-3 py-2 text-sm">
+          <div className="border-t px-3 py-2 text-sm" onClick={(event) => event.stopPropagation()}>
             <div className="grid grid-cols-2 gap-2">
-              <p>
-                <span className="font-medium">Current Location:</span> {resource.currentLocation}
-              </p>
-              <p>
-                <span className="font-medium">Datetime Ordered:</span> {resource.datetimeOrdered}
-              </p>
-              <p>
-                <span className="font-medium">OPCON:</span> {resource.opcon}
-              </p>
-              <p>
-                <span className="font-medium">TACON:</span> {resource.tacon}
-              </p>
-              <p>
-                <span className="font-medium">Point of Contact:</span> {resource.pointOfContact}
-              </p>
-              <p>
-                <span className="font-medium">Owning Organization:</span>{' '}
-                {resource.owningOrganization}
-              </p>
-              <p>
-                <span className="font-medium">Quantity:</span> {resource.quantity}
-              </p>
-              <p>
-                <span className="font-medium">Unit:</span> {resource.unit}
-              </p>
-              <p>
-                <span className="font-medium">Cost Unit Type:</span>{' '}
-                {formatResourceCostUnitType(resource.costUnitType)}
-              </p>
-              <p>
-                <span className="font-medium">Cost per Unit:</span>{' '}
-                {formatResourceCostPerUnit(resource.costPerUnit)}
-              </p>
-              <p>
-                <span className="font-medium">Hull/Tail Number:</span> {resource.hullTailNumber}
-              </p>
-              <p>
-                <span className="font-medium">Symbology:</span> {resource.symbology}
-              </p>
-              <p>
-                <span className="font-medium">Lat:</span> {resource.latitude}
-              </p>
-              <p>
-                <span className="font-medium">Long:</span> {resource.longitude}
-              </p>
-              <p className="col-span-2">
-                <span className="font-medium">Capabilities:</span> {resource.capabilities}
-              </p>
-              <p>
-                <span className="font-medium">Current Op Period:</span> {resource.currentOpPeriod}
-              </p>
-              <p>
-                <span className="font-medium">Next Op Period:</span> {resource.nextOpPeriod}
-              </p>
-              <p>
-                <span className="font-medium">Current Op Period Assignment:</span>{' '}
-                {resource.currentOpPeriodAssignment}
-              </p>
-              <p>
-                <span className="font-medium">Next Op Period Assignment:</span>{' '}
-                {resource.nextOpPeriodAssignment}
-              </p>
-              <p>
-                <span className="font-medium">Check-in Status:</span> {resource.checkInStatus}
-              </p>
+              <div className="space-y-1">
+                <ResourceFieldLabel>Current Location:</ResourceFieldLabel>
+                <AlmisLockedValue>
+                  <span>{resource.currentLocation}</span>
+                </AlmisLockedValue>
+              </div>
+              <div className="space-y-1">
+                <ResourceFieldLabel>Datetime Ordered:</ResourceFieldLabel>
+                {isEditing ? (
+                  renderEditableInput('datetimeOrdered', activeResource.datetimeOrdered)
+                ) : (
+                  <p>{activeResource.datetimeOrdered}</p>
+                )}
+              </div>
+              <div className="space-y-1">
+                <ResourceFieldLabel>OPCON:</ResourceFieldLabel>
+                <AlmisLockedValue>
+                  <span>{resource.opcon}</span>
+                </AlmisLockedValue>
+              </div>
+              <div className="space-y-1">
+                <ResourceFieldLabel>TACON:</ResourceFieldLabel>
+                {isEditing ? (
+                  renderEditableInput('tacon', activeResource.tacon)
+                ) : (
+                  <p>{activeResource.tacon}</p>
+                )}
+              </div>
+              <div className="space-y-1">
+                <ResourceFieldLabel>Point of Contact:</ResourceFieldLabel>
+                {isEditing ? (
+                  renderEditableInput('pointOfContact', activeResource.pointOfContact)
+                ) : (
+                  <p>{activeResource.pointOfContact}</p>
+                )}
+              </div>
+              <div className="space-y-1">
+                <ResourceFieldLabel>Owning Organization:</ResourceFieldLabel>
+                {isEditing ? (
+                  renderEditableInput('owningOrganization', activeResource.owningOrganization)
+                ) : (
+                  <p>{activeResource.owningOrganization}</p>
+                )}
+              </div>
+              <div className="space-y-1">
+                <ResourceFieldLabel>Quantity:</ResourceFieldLabel>
+                {isEditing ? (
+                  renderEditableInput('quantity', activeResource.quantity, { type: 'number' })
+                ) : (
+                  <p>{activeResource.quantity}</p>
+                )}
+              </div>
+              <div className="space-y-1">
+                <ResourceFieldLabel>Unit Type:</ResourceFieldLabel>
+                <AlmisLockedValue>
+                  <span>{resource.unitType}</span>
+                </AlmisLockedValue>
+              </div>
+              <div className="space-y-1">
+                <ResourceFieldLabel>Unit Name:</ResourceFieldLabel>
+                <AlmisLockedValue>
+                  <span>{resource.unitName}</span>
+                </AlmisLockedValue>
+              </div>
+              <div className="space-y-1">
+                <ResourceFieldLabel>Cost Unit Type:</ResourceFieldLabel>
+                {isEditing ? (
+                  <Select
+                    value={activeResource.costUnitType}
+                    onValueChange={(value) =>
+                      patchDraft('costUnitType', value as ResourceCostUnitType)
+                    }
+                  >
+                    <SelectTrigger className="h-8 w-full text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {COST_UNIT_TYPE_OPTIONS.map((option) => (
+                        <SelectItem key={option} value={option}>
+                          {formatResourceCostUnitType(option)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <p>{formatResourceCostUnitType(activeResource.costUnitType)}</p>
+                )}
+              </div>
+              <div className="space-y-1">
+                <ResourceFieldLabel>Cost per Unit:</ResourceFieldLabel>
+                {isEditing ? (
+                  renderEditableInput('costPerUnit', activeResource.costPerUnit, { type: 'number' })
+                ) : (
+                  <p>{formatResourceCostPerUnit(activeResource.costPerUnit)}</p>
+                )}
+              </div>
+              <div className="space-y-1">
+                <ResourceFieldLabel>Hull/Tail Number:</ResourceFieldLabel>
+                {isEditing ? (
+                  renderEditableInput('hullTailNumber', activeResource.hullTailNumber)
+                ) : (
+                  <p>{activeResource.hullTailNumber}</p>
+                )}
+              </div>
+              <div className="space-y-1">
+                <ResourceFieldLabel>Symbology:</ResourceFieldLabel>
+                {isEditing ? (
+                  renderEditableInput('symbology', activeResource.symbology)
+                ) : (
+                  <p>{activeResource.symbology}</p>
+                )}
+              </div>
+              <div className="space-y-1">
+                <ResourceFieldLabel>Lat:</ResourceFieldLabel>
+                {isEditing ? (
+                  renderEditableInput('latitude', activeResource.latitude)
+                ) : (
+                  <p>{activeResource.latitude}</p>
+                )}
+              </div>
+              <div className="space-y-1">
+                <ResourceFieldLabel>Long:</ResourceFieldLabel>
+                {isEditing ? (
+                  renderEditableInput('longitude', activeResource.longitude)
+                ) : (
+                  <p>{activeResource.longitude}</p>
+                )}
+              </div>
+              <div className="col-span-2 space-y-1">
+                <ResourceFieldLabel>Capabilities:</ResourceFieldLabel>
+                {isEditing ? (
+                  <Textarea
+                    value={activeResource.capabilities}
+                    onClick={(event) => event.stopPropagation()}
+                    onChange={(event) => patchDraft('capabilities', event.target.value)}
+                    className="min-h-16 text-xs"
+                  />
+                ) : (
+                  <p>{activeResource.capabilities}</p>
+                )}
+              </div>
+              <div className="col-span-2 rounded-md border bg-muted/20 p-3">
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Incident Assignment Details
+                </p>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="col-span-2">
+                    <IncidentAssignmentSubfield
+                      label="Assigned to Incident:"
+                      isEditing={isEditing}
+                      value={activeResource.assignedIncidentName ?? ''}
+                      field="assignedIncidentName"
+                      onRenderInput={renderEditableInput}
+                    />
+                  </div>
+                  <IncidentAssignmentSubfield
+                    label="Current Op Period:"
+                    isEditing={isEditing}
+                    value={activeResource.currentOpPeriod}
+                    field="currentOpPeriod"
+                    onRenderInput={renderEditableInput}
+                  />
+                  <IncidentAssignmentSubfield
+                    label="Next Op Period:"
+                    isEditing={isEditing}
+                    value={activeResource.nextOpPeriod}
+                    field="nextOpPeriod"
+                    onRenderInput={renderEditableInput}
+                  />
+                  <IncidentAssignmentSubfield
+                    label="Current Op Period Assignment:"
+                    isEditing={isEditing}
+                    value={activeResource.currentOpPeriodAssignment}
+                    field="currentOpPeriodAssignment"
+                    onRenderInput={renderEditableInput}
+                  />
+                  <IncidentAssignmentSubfield
+                    label="Next Op Period Assignment:"
+                    isEditing={isEditing}
+                    value={activeResource.nextOpPeriodAssignment}
+                    field="nextOpPeriodAssignment"
+                    onRenderInput={renderEditableInput}
+                  />
+                  <IncidentAssignmentSubfield
+                    label="Check-in Status:"
+                    isEditing={isEditing}
+                    value={activeResource.checkInStatus}
+                    field="checkInStatus"
+                    onRenderInput={renderEditableInput}
+                  />
+                </div>
+              </div>
             </div>
           </div>
         </CollapsibleContent>

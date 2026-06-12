@@ -214,7 +214,7 @@ export function buildIcs213rrDocxBlocks(request: ResourceRequestItem): DocxBlock
   blocks.push({ kind: 'title', text: 'Resource Request (ICS 213RR-CG)' })
   blocks.push({
     kind: 'subtitle',
-    text: 'Marathon · Department of Homeland Security · ICS 213RR-CG (07/25)',
+    text: 'United States Coast Guard · Department of Homeland Security · ICS 213RR-CG (07/25)',
   })
 
   pushHeading('1. Incident Name')
@@ -340,7 +340,7 @@ export function buildIcs213rrPrintHtml(request: ResourceRequestItem) {
 </head>
 <body>
   <h1>Resource Request (ICS 213RR-CG)</h1>
-  <div class="subtitle">Marathon · Department of Homeland Security · ICS 213RR-CG (07/25)</div>
+  <div class="subtitle">United States Coast Guard · Department of Homeland Security · ICS 213RR-CG (07/25)</div>
 
   <h2>1. Incident Name</h2>
   <table>${fieldRow('Incident Name', request.incidentName)}</table>

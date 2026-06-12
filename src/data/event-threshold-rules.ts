@@ -332,7 +332,7 @@ export const buildEventRuleGenerationPrompt = (businessUnitOptions: string[]) =>
       ? businessUnitOptions.join('; ')
       : 'available business units in the hub'
 
-  return `Help me create an automated event creation rule for Marathon emergency operations.
+  return `Help me create an automated event creation rule for United States Coast Guard emergency operations.
 
 I need a rule that auto-creates an event when monitored data crosses defined thresholds. Please propose a complete rule including:
 1. One or more conditions (data input, operator, threshold value)

@@ -26,6 +26,8 @@ type LegacyIcs204ResourceAssignedRow = Partial<Ics204ResourceAssignedRow> & {
 const EMPTY_RESOURCE_SNAPSHOT = (id: number, name: string): Ics204ResourceSnapshot => ({
   id,
   name,
+  assetStatus: 'FMC',
+  assetStatusUpdatedAt: '',
   owner: '',
   status: 'Assigned',
   type: '',
@@ -41,7 +43,8 @@ const EMPTY_RESOURCE_SNAPSHOT = (id: number, name: string): Ics204ResourceSnapsh
   pointOfContact: '',
   owningOrganization: '',
   quantity: 0,
-  unit: '',
+  unitType: '',
+  unitName: '',
   hullTailNumber: '',
   symbology: '',
   latitude: '',

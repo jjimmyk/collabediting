@@ -44,7 +44,7 @@ function buildHubTutorialSteps(
       popover: {
         title: 'Welcome to PRATUS Coach',
         description:
-          'This tour walks you through The Hub — your home for incidents, exercises, events, and operational awareness across the Marathon.',
+          'This tour walks you through The Hub — your home for incidents, exercises, events, and operational awareness across United States Coast Guard.',
         side: 'bottom',
         align: 'start',
       },

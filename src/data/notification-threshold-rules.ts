@@ -332,7 +332,7 @@ export const buildNotificationRuleGenerationPrompt = (categoryOptions: string[])
       ? categoryOptions.join('; ')
       : 'available notification categories in the hub'
 
-  return `Help me create an automated notification rule for Marathon emergency operations.
+  return `Help me create an automated notification rule for United States Coast Guard emergency operations.
 
 I need a rule that auto-sends a notification when monitored data crosses defined thresholds. Please propose a complete rule including:
 1. One or more conditions (data input, operator, threshold value)

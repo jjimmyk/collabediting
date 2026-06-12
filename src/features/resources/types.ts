@@ -2,9 +2,15 @@ export type ResourceCostUnitType = 'per day' | 'per hour' | 'to purchase'
 
 export type ResourceDeploymentKind = 'available' | 'incident' | 'exercise'
 
+export type AssetStatus = 'FMC' | 'PMC' | 'NMC'
+
+export const ASSET_STATUS_OPTIONS: AssetStatus[] = ['FMC', 'PMC', 'NMC']
+
 export type ResourceListItemData = {
   id: number
   name: string
+  assetStatus: AssetStatus
+  assetStatusUpdatedAt: string
   owner: string
   status: 'Assigned' | 'Staged' | 'Available'
   type: string
@@ -20,7 +26,8 @@ export type ResourceListItemData = {
   pointOfContact: string
   owningOrganization: string
   quantity: number
-  unit: string
+  unitType: string
+  unitName: string
   hullTailNumber: string
   symbology: string
   latitude: string
