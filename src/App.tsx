@@ -569,160 +569,160 @@ type NotificationTaskResource = {
 }
 
 const NOTIFICATION_TASK_RESOURCE_CATALOG: Record<string, NotificationTaskResource[]> = {
-  'Activate BP Cherry Point refinery ERP and unified command; notify Whatcom County OEM, WA Ecology, and USCG Sector Puget Sound.':
+  'Activate Marathon Garyville refinery ERP and unified command; notify St. James Parish OEM, LDEQ, and USCG Sector New Orleans.':
     [
       {
-        id: 'bp-cherry-point-uc',
-        name: 'BP Cherry Point Refinery Unified Command',
+        id: 'mpc-garyville-uc',
+        name: 'Marathon Garyville Refinery Unified Command',
         availability: 'Available',
-        location: 'Ferndale, WA',
+        location: 'Garyville, LA',
       },
       {
-        id: 'bp-ccmer-watch',
-        name: 'BP CCMER Advisor on Duty',
+        id: 'mpc-emergency-response',
+        name: 'Marathon Emergency Response Team — Gulf Coast',
         availability: 'Available',
-        location: 'Seattle, WA',
+        location: 'Garyville, LA',
       },
       {
-        id: 'whatcom-oem',
-        name: 'Whatcom County Office of Emergency Management',
+        id: 'st-james-oem',
+        name: 'St. James Parish Office of Emergency Preparedness',
         availability: 'Assigned',
-        location: 'Bellingham, WA',
+        location: 'Convent, LA',
       },
       {
-        id: 'wa-ecology-spill',
-        name: 'WA Department of Ecology — Spill Response',
+        id: 'ldeq-spill',
+        name: 'Louisiana DEQ — Spill Response & Air Monitoring',
         availability: 'Assigned',
-        location: 'Bellingham, WA',
+        location: 'Baton Rouge, LA',
       },
       {
-        id: 'uscg-sector-puget',
-        name: 'USCG Sector Puget Sound',
+        id: 'uscg-sector-nola',
+        name: 'USCG Sector New Orleans',
         availability: 'Assigned',
-        location: 'Seattle, WA',
+        location: 'New Orleans, LA',
       },
       {
-        id: 'bp-ert-pnw',
-        name: 'BP Emergency Response Team — Pacific Northwest',
+        id: 'mpc-ert-gulf',
+        name: 'Marathon Emergency Response Team — Gulf Coast',
         availability: 'Available',
-        location: 'Ferndale, WA',
+        location: 'Garyville, LA',
       },
     ],
   'Deploy industrial firefighting foam units and mutual-aid strike teams; establish downwind air monitoring perimeter.':
     [
       {
-        id: 'whatcom-fd7-mutual-aid',
-        name: 'Whatcom County Fire District 7 — Industrial Mutual Aid',
+        id: 'st-james-mutual-aid',
+        name: 'St. James Parish Industrial Mutual Aid Fire District',
         availability: 'Assigned',
-        location: 'Ferndale, WA',
+        location: 'Garyville, LA',
       },
       {
-        id: 'bp-fire-brigade-cherry-point',
-        name: 'BP Industrial Fire Brigade — Cherry Point',
+        id: 'mpc-fire-brigade-garyville',
+        name: 'Marathon Industrial Fire Brigade — Garyville',
         availability: 'Assigned',
-        location: 'Cherry Point Refinery',
+        location: 'Garyville Refinery',
       },
       {
-        id: 'epa-region10-air',
-        name: 'EPA Region 10 Air Monitoring Cell',
+        id: 'ldeq-air',
+        name: 'LDEQ Downwind Air Monitoring Team',
         availability: 'Available',
-        location: 'Seattle, WA',
+        location: 'Laplace, LA',
       },
       {
-        id: 'wa-ecology-air',
-        name: 'WA Ecology Downwind Air Monitoring Team',
+        id: 'epa-region6-air',
+        name: 'EPA Region 6 Air Monitoring Cell',
         availability: 'Available',
-        location: 'Blaine, WA',
+        location: 'Dallas, TX',
       },
       {
-        id: 'bp-hazmat-monitoring',
-        name: 'BP Refinery Fixed Gas Detection Network',
+        id: 'mpc-hazmat-monitoring',
+        name: 'Marathon Refinery Fixed Gas Detection Network',
         availability: 'Assigned',
-        location: 'Cherry Point Refinery',
+        location: 'Garyville Refinery',
       },
       {
-        id: 'nw-municipal-foam-strike',
-        name: 'Northwest Regional Foam Strike Team',
+        id: 'gulf-coast-foam-strike',
+        name: 'Gulf Coast Regional Foam Strike Team',
         availability: 'Available',
-        location: 'Bellingham, WA',
+        location: 'Baton Rouge, LA',
       },
     ],
-  'Activate BP Senegal refinery ERP and unified command; notify Ministry of Petroleum and Mines, ANACIM, and Dakar port authority.':
+  'Activate MPLX pipeline emergency response plan; notify PHMSA, USCG Sector Houston-Galveston, and LDEQ.':
     [
       {
-        id: 'bp-sar-unified-command',
-        name: 'BP SAR Refinery Unified Command — Mbao',
+        id: 'mplx-pipeline-uc',
+        name: 'MPLX Pipeline Operations Unified Command',
         availability: 'Available',
-        location: 'Dakar, Senegal',
+        location: 'Sabine River Crossing, TX/LA',
       },
       {
-        id: 'bp-ccmer-africa-watch',
-        name: 'BP CCMER Advisor on Duty — Africa',
+        id: 'mpc-emergency-response-gulf',
+        name: 'Marathon Emergency Response Advisor on Duty — Gulf Coast',
         availability: 'Available',
-        location: 'London, UK',
+        location: 'Houston, TX',
       },
       {
-        id: 'senegal-petroleum-ministry',
-        name: 'Ministry of Petroleum and Mines — Senegal',
+        id: 'phmsa-fosc',
+        name: 'PHMSA Federal On-Scene Coordinator',
         availability: 'Assigned',
-        location: 'Dakar, Senegal',
+        location: 'Beaumont, TX',
       },
       {
-        id: 'anacim-senegal',
-        name: 'ANACIM — Civil Aviation Meteorology',
+        id: 'uscg-sector-hg',
+        name: 'USCG Sector Houston-Galveston',
         availability: 'Assigned',
-        location: 'Dakar, Senegal',
+        location: 'Houston, TX',
       },
       {
-        id: 'dakar-port-authority',
-        name: 'Port Autonome de Dakar',
+        id: 'ldeq-spill',
+        name: 'Louisiana DEQ — Spill Response',
         availability: 'Assigned',
-        location: 'Dakar, Senegal',
+        location: 'Baton Rouge, LA',
       },
       {
-        id: 'bp-ert-west-africa',
-        name: 'BP Emergency Response Team — West Africa',
+        id: 'mpc-ert-gulf-pipeline',
+        name: 'Marathon Emergency Response Team — Gulf Coast',
         availability: 'Available',
-        location: 'Dakar, Senegal',
+        location: 'Houston, TX',
       },
     ],
-  'Deploy industrial firefighting and blast-response teams; establish downwind air monitoring and casualty accounting perimeter.':
+  'Deploy containment boom, vacuum recovery, and perimeter air/water monitoring teams.':
     [
       {
-        id: 'senegal-fire-brigade-mbao',
-        name: 'Senegal National Fire Brigade — Mbao Industrial Zone',
+        id: 'mplx-leak-contractor',
+        name: 'MPLX Certified Leak Response Contractor',
         availability: 'Assigned',
-        location: 'Mbao, Dakar',
+        location: 'Sabine River Crossing',
       },
       {
-        id: 'bp-fire-brigade-sar',
-        name: 'BP Industrial Fire Brigade — SAR Refinery',
+        id: 'mplx-integrity-inspection',
+        name: 'MPLX Pipeline Integrity Inspection Crew',
         availability: 'Assigned',
-        location: 'SAR Refinery, Mbao',
+        location: 'Sabine River Crossing',
       },
       {
-        id: 'unep-spill-west-africa',
-        name: 'UNEP Regional Environmental Emergency Cell',
+        id: 'epa-region6-spill',
+        name: 'EPA Region 6 Spill Response Support',
         availability: 'Available',
-        location: 'Abidjan, Côte d\'Ivoire',
+        location: 'Dallas, TX',
       },
       {
-        id: 'dakar-air-monitoring',
-        name: 'Dakar Prefecture Air Monitoring Team',
+        id: 'ldeq-water-sampling',
+        name: 'LDEQ Water Sampling & Air Monitoring Team',
         availability: 'Available',
-        location: 'Guédiawaye, Senegal',
+        location: 'Orange, TX',
       },
       {
-        id: 'bp-blast-gas-network',
-        name: 'BP SAR Fixed Gas Detection Network',
+        id: 'mplx-boom-recovery',
+        name: 'MPLX Containment Boom & Vacuum Recovery Unit',
         availability: 'Assigned',
-        location: 'SAR Refinery, Mbao',
+        location: 'Sabine River shoreline',
       },
       {
-        id: 'msf-casualty-cell',
-        name: 'MSF Forward Trauma Staging Cell',
+        id: 'uscg-marine-observer',
+        name: 'USCG Marine Safety Observer Team',
         availability: 'Available',
-        location: 'Dakar, Senegal',
+        location: 'Sabine River',
       },
     ],
 }
@@ -1016,16 +1016,16 @@ type IncidentListItem = {
 }
 
 const INCIDENT_CATEGORY_OPTIONS = [
-  'World Cup 2026',
-  'Special Event',
-  'Hazardous Materials',
+  'Refinery Operations',
+  'Pipeline / Hazmat',
+  'Severe Weather',
   'Exercise',
 ] as const
 
 const INCIDENT_CATEGORY_COLORS: Record<(typeof INCIDENT_CATEGORY_OPTIONS)[number], [number, number, number]> = {
-  'World Cup 2026': [22, 163, 74],
-  'Special Event': [37, 99, 235],
-  'Hazardous Materials': [220, 38, 38],
+  'Refinery Operations': [220, 38, 38],
+  'Pipeline / Hazmat': [234, 88, 12],
+  'Severe Weather': [37, 99, 235],
   Exercise: [147, 51, 234],
 }
 
@@ -1283,23 +1283,24 @@ const DEFAULT_EVENT_LIST: EventListItem[] = (
   [
   {
     id: 1,
-    name: 'Southeast Florida Coastal Flood Advisory',
-    type: 'Coastal Flood Watch',
-    status: 'Monitoring',
-    severity: 'Medium',
-    region: 'USCG District 7 — Southeast',
-    location: [-80.1918, 26.1224],
-    lead: 'NWS Miami · FEMA Region 4 Liaison',
-    startedAt: '2026-05-08 18:00 EST',
-    lastUpdate: '2026-05-09 07:30 EST',
+    name: 'Hurricane Edgar — Gulf Coast Refinery & Pipeline Watch',
+    type: 'Hurricane / Tropical Storm',
+    status: 'Active',
+    severity: 'High',
+    region: 'Gulf Coast — Texas & Louisiana',
+    location: [-95.37, 29.76],
+    lead: 'Marathon Gulf Coast Weather Cell · NWS Houston/Galveston Liaison',
+    startedAt: '2026-05-08 18:00 CST',
+    lastUpdate: '2026-05-09 10:30 CST',
     summary:
-      'Minor coastal flooding expected along Atlantic barrier islands from Sebastian Inlet to Miami-Dade. No road closures; FDOT monitoring A1A low spots and pump stations. Related to but below Hurricane Edgar incident threshold.',
+      'Hurricane Edgar approaching upper Texas and southwest Louisiana coast. Marathon initiating controlled shutdowns at Texas City, Galveston Bay, and Louisiana refining assets; MPLX pipeline segment isolation and storm hardening in progress. Storm surge and flooding risk to coastal terminals.',
     resourcesCommitted:
-      'FDOT District 4 flood monitors, Palm Beach County OEM watch desk, 2 ESF-1 liaison officers',
-    businessUnit: 'USCG District 7 — Southeast',
+      'Marathon weather cell, refinery EOC teams, MPLX control center, contractor pre-positioning, parish/county OEM liaisons',
+    businessUnit: 'Gulf Coast — Texas & Louisiana',
     creationKind: 'threshold',
     createdByUser: null,
-    thresholdDescription: 'Coastal flood watch threshold reached for USCG District 7 — Southeast',
+    thresholdDescription:
+      'Hurricane watch threshold reached for Marathon Gulf Coast refining and MPLX corridor assets',
   },
   {
     id: 2,
@@ -1322,22 +1323,22 @@ const DEFAULT_EVENT_LIST: EventListItem[] = (
   },
   {
     id: 3,
-    name: 'GOM Platform Crew Change Delay — BP Mad Dog',
-    type: 'Offshore Operations',
-    status: 'Monitoring',
-    severity: 'Low',
-    region: 'Gulf of Mexico — Offshore',
-    location: [-90.78, 27.53],
-    lead: 'BP Mad Dog OIM · Logistics Coordinator',
-    startedAt: '2026-05-09 06:00 CST',
-    lastUpdate: '2026-05-09 07:45 CST',
+    name: 'MPLX Crude Pipeline Rupture — Sabine River Crossing',
+    type: 'Pipeline Rupture / Oil Spill',
+    status: 'Active',
+    severity: 'High',
+    region: 'Gulf Coast Pipelines — Texas/Louisiana',
+    location: [-93.92, 29.98],
+    lead: 'MPLX Pipeline Control Center · PHMSA Federal On-Scene Coordinator Liaison',
+    startedAt: '2026-05-09 05:30 CST',
+    lastUpdate: '2026-05-09 08:45 CST',
     summary:
-      'Helicopter crew change delayed 90 minutes due to low cloud ceiling at Green Canyon heliport. No personnel welfare issues; production operations nominal. CCMER notified per standing protocol.',
+      'Crude release from MPLX pipeline rupture near Sabine River crossing. Containment boom and vacuum recovery deployed; USCG Sector Houston-Galveston notified for inland/coastal waterway coordination. PHMSA investigative team en route.',
     resourcesCommitted:
-      'BP aviation coordinator, USCG Sector NOLA helo ops liaison, offshore medic on standby',
-    businessUnit: 'Gulf of Mexico — Offshore',
+      'MPLX leak response contractors, USCG marine safety unit, TX/RRC and LDEQ spill teams, air monitoring, integrity inspection crew',
+    businessUnit: 'Gulf Coast Pipelines — MPLX',
     creationKind: 'user',
-    createdByUser: 'BP Mad Dog OIM · Logistics Coordinator',
+    createdByUser: 'MPLX Pipeline Control Center',
     thresholdDescription: null,
   },
   {
@@ -1362,22 +1363,24 @@ const DEFAULT_EVENT_LIST: EventListItem[] = (
   },
   {
     id: 5,
-    name: 'Houston Ship Channel Approach Flood Watch',
-    type: 'Riverine / Coastal Flood',
+    name: 'Hurricane Edgar — Galveston Bay Terminal Storm Surge Watch',
+    type: 'Storm Surge / Coastal Flood',
     status: 'Monitoring',
-    severity: 'Medium',
-    region: 'USCG District 8 — Gulf',
+    severity: 'High',
+    region: 'Gulf Coast — Texas',
     location: [-95.2695, 29.7355],
-    lead: 'Harris County OEM · Hydrology Desk',
+    lead: 'Marathon Texas City Terminal · Harris County OEM Liaison',
     startedAt: '2026-05-08 22:00 CST',
     lastUpdate: '2026-05-09 06:30 CST',
     summary:
-      'Tidal flooding watch for SH-146 approach to Houston Ship Channel. TxDOT gates staged; no lane closures. Monitoring only — separate from LBJ Express hazmat incident operations.',
-    resourcesCommitted: 'Harris County OEM hydrology desk, TxDOT Houston District flood monitors',
-    businessUnit: 'USCG District 8 — Gulf',
+      'Storm surge and tidal flooding watch for Galveston Bay and Houston Ship Channel approaches ahead of Hurricane Edgar landfall. Marathon terminal loadings curtailed; TxDOT gates staged; MPLX marine terminal transfer suspended.',
+    resourcesCommitted:
+      'Marathon terminal operations, Harris County OEM hydrology desk, TxDOT Houston District flood monitors, USCG VTS Houston',
+    businessUnit: 'Gulf Coast — Texas',
     creationKind: 'threshold',
     createdByUser: null,
-    thresholdDescription: 'Tidal flood watch threshold reached for Houston Ship Channel approach',
+    thresholdDescription:
+      'Storm surge watch threshold reached for Marathon Galveston Bay terminal and ship channel assets',
   },
   {
     id: 6,
@@ -1458,67 +1461,68 @@ const DEFAULT_EVENT_LIST: EventListItem[] = (
   },
   {
     id: 10,
-    name: 'LBJ Express Perimeter Air Monitoring',
+    name: 'MPLX Pipeline Spill — Sabine River Air & Water Monitoring',
     type: 'Hazmat Support / Perimeter',
     status: 'Monitoring',
     severity: 'Medium',
-    region: 'USCG District 8 — Gulf',
-    location: [-96.8717, 32.9067],
+    region: 'Gulf Coast Pipelines — Texas/Louisiana',
+    location: [-93.92, 29.98],
     lead: 'EPA Region 6 · Air Monitoring Lead',
     startedAt: '2026-05-09 05:30 CST',
     lastUpdate: '2026-05-09 08:20 CST',
     summary:
-      'Downwind air monitoring at 1.5-mile perimeter for anhydrous ammonia release. Readings below action levels; shelter-in-place remains per unified command. Support event to active hazmat incident.',
+      'Perimeter air and water quality monitoring for MPLX crude pipeline release near Sabine River crossing. VOC readings below action levels at community receptors; boom deployment and vacuum recovery ongoing per unified command.',
     resourcesCommitted:
-      'EPA Region 6 air monitoring team, Dallas Fire-Rescue hazmat techs, 2 fixed-site sensors',
-    businessUnit: 'USCG District 8 — Gulf',
+      'EPA Region 6 air monitoring team, LDEQ water sampling crew, USCG marine safety observers, 2 fixed-site sensors',
+    businessUnit: 'Gulf Coast Pipelines — MPLX',
     creationKind: 'threshold',
     createdByUser: null,
-    thresholdDescription: 'Perimeter air monitoring watch threshold reached for hazmat support zone',
+    thresholdDescription:
+      'Perimeter monitoring threshold reached for MPLX Sabine River pipeline release support zone',
   },
   {
     id: 11,
-    name: 'Cherry Point Refinery Fire — Process Unit Alert',
-    type: 'Industrial Fire / Refinery Operations',
+    name: 'Garyville Refinery Fire — Fired Heater Tube Rupture',
+    type: 'Industrial Fire / Hydrocarbon Release',
     status: 'Active',
     severity: 'High',
-    region: 'USCG District 13 — Pacific Northwest',
-    location: [-122.7589, 48.862],
-    lead: 'BP Cherry Point Unified Command · Whatcom County OEM Liaison',
-    startedAt: '2026-05-09 09:45 PST',
-    lastUpdate: '2026-05-09 09:45 PST',
+    region: 'Gulf Coast Refining — Louisiana',
+    location: [-90.615, 30.054],
+    lead: 'Marathon Garyville Unified Command · St. James Parish OEM Liaison',
+    startedAt: '2026-05-09 07:00 CST',
+    lastUpdate: '2026-05-09 09:46 CST',
     summary:
-      'Process unit fire reported at BP Cherry Point Refinery in Ferndale, WA. Partial unit shutdown underway; all personnel accounted for; downwind air monitoring initiated per refinery ERP.',
+      'Fired heater tube rupture during startup at Marathon Garyville Refinery. Hydrocarbon release and fire in crude/vacuum unit area; emergency shutdown initiated; all personnel accounted for; downwind air monitoring and community notification per refinery ERP.',
     resourcesCommitted:
-      'BP industrial fire brigade, Whatcom County mutual aid, WA Ecology spill response liaison, USCG Sector Puget Sound notification',
-    businessUnit: 'Pacific Northwest — Refining',
+      'Marathon industrial fire brigade, St. James Parish mutual aid, LDEQ air monitoring, foam strike teams, MPLX terminal liaison',
+    businessUnit: 'Gulf Coast Refining — Louisiana',
     creationKind: 'user',
-    createdByUser: 'John Smith · john.smith@bp.com',
+    createdByUser: 'Site Emergency Manager · garyville.emergency@marathon.com',
     thresholdDescription:
-      'Industrial fire threshold crossed for BP Cherry Point refinery process safety ERP',
+      'Industrial fire threshold crossed for Marathon Garyville refinery process safety ERP',
     sourceReport: {
-      shortDescription: 'Cherry Point Refinery Fire — Process Unit Alert',
+      shortDescription: 'Garyville Refinery Fire — Fired Heater Tube Rupture',
       reportDate: '2026-05-09',
-      reportTime: '09:45',
+      reportTime: '07:00',
       facilityLocations: [],
-      facilityLocationOther: 'BP Cherry Point Refinery — Crude Processing Unit, Ferndale, WA',
+      facilityLocationOther: 'Marathon Garyville Refinery — Crude/Vacuum Unit, Garyville, LA',
       ccmerAdvisors: [],
-      callerName: 'John Smith',
-      callbackNumber: 'john.smith@bp.com',
+      callerName: 'Garyville Site Emergency Manager',
+      callbackNumber: 'garyville.emergency@marathon.com',
       callType: 'incident',
       whatHappened:
-        'Process unit fire reported at BP Cherry Point Refinery in Ferndale, WA. Partial unit shutdown underway; all personnel accounted for; downwind air monitoring initiated per refinery ERP.',
+        'Fired heater tube rupture during startup sequence with hydrocarbon release and fire. Emergency shutdown initiated; personnel accounted for; LP flare and fixed monitors active; downwind air monitoring underway.',
       facilityMuster: 'yes',
       abandonStations: 'no',
       assistanceNeeded: 'yes',
       qiDrill: 'no',
       icNotified: 'yes',
-      icNotifiedName: 'BP Cherry Point Unified Command',
-      rpName: '',
-      materialReleased: '',
-      enterWater: '',
-      releaseDischargeRate: '',
-      sourceControlled: '',
+      icNotifiedName: 'Marathon Garyville Unified Command',
+      rpName: 'Marathon Petroleum Corporation',
+      materialReleased: 'Hydrocarbon vapor and liquid — quantity under assessment',
+      enterWater: 'no',
+      releaseDischargeRate: 'Under assessment',
+      sourceControlled: 'no',
       scenarios: ['Fire – Jet Pressurized', 'Process Area - Gas Release'],
     },
   },
@@ -3253,13 +3257,6 @@ const inferIncidentCategoryFromEvent = (event: EventListItem): string => {
   const haystack = `${event.name} ${event.type} ${event.summary}`.toLowerCase()
 
   if (
-    haystack.includes('world cup') ||
-    haystack.includes('fifa') ||
-    haystack.includes('soccer')
-  ) {
-    return 'World Cup 2026'
-  }
-  if (
     haystack.includes('drill') ||
     haystack.includes('exercise') ||
     haystack.includes('tabletop')
@@ -3267,18 +3264,36 @@ const inferIncidentCategoryFromEvent = (event: EventListItem): string => {
     return 'Exercise'
   }
   if (
-    haystack.includes('hazmat') ||
-    haystack.includes('ammonia') ||
+    haystack.includes('hurricane') ||
+    haystack.includes('tropical') ||
+    haystack.includes('storm surge') ||
+    haystack.includes('extreme weather') ||
+    haystack.includes('flood watch')
+  ) {
+    return 'Severe Weather'
+  }
+  if (
+    haystack.includes('pipeline') ||
+    haystack.includes('mplx') ||
+    haystack.includes('phmsa') ||
+    haystack.includes('rupture') ||
+    haystack.includes('oil spill') ||
+    haystack.includes('hazmat')
+  ) {
+    return 'Pipeline / Hazmat'
+  }
+  if (
+    haystack.includes('refinery') ||
+    haystack.includes('fired heater') ||
+    haystack.includes('hydrocarbon') ||
     haystack.includes('fire') ||
     haystack.includes('explosion') ||
-    haystack.includes('refinery') ||
-    haystack.includes('gas release') ||
-    haystack.includes('spill')
+    haystack.includes('process unit')
   ) {
-    return 'Hazardous Materials'
+    return 'Refinery Operations'
   }
 
-  return 'Special Event'
+  return 'Refinery Operations'
 }
 
 const inferIncidentWorkflowFromEvent = (_event: EventListItem) => 'ipieca-ims'
@@ -5356,7 +5371,7 @@ function buildIcs201ExportOptions(form: Ics201FormState): DocxOptions {
     header: {
       topLines: [
         'DEPARTMENT OF HOMELAND SECURITY',
-        'U.S. COAST GUARD',
+        'MARATHON',
         'INCIDENT BRIEFING (ICS 201-CG)',
       ],
       cells: [
@@ -6326,7 +6341,7 @@ function App() {
   const incidentCategoryOptions = INCIDENT_CATEGORY_OPTIONS
   const incidentWorkflowOptions = [
     { value: 'ipieca-ims', label: 'IPIECA IMS' },
-    { value: 'uscg-ics', label: 'United States Coast Guard ICS' },
+    { value: 'uscg-ics', label: 'Marathon ICS' },
     { value: 'epa-ics', label: 'Environmental Protection Agency ICS' },
     { value: 'bsee-ics', label: 'Bureau of Safety and Environmental Enforcement ICS' },
     { value: 'california-ics', label: 'California ICS' },
@@ -8035,56 +8050,56 @@ function App() {
   const [notifications, setNotifications] = useState<NotificationItem[]>([
     {
       id: 0,
-      title: 'Refinery fire reported at BP Cherry Point, Washington',
+      title: 'Refinery fire reported at Marathon Garyville, Louisiana',
       severity: 'Critical',
       status: 'New',
       category: 'Hazmat',
-      timestamp: '2026-05-09 09:45',
+      timestamp: '2026-05-09 07:00',
       owner: 'Sensor Alpha',
       summary:
-        'User-reported process unit fire at BP Cherry Point Refinery, Ferndale, WA. Refinery unified command activating ERP; Whatcom County OEM and WA Ecology notified per standing protocol.',
+        'Fired heater tube rupture during startup at Marathon Garyville Refinery. Unified command activating ERP; St. James Parish OEM and LDEQ notified per standing protocol. Hydrocarbon release with active fire in crude/vacuum unit area.',
       impact:
-        'Crude processing curtailment, marine terminal load suspensions, and downwind air quality monitoring across Whatcom County and northern Puget Sound.',
-      location: [-122.7589, 48.862],
+        'Crude and vacuum unit curtailment, MPLX terminal load suspensions, and downwind air quality monitoring across St. James Parish and the Mississippi River corridor.',
+      location: [-90.615, 30.054],
       relatedEventId: 11,
       regionalThreats: {
-        region: 'USCG District 13 — Pacific Northwest',
+        region: 'Gulf Coast Refining — Louisiana',
         description:
-          'Active refinery fire, thermal plume, and product transfer disruptions place the following BP assets and adjacent receptors at elevated risk:',
+          'Active refinery fire, thermal plume, and hydrocarbon release place the following Marathon assets and adjacent receptors at elevated risk:',
         threats: [
           {
-            id: 'CP-REF-CPU-001',
-            resource: 'BP Cherry Point Refinery — Crude Processing Unit',
-            risk: 'Confirmed fire in crude processing unit requires full unit isolation, foam application, and perimeter cooling; adjacent units on controlled shutdown with potential cascade impact to alkylation and reformer trains.',
-            location: [-122.7589, 48.862],
+            id: 'GV-REF-CVU-001',
+            resource: 'Marathon Garyville Refinery — Crude/Vacuum Unit',
+            risk: 'Fired heater tube rupture with hydrocarbon fire requires full unit isolation, foam application, and perimeter cooling; adjacent units on controlled shutdown with potential cascade impact to reformer and alkylation trains.',
+            location: [-90.615, 30.054],
             operationalStatus: 'Partially Operational',
           },
           {
-            id: 'CP-MT-002',
-            resource: 'Cherry Point Marine Terminal',
+            id: 'GV-MT-002',
+            resource: 'Garyville Marine & MPLX Terminal',
             risk: 'Tanker loading and berthing suspended; vapor recovery and firewater supply prioritized to protect dock manifold and export tanks from radiant heat exposure.',
-            location: [-122.745, 48.855],
+            location: [-90.605, 30.048],
             operationalStatus: 'Not Operational',
           },
           {
-            id: 'CP-TF-NB-003',
-            resource: 'Refinery Tank Farm — North Battery',
+            id: 'GV-TF-003',
+            resource: 'Refinery Tank Farm — East Battery',
             risk: 'Elevated thermal radiation and smoke plume require fixed monitor activation, foam stock drawdown tracking, and secondary containment inspection on gasoline and diesel storage.',
-            location: [-122.752, 48.868],
+            location: [-90.608, 30.058],
             operationalStatus: 'Partially Operational',
           },
           {
-            id: 'CP-DC-004',
-            resource: 'Ferndale / Blaine Downwind Community Corridor',
-            risk: 'Modeled downwind particulate and VOC plume may require public shelter-in-place messaging, road closures on Grandview Rd, and continuous air monitoring at school and hospital receptors.',
-            location: [-122.591, 48.846],
+            id: 'GV-DC-004',
+            resource: 'Garyville / Convent Downwind Community Corridor',
+            risk: 'Modeled downwind particulate and VOC plume may require public shelter-in-place messaging, LA-44 corridor restrictions, and continuous air monitoring at school and hospital receptors.',
+            location: [-90.82, 30.02],
             operationalStatus: 'Operational',
           },
         ],
         responseChecklist: [
           {
             label:
-              'Activate BP Cherry Point refinery ERP and unified command; notify Whatcom County OEM, WA Ecology, and USCG Sector Puget Sound.',
+              'Activate Marathon Garyville refinery ERP and unified command; notify St. James Parish OEM, LDEQ, and USCG Sector New Orleans.',
           },
           {
             label:
@@ -8095,193 +8110,196 @@ function App() {
     },
     {
       id: 1,
-      title: 'Refinery explosion reported at BP SAR Refinery, Senegal',
+      title: 'MPLX crude pipeline rupture reported near Sabine River',
       severity: 'Critical',
       status: 'New',
       category: 'Hazmat',
-      timestamp: '2026-05-09 10:15',
-      owner: 'Fatou Ndiaye · fatou.ndiaye@bp.com',
+      timestamp: '2026-05-09 05:30',
+      owner: 'Pipeline Control Center · pipeline.ops@marathon.com',
       summary:
-        'User-reported process unit explosion at BP SAR Refinery, Mbao, Dakar, Senegal. Refinery unified command activating ERP; Ministry of Petroleum and Mines and Port Autonome de Dakar notified per standing protocol.',
+        'MPLX pipeline control center reported crude release from a rupture near Sabine River crossing. Emergency response plan activated; PHMSA, USCG Sector Houston-Galveston, and LDEQ notified per standing protocol.',
       impact:
-        'Crude and LPG processing curtailment, marine berth suspensions, and downwind air quality monitoring across Mbao, Guédiawaye, and the Dakar metropolitan area.',
-      location: [-17.439, 14.739],
-      relatedEventId: 12,
+        'Crude product reaching vegetated shoreline and sensitive waterway areas; pipeline segment isolated; vacuum recovery and boom deployment underway; potential impact to Marathon Galveston Bay terminal logistics.',
+      location: [-93.92, 29.98],
+      relatedEventId: 3,
       regionalThreats: {
-        region: 'USCG District 17 — West Africa',
+        region: 'Gulf Coast Pipelines — Texas/Louisiana',
         description:
-          'Active refinery explosion, blast overpressure, and product transfer disruptions place the following BP assets and adjacent receptors at elevated risk:',
+          'Active pipeline rupture and product release place the following Marathon/MPLX assets and adjacent receptors at elevated risk:',
         threats: [
           {
-            id: 'SN-REF-CCU-001',
-            resource: 'BP SAR Refinery — Mbao Cracking Unit',
-            risk: 'Confirmed explosion in the cracking unit requires full plant isolation, foam and cooling application on adjacent columns, and structural assessment before re-entry; potential cascade impact to reformer and LPG recovery trains.',
-            location: [-17.439, 14.739],
-            operationalStatus: 'Partially Operational',
-          },
-          {
-            id: 'SN-MT-002',
-            resource: 'Dakar Marine Terminal — SAR Berth',
-            risk: 'Tanker loading and bunkering suspended; firewater and vapor recovery prioritized to protect dock manifold and export tanks from secondary ignition and radiant heat exposure.',
-            location: [-17.42, 14.695],
+            id: 'MPLX-PL-001',
+            resource: 'MPLX Crude Pipeline — Sabine River Crossing',
+            risk: 'Confirmed rupture requires segment isolation, integrity assessment, and vacuum recovery; potential migration to Sabine River and adjacent wetlands.',
+            location: [-93.92, 29.98],
             operationalStatus: 'Not Operational',
           },
           {
-            id: 'SN-LPG-003',
-            resource: 'Refinery LPG Sphere Farm — East Battery',
-            risk: 'Blast overpressure and fire impingement require deluge system activation, foam stock drawdown tracking, and BLEVE watch on propane storage spheres.',
-            location: [-17.435, 14.732],
+            id: 'MPLX-PL-002',
+            resource: 'Sabine River Shoreline & Wetlands Receptors',
+            risk: 'Product sheen and shoreline contact may require expanded boom deployment, wildlife protection measures, and USCG marine safety coordination.',
+            location: [-93.88, 29.95],
             operationalStatus: 'Partially Operational',
           },
           {
-            id: 'SN-DC-004',
-            resource: 'Mbao / Guédiawaye Downwind Community Corridor',
-            risk: 'Modeled downwind particulate, SO₂, and VOC plume may require public shelter-in-place messaging, N1 corridor closures, and continuous air monitoring at clinic and school receptors.',
-            location: [-17.41, 14.78],
+            id: 'MPLX-PL-003',
+            resource: 'MPLX Pump Station 14 — Orange County',
+            risk: 'Upstream/downstream valve isolation and pressure monitoring required to prevent secondary releases during recovery operations.',
+            location: [-93.85, 30.01],
+            operationalStatus: 'Partially Operational',
+          },
+          {
+            id: 'MPLX-PL-004',
+            resource: 'Orange / Bridge City Community Corridor',
+            risk: 'Downwind VOC readings and odor complaints may require public notification, road restrictions on TX-87, and continuous air monitoring at school and clinic receptors.',
+            location: [-93.82, 30.08],
             operationalStatus: 'Operational',
           },
         ],
         responseChecklist: [
           {
             label:
-              'Activate BP Senegal refinery ERP and unified command; notify Ministry of Petroleum and Mines, ANACIM, and Dakar port authority.',
+              'Activate MPLX pipeline emergency response plan; notify PHMSA, USCG Sector Houston-Galveston, and LDEQ.',
           },
           {
             label:
-              'Deploy industrial firefighting and blast-response teams; establish downwind air monitoring and casualty accounting perimeter.',
+              'Deploy containment boom, vacuum recovery, and perimeter air/water monitoring teams.',
           },
         ],
       },
     },
     {
       id: 2,
-      title: 'Road closure expanded near central corridor',
+      title: 'Hurricane Edgar — Texas City refinery shutdown initiated',
       severity: 'High',
       status: 'Acknowledged',
-      category: 'Transport',
-      timestamp: '2026-03-28 08:27',
-      owner: 'Marcus Webb · marcus.webb@bp.com',
-      summary: 'Closure now includes eastbound lanes due to debris and utility hazards.',
-      impact: '6-mile diversion and 42-minute delay',
-      location: [-97.7431, 30.2672],
+      category: 'Weather',
+      timestamp: '2026-05-09 08:27',
+      owner: 'Marcus Webb · marcus.webb@marathon.com',
+      summary:
+        'Marathon Texas City refinery initiating controlled shutdown ahead of Hurricane Edgar landfall. Galveston Bay terminal loadings curtailed; essential personnel only on-site.',
+      impact:
+        'Production curtailment at Texas City; MPLX marine transfers suspended; storm hardening and generator fuel checks in progress across Gulf Coast assets.',
+      location: [-95.0, 29.38],
     },
     {
       id: 3,
-      title: 'Public shelter occupancy update',
+      title: 'Garyville refinery — community air monitoring update',
       severity: 'Medium',
       status: 'Resolved',
-      category: 'Shelter',
-      timestamp: '2026-03-28 08:45',
-      owner: 'Jennifer Hart · jennifer.hart@bp.com',
-      summary: 'Shelter capacity increased and overflow queue cleared.',
-      impact: '312 residents reallocated safely',
-      location: [-95.3698, 29.7604],
+      category: 'Hazmat',
+      timestamp: '2026-05-09 09:30',
+      owner: 'Jennifer Hart · jennifer.hart@marathon.com',
+      summary:
+        'LDEQ downwind air monitoring along LA-44 corridor shows VOC readings below action levels. Shelter-in-place lifted for Convent and Garyville communities per unified command.',
+      impact: 'No offsite exceedances; refinery fire response continues with foam and cooling operations on crude/vacuum unit.',
+      location: [-90.82, 30.02],
     },
   ])
   const [resources] = useState<ResourceItem[]>([
     {
       id: 1,
-      name: 'Northwest Regional Foam Strike Team',
-      owner: 'Whatcom County Fire District 7',
+      name: 'Gulf Coast Regional Foam Strike Team',
+      owner: 'St. James Parish Industrial Mutual Aid',
       status: 'Assigned',
       type: 'Industrial Firefighting / Foam',
       teamLead: 'Battalion Chief M. Reeves',
       eta: 'On-site',
-      location: 'Cherry Point Refinery — crude unit perimeter',
-      notes: 'Supporting BP industrial fire brigade with high-expansion foam application and cooling water on adjacent process equipment.',
-      mapLocation: [-122.7589, 48.862],
-      currentLocation: 'BP Cherry Point Refinery',
-      datetimeOrdered: '05/09/2026 07:15 UTC',
-      opcon: 'BP Cherry Point Unified Command',
-      tacon: 'Whatcom County Fire District 7',
+      location: 'Garyville Refinery — crude/vacuum unit perimeter',
+      notes: 'Supporting Marathon industrial fire brigade with high-expansion foam application and cooling water on adjacent process equipment.',
+      mapLocation: [-90.615, 30.054],
+      currentLocation: 'Marathon Garyville Refinery',
+      datetimeOrdered: '05/09/2026 12:15 UTC',
+      opcon: 'Marathon Garyville Unified Command',
+      tacon: 'St. James Parish Industrial Mutual Aid',
       pointOfContact: 'Battalion Chief M. Reeves',
-      owningOrganization: 'Whatcom County Fire District 7',
+      owningOrganization: 'St. James Parish Industrial Mutual Aid',
       quantity: 2,
       unit: 'teams',
       hullTailNumber: '---',
       symbology: 'Industrial firefighting',
-      latitude: '48.862',
-      longitude: '-122.7589',
+      latitude: '30.054',
+      longitude: '-90.615',
       capabilities: 'High-expansion foam; aerial monitor ops; refinery mutual-aid coordination',
       currentOpPeriod: 'Op Period 1',
       nextOpPeriod: 'Op Period 2',
-      currentOpPeriodAssignment: 'Crude unit perimeter foam and cooling operations',
+      currentOpPeriodAssignment: 'Crude/vacuum unit perimeter foam and cooling operations',
       nextOpPeriodAssignment: 'Tank farm secondary containment standby',
       checkInStatus: 'Onsite',
       costUnitType: 'per hour',
       costPerUnit: 2800,
       deploymentKind: 'incident',
-      assignedIncidentName: 'Cherry Point Refinery Fire — Process Unit Response',
+      assignedIncidentName: 'Garyville Refinery Fire — Fired Heater Tube Rupture',
       assignedExerciseName: null,
     },
     {
       id: 2,
-      name: 'EPA Region 10 — Portable Air Monitoring Suite',
-      owner: 'EPA Region 10',
+      name: 'EPA Region 6 — Portable Air Monitoring Suite',
+      owner: 'EPA Region 6',
       status: 'Staged',
       type: 'Air Monitoring / Environmental',
       teamLead: 'Dr. A. Chen',
       eta: '45 min',
-      location: 'Downwind monitoring corridor — Blaine, WA',
-      notes: 'Deploying particulate and VOC monitors along Grandview Rd and Blaine receptor points per unified command air modeling.',
-      mapLocation: [-122.591, 48.846],
-      currentLocation: 'Blaine staging area, WA',
-      datetimeOrdered: '05/09/2026 06:00 UTC',
-      opcon: 'BP Cherry Point Unified Command',
-      tacon: 'WA Department of Ecology',
-      pointOfContact: 'EPA Region 10 Air Monitoring Cell',
+      location: 'Downwind monitoring corridor — Laplace, LA',
+      notes: 'Deploying particulate and VOC monitors along LA-44 and Convent receptor points per unified command air modeling.',
+      mapLocation: [-90.82, 30.02],
+      currentLocation: 'Laplace staging area, LA',
+      datetimeOrdered: '05/09/2026 11:00 UTC',
+      opcon: 'Marathon Garyville Unified Command',
+      tacon: 'Louisiana DEQ',
+      pointOfContact: 'EPA Region 6 Air Monitoring Cell',
       owningOrganization: 'U.S. Environmental Protection Agency',
       quantity: 4,
       unit: 'monitoring stations',
       hullTailNumber: '---',
       symbology: 'Environmental monitoring',
-      latitude: '48.846',
-      longitude: '-122.591',
+      latitude: '30.02',
+      longitude: '-90.82',
       capabilities: 'PM2.5/PM10; benzene and VOC speciation; real-time telemetry to unified command',
       currentOpPeriod: 'Op Period 1',
       nextOpPeriod: 'Op Period 2',
-      currentOpPeriodAssignment: 'Blaine downwind perimeter monitoring',
-      nextOpPeriodAssignment: 'Ferndale community receptor expansion',
+      currentOpPeriodAssignment: 'Laplace downwind perimeter monitoring',
+      nextOpPeriodAssignment: 'Garyville community receptor expansion',
       checkInStatus: 'Staged',
       costUnitType: 'per day',
       costPerUnit: 9200,
       deploymentKind: 'incident',
-      assignedIncidentName: 'Cherry Point Refinery Fire — Process Unit Response',
+      assignedIncidentName: 'Garyville Refinery Fire — Fired Heater Tube Rupture',
       assignedExerciseName: null,
     },
     {
       id: 3,
-      name: 'BP Emergency Response Team — Pacific Northwest',
-      owner: 'BP Emergency Response',
+      name: 'Marathon Emergency Response Team — Gulf Coast',
+      owner: 'Marathon Emergency Response',
       status: 'Available',
       type: 'Emergency Response Team',
       teamLead: 'C. Landry',
       eta: 'On-site',
-      location: 'Cherry Point refinery EOC',
-      notes: 'Available for process-safety support, ERP documentation, and unified command liaison with Whatcom County OEM and WA Ecology.',
-      mapLocation: [-122.7589, 48.862],
-      currentLocation: 'BP Cherry Point Refinery EOC',
-      datetimeOrdered: '05/09/2026 05:30 UTC',
-      opcon: 'BP CCMER Program',
-      tacon: 'BP Cherry Point Unified Command',
-      pointOfContact: 'BP CCMER Advisor on Duty',
-      owningOrganization: 'United States Coast Guard',
+      location: 'Garyville refinery EOC',
+      notes: 'Available for process-safety support, ERP documentation, and unified command liaison with St. James Parish OEM and LDEQ.',
+      mapLocation: [-90.615, 30.054],
+      currentLocation: 'Marathon Garyville Refinery EOC',
+      datetimeOrdered: '05/09/2026 10:30 UTC',
+      opcon: 'Marathon Emergency Response Program',
+      tacon: 'Marathon Garyville Unified Command',
+      pointOfContact: 'Marathon Emergency Response Advisor on Duty',
+      owningOrganization: 'Marathon',
       quantity: 1,
       unit: 'team',
       hullTailNumber: '---',
-      symbology: 'ERT/CCMER',
-      latitude: '48.862',
-      longitude: '-122.7589',
+      symbology: 'ERT/Emergency Response',
+      latitude: '30.054',
+      longitude: '-90.615',
       capabilities: 'Process area assessment; incident command support; regulatory liaison; ERP scenario coordination',
       currentOpPeriod: 'Op Period 1',
       nextOpPeriod: 'Op Period 2',
-      currentOpPeriodAssignment: 'Cherry Point unified command advisory support',
+      currentOpPeriodAssignment: 'Garyville unified command advisory support',
       nextOpPeriodAssignment: 'Post-fire process safety review support',
       checkInStatus: 'Onsite',
       costUnitType: 'per day',
       costPerUnit: 8900,
       deploymentKind: 'incident',
-      assignedIncidentName: 'Cherry Point Refinery Fire — Process Unit Response',
+      assignedIncidentName: 'Garyville Refinery Fire — Fired Heater Tube Rupture',
       assignedExerciseName: null,
     },
   ])
@@ -8304,57 +8322,57 @@ function App() {
   const [incidentList, setIncidentList] = useState<IncidentListItem[]>([
     {
       id: 1,
-      name: 'Cherry Point Refinery Fire — Process Unit Response',
-      type: 'Industrial Fire / Refinery Operations',
-      category: 'Hazardous Materials',
+      name: 'Garyville Refinery Fire — Fired Heater Tube Rupture',
+      type: 'Industrial Fire / Hydrocarbon Release',
+      category: 'Refinery Operations',
       status: 'Active',
       severity: 'High',
-      region: 'USCG District 13 — Pacific Northwest',
-      location: [-122.7589, 48.862],
-      lead: 'BP Cherry Point Unified Command · IC Hartman',
-      startedAt: '2026-05-09 07:00 PST',
-      lastUpdate: '2026-05-09 09:46 PST',
+      region: 'Gulf Coast Refining — Louisiana',
+      location: [-90.615, 30.054],
+      lead: 'Marathon Garyville Unified Command · Site Emergency Manager',
+      startedAt: '2026-05-09 07:00 CST',
+      lastUpdate: '2026-05-09 09:46 CST',
       summary:
-        'Process unit fire at BP Cherry Point Refinery in Ferndale, WA. BP industrial fire brigade and Whatcom County mutual aid on-scene; crude unit isolated; marine terminal loadings suspended; downwind air monitoring active under unified command.',
+        'Fired heater tube rupture during startup at Marathon Garyville Refinery (528,000 bpd). Hydrocarbon release and fire in crude/vacuum unit area; emergency shutdown initiated; all personnel accounted for; LP flare and fixed monitors deployed; downwind air quality monitoring and community notification per refinery ERP.',
       resourcesCommitted:
-        'BP industrial fire brigade, Northwest foam strike team, EPA Region 10 air monitoring, WA Ecology liaison, Whatcom County OEM',
+        'Marathon industrial fire brigade, St. James Parish mutual aid, LDEQ air monitoring, Gulf Coast foam strike teams, MPLX terminal liaison',
       relatedEventIds: [11],
     },
     {
       id: 2,
-      name: 'BP Mad Dog Process Area Gas Release',
-      type: 'Offshore Process Safety / Gas Release',
-      category: 'Hazardous Materials',
+      name: 'MPLX Pipeline Rupture — Crude Release Near Sabine River',
+      type: 'Pipeline Rupture / Oil Spill',
+      category: 'Pipeline / Hazmat',
       status: 'Active',
       severity: 'High',
-      region: 'USCG District 8 — Gulf',
-      location: [-90.78, 27.53],
-      lead: 'Mad Dog OIM · BP CCMER Advisor Landry',
+      region: 'Gulf Coast Pipelines — Texas/Louisiana',
+      location: [-93.92, 29.98],
+      lead: 'MPLX Pipeline Operations · PHMSA Federal On-Scene Coordinator Liaison',
       startedAt: '2026-05-09 05:30 CST',
       lastUpdate: '2026-05-09 08:45 CST',
       summary:
-        'Elevated gas readings in Mad Dog process area triggered ERP activation. Production isolated; muster accounted for; BSEE and USCG Sector NOLA notified. No injuries; remote monitoring continues ahead of EDGAR weather window.',
+        'Crude release from MPLX pipeline rupture near Sabine River crossing. Estimated release volume under assessment; containment boom and vacuum trucks deployed; USCG Sector Houston-Galveston notified for inland/coastal waterway coordination per PHMSA protocols.',
       resourcesCommitted:
-        'BP CCMER field team, platform control room operators, firewater and gas detection monitors, standby vessel on station',
-      relatedEventIds: [3, 8],
+        'MPLX leak response contractors, USCG marine safety unit, TX/RRC and LDEQ spill responders, air monitoring, dive/integrity inspection team',
+      relatedEventIds: [3, 10],
     },
     {
       id: 3,
-      name: 'FIFA World Cup 2026 — MetLife Stadium Security Coordination',
-      type: 'World Cup Security / Venue Operations',
-      category: 'World Cup 2026',
+      name: 'Hurricane Edgar — Gulf Coast Asset Protection & Shutdown',
+      type: 'Hurricane / Extreme Weather',
+      category: 'Severe Weather',
       status: 'Active',
       severity: 'High',
-      region: 'USCG District 5 — Mid-Atlantic',
-      location: [-74.074, 40.814],
-      lead: 'FIFA Venue Security Liaison · BP Special Events Command',
-      startedAt: '2026-06-15 08:00 EST',
-      lastUpdate: '2026-06-15 10:30 EST',
+      region: 'Gulf Coast — Texas & Louisiana',
+      location: [-95.37, 29.76],
+      lead: 'Marathon Gulf Coast Weather Cell · Enterprise Crisis Manager',
+      startedAt: '2026-05-08 18:00 CST',
+      lastUpdate: '2026-05-09 10:30 CST',
       summary:
-        'World Cup 2026 match-day security coordination at MetLife Stadium. BP special events team supporting credentialing, perimeter access control, and emergency medical staging for Argentina vs. Germany group-stage fixture.',
+        'Hurricane Edgar tracking toward upper Texas and southwest Louisiana coast. Controlled shutdown and storm hardening underway at Texas City, Galveston Bay, and Louisiana refining/logistics assets; MPLX pipeline segment isolation and generator fuel checks in progress; flooding and wind damage risk to Gulf Coast terminals.',
       resourcesCommitted:
-        'BP special events security cell, stadium operations liaison, regional EMS staging team, transit corridor monitors',
-      relatedEventIds: [],
+        'Marathon weather cell, refinery EOC teams (TX/LA), MPLX control center, mutual-aid contractor pre-positioning, parish/county OEM liaisons',
+      relatedEventIds: [1, 5],
     },
   ])
   const [incidentEventFilters, setIncidentEventFilters] = useState<number[]>([])
@@ -8542,19 +8560,20 @@ function App() {
       incidents: 3,
       priority: 'High',
       population: '41.0M',
-      lastUpdate: '2026-05-09 08:11 EST',
-      evacuationStatus: 'None',
+      lastUpdate: '2026-05-09 10:30 CST',
+      evacuationStatus: 'Recommended',
       notes:
-        'AR, LA, NM, OK, TX — multiple active surface-transport incidents under DOT response.',
+        'AR, LA, NM, OK, TX — Marathon Garyville refinery fire, MPLX pipeline release, and Hurricane Edgar Gulf Coast asset protection active.',
       sitrep:
-        '3 active surface-transport incidents in TX. PHMSA on-scene at LBJ Express hazmat; AUS runway closure expected to lift this afternoon. NWS flash-flood watch over Houston metro.',
+        'Marathon Garyville refinery fire in crude/vacuum unit; MPLX crude pipeline release at Sabine River crossing with USCG spill coordination; Hurricane Edgar driving controlled shutdowns at Texas City and Louisiana assets. PHMSA and LDEQ on-scene.',
       sitrepUpdatedBy: 'District Commander Denton, TX',
       sitrepSources: [
-        'TxDOT Lone Star ITS / DriveTexas feed',
+        'Marathon Garyville unified command status board',
+        'MPLX pipeline control center incident log',
         'PHMSA NRC hazmat incident log',
-        'FAA AUS ATCT runway status',
-        'NWS WFO Houston/Galveston flash-flood watch',
-        'Louisiana DOTD 511 / NMRoads',
+        'NWS WFO Houston/Galveston — Hurricane Edgar advisory',
+        'Louisiana DEQ spill and air monitoring feed',
+        'USCG Sector Houston-Galveston marine safety broadcast',
       ],
       location: [-97.5, 32.5],
     },
@@ -8626,23 +8645,22 @@ function App() {
       id: 10,
       name: 'USCG District 13 — Pacific Northwest',
       lead: 'District Commander — Bothell, WA',
-      incidents: 1,
-      priority: 'High',
+      incidents: 0,
+      priority: 'Low',
       population: '14.4M',
       lastUpdate: '2026-05-09 09:46 PST',
-      evacuationStatus: 'Recommended',
-      notes: 'AK, ID, OR, WA — BP Cherry Point refinery fire response active in Whatcom County.',
+      evacuationStatus: 'None',
+      notes: 'AK, ID, OR, WA — steady-state operations; Marathon Martinez refinery in routine monitoring posture.',
       sitrep:
-        'BP Cherry Point refinery fire in Ferndale, WA driving partial unit shutdown and marine terminal suspensions. Whatcom County OEM unified command active; WSDOT monitoring Grandview Rd corridor closures; no state highway contraflow required.',
+        'Steady-state operations across AK, ID, OR, WA. Marathon Martinez refinery conducting planned maintenance with no active ERP activations. NWS marine forecasts stable; no DOT transport disruptions reported.',
       sitrepUpdatedBy: 'District Commander Bothell, WA',
       sitrepSources: [
-        'Whatcom County OEM incident status board',
-        'WA Department of Ecology spill and air monitoring feed',
-        'WSDOT traffic cameras — Grandview Rd / I-5 Blaine corridor',
-        'NWS WFO Seattle smoke and wind forecast',
+        'NWS WFO Seattle / Portland marine forecast',
+        'WSDOT traffic cameras — I-5 corridor',
+        'Marathon Martinez refinery operations status',
         'USCG Sector Puget Sound marine safety broadcast',
       ],
-      location: [-122.7589, 48.862],
+      location: [-122.12, 38.02],
     },
   ])
   const DEFAULT_SEERIST_ENDPOINT =
@@ -20532,7 +20550,7 @@ function App() {
                   ? `Exercise ${activeExerciseWorkspace.name}`
                   : isInIncidentWorkspace && activeIncidentWorkspace
                     ? activeIncidentWorkspace.name
-                    : 'United States Coast Guard'}
+                    : 'Marathon'}
               </span>
               <StartHereButton
                 className={cn('ml-2 h-10', glassIconButtonClasses)}
@@ -24425,26 +24443,6 @@ function App() {
                                   }}
                                 >
                                   Enter Workspace
-                                </Button>
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant="outline"
-                                  aria-label={
-                                    isIncidentArchived(incident)
-                                      ? `Restore ${incident.name}`
-                                      : `Archive ${incident.name}`
-                                  }
-                                  onClick={(event) => {
-                                    event.stopPropagation()
-                                    void handleSetIncidentArchived(
-                                      incident,
-                                      !isIncidentArchived(incident)
-                                    )
-                                  }}
-                                >
-                                  <Archive className="mr-1 h-3.5 w-3.5" />
-                                  {isIncidentArchived(incident) ? 'Restore' : 'Archive'}
                                 </Button>
                                 <Button
                                   variant="ghost"
@@ -34104,7 +34102,7 @@ function App() {
         >
           <div className="flex h-full flex-col">
             <SheetHeader className="gap-1 border-b border-border bg-muted/40 px-4 py-4">
-              <SheetTitle className="text-base font-semibold">United States Coast Guard</SheetTitle>
+              <SheetTitle className="text-base font-semibold">Marathon</SheetTitle>
               <span className="text-xs text-muted-foreground">Navigation</span>
             </SheetHeader>
             <nav className="flex-1 overflow-y-auto px-2 py-3">

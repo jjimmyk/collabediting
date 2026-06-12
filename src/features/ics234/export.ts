@@ -41,7 +41,7 @@ export function buildIcs234ExportOptions(
     header: {
       topLines: [
         'DEPARTMENT OF HOMELAND SECURITY',
-        'U.S. COAST GUARD',
+        'MARATHON',
         'WORK ANALYSIS MATRIX (ICS 234-CG)',
       ],
       cells: [
