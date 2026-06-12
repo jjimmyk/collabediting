@@ -233,6 +233,23 @@ import {
   ics202AuthorColor,
 } from '@/features/ics202/utils'
 import { useIcs202WorkspaceForm } from '@/hooks/useIcs202WorkspaceForm'
+import { IapWorkspacePanel } from '@/features/iap/IapWorkspacePanel'
+import type { IapAppendableForms } from '@/features/iap/export'
+import type {
+  IapFormSectionDrafts,
+  IapFormState,
+  IapSectionId,
+  IapVersion,
+} from '@/features/iap/types'
+import {
+  applyIapSectionDraft,
+  cloneIapFormState,
+  createEmptyIapForm,
+  createLocalIapDocumentId,
+  extractIapSectionDraft,
+  iapAuthorColor,
+} from '@/features/iap/utils'
+import { useIapWorkspaceForm } from '@/hooks/useIapWorkspaceForm'
 import { ICS203_SECTION_PROMPTS } from '@/features/ics203/constants'
 import { Ics203WorkspacePanel } from '@/features/ics203/Ics203WorkspacePanel'
 import type {
@@ -3988,6 +4005,7 @@ type LeftTab =
 
 const WORKSPACE_FORMS_MENU: Array<{ id: string; tab: LeftTab; label: string }> = [
   { id: 'ICS-201', tab: 'briefing', label: 'Incident Briefing / ICS-201' },
+  { id: 'IAP', tab: 'form-IAP', label: 'Incident Action Plan' },
   { id: 'ICS-202', tab: 'form-ICS-202', label: 'Incident Objectives / ICS-202' },
   { id: 'ICS-203', tab: 'form-ICS-203', label: 'Organization Assignment List / ICS-203' },
   { id: 'ICS-234', tab: 'form-ICS-234', label: 'Work Analysis Matrix / ICS-234' },
@@ -7896,6 +7914,16 @@ function App() {
   ics202FormRef.current = ics202Form
   const ics202VersionsRef = useRef(ics202Versions)
   ics202VersionsRef.current = ics202Versions
+  const [iapForm, setIapForm] = useState<IapFormState | null>(null)
+  const [iapVersions, setIapVersions] = useState<IapVersion[]>([])
+  const [iapEditingSections, setIapEditingSections] = useState<
+    Partial<Record<IapSectionId, boolean>>
+  >({})
+  const [iapSectionDrafts, setIapSectionDrafts] = useState<IapFormSectionDrafts>({})
+  const iapFormRef = useRef(iapForm)
+  iapFormRef.current = iapForm
+  const iapVersionsRef = useRef(iapVersions)
+  iapVersionsRef.current = iapVersions
   const [ics203Form, setIcs203Form] = useState<Ics203FormState | null>(null)
   const [ics203Versions, setIcs203Versions] = useState<Ics203Version[]>([])
   const [ics203EditingSections, setIcs203EditingSections] = useState<
@@ -8038,6 +8066,8 @@ function App() {
         ics204VersionsById: Record<string, Ics204Version[]>
         ics202Form: Ics202FormState | null
         ics202Versions: Ics202Version[]
+        iapForm: IapFormState | null
+        iapVersions: IapVersion[]
         ics203Form: Ics203FormState | null
         ics203Versions: Ics203Version[]
         ics234Form: Ics234FormState | null
@@ -10255,6 +10285,7 @@ function App() {
     if (tab === 'seerist') return 'Seerist'
     if (tab === 'form-ICS-204') return 'ICS-204 Assignment List'
     if (tab === 'form-ICS-202') return 'ICS-202 Incident Objectives'
+    if (tab === 'form-IAP') return 'Incident Action Plan'
     if (tab === 'form-ICS-203') return 'ICS-203 Organization Assignment List'
     if (tab === 'form-ICS-234') return 'ICS-234 Work Analysis Matrix'
     if (tab === 'form-ICS-215') return 'ICS-215 Operational Planning Worksheet'
@@ -11448,6 +11479,8 @@ function App() {
       ics204VersionsById: isSupabaseEnabled ? {} : ics204VersionsByIdRef.current,
       ics202Form: isSupabaseEnabled ? null : ics202FormRef.current,
       ics202Versions: isSupabaseEnabled ? [] : ics202VersionsRef.current,
+      iapForm: isSupabaseEnabled ? null : iapFormRef.current,
+      iapVersions: isSupabaseEnabled ? [] : iapVersionsRef.current,
       ics203Form: isSupabaseEnabled ? null : ics203FormRef.current,
       ics203Versions: isSupabaseEnabled ? [] : ics203VersionsRef.current,
       ics234Form: isSupabaseEnabled ? null : ics234FormRef.current,
@@ -11477,6 +11510,8 @@ function App() {
       setIcs204VersionsById({})
       setIcs202Form(null)
       setIcs202Versions([])
+      setIapForm(null)
+      setIapVersions([])
       setIcs203Form(null)
       setIcs203Versions([])
       setIcs234Form(null)
@@ -11504,6 +11539,8 @@ function App() {
       setIcs204VersionsById({})
       setIcs202Form(null)
       setIcs202Versions([])
+      setIapForm(null)
+      setIapVersions([])
       setIcs203Form(null)
       setIcs203Versions([])
       setIcs234Form(null)
@@ -11531,6 +11568,8 @@ function App() {
     setIcs204VersionsById(cached?.ics204VersionsById ?? {})
     setIcs202Form(cached?.ics202Form ?? null)
     setIcs202Versions(cached?.ics202Versions ?? [])
+    setIapForm(cached?.iapForm ?? null)
+    setIapVersions(cached?.iapVersions ?? [])
     setIcs203Form(cached?.ics203Form ?? null)
     setIcs203Versions(cached?.ics203Versions ?? [])
     setIcs234Form(cached?.ics234Form ?? null)
@@ -11779,6 +11818,18 @@ function App() {
       })))
       setIcs202EditingSections({})
       setIcs202SectionDrafts({})
+    },
+    []
+  )
+  const handleIapLoaded = useCallback(
+    (payload: { form: IapFormState; versions: IapVersion[] }) => {
+      setIapForm(cloneIapFormState(payload.form))
+      setIapVersions(payload.versions.map((version) => ({
+        ...version,
+        snapshot: cloneIapFormState(version.snapshot),
+      })))
+      setIapEditingSections({})
+      setIapSectionDrafts({})
     },
     []
   )
@@ -12378,6 +12429,39 @@ function App() {
     workspaceDefaults: ics202WorkspaceDefaults,
     onLoaded: handleIcs202Loaded,
   })
+  const iapWorkspaceDefaults = useMemo(
+    (): Partial<IapFormState> => ({
+      incidentName: activeIncidentWorkspace?.name ?? '',
+    }),
+    [activeIncidentWorkspace?.name]
+  )
+  const {
+    loading: isIapLoading,
+    error: iapSyncError,
+    isSaving: isIapSaving,
+    saveDraft: saveIapDraftToServer,
+    appendVersion: appendIapVersionToServer,
+    saveSignedReview: saveIapSignedReviewToServer,
+  } = useIapWorkspaceForm({
+    enabled:
+      isSupabaseEnabled && isInIncidentWorkspace && activeWorkspaceSupabaseId !== null,
+    workspaceId: activeWorkspaceSupabaseId,
+    userId: user?.id ?? null,
+    profileEmail,
+    workspaceDefaults: iapWorkspaceDefaults,
+    onLoaded: handleIapLoaded,
+  })
+  const iapAppendableForms = useMemo(
+    (): IapAppendableForms => ({
+      ics202: ics202Form,
+      ics203: ics203Form,
+      ics204: ics204Forms,
+      ics205: ics205Form,
+      ics206: ics206Form,
+      ics208: ics208Form,
+    }),
+    [ics202Form, ics203Form, ics204Forms, ics205Form, ics206Form, ics208Form]
+  )
   const ics203WorkspaceDefaults = useMemo(
     (): Partial<Ics203FormState> => ({
       incidentName: activeIncidentWorkspace?.name ?? activeExerciseWorkspace?.name ?? '',
@@ -12812,6 +12896,8 @@ function App() {
   const ics204LocalAuthorColor = resolveIcs204AuthorColor(user?.id ?? null)
   const ics202AuthorName = profileEmail ?? 'You'
   const ics202LocalAuthorColor = ics202AuthorColor(user?.id ?? null)
+  const iapAuthorName = profileEmail ?? 'You'
+  const iapLocalAuthorColor = iapAuthorColor(user?.id ?? null)
   const ics203AuthorName = profileEmail ?? 'You'
   const ics203LocalAuthorColor = ics203AuthorColor(user?.id ?? null)
   const ics234AuthorName = profileEmail ?? 'You'
@@ -12842,6 +12928,11 @@ function App() {
       toast.error(ics202SyncError)
     }
   }, [ics202SyncError])
+  useEffect(() => {
+    if (iapSyncError) {
+      toast.error(iapSyncError)
+    }
+  }, [iapSyncError])
   useEffect(() => {
     if (ics203SyncError) {
       toast.error(ics203SyncError)
@@ -13164,6 +13255,30 @@ function App() {
     ics202LocalAuthorColor,
     ics202WorkspaceDefaults,
     isInExerciseWorkspace,
+    isInIncidentWorkspace,
+    isSupabaseEnabled,
+  ])
+  useEffect(() => {
+    if (isSupabaseEnabled) return
+    if (!isInIncidentWorkspace) return
+    if (iapForm) return
+    const localId = createLocalIapDocumentId()
+    const form = createEmptyIapForm(localId, iapWorkspaceDefaults)
+    const initialVersion: IapVersion = {
+      id: `local-v-${localId}`,
+      createdAt: Date.now(),
+      authorName: iapAuthorName,
+      authorColor: iapLocalAuthorColor,
+      snapshot: cloneIapFormState(form),
+      signatures: [],
+    }
+    setIapForm(form)
+    setIapVersions([initialVersion])
+  }, [
+    iapAuthorName,
+    iapForm,
+    iapLocalAuthorColor,
+    iapWorkspaceDefaults,
     isInIncidentWorkspace,
     isSupabaseEnabled,
   ])
@@ -18538,6 +18653,153 @@ function App() {
       )
     })
   }
+  const mergePersistedIapVersion = (
+    previous: IapVersion[],
+    latestVersion: IapVersion | null,
+    persisted: IapVersion
+  ): IapVersion[] => {
+    if (previous.length === 0) {
+      return [persisted]
+    }
+    const next = [...previous]
+    const lastIndex = next.length - 1
+    if (latestVersion && next[lastIndex]?.id === latestVersion.id) {
+      next[lastIndex] = persisted
+    } else if (next.some((entry) => entry.id === persisted.id)) {
+      const index = next.findIndex((entry) => entry.id === persisted.id)
+      next[index] = persisted
+    } else {
+      next.push(persisted)
+    }
+    return next.slice(-100)
+  }
+  const startIapSectionEdit = (section: IapSectionId) => {
+    if (!canEditIcs201Form || !iapForm) return
+    setIapSectionDrafts((previous) => ({
+      ...previous,
+      [section]: extractIapSectionDraft(iapForm, section),
+    }))
+    setIapEditingSections((previous) => ({
+      ...previous,
+      [section]: true,
+    }))
+  }
+  const cancelIapSectionEdit = (section: IapSectionId) => {
+    setIapEditingSections((previous) => {
+      const next = { ...previous }
+      delete next[section]
+      return next
+    })
+    setIapSectionDrafts((previous) => {
+      const next = { ...previous }
+      delete next[section]
+      return next
+    })
+  }
+  const patchIapSectionDraft = <S extends IapSectionId>(
+    section: S,
+    value: IapFormSectionDrafts[S]
+  ) => {
+    setIapSectionDrafts((previous) => ({
+      ...previous,
+      [section]: value,
+    }))
+  }
+  const saveIapSection = (section: IapSectionId) => {
+    if (!canEditIcs201Form) {
+      toast.error('Your ICS position does not include permission to edit IAP forms.')
+      return
+    }
+    const draft = iapSectionDrafts[section]
+    if (draft === undefined || !iapForm) return
+    const nextForm = applyIapSectionDraft(iapForm, section, draft)
+    setIapForm(cloneIapFormState(nextForm))
+    const latestVersion = iapVersions[iapVersions.length - 1]
+    if (latestVersion && latestVersion.signatures.length === 0) {
+      handleIapSaveDraft(nextForm, latestVersion)
+    }
+    cancelIapSectionEdit(section)
+  }
+  const handleIapSaveDraft = (form: IapFormState, latestVersion: IapVersion) => {
+    const optimisticVersion: IapVersion = {
+      ...latestVersion,
+      createdAt: Date.now(),
+      authorName: iapAuthorName,
+      authorColor: iapLocalAuthorColor,
+      snapshot: cloneIapFormState(form),
+    }
+    setIapVersions((previous) =>
+      mergePersistedIapVersion(previous, latestVersion, optimisticVersion)
+    )
+    void saveIapDraftToServer(form.id, form, latestVersion).then((persisted) => {
+      if (!persisted) return
+      setIapVersions((previous) =>
+        mergePersistedIapVersion(previous, latestVersion, persisted)
+      )
+    })
+  }
+  const handleSignIapIncidentCommander = (rowId: number) => {
+    if (!canEditIcs201Form || !iapForm) return
+    const nextForm = cloneIapFormState({
+      ...iapForm,
+      incidentCommanders: iapForm.incidentCommanders.map((row) =>
+        row.id === rowId && row.name.trim().length > 0 ? { ...row, signedAt: Date.now() } : row
+      ),
+    })
+    setIapForm(nextForm)
+    const latestVersion = iapVersions[iapVersions.length - 1]
+    if (latestVersion && latestVersion.signatures.length === 0) {
+      handleIapSaveDraft(nextForm, latestVersion)
+    }
+  }
+  const handleIapAppendVersion = (
+    form: IapFormState,
+    signatures: Ics201VersionSignature[] = [],
+    authorNameOverride?: string
+  ) => {
+    const authorName = authorNameOverride ?? iapAuthorName
+    const optimisticVersion: IapVersion = {
+      id: `local-v-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      createdAt: Date.now(),
+      authorName,
+      authorColor: iapLocalAuthorColor,
+      snapshot: cloneIapFormState(form),
+      signatures,
+    }
+    setIapVersions((previous) => [...previous, optimisticVersion].slice(-100))
+    void appendIapVersionToServer(form.id, form, signatures).then((persisted) => {
+      if (!persisted) return
+      setIapVersions((previous) =>
+        previous
+          .map((entry) => (entry.id === optimisticVersion.id ? persisted : entry))
+          .slice(-100)
+      )
+    })
+  }
+  const handleIapSignReview = (
+    form: IapFormState,
+    latestVersion: IapVersion,
+    signature: Ics201VersionSignature
+  ) => {
+    const nextVersion: IapVersion = {
+      ...latestVersion,
+      signatures: [...latestVersion.signatures, signature],
+    }
+    setIapVersions((previous) =>
+      mergePersistedIapVersion(previous, latestVersion, nextVersion)
+    )
+    void saveIapSignedReviewToServer(
+      form.id,
+      form,
+      latestVersion.id,
+      nextVersion.signatures
+    ).then((persisted) => {
+      if (!persisted) return
+      setIapVersions((previous) =>
+        mergePersistedIapVersion(previous, latestVersion, persisted)
+      )
+    })
+  }
   const mergePersistedIcs203Version = (
     previous: Ics203Version[],
     latestVersion: Ics203Version | null,
@@ -21522,6 +21784,7 @@ function App() {
                   {activeTab === 'seerist' && 'Seerist'}
                   {activeTab === 'files' && 'Incident Files'}
                   {activeTab === 'form-ICS-204' && 'ICS-204 Assignment List'}
+                  {activeTab === 'form-IAP' && 'Incident Action Plan'}
                   {activeTab === 'form-ICS-202' && 'ICS-202 Incident Objectives'}
                   {activeTab === 'form-ICS-203' && 'ICS-203 Organization Assignment List'}
                   {activeTab === 'form-ICS-234' && 'ICS-234 Work Analysis Matrix'}
@@ -21534,6 +21797,7 @@ function App() {
                   {activeTab === 'form-ICS-208HM' && 'ICS-208HM Site Safety & Control Plan'}
                   {activeTab === 'form-ICS-209' && 'ICS-209 Incident Status Summary'}
                   {activeTab !== 'form-ICS-204' &&
+                    activeTab !== 'form-IAP' &&
                     activeTab !== 'form-ICS-202' &&
                     activeTab !== 'form-ICS-203' &&
                     activeTab !== 'form-ICS-234' &&
@@ -30083,6 +30347,31 @@ function App() {
                   />
                 )}
 
+                {activeTab === 'form-IAP' && isInIncidentWorkspace && (
+                  <IapWorkspacePanel
+                    form={iapForm}
+                    setForm={setIapForm}
+                    versions={iapVersions}
+                    canEdit={canEditIcs201Form}
+                    isLoading={isIapLoading}
+                    isSaving={isIapSaving}
+                    glassItemBorderClasses={glassItemBorderClasses}
+                    incidentName={activeIncidentWorkspace?.name ?? ''}
+                    appendableForms={iapAppendableForms}
+                    editingSections={iapEditingSections}
+                    sectionDrafts={iapSectionDrafts}
+                    onStartSectionEdit={startIapSectionEdit}
+                    onCancelSectionEdit={cancelIapSectionEdit}
+                    onSaveSection={saveIapSection}
+                    onPatchSectionDraft={patchIapSectionDraft}
+                    onSignIncidentCommander={handleSignIapIncidentCommander}
+                    onAppendVersion={handleIapAppendVersion}
+                    onSignReview={handleIapSignReview}
+                    downloadDocx={downloadDocx}
+                    downloadPdf={downloadPdf}
+                  />
+                )}
+
                 {activeTab === 'form-ICS-202' && (isInIncidentWorkspace || isInExerciseWorkspace) && (
                   <Ics202WorkspacePanel
                     form={ics202Form}
@@ -32076,6 +32365,7 @@ function App() {
                   activeFormTabLabel &&
                   (isInIncidentWorkspace || isInExerciseWorkspace) &&
                   activeTab !== 'form-ICS-204' &&
+                  activeTab !== 'form-IAP' &&
                   activeTab !== 'form-ICS-202' &&
                   activeTab !== 'form-ICS-203' &&
                   activeTab !== 'form-ICS-234' &&
