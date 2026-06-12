@@ -62,6 +62,7 @@ import {
   MoreVertical,
   MousePointer2,
   LayoutGrid,
+  ListOrdered,
   Lock,
   Moon,
   Network,
@@ -6283,6 +6284,7 @@ function App() {
     DEFAULT_INCIDENT_COMPLEXITY
   )
   const [planningPStepId, setPlanningPStepId] = useState(PLANNING_P_STEPS[0]?.id ?? 'objectives-meeting')
+  const [isPlanningPStepperOpen, setIsPlanningPStepperOpen] = useState(true)
   const [incidentTemplate, setIncidentTemplate] = useState('')
   const [previewTemplateId, setPreviewTemplateId] = useState<string | null>(null)
   const [incidentSituationReport, setIncidentSituationReport] = useState('')
@@ -11420,9 +11422,11 @@ function App() {
       hasSequentialWorkflow: activeIncidentWorkspace?.hasSequentialWorkflow,
       sequentialWorkflowType: activeIncidentWorkspace?.sequentialWorkflowType,
     })
+  const isPlanningPStepperVisible = showPlanningPStepper && isPlanningPStepperOpen
   useEffect(() => {
     if (showPlanningPStepper) {
       setPlanningPStepId(PLANNING_P_STEPS[0]?.id ?? 'objectives-meeting')
+      setIsPlanningPStepperOpen(true)
     }
   }, [activeIncidentWorkspaceId, showPlanningPStepper])
   const activeWorkspaceRosterKey =
@@ -20744,6 +20748,35 @@ function App() {
                   }
                 }}
               />
+              {showPlanningPStepper && (
+                <TooltipProvider delayDuration={150}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        type="button"
+                        variant={isPlanningPStepperOpen ? 'default' : 'outline'}
+                        size="sm"
+                        className={cn('ml-1 h-8 gap-1.5', glassIconButtonClasses)}
+                        onClick={() => setIsPlanningPStepperOpen((open) => !open)}
+                        aria-pressed={isPlanningPStepperOpen}
+                        aria-label={
+                          isPlanningPStepperOpen
+                            ? 'Hide Planning P workflow'
+                            : 'Show Planning P workflow'
+                        }
+                      >
+                        <ListOrdered className="h-4 w-4" />
+                        <span className="hidden sm:inline">Planning P</span>
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      {isPlanningPStepperOpen
+                        ? 'Hide Planning P stepper'
+                        : 'Show Planning P stepper'}
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              )}
             </div>
           </div>
           <div className="flex items-start gap-2">
@@ -20972,7 +21005,7 @@ function App() {
         </div>
       </div>
       <div className="absolute inset-0 flex overflow-hidden">
-      {showPlanningPStepper && (
+      {isPlanningPStepperVisible && (
         <aside
           className={cn(
             'absolute top-14 left-0 z-20 h-[calc(100%-3.5rem)] w-56 shrink-0 border-r shadow-lg backdrop-blur',
@@ -20983,14 +21016,15 @@ function App() {
           <PlanningPStepper
             activeStepId={planningPStepId}
             onStepChange={setPlanningPStepId}
+            onHide={() => setIsPlanningPStepperOpen(false)}
             className="h-full"
           />
         </aside>
       )}
       <div
         className={cn(
-          'relative min-w-0 flex-1 overflow-hidden transition-[width] duration-300',
-          showPlanningPStepper && 'pl-56'
+          'relative min-w-0 flex-1 overflow-hidden transition-[width,padding] duration-300',
+          isPlanningPStepperVisible && 'pl-56'
         )}
       >
       <div
@@ -21005,7 +21039,7 @@ function App() {
         ref={leftPanelRef}
         className={cn(
           'absolute top-14 z-10 h-[calc(100%-3.5rem)] min-w-0 transition-[width,left] duration-300',
-          showPlanningPStepper ? 'left-56' : 'left-0',
+          isPlanningPStepperVisible ? 'left-56' : 'left-0',
           isObjectivesOpen
             ? isMapVisible
               ? panelWidthMode === 'one-half'

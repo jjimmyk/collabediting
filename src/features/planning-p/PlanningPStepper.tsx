@@ -1,15 +1,19 @@
+import { ChevronLeft } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { Button } from '@/components/ui/button'
 import { PLANNING_P_STEPS } from '@/features/planning-p/planning-p-steps'
 
 type PlanningPStepperProps = {
   activeStepId: string
   onStepChange: (stepId: string) => void
+  onHide?: () => void
   className?: string
 }
 
 export function PlanningPStepper({
   activeStepId,
   onStepChange,
+  onHide,
   className,
 }: PlanningPStepperProps) {
   const activeIndex = PLANNING_P_STEPS.findIndex((step) => step.id === activeStepId)
@@ -19,11 +23,24 @@ export function PlanningPStepper({
       aria-label="Planning-P workflow"
       className={cn('flex h-full flex-col', className)}
     >
-      <div className="border-b px-3 py-3">
-        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-          Planning-P
-        </p>
-        <p className="mt-0.5 text-sm font-medium">8-step cycle</p>
+      <div className="flex items-start justify-between gap-2 border-b px-3 py-3">
+        <div className="min-w-0">
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Planning-P
+          </p>
+        </div>
+        {onHide && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 shrink-0"
+            onClick={onHide}
+            aria-label="Hide Planning P stepper"
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+        )}
       </div>
       <ol className="min-h-0 flex-1 space-y-0 overflow-y-auto px-2 py-3">
         {PLANNING_P_STEPS.map((step, index) => {
