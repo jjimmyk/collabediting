@@ -20760,19 +20760,17 @@ function App() {
                         onClick={() => setIsPlanningPStepperOpen((open) => !open)}
                         aria-pressed={isPlanningPStepperOpen}
                         aria-label={
-                          isPlanningPStepperOpen
-                            ? 'Hide Planning P workflow'
-                            : 'Show Planning P workflow'
+                          isPlanningPStepperOpen ? 'Hide Planning P' : 'Show Planning P'
                         }
                       >
                         <ListOrdered className="h-4 w-4" />
-                        <span className="hidden sm:inline">Planning P</span>
+                        <span className="hidden sm:inline">
+                          {isPlanningPStepperOpen ? 'Hide Planning P' : 'Show Planning P'}
+                        </span>
                       </Button>
                     </TooltipTrigger>
                     <TooltipContent>
-                      {isPlanningPStepperOpen
-                        ? 'Hide Planning P stepper'
-                        : 'Show Planning P stepper'}
+                      {isPlanningPStepperOpen ? 'Hide Planning P' : 'Show Planning P'}
                     </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
