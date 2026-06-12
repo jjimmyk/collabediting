@@ -385,6 +385,24 @@ import {
   ics208hmAuthorColor,
 } from '@/features/ics208hm/utils'
 import { useIcs208hmWorkspaceForm } from '@/hooks/useIcs208hmWorkspaceForm'
+import { ICS209_SECTION_PROMPTS } from '@/features/ics209/constants'
+import { Ics209WorkspacePanel } from '@/features/ics209/Ics209WorkspacePanel'
+import type {
+  Ics209FormSectionDrafts,
+  Ics209FormState,
+  Ics209LocationInfoDraft,
+  Ics209SectionId,
+  Ics209Version,
+} from '@/features/ics209/types'
+import {
+  applyIcs209SectionDraft,
+  cloneIcs209FormState,
+  createEmptyIcs209Form,
+  createLocalIcs209DocumentId,
+  extractIcs209SectionDraft,
+  ics209AuthorColor,
+} from '@/features/ics209/utils'
+import { useIcs209WorkspaceForm } from '@/hooks/useIcs209WorkspaceForm'
 import {
   buildIcs204DocxBlocks,
   buildIcs204ExportOptions,
@@ -3954,79 +3972,6 @@ type AssigneeOption = {
   position: string
   availability: 'Available'
 }
-type Ics209ReportVersion = 'Initial' | 'Updated' | 'Final'
-type Ics209IncidentType =
-  | 'SAR'
-  | 'Oil/Petroleum'
-  | 'Natural Disaster'
-  | 'Marine Disaster'
-  | 'Marine Salvage / Firefighting'
-  | 'Other'
-type Ics209ResourceRequest = {
-  id: number
-  request: string
-}
-type Ics209PlannedAction = {
-  id: number
-  task: string
-  poc: string
-  pocBriefed: boolean
-  startDate: string
-  deadline: string
-  status: string
-}
-type Ics209CommandPriority = {
-  id: number
-  priority: string
-}
-type Ics209NotableItem = {
-  id: number
-  item: string
-  totalThisPeriod: string
-  totalToDate: string
-}
-type Ics209EquipmentType = {
-  id: string
-  label: string
-  description?: string
-}
-type Ics209AssignedResource = {
-  id: number
-  agency: string
-  people: number
-  equipmentCounts: Record<string, number>
-}
-type Ics209FormState = {
-  reportVersion: Ics209ReportVersion
-  incidentTypes: Ics209IncidentType[]
-  otherIncidentTypeSpecify: string
-  incidentName: string
-  incidentLocation: string
-  reportDate: string
-  reportTime: string
-  operationalPeriodFrom: string
-  operationalPeriodTo: string
-  situationSummary: string
-  lifeSafetyHealthIssues: string
-  mtsImpacts: string
-  resourceRequests: Ics209ResourceRequest[]
-  plannedActions: Ics209PlannedAction[]
-  commandPriorities: Ics209CommandPriority[]
-  notableItems: Ics209NotableItem[]
-  responderInjuriesThisPeriod: number
-  responderInjuriesToDate: number
-  responderDeathsThisPeriod: number
-  responderDeathsToDate: number
-  mediaPhotosOutreach: string
-  equipmentTypes: Ics209EquipmentType[]
-  assignedResources: Ics209AssignedResource[]
-  amplifyingInformation: string
-  comments: string
-  preparedByName: string
-  preparedByPositionTitle: string
-  preparedBySignature: string
-  preparedByDateTime: string
-}
 type SitrepActivityRow = {
   id: number
   time: string
@@ -5425,184 +5370,6 @@ function buildIcs201ExportOptions(form: Ics201FormState): DocxOptions {
   }
 }
 
-function buildIcs209DocxBlocks(
-  form: Ics209FormState,
-  incidentName?: string
-): DocxBlock[] {
-  const blocks: DocxBlock[] = []
-  const pushHeading = (text: string) => blocks.push({ kind: 'heading', text })
-  const pushParagraph = (text: string | undefined | null) => {
-    const trimmed = (text ?? '').trim()
-    if (trimmed.length === 0) return
-    for (const line of trimmed.split(/\r?\n/)) {
-      const segment = line.trim()
-      if (segment.length === 0) continue
-      blocks.push({ kind: 'paragraph', text: segment })
-    }
-  }
-  const pushBullet = (text: string | undefined | null) => {
-    const trimmed = (text ?? '').trim()
-    if (trimmed.length === 0) return
-    blocks.push({ kind: 'bullet', text: trimmed })
-  }
-  blocks.push({ kind: 'title', text: 'Incident Status Summary (ICS-209)' })
-  if (incidentName?.trim()) {
-    blocks.push({ kind: 'subtitle', text: incidentName.trim() })
-  }
-
-  pushHeading('Operational Period Covered')
-  const fromText = form.operationalPeriodFrom.trim().replace('T', ' ')
-  const toText = form.operationalPeriodTo.trim().replace('T', ' ')
-  pushParagraph(`From: ${fromText || '—'}`)
-  pushParagraph(`To: ${toText || '—'}`)
-
-  pushHeading('Report Version')
-  pushParagraph(form.reportVersion)
-
-  pushHeading('Type of Incident')
-  if (form.incidentTypes.length === 0) {
-    pushParagraph('No incident types selected.')
-  } else {
-    form.incidentTypes.forEach((type) => pushBullet(type))
-  }
-  if (
-    form.incidentTypes.includes('Other') &&
-    form.otherIncidentTypeSpecify.trim().length > 0
-  ) {
-    pushParagraph(`Other: ${form.otherIncidentTypeSpecify.trim()}`)
-  }
-
-  pushHeading('Situation Summary')
-  if (form.situationSummary.trim().length === 0) {
-    pushParagraph('No situation summary recorded.')
-  } else {
-    pushParagraph(form.situationSummary)
-  }
-
-  pushHeading('Command Priorities')
-  if (form.commandPriorities.length === 0) {
-    pushParagraph('No command priorities recorded.')
-  } else {
-    form.commandPriorities.forEach((priority, index) =>
-      pushBullet(priority.priority || `Priority ${index + 1}`)
-    )
-  }
-
-  pushHeading('Notable Items')
-  if (form.notableItems.length === 0) {
-    pushParagraph('No notable items recorded.')
-  } else {
-    form.notableItems.forEach((item, index) => {
-      const label = item.item || `Item ${index + 1}`
-      const meta: string[] = []
-      if (item.totalThisPeriod.trim()) meta.push(`This period: ${item.totalThisPeriod.trim()}`)
-      if (item.totalToDate.trim()) meta.push(`To date: ${item.totalToDate.trim()}`)
-      pushBullet(meta.length > 0 ? `${label} — ${meta.join(' · ')}` : label)
-    })
-  }
-
-  pushHeading('Responder Injuries')
-  pushParagraph(
-    `Total Responder Injuries This Reporting Period: ${form.responderInjuriesThisPeriod}`
-  )
-  pushParagraph(`Total Responder Injuries To Date: ${form.responderInjuriesToDate}`)
-
-  pushHeading('Responder Deaths')
-  pushParagraph(
-    `Total Responder Deaths This Reporting Period: ${form.responderDeathsThisPeriod}`
-  )
-  pushParagraph(`Total Responder Deaths To Date: ${form.responderDeathsToDate}`)
-
-  pushHeading('Life, Safety, and Health Issues')
-  if (form.lifeSafetyHealthIssues.trim().length === 0) {
-    pushParagraph('Nothing significant to report.')
-  } else {
-    pushParagraph(form.lifeSafetyHealthIssues)
-  }
-
-  pushHeading('Impacts to Marine Transportation System and Critical Infrastructure')
-  if (form.mtsImpacts.trim().length === 0) {
-    pushParagraph('No impacts recorded.')
-  } else {
-    pushParagraph(form.mtsImpacts)
-  }
-
-  pushHeading('Critical Resource Requests & Unmet Needs')
-  if (form.resourceRequests.length === 0) {
-    pushParagraph('No resource requests recorded.')
-  } else {
-    form.resourceRequests.forEach((row, index) =>
-      pushBullet(row.request || `Request ${index + 1}`)
-    )
-  }
-
-  pushHeading('Planned Actions for Next Operational Period')
-  if (form.plannedActions.length === 0) {
-    pushParagraph('No planned actions recorded.')
-  } else {
-    form.plannedActions.forEach((row, index) => {
-      const label = row.task || `Action ${index + 1}`
-      const meta: string[] = []
-      if (row.poc.trim()) meta.push(`POC: ${row.poc.trim()}`)
-      meta.push(`POC Briefed: ${row.pocBriefed ? 'Yes' : 'No'}`)
-      if (row.startDate.trim()) meta.push(`Start: ${row.startDate.trim()}`)
-      if (row.deadline.trim()) meta.push(`Deadline: ${row.deadline.trim()}`)
-      if (row.status.trim()) meta.push(`Status: ${row.status.trim()}`)
-      pushBullet(`${label} — ${meta.join(' · ')}`)
-    })
-  }
-
-  pushHeading('Assigned Resources')
-  if (form.assignedResources.length === 0) {
-    pushParagraph('No assigned resources recorded.')
-  } else {
-    form.assignedResources.forEach((row, index) => {
-      const label = row.agency || `Agency ${index + 1}`
-      const counts: string[] = [`People: ${row.people}`]
-      form.equipmentTypes.forEach((type) => {
-        counts.push(`${type.label}: ${row.equipmentCounts[type.id] ?? 0}`)
-      })
-      pushBullet(`${label} — ${counts.join(' · ')}`)
-    })
-    const totals: string[] = []
-    let totalPeople = 0
-    form.assignedResources.forEach((row) => {
-      totalPeople += row.people
-    })
-    totals.push(`People: ${totalPeople}`)
-    form.equipmentTypes.forEach((type) => {
-      let typeTotal = 0
-      form.assignedResources.forEach((row) => {
-        typeTotal += row.equipmentCounts[type.id] ?? 0
-      })
-      totals.push(`${type.label}: ${typeTotal}`)
-    })
-    pushParagraph(`Totals — ${totals.join(' · ')}`)
-  }
-
-  pushHeading('Amplifying Information')
-  if (form.amplifyingInformation.trim().length === 0) {
-    pushParagraph('No amplifying information recorded.')
-  } else {
-    pushParagraph(form.amplifyingInformation)
-  }
-
-  pushHeading('Comments')
-  if (form.comments.trim().length === 0) {
-    pushParagraph('No comments recorded.')
-  } else {
-    pushParagraph(form.comments)
-  }
-
-  pushHeading('Media, Photos, and Public Outreach')
-  if (form.mediaPhotosOutreach.trim().length === 0) {
-    pushParagraph('No media or outreach activities recorded.')
-  } else {
-    pushParagraph(form.mediaPhotosOutreach)
-  }
-
-  return blocks
-}
 
 type SitrepDocxCollaborator = {
   name: string
@@ -7008,6 +6775,7 @@ function App() {
     | 'ics206-section-generation'
     | 'ics208-section-generation'
     | 'ics208hm-section-generation'
+    | 'ics209-section-generation'
     | 'event-rule-generation'
     | 'notification-rule-generation'
   >('default')
@@ -7025,6 +6793,7 @@ function App() {
   const [pratusAiIcs206Section, setPratusAiIcs206Section] = useState<Ics206SectionId | null>(null)
   const [pratusAiIcs208Section, setPratusAiIcs208Section] = useState<Ics208SectionId | null>(null)
   const [pratusAiIcs208hmSection, setPratusAiIcs208hmSection] = useState<Ics208hmSectionId | null>(null)
+  const [pratusAiIcs209Section, setPratusAiIcs209Section] = useState<Ics209SectionId | null>(null)
   const [pratusAiIcs234MatrixItem, setPratusAiIcs234MatrixItem] =
     useState<Ics234MatrixItemRef | null>(null)
   const [ics234EditingMatrixItem, setIcs234EditingMatrixItem] =
@@ -7181,352 +6950,6 @@ function App() {
   const [ics201ResourcesDraft, setIcs201ResourcesDraft] = useState<Ics201ResourceSummaryRow[]>([])
   const [ics201EditingSafetyAnalysis, setIcs201EditingSafetyAnalysis] = useState(false)
   const [ics201SafetyAnalysisDraft, setIcs201SafetyAnalysisDraft] = useState<Ics201SafetyRow[]>([])
-  const INITIAL_ICS209_FORM: Ics209FormState = {
-    reportVersion: 'Initial',
-    incidentTypes: ['Oil/Petroleum', 'Other'],
-    otherIncidentTypeSpecify: 'Maritime Security',
-    incidentName: 'Tall Ships New Orleans 250',
-    incidentLocation: 'Lower Mississippi River, New Orleans, LA',
-    reportDate: '2026-05-27',
-    reportTime: '08:00',
-    operationalPeriodFrom: '2026-05-27T08:00',
-    operationalPeriodTo: '2026-05-27T20:00',
-    situationSummary:
-      "Sector New Orleans is actively preparing for the upcoming 250th Celebration of the United States commemorated by the arrival of the world's tall ships to New Orleans, scheduled to commence on 27MAY2026, and concluding on 01JUN2026. To ensure readiness to support this mission, preoperational measures have been implemented, including coordination with local LE personnel to maximize coordination for both safety and security during the event. Additionally, the Incident Management Team (IMT) has worked to ensure adequate staffing of personnel to maintain operational readiness. The IMT continues to work closely with interagency partners to ensure flexibility and rapid response posture for the duration of the event.",
-    lifeSafetyHealthIssues: 'Nothing significant to report.',
-    mtsImpacts:
-      'Security Zone Enforcement\nStationary Security Zone: Enforced from Mile Marker (MM) 92.7 to MM 96, extending 500 yards from the left descending bank, in accordance with MSIB Vol XXVI, Issue 011 (fixed security zone).\nMoving Security Zone: Enforced as a moving exclusion zone around tall ship transits along the Lower Mississippi River, 500-yard standoff fore/aft and abeam, in effect from 27MAY2026 through 01JUN2026 in accordance with MSIB Vol XXVI, Issue 012.',
-    resourceRequests: [],
-    plannedActions: [],
-    commandPriorities: [
-      { id: 1, priority: 'Safety of Public and Responders' },
-      { id: 2, priority: 'Homeland Security' },
-      { id: 3, priority: 'Threat/attack prevention' },
-      { id: 4, priority: 'Support of partner agencies' },
-      { id: 5, priority: 'Information management and situation awareness' },
-    ],
-    notableItems: [],
-    responderInjuriesThisPeriod: 0,
-    responderInjuriesToDate: 0,
-    responderDeathsThisPeriod: 0,
-    responderDeathsToDate: 0,
-    mediaPhotosOutreach:
-      'Public Affairs: High-visibility media posture from May 26-Jun 1. Key events: Press conferences, CGC EAGLE ride-ins/tours (Fox, PBS, TODAY Show), and security zone ride-alongs. Metrics: 18 inquiries, 48 articles, and 24 broadcasts reaching an audience of approximately 4 million.',
-    equipmentTypes: [
-      { id: 'cedt', label: 'CEDT', description: '1 K-9, 1 handler, 1 cover officer' },
-      { id: 'crew', label: 'Crew', description: '4 mbrs' },
-      { id: 'rbs', label: 'RBS' },
-    ],
-    assignedResources: [
-      {
-        id: 1,
-        agency: 'MSRT-E C-UAS Package',
-        people: 20,
-        equipmentCounts: { cedt: 0, crew: 0, rbs: 0 },
-      },
-      { id: 2, agency: 'MSST Cape Cod', people: 0, equipmentCounts: { cedt: 0, crew: 1, rbs: 0 } },
-      { id: 3, agency: 'MSST New York', people: 0, equipmentCounts: { cedt: 1, crew: 5, rbs: 0 } },
-      { id: 4, agency: 'MSST Kings Bay', people: 0, equipmentCounts: { cedt: 2, crew: 0, rbs: 0 } },
-      { id: 5, agency: 'MSST Houston', people: 0, equipmentCounts: { cedt: 1, crew: 5, rbs: 2 } },
-      { id: 6, agency: 'MSST NOLA', people: 0, equipmentCounts: { cedt: 0, crew: 5, rbs: 6 } },
-      { id: 7, agency: 'MSRT-E', people: 0, equipmentCounts: { cedt: 1, crew: 0, rbs: 0 } },
-    ],
-    amplifyingInformation:
-      'Sector New Orleans has manned an incident command post at Sector proper. Additionally, a CG agency representative is embedded with the Unified Command Post over at Julia Street Terminal.',
-    comments:
-      'Significant event timeline:\n26MAY26: Sector NOLA conducted operations brief with all DSF units.\n27MAY26: CGC EAGLE moored at the Lower Mississippi River (LMR) operational pier to commence MSRO patrols and search hull sweeps. CGC EAGLE conducted port visit with senior leadership tours, including Fox News, PBS, and TODAY Show interviews.\n28-31MAY26: Continuous tall ship arrivals, parade of sail, public visitation hours, and waterborne security patrols. Coordination with USCG Auxiliary, NOPD Harbor Patrol, and Louisiana State Police Marine Unit.\n01JUN2026: Final departure ceremony, demobilization phase commenced.',
-    preparedByName: 'CDR A. Rivera',
-    preparedByPositionTitle: 'Planning Section Chief',
-    preparedBySignature: 'A. Rivera',
-    preparedByDateTime: '2026-05-27 08:15',
-  }
-  const [ics209Form, setIcs209Form] = useState<Ics209FormState>(INITIAL_ICS209_FORM)
-  const updateIcs209Field = <K extends keyof Ics209FormState>(
-    field: K,
-    value: Ics209FormState[K]
-  ) => {
-    setIcs209Form((previous) => ({ ...previous, [field]: value }))
-  }
-  const toggleIcs209IncidentType = (type: Ics209IncidentType) => {
-    setIcs209Form((previous) => ({
-      ...previous,
-      incidentTypes: previous.incidentTypes.includes(type)
-        ? previous.incidentTypes.filter((value) => value !== type)
-        : [...previous.incidentTypes, type],
-    }))
-  }
-  const addIcs209ResourceRequest = () => {
-    setIcs209Form((previous) => ({
-      ...previous,
-      resourceRequests: [
-        ...previous.resourceRequests,
-        { id: Date.now() + previous.resourceRequests.length, request: '' },
-      ],
-    }))
-  }
-  const removeIcs209ResourceRequest = (id: number) => {
-    setIcs209Form((previous) => ({
-      ...previous,
-      resourceRequests: previous.resourceRequests.filter((row) => row.id !== id),
-    }))
-  }
-  const addIcs209PlannedAction = () => {
-    setIcs209Form((previous) => ({
-      ...previous,
-      plannedActions: [
-        ...previous.plannedActions,
-        {
-          id: Date.now() + previous.plannedActions.length,
-          task: '',
-          poc: '',
-          pocBriefed: false,
-          startDate: '',
-          deadline: '',
-          status: 'Pending',
-        },
-      ],
-    }))
-  }
-  const removeIcs209PlannedAction = (id: number) => {
-    setIcs209Form((previous) => ({
-      ...previous,
-      plannedActions: previous.plannedActions.filter((row) => row.id !== id),
-    }))
-  }
-  const addIcs209CommandPriority = () => {
-    setIcs209Form((previous) => ({
-      ...previous,
-      commandPriorities: [
-        ...previous.commandPriorities,
-        { id: Date.now() + previous.commandPriorities.length, priority: '' },
-      ],
-    }))
-  }
-  const removeIcs209CommandPriority = (id: number) => {
-    setIcs209Form((previous) => ({
-      ...previous,
-      commandPriorities: previous.commandPriorities.filter((row) => row.id !== id),
-    }))
-  }
-  const addIcs209NotableItem = () => {
-    setIcs209Form((previous) => ({
-      ...previous,
-      notableItems: [
-        ...previous.notableItems,
-        {
-          id: Date.now() + previous.notableItems.length,
-          item: '',
-          totalThisPeriod: '',
-          totalToDate: '',
-        },
-      ],
-    }))
-  }
-  const removeIcs209NotableItem = (id: number) => {
-    setIcs209Form((previous) => ({
-      ...previous,
-      notableItems: previous.notableItems.filter((row) => row.id !== id),
-    }))
-  }
-  const addIcs209AssignedResource = () => {
-    setIcs209Form((previous) => {
-      const blankCounts: Record<string, number> = {}
-      previous.equipmentTypes.forEach((type) => {
-        blankCounts[type.id] = 0
-      })
-      return {
-        ...previous,
-        assignedResources: [
-          ...previous.assignedResources,
-          {
-            id: Date.now() + previous.assignedResources.length,
-            agency: '',
-            people: 0,
-            equipmentCounts: blankCounts,
-          },
-        ],
-      }
-    })
-  }
-  const removeIcs209AssignedResource = (id: number) => {
-    setIcs209Form((previous) => ({
-      ...previous,
-      assignedResources: previous.assignedResources.filter((row) => row.id !== id),
-    }))
-  }
-  const [ics209ResourceSearch, setIcs209ResourceSearch] = useState('')
-  const [ics209ActionSearch, setIcs209ActionSearch] = useState('')
-  const [ics209PrioritySearch, setIcs209PrioritySearch] = useState('')
-  const [ics209NotableSearch, setIcs209NotableSearch] = useState('')
-  const [ics209AssignedSearch, setIcs209AssignedSearch] = useState('')
-  // Per-row edit state (id of row currently being edited + a draft copy)
-  const [ics209EditingResourceRequestId, setIcs209EditingResourceRequestId] = useState<
-    number | null
-  >(null)
-  const [ics209ResourceRequestDraft, setIcs209ResourceRequestDraft] =
-    useState<Ics209ResourceRequest | null>(null)
-  const [ics209EditingPlannedActionId, setIcs209EditingPlannedActionId] = useState<
-    number | null
-  >(null)
-  const [ics209PlannedActionDraft, setIcs209PlannedActionDraft] =
-    useState<Ics209PlannedAction | null>(null)
-  const [ics209EditingCommandPriorityId, setIcs209EditingCommandPriorityId] = useState<
-    number | null
-  >(null)
-  const [ics209CommandPriorityDraft, setIcs209CommandPriorityDraft] =
-    useState<Ics209CommandPriority | null>(null)
-  const [ics209EditingNotableItemId, setIcs209EditingNotableItemId] = useState<number | null>(
-    null
-  )
-  const [ics209NotableItemDraft, setIcs209NotableItemDraft] =
-    useState<Ics209NotableItem | null>(null)
-  const [ics209EditingAssignedResourceId, setIcs209EditingAssignedResourceId] = useState<
-    number | null
-  >(null)
-  const [ics209AssignedResourceDraft, setIcs209AssignedResourceDraft] =
-    useState<Ics209AssignedResource | null>(null)
-  const [ics209EditingResponderInjuries, setIcs209EditingResponderInjuries] = useState(false)
-  const [ics209ResponderInjuriesDraft, setIcs209ResponderInjuriesDraft] = useState<{
-    thisPeriod: number
-    toDate: number
-  }>({ thisPeriod: 0, toDate: 0 })
-  const [ics209EditingResponderDeaths, setIcs209EditingResponderDeaths] = useState(false)
-  const [ics209ResponderDeathsDraft, setIcs209ResponderDeathsDraft] = useState<{
-    thisPeriod: number
-    toDate: number
-  }>({ thisPeriod: 0, toDate: 0 })
-  const [ics209EditingReportInfo, setIcs209EditingReportInfo] = useState(false)
-  const [ics209ReportInfoDraft, setIcs209ReportInfoDraft] = useState<{
-    incidentName: string
-    incidentLocation: string
-    reportDate: string
-    reportTime: string
-  }>({ incidentName: '', incidentLocation: '', reportDate: '', reportTime: '' })
-  const [ics209EditingOperationalPeriod, setIcs209EditingOperationalPeriod] = useState(false)
-  const [ics209OperationalPeriodDraft, setIcs209OperationalPeriodDraft] = useState<{
-    from: string
-    to: string
-  }>({ from: '', to: '' })
-  const [ics209EditingPreparedBy, setIcs209EditingPreparedBy] = useState(false)
-  const [ics209PreparedByDraft, setIcs209PreparedByDraft] = useState<{
-    preparedByName: string
-    preparedByPositionTitle: string
-    preparedBySignature: string
-    preparedByDateTime: string
-  }>({
-    preparedByName: '',
-    preparedByPositionTitle: '',
-    preparedBySignature: '',
-    preparedByDateTime: '',
-  })
-  // Per-textarea edit state
-  const [ics209EditingTextareaField, setIcs209EditingTextareaField] = useState<
-    | 'situationSummary'
-    | 'lifeSafetyHealthIssues'
-    | 'mtsImpacts'
-    | 'amplifyingInformation'
-    | 'comments'
-    | 'mediaPhotosOutreach'
-    | 'otherIncidentTypeSpecify'
-    | null
-  >(null)
-  const [ics209TextareaDraft, setIcs209TextareaDraft] = useState('')
-  const startEditTextarea = (
-    field:
-      | 'situationSummary'
-      | 'lifeSafetyHealthIssues'
-      | 'mtsImpacts'
-      | 'amplifyingInformation'
-      | 'comments'
-      | 'mediaPhotosOutreach'
-      | 'otherIncidentTypeSpecify'
-  ) => {
-    setIcs209TextareaDraft(ics209Form[field])
-    setIcs209EditingTextareaField(field)
-  }
-  const cancelEditTextarea = () => {
-    setIcs209EditingTextareaField(null)
-    setIcs209TextareaDraft('')
-  }
-  const saveEditTextarea = () => {
-    if (ics209EditingTextareaField) {
-      updateIcs209Field(ics209EditingTextareaField, ics209TextareaDraft)
-    }
-    setIcs209EditingTextareaField(null)
-    setIcs209TextareaDraft('')
-  }
-  // Edit Equipment Types dialog
-  const [ics209EquipmentTypesDialogOpen, setIcs209EquipmentTypesDialogOpen] = useState(false)
-  const [ics209EquipmentTypesDraft, setIcs209EquipmentTypesDraft] = useState<
-    Ics209EquipmentType[]
-  >([])
-  const openEquipmentTypesDialog = () => {
-    setIcs209EquipmentTypesDraft(
-      ics209Form.equipmentTypes.map((type) => ({ ...type }))
-    )
-    setIcs209EquipmentTypesDialogOpen(true)
-  }
-  const addDraftEquipmentType = () => {
-    setIcs209EquipmentTypesDraft((previous) => [
-      ...previous,
-      {
-        id: `equip_${Date.now()}_${previous.length}`,
-        label: '',
-        description: '',
-      },
-    ])
-  }
-  const updateDraftEquipmentType = (
-    index: number,
-    field: 'label' | 'description',
-    value: string
-  ) => {
-    setIcs209EquipmentTypesDraft((previous) =>
-      previous.map((type, position) =>
-        position === index ? { ...type, [field]: value } : type
-      )
-    )
-  }
-  const removeDraftEquipmentType = (index: number) => {
-    setIcs209EquipmentTypesDraft((previous) => previous.filter((_, position) => position !== index))
-  }
-  const saveEquipmentTypes = () => {
-    const cleaned = ics209EquipmentTypesDraft
-      .map((type) => ({
-        ...type,
-        label: type.label.trim(),
-        description: type.description?.trim() || undefined,
-      }))
-      .filter((type) => type.label.length > 0)
-    const validIds = new Set(cleaned.map((type) => type.id))
-    setIcs209Form((previous) => ({
-      ...previous,
-      equipmentTypes: cleaned,
-      assignedResources: previous.assignedResources.map((row) => {
-        const nextCounts: Record<string, number> = {}
-        cleaned.forEach((type) => {
-          nextCounts[type.id] = row.equipmentCounts[type.id] ?? 0
-        })
-        return { ...row, equipmentCounts: nextCounts }
-      }),
-    }))
-    // Also update any in-flight assigned-resource draft to keep columns in sync
-    setIcs209AssignedResourceDraft((draft) => {
-      if (!draft) return draft
-      const nextCounts: Record<string, number> = {}
-      cleaned.forEach((type) => {
-        nextCounts[type.id] = draft.equipmentCounts[type.id] ?? 0
-      })
-      // Remove counts for types that no longer exist
-      Object.keys(draft.equipmentCounts).forEach((key) => {
-        if (!validIds.has(key)) {
-          delete nextCounts[key]
-        }
-      })
-      return { ...draft, equipmentCounts: nextCounts }
-    })
-    setIcs209EquipmentTypesDialogOpen(false)
-  }
   const [ics201Versions, setIcs201Versions] = useState<Ics201Version[]>(() =>
     isSupabaseEnabled ? [] : createSeedIcs201Versions(INITIAL_ICS201_FORM)
   )
@@ -8459,6 +7882,16 @@ function App() {
   ics208hmFormRef.current = ics208hmForm
   const ics208hmVersionsRef = useRef(ics208hmVersions)
   ics208hmVersionsRef.current = ics208hmVersions
+  const [ics209Form, setIcs209Form] = useState<Ics209FormState | null>(null)
+  const [ics209Versions, setIcs209Versions] = useState<Ics209Version[]>([])
+  const [ics209EditingSections, setIcs209EditingSections] = useState<
+    Partial<Record<Ics209SectionId, boolean>>
+  >({})
+  const [ics209SectionDrafts, setIcs209SectionDrafts] = useState<Ics209FormSectionDrafts>({})
+  const ics209FormRef = useRef(ics209Form)
+  ics209FormRef.current = ics209Form
+  const ics209VersionsRef = useRef(ics209Versions)
+  ics209VersionsRef.current = ics209Versions
   const liveIcs204FormsRef = useRef<Record<string, Ics204FormState>>({})
   const [ics233Rows, setIcs233Rows] = useState<Ics233TaskRow[]>([])
   const [activeIcs233CellEdit, setActiveIcs233CellEdit] = useState<{
@@ -8517,6 +7950,8 @@ function App() {
         ics208Versions: Ics208Version[]
         ics208hmForm: Ics208hmFormState | null
         ics208hmVersions: Ics208hmVersion[]
+        ics209Form: Ics209FormState | null
+        ics209Versions: Ics209Version[]
         ics233Rows: Ics233TaskRow[]
       }
     >
@@ -10701,6 +10136,7 @@ function App() {
     if (tab === 'form-ICS-206') return 'ICS-206 Medical Plan'
     if (tab === 'form-ICS-208') return 'ICS-208 Safety & Health Plan'
     if (tab === 'form-ICS-208HM') return 'ICS-208HM Site Safety & Control Plan'
+    if (tab === 'form-ICS-209') return 'ICS-209 Incident Status Summary'
     if (tab.startsWith('form-')) return tab.replace('form-', '')
     return 'Panel Content'
   }
@@ -11854,6 +11290,8 @@ function App() {
       ics208Versions: isSupabaseEnabled ? [] : ics208VersionsRef.current,
       ics208hmForm: isSupabaseEnabled ? null : ics208hmFormRef.current,
       ics208hmVersions: isSupabaseEnabled ? [] : ics208hmVersionsRef.current,
+      ics209Form: isSupabaseEnabled ? null : ics209FormRef.current,
+      ics209Versions: isSupabaseEnabled ? [] : ics209VersionsRef.current,
       ics233Rows: ics233RowsRef.current,
     }
   }
@@ -11879,6 +11317,8 @@ function App() {
       setIcs208Versions([])
       setIcs208hmForm(null)
       setIcs208hmVersions([])
+      setIcs209Form(null)
+      setIcs209Versions([])
       setIcs233Rows([])
       setExpandedIcs204FormId(null)
       return
@@ -11904,6 +11344,8 @@ function App() {
       setIcs208Versions([])
       setIcs208hmForm(null)
       setIcs208hmVersions([])
+      setIcs209Form(null)
+      setIcs209Versions([])
       setIcs233Rows([])
       setExpandedIcs204FormId(null)
       return
@@ -11929,6 +11371,8 @@ function App() {
     setIcs208Versions(cached?.ics208Versions ?? [])
     setIcs208hmForm(cached?.ics208hmForm ?? null)
     setIcs208hmVersions(cached?.ics208hmVersions ?? [])
+    setIcs209Form(cached?.ics209Form ?? null)
+    setIcs209Versions(cached?.ics209Versions ?? [])
     setIcs233Rows((cached?.ics233Rows ?? []).map((row) => normalizeIcs233Row(row)))
     setExpandedIcs204FormId(cached?.ics204Forms[0]?.id ?? null)
   }
@@ -12254,6 +11698,18 @@ function App() {
       })))
       setIcs208hmEditingSections({})
       setIcs208hmSectionDrafts({})
+    },
+    []
+  )
+  const handleIcs209Loaded = useCallback(
+    (payload: { form: Ics209FormState; versions: Ics209Version[] }) => {
+      setIcs209Form(cloneIcs209FormState(payload.form))
+      setIcs209Versions(payload.versions.map((version) => ({
+        ...version,
+        snapshot: cloneIcs209FormState(version.snapshot),
+      })))
+      setIcs209EditingSections({})
+      setIcs209SectionDrafts({})
     },
     []
   )
@@ -12924,6 +12380,30 @@ function App() {
     workspaceDefaults: ics208hmWorkspaceDefaults,
     onLoaded: handleIcs208hmLoaded,
   })
+  const ics209WorkspaceDefaults = useMemo(
+    (): Partial<Ics209FormState> => ({
+      incidentName: activeIncidentWorkspace?.name ?? activeExerciseWorkspace?.name ?? '',
+    }),
+    [activeIncidentWorkspace?.name, activeExerciseWorkspace?.name]
+  )
+  const {
+    loading: isIcs209Loading,
+    error: ics209SyncError,
+    isSaving: isIcs209Saving,
+    saveDraft: saveIcs209DraftToServer,
+    appendVersion: appendIcs209VersionToServer,
+    saveSignedReview: saveIcs209SignedReviewToServer,
+  } = useIcs209WorkspaceForm({
+    enabled:
+      isSupabaseEnabled &&
+      (isInIncidentWorkspace || isInExerciseWorkspace) &&
+      activeWorkspaceSupabaseId !== null,
+    workspaceId: activeWorkspaceSupabaseId,
+    userId: user?.id ?? null,
+    profileEmail,
+    workspaceDefaults: ics209WorkspaceDefaults,
+    onLoaded: handleIcs209Loaded,
+  })
   const { canEditIcs201Form, refresh: refreshWorkspacePermissions } = useWorkspacePermissions(
     isInIncidentWorkspace || isInExerciseWorkspace ? activeWorkspaceSupabaseId : null,
     isOrgAdmin
@@ -12993,6 +12473,8 @@ function App() {
     setIcs208SectionDrafts({})
     setIcs208hmEditingSections({})
     setIcs208hmSectionDrafts({})
+    setIcs209EditingSections({})
+    setIcs209SectionDrafts({})
   }, [canEditIcs201Form])
   const currentUserRosterMember = activeWorkspaceRoster.find(
     (member) => member.email.toLowerCase() === (profileEmail ?? '').toLowerCase()
@@ -13132,6 +12614,8 @@ function App() {
   const ics208LocalAuthorColor = ics208AuthorColor(user?.id ?? null)
   const ics208hmAuthorName = profileEmail ?? 'You'
   const ics208hmLocalAuthorColor = ics208hmAuthorColor(user?.id ?? null)
+  const ics209AuthorName = profileEmail ?? 'You'
+  const ics209LocalAuthorColor = ics209AuthorColor(user?.id ?? null)
   useEffect(() => {
     if (ics204SyncError) {
       toast.error(ics204SyncError)
@@ -13182,6 +12666,11 @@ function App() {
       toast.error(ics208hmSyncError)
     }
   }, [ics208hmSyncError])
+  useEffect(() => {
+    if (ics209SyncError) {
+      toast.error(ics209SyncError)
+    }
+  }, [ics209SyncError])
   useEffect(() => {
     if (isSupabaseEnabled) return
     if (!isInIncidentWorkspace && !isInExerciseWorkspace) return
@@ -13303,6 +12792,31 @@ function App() {
     ics208hmForm,
     ics208hmLocalAuthorColor,
     ics208hmWorkspaceDefaults,
+    isInExerciseWorkspace,
+    isInIncidentWorkspace,
+    isSupabaseEnabled,
+  ])
+  useEffect(() => {
+    if (isSupabaseEnabled) return
+    if (!isInIncidentWorkspace && !isInExerciseWorkspace) return
+    if (ics209Form) return
+    const localId = createLocalIcs209DocumentId()
+    const form = createEmptyIcs209Form(localId, ics209WorkspaceDefaults)
+    const initialVersion: Ics209Version = {
+      id: `local-v-${localId}`,
+      createdAt: Date.now(),
+      authorName: ics209AuthorName,
+      authorColor: ics209LocalAuthorColor,
+      snapshot: cloneIcs209FormState(form),
+      signatures: [],
+    }
+    setIcs209Form(form)
+    setIcs209Versions([initialVersion])
+  }, [
+    ics209AuthorName,
+    ics209Form,
+    ics209LocalAuthorColor,
+    ics209WorkspaceDefaults,
     isInExerciseWorkspace,
     isInIncidentWorkspace,
     isSupabaseEnabled,
@@ -17219,6 +16733,115 @@ function App() {
       }, 1400)
       return
     }
+    if (pratusAiIntent === 'ics209-section-generation' && pratusAiIcs209Section) {
+      const section = pratusAiIcs209Section
+      if (!ics209Form) {
+        setPratusAiIntent('default')
+        setPratusAiIcs209Section(null)
+        setPratusAiDraftMessage('')
+        return
+      }
+      startIcs209SectionEdit(section)
+      setIsPratusAiDrawerOpen(false)
+      setPratusAiIntent('default')
+      setPratusAiIcs209Section(null)
+      setPratusAiDraftMessage('')
+      setIsPratusAiLoading(true)
+      if (pratusAiLoadingTimerRef.current) {
+        window.clearTimeout(pratusAiLoadingTimerRef.current)
+        pratusAiLoadingTimerRef.current = null
+      }
+      const incidentLabel =
+        ics209Form.incidentName ||
+        activeIncidentWorkspace?.name ||
+        activeExerciseWorkspace?.name ||
+        'this incident'
+      const now = new Date()
+      const later = new Date(Date.now() + 12 * 60 * 60 * 1000)
+      pratusAiLoadingTimerRef.current = window.setTimeout(() => {
+        switch (section) {
+          case 'incident-info':
+            patchIcs209SectionDraft(section, {
+              incidentName: incidentLabel,
+              incidentNumber: ics209Form.incidentNumber || '',
+              reportVersion: ics209Form.reportVersion || 'initial',
+              reportNumber: ics209Form.reportNumber || '',
+              incidentCommanders: ics209Form.incidentCommanders || 'Incident Commander',
+              incidentManagementOrganization:
+                ics209Form.incidentManagementOrganization || 'Type 3 IMT',
+              incidentStartDate: ics209Form.incidentStartDate || now.toISOString().slice(0, 10),
+              incidentStartTime: ics209Form.incidentStartTime || now.toTimeString().slice(0, 5),
+              incidentStartTimeZone: ics209Form.incidentStartTimeZone || 'Local',
+              currentIncidentSize: ics209Form.currentIncidentSize || '',
+              percentMetric: ics209Form.percentMetric || '',
+              percentValue: ics209Form.percentValue || '',
+              incidentDefinition: ics209Form.incidentDefinition || 'Significant incident',
+              incidentComplexityLevel: ics209Form.incidentComplexityLevel || 'Type 3',
+              timePeriodFrom: ics209Form.timePeriodFrom || now.toISOString().slice(0, 16),
+              timePeriodTo: ics209Form.timePeriodTo || later.toISOString().slice(0, 16),
+            })
+            break
+          case 'approval-routing':
+            patchIcs209SectionDraft(section, {
+              preparedByName: ics209Form.preparedByName || 'Planning Section Chief',
+              preparedByPosition: ics209Form.preparedByPosition || 'Planning Section Chief',
+              preparedByDateTime: ics209Form.preparedByDateTime || now.toISOString().slice(0, 16),
+              submittedDateTime: ics209Form.submittedDateTime || now.toISOString().slice(0, 16),
+              submittedTimeZone: ics209Form.submittedTimeZone || 'Local',
+              approvedByName: ics209Form.approvedByName || 'Incident Commander',
+              approvedByPosition: ics209Form.approvedByPosition || 'Incident Commander',
+              approvedBySignature: ics209Form.approvedBySignature || '',
+              primarySentTo: ics209Form.primarySentTo || 'Area Command / EOC',
+            })
+            break
+          case 'location-info':
+            patchIcs209SectionDraft(section, {
+              ...(extractIcs209SectionDraft(ics209Form, 'location-info') as Ics209LocationInfoDraft),
+              shortLocationDescription:
+                ics209Form.shortLocationDescription ||
+                `Primary incident area for ${incidentLabel}. Confirm coordinates at Command Post.`,
+            })
+            break
+          case 'incident-summary':
+            patchIcs209SectionDraft(section, {
+              significantEvents:
+                ics209Form.significantEvents ||
+                `Significant progress and operational updates for ${incidentLabel} during this reporting period.`,
+              primaryMaterialsHazards: ics209Form.primaryMaterialsHazards || '',
+              damageAssessmentSummary: ics209Form.damageAssessmentSummary || '',
+              damageRows: ics209Form.damageRows,
+            })
+            break
+          case 'strategic-objectives':
+            patchIcs209SectionDraft(
+              section,
+              ics209Form.strategicObjectives ||
+                `Protect life safety, stabilize incident conditions, and restore normal operations for ${incidentLabel}.`
+            )
+            break
+          case 'planned-actions-projections':
+            patchIcs209SectionDraft(section, {
+              plannedActionsNextPeriod:
+                ics209Form.plannedActionsNextPeriod ||
+                'Continue operational objectives, maintain situational awareness, and support resource ordering.',
+              projectedFinalSize: ics209Form.projectedFinalSize || '',
+              anticipatedCompletionDate: ics209Form.anticipatedCompletionDate || '',
+              projectedDemobilizationStartDate: ics209Form.projectedDemobilizationStartDate || '',
+              estimatedCostsToDate: ics209Form.estimatedCostsToDate || '',
+              projectedFinalCostEstimate: ics209Form.projectedFinalCostEstimate || '',
+            })
+            break
+          default:
+            break
+        }
+        setIsPratusAiLoading(false)
+        pratusAiLoadingTimerRef.current = null
+        toast.success(
+          `PRATUS AI drafted ICS-209 ${section.replace(/-/g, ' ')}. Review and click Save to commit.`
+        )
+      }, 1400)
+      return
+    }
     if (pratusAiIntent === 'ics201-section-generation' && pratusAiIcs201Section) {
       const section = pratusAiIcs201Section
       const sectionLabel = ICS201_SECTION_LABELS[section]
@@ -19800,6 +19423,141 @@ function App() {
       )
     })
   }
+  const mergePersistedIcs209Version = (
+    previous: Ics209Version[],
+    latestVersion: Ics209Version,
+    persisted: Ics209Version
+  ) => {
+    const next = [...previous]
+    const lastIndex = next.length - 1
+    if (latestVersion && next[lastIndex]?.id === latestVersion.id) {
+      next[lastIndex] = persisted
+    } else if (next.some((entry) => entry.id === persisted.id)) {
+      next[next.findIndex((entry) => entry.id === persisted.id)] = persisted
+    } else {
+      next.push(persisted)
+    }
+    return next.slice(-100)
+  }
+  const openIcs209SectionGeneration = (section: Ics209SectionId) => {
+    setPratusAiIntent('ics209-section-generation')
+    setPratusAiIcs209Section(section)
+    setPratusAiDraftMessage(ICS209_SECTION_PROMPTS[section])
+    setIsPratusAiDrawerOpen(true)
+  }
+  const startIcs209SectionEdit = (section: Ics209SectionId) => {
+    if (!canEditIcs201Form || !ics209Form) return
+    setIcs209SectionDrafts((previous) => ({
+      ...previous,
+      [section]: extractIcs209SectionDraft(ics209Form, section),
+    }))
+    setIcs209EditingSections((previous) => ({
+      ...previous,
+      [section]: true,
+    }))
+  }
+  const cancelIcs209SectionEdit = (section: Ics209SectionId) => {
+    setIcs209EditingSections((previous) => {
+      const next = { ...previous }
+      delete next[section]
+      return next
+    })
+    setIcs209SectionDrafts((previous) => {
+      const next = { ...previous }
+      delete next[section]
+      return next
+    })
+  }
+  const patchIcs209SectionDraft = <S extends Ics209SectionId>(
+    section: S,
+    value: Ics209FormSectionDrafts[S]
+  ) => {
+    setIcs209SectionDrafts((previous) => ({
+      ...previous,
+      [section]: value,
+    }))
+  }
+  const saveIcs209Section = (section: Ics209SectionId) => {
+    if (!canEditIcs201Form) {
+      toast.error('Your ICS position does not include permission to edit ICS-209 forms.')
+      return
+    }
+    const draft = ics209SectionDrafts[section]
+    if (draft === undefined || !ics209Form) return
+    const nextForm = applyIcs209SectionDraft(ics209Form, section, draft)
+    setIcs209Form(cloneIcs209FormState(nextForm))
+    const latestVersion = ics209Versions[ics209Versions.length - 1]
+    if (latestVersion && latestVersion.signatures.length === 0) {
+      handleIcs209SaveDraft(nextForm, latestVersion)
+    }
+    cancelIcs209SectionEdit(section)
+  }
+  const handleIcs209SaveDraft = (form: Ics209FormState, latestVersion: Ics209Version) => {
+    const optimisticVersion: Ics209Version = {
+      ...latestVersion,
+      createdAt: Date.now(),
+      authorName: ics209AuthorName,
+      authorColor: ics209LocalAuthorColor,
+      snapshot: cloneIcs209FormState(form),
+    }
+    setIcs209Versions((previous) =>
+      mergePersistedIcs209Version(previous, latestVersion, optimisticVersion)
+    )
+    void saveIcs209DraftToServer(form.id, form, latestVersion).then((persisted) => {
+      if (!persisted) return
+      setIcs209Versions((previous) =>
+        mergePersistedIcs209Version(previous, latestVersion, persisted)
+      )
+    })
+  }
+  const handleIcs209AppendVersion = (
+    form: Ics209FormState,
+    signatures: Ics201VersionSignature[] = [],
+    authorNameOverride?: string
+  ) => {
+    const authorName = authorNameOverride ?? ics209AuthorName
+    const optimisticVersion: Ics209Version = {
+      id: `local-v-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      createdAt: Date.now(),
+      authorName,
+      authorColor: ics209LocalAuthorColor,
+      snapshot: cloneIcs209FormState(form),
+      signatures,
+    }
+    setIcs209Versions((previous) => [...previous, optimisticVersion].slice(-100))
+    void appendIcs209VersionToServer(form.id, form, signatures).then((persisted) => {
+      if (!persisted) return
+      setIcs209Versions((previous) =>
+        previous
+          .map((entry) => (entry.id === optimisticVersion.id ? persisted : entry))
+          .slice(-100)
+      )
+    })
+  }
+  const handleIcs209SignReview = (
+    form: Ics209FormState,
+    latestVersion: Ics209Version,
+    signature: Ics201VersionSignature
+  ) => {
+    const nextVersion: Ics209Version = {
+      ...latestVersion,
+      signatures: [...latestVersion.signatures, signature],
+    }
+    setIcs209Versions((previous) =>
+      mergePersistedIcs209Version(previous, latestVersion, nextVersion)
+    )
+    void saveIcs209SignedReviewToServer(
+      form.id,
+      form,
+      latestVersion.id,
+      nextVersion.signatures
+    ).then((persisted) => {
+      if (!persisted) return
+      setIcs209Versions((previous) =>
+        mergePersistedIcs209Version(previous, latestVersion, persisted)
+      )
+    })
+  }
   const applyDraftIcs204Recommendations = async () => {
     const templates: Partial<Ics204FormState>[] = [
       {
@@ -21220,6 +20978,7 @@ function App() {
                   {activeTab === 'form-ICS-206' && 'ICS-206 Medical Plan'}
                   {activeTab === 'form-ICS-208' && 'ICS-208 Safety & Health Plan'}
                   {activeTab === 'form-ICS-208HM' && 'ICS-208HM Site Safety & Control Plan'}
+                  {activeTab === 'form-ICS-209' && 'ICS-209 Incident Status Summary'}
                   {activeTab !== 'form-ICS-204' &&
                     activeTab !== 'form-ICS-202' &&
                     activeTab !== 'form-ICS-203' &&
@@ -21230,6 +20989,7 @@ function App() {
                     activeTab !== 'form-ICS-206' &&
                     activeTab !== 'form-ICS-208' &&
                     activeTab !== 'form-ICS-208HM' &&
+                    activeTab !== 'form-ICS-209' &&
                     activeFormTabLabel}
                 </CardTitle>
                 {activeTab === 'roster' && (isInIncidentWorkspace || isInExerciseWorkspace) && (
@@ -29479,6 +29239,32 @@ function App() {
                   />
                 )}
 
+                {activeTab === 'form-ICS-209' && (isInIncidentWorkspace || isInExerciseWorkspace) && (
+                  <Ics209WorkspacePanel
+                    form={ics209Form}
+                    setForm={setIcs209Form}
+                    versions={ics209Versions}
+                    canEdit={canEditIcs201Form}
+                    isLoading={isIcs209Loading}
+                    isSaving={isIcs209Saving}
+                    glassItemBorderClasses={glassItemBorderClasses}
+                    incidentName={
+                      activeIncidentWorkspace?.name ?? activeExerciseWorkspace?.name ?? ''
+                    }
+                    editingSections={ics209EditingSections}
+                    sectionDrafts={ics209SectionDrafts}
+                    onStartSectionEdit={startIcs209SectionEdit}
+                    onCancelSectionEdit={cancelIcs209SectionEdit}
+                    onSaveSection={saveIcs209Section}
+                    onGenerateSection={openIcs209SectionGeneration}
+                    onPatchSectionDraft={patchIcs209SectionDraft}
+                    onAppendVersion={handleIcs209AppendVersion}
+                    onSignReview={handleIcs209SignReview}
+                    downloadDocx={downloadDocx}
+                    downloadPdf={downloadPdf}
+                  />
+                )}
+
                 {activeTab === 'form-ICS-203' && (isInIncidentWorkspace || isInExerciseWorkspace) && (
                   <Ics203WorkspacePanel
                     form={ics203Form}
@@ -31507,6 +31293,7 @@ function App() {
                   activeTab !== 'form-ICS-206' &&
                   activeTab !== 'form-ICS-208' &&
                   activeTab !== 'form-ICS-208HM' &&
+                  activeTab !== 'form-ICS-209' &&
                   activeTab !== 'form-ICS-233' && (
                   <Item variant="outline" className={cn('flex-col items-stretch p-0', glassItemBorderClasses)}>
                     <div className="px-3 py-2.5">
