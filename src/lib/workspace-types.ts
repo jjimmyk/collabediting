@@ -23,6 +23,10 @@ export type AccessibleWorkspace = {
   region: string | null
   summary: string | null
   archivedAt: string | null
+  workspaceFormat: string | null
+  incidentComplexity: string | null
+  hasSequentialWorkflow: boolean
+  sequentialWorkflowType: string | null
 }
 
 export type WorkspacePermissions = {
@@ -46,6 +50,10 @@ export type DbWorkspace = {
   region: string | null
   summary: string | null
   archived_at?: string | null
+  workspace_format?: string | null
+  incident_complexity?: string | null
+  has_sequential_workflow?: boolean | null
+  sequential_workflow_type?: string | null
 }
 
 export type DbWorkspaceMember = {

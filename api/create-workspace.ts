@@ -13,6 +13,30 @@ type CreateWorkspaceBody = {
   name?: string
   region?: string
   summary?: string
+  workspaceFormat?: string
+  incidentComplexity?: string
+}
+
+function deriveSequentialWorkflow(
+  kind: 'incident' | 'exercise',
+  workspaceFormat: string | null,
+  incidentComplexity: string | null
+) {
+  if (
+    kind === 'incident' &&
+    workspaceFormat === 'uscg-ics' &&
+    incidentComplexity === 'planning-p'
+  ) {
+    return {
+      has_sequential_workflow: true,
+      sequential_workflow_type: 'planning-p',
+    }
+  }
+
+  return {
+    has_sequential_workflow: false,
+    sequential_workflow_type: null,
+  }
 }
 
 function parseBody(req: VercelRequest): CreateWorkspaceBody {
@@ -50,10 +74,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const name = body.name?.trim()
     const region = body.region?.trim() || null
     const summary = body.summary?.trim() || null
+    const workspaceFormat = body.workspaceFormat?.trim() || null
+    const incidentComplexity = body.incidentComplexity?.trim() || null
 
     if (kind !== 'incident' && kind !== 'exercise') {
       return res.status(400).json({ error: 'kind must be incident or exercise.' })
     }
+
+    const sequentialWorkflow = deriveSequentialWorkflow(kind, workspaceFormat, incidentComplexity)
 
     if (!name) {
       return res.status(400).json({ error: 'name is required.' })
@@ -97,8 +125,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         name,
         region,
         summary,
+        workspace_format: workspaceFormat,
+        incident_complexity: incidentComplexity,
+        has_sequential_workflow: sequentialWorkflow.has_sequential_workflow,
+        sequential_workflow_type: sequentialWorkflow.sequential_workflow_type,
       })
-      .select('id, kind, legacy_id, name, region, summary')
+      .select(
+        'id, kind, legacy_id, name, region, summary, workspace_format, incident_complexity, has_sequential_workflow, sequential_workflow_type'
+      )
       .single()
 
     if (workspaceError || !workspace) {
@@ -164,6 +198,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         name: workspace.name,
         region: workspace.region,
         summary: workspace.summary,
+        workspaceFormat: workspace.workspace_format,
+        incidentComplexity: workspace.incident_complexity,
+        hasSequentialWorkflow: workspace.has_sequential_workflow,
+        sequentialWorkflowType: workspace.sequential_workflow_type,
       },
     })
   } catch (error) {

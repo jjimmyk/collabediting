@@ -514,9 +514,10 @@ import { PLANNING_P_STEPS } from '@/features/planning-p/planning-p-steps'
 import {
   DEFAULT_INCIDENT_COMPLEXITY,
   getIncidentComplexityOptionsForWorkflow,
-  isPlanningPIncidentWorkspace,
+  getWorkspaceSequentialWorkflowMetadata,
   normalizeIncidentComplexityForWorkflow,
   STANDARD_INCIDENT_COMPLEXITY_OPTIONS,
+  workspaceHasPlanningPStepper,
 } from '@/lib/workspace-format'
 import { ICS_POSITIONS, WORKSPACE_ROSTER_POSITIONS } from '@/lib/ics-positions'
 
@@ -1046,6 +1047,8 @@ type IncidentListItem = {
   relatedEventIds: number[]
   workspaceFormat?: string
   incidentComplexity?: string
+  hasSequentialWorkflow?: boolean
+  sequentialWorkflowType?: string | null
   archivedAt?: string | null
 }
 
@@ -6561,6 +6564,8 @@ function App() {
           name: displayName,
           region,
           summary,
+          workspaceFormat: incidentWorkflow,
+          incidentComplexity,
         })
 
         if (!result.ok) {
@@ -6668,6 +6673,11 @@ function App() {
     const resourcesCommitted = incidentTeamTemplate
       ? `${incidentTeamTemplate} team standing up`
       : 'Initial responders mobilizing'
+    const incidentWorkflowMetadata = getWorkspaceSequentialWorkflowMetadata({
+      workspaceFormat: incidentWorkflow,
+      incidentComplexity,
+      kind: 'incident',
+    })
     const newIncident: IncidentListItem = {
       id: Date.now(),
       name: displayName,
@@ -6683,8 +6693,10 @@ function App() {
       summary,
       resourcesCommitted,
       relatedEventIds: [...incidentRelatedEventIds],
-      workspaceFormat: incidentWorkflow,
-      incidentComplexity,
+      workspaceFormat: incidentWorkflowMetadata.workspaceFormat ?? incidentWorkflow,
+      incidentComplexity: incidentWorkflowMetadata.incidentComplexity ?? incidentComplexity,
+      hasSequentialWorkflow: incidentWorkflowMetadata.hasSequentialWorkflow,
+      sequentialWorkflowType: incidentWorkflowMetadata.sequentialWorkflowType,
     }
 
     if (isSupabaseEnabled) {
@@ -6702,6 +6714,8 @@ function App() {
           name: displayName,
           region,
           summary,
+          workspaceFormat: incidentWorkflow,
+          incidentComplexity,
         })
 
         if (!result.ok) {
@@ -6713,6 +6727,10 @@ function App() {
           ...newIncident,
           id: result.workspace.legacyId,
           workspaceId: result.workspace.workspaceId,
+          workspaceFormat: result.workspace.workspaceFormat ?? newIncident.workspaceFormat,
+          incidentComplexity: result.workspace.incidentComplexity ?? newIncident.incidentComplexity,
+          hasSequentialWorkflow: result.workspace.hasSequentialWorkflow,
+          sequentialWorkflowType: result.workspace.sequentialWorkflowType,
         }
 
         setIncidentList((previous) => [persistedIncident, ...previous])
@@ -11080,6 +11098,12 @@ function App() {
             region: workspace.region ?? existing.region,
             summary: workspace.summary ?? existing.summary,
             archivedAt: workspace.archivedAt ?? existing.archivedAt ?? null,
+            workspaceFormat: workspace.workspaceFormat ?? existing.workspaceFormat,
+            incidentComplexity: workspace.incidentComplexity ?? existing.incidentComplexity,
+            hasSequentialWorkflow:
+              workspace.hasSequentialWorkflow || existing.hasSequentialWorkflow === true,
+            sequentialWorkflowType:
+              workspace.sequentialWorkflowType ?? existing.sequentialWorkflowType ?? null,
           })
           continue
         }
@@ -11100,6 +11124,10 @@ function App() {
           resourcesCommitted: 'Initial responders mobilizing',
           relatedEventIds: [],
           archivedAt: workspace.archivedAt ?? null,
+          workspaceFormat: workspace.workspaceFormat ?? undefined,
+          incidentComplexity: workspace.incidentComplexity ?? undefined,
+          hasSequentialWorkflow: workspace.hasSequentialWorkflow,
+          sequentialWorkflowType: workspace.sequentialWorkflowType ?? undefined,
         })
       }
     }
@@ -11212,6 +11240,8 @@ function App() {
             name: workspace.name,
             region: workspace.region ?? existing.region,
             summary: workspace.summary ?? existing.summary,
+            workspaceFormat: workspace.workspaceFormat ?? existing.workspaceFormat,
+            incidentComplexity: workspace.incidentComplexity ?? existing.incidentComplexity,
           })
           continue
         }
@@ -11231,6 +11261,8 @@ function App() {
           summary: workspace.summary ?? '',
           resourcesCommitted: 'Exercise planning cell forming',
           relatedEventIds: [],
+          workspaceFormat: workspace.workspaceFormat ?? undefined,
+          incidentComplexity: workspace.incidentComplexity ?? undefined,
         })
       }
     }
@@ -11382,9 +11414,11 @@ function App() {
   const isInIncidentWorkspace = activeIncidentWorkspace !== null
   const showPlanningPStepper =
     isInIncidentWorkspace &&
-    isPlanningPIncidentWorkspace({
+    workspaceHasPlanningPStepper({
       workspaceFormat: activeIncidentWorkspace?.workspaceFormat,
       incidentComplexity: activeIncidentWorkspace?.incidentComplexity,
+      hasSequentialWorkflow: activeIncidentWorkspace?.hasSequentialWorkflow,
+      sequentialWorkflowType: activeIncidentWorkspace?.sequentialWorkflowType,
     })
   useEffect(() => {
     if (showPlanningPStepper) {

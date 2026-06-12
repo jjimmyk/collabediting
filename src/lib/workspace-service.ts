@@ -84,6 +84,20 @@ export async function activatePendingInvites(): Promise<void> {
   await supabase.rpc('activate_my_invites')
 }
 
+function mapAccessibleWorkspaceFields(row: {
+  workspace_format?: string | null
+  incident_complexity?: string | null
+  has_sequential_workflow?: boolean | null
+  sequential_workflow_type?: string | null
+}) {
+  return {
+    workspaceFormat: row.workspace_format ?? null,
+    incidentComplexity: row.incident_complexity ?? null,
+    hasSequentialWorkflow: row.has_sequential_workflow ?? false,
+    sequentialWorkflowType: row.sequential_workflow_type ?? null,
+  }
+}
+
 export async function fetchAccessibleWorkspaces(
   userId: string,
   isOrgAdmin: boolean
@@ -94,7 +108,9 @@ export async function fetchAccessibleWorkspaces(
   if (isOrgAdmin) {
     const { data, error } = await supabase
       .from('workspaces')
-      .select('id, kind, legacy_id, name, region, summary, archived_at')
+      .select(
+        'id, kind, legacy_id, name, region, summary, archived_at, workspace_format, incident_complexity, has_sequential_workflow, sequential_workflow_type'
+      )
       .order('name')
 
     if (error || !data) {
@@ -111,6 +127,7 @@ export async function fetchAccessibleWorkspaces(
       region: row.region ?? null,
       summary: row.summary ?? null,
       archivedAt: row.archived_at ?? null,
+      ...mapAccessibleWorkspaceFields(row),
     }))
   }
 
@@ -127,7 +144,11 @@ export async function fetchAccessibleWorkspaces(
         name,
         region,
         summary,
-        archived_at
+        archived_at,
+        workspace_format,
+        incident_complexity,
+        has_sequential_workflow,
+        sequential_workflow_type
       )
     `
     )
@@ -149,6 +170,10 @@ export async function fetchAccessibleWorkspaces(
             region: string | null
             summary: string | null
             archived_at?: string | null
+            workspace_format?: string | null
+            incident_complexity?: string | null
+            has_sequential_workflow?: boolean | null
+            sequential_workflow_type?: string | null
           }
         | {
             id: string
@@ -158,6 +183,10 @@ export async function fetchAccessibleWorkspaces(
             region: string | null
             summary: string | null
             archived_at?: string | null
+            workspace_format?: string | null
+            incident_complexity?: string | null
+            has_sequential_workflow?: boolean | null
+            sequential_workflow_type?: string | null
           }[]
         | null
       const workspace = Array.isArray(workspaceRaw) ? workspaceRaw[0] : workspaceRaw
@@ -189,6 +218,7 @@ export async function fetchAccessibleWorkspaces(
         region: workspace.region ?? null,
         summary: workspace.summary ?? null,
         archivedAt: workspace.archived_at ?? null,
+        ...mapAccessibleWorkspaceFields(workspace),
       }
     })
     .filter((entry): entry is AccessibleWorkspace => entry !== null)
@@ -501,6 +531,10 @@ export type CreatedWorkspace = {
   name: string
   region: string | null
   summary: string | null
+  workspaceFormat: string | null
+  incidentComplexity: string | null
+  hasSequentialWorkflow: boolean
+  sequentialWorkflowType: string | null
 }
 
 export async function createWorkspace(params: {
@@ -509,6 +543,8 @@ export async function createWorkspace(params: {
   name: string
   region?: string
   summary?: string
+  workspaceFormat?: string
+  incidentComplexity?: string
 }): Promise<{ ok: true; workspace: CreatedWorkspace } | { ok: false; message: string }> {
   if (!isSupabaseConfigured) {
     return { ok: false, message: 'Supabase is not configured.' }
@@ -525,6 +561,8 @@ export async function createWorkspace(params: {
       name: params.name,
       region: params.region,
       summary: params.summary,
+      workspaceFormat: params.workspaceFormat,
+      incidentComplexity: params.incidentComplexity,
     }),
   })
 
