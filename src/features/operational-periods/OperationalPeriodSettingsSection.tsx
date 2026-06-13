@@ -1,0 +1,150 @@
+import { useState } from 'react'
+import { Clock3, Lock } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import {
+  formatOperationalPeriodLabel,
+  formatWorkingOperationalPeriodLabel,
+} from '@/lib/operational-period-utils'
+import type { WorkspaceOperationalPeriod } from '@/lib/operational-period-types'
+
+type OperationalPeriodSettingsSectionProps = {
+  canEdit: boolean
+  isSupabaseEnabled: boolean
+  startedOperationalPeriodCount: number
+  workingOperationalPeriodNumber: number
+  periods: WorkspaceOperationalPeriod[]
+  isLoadingPeriods?: boolean
+  isStarting?: boolean
+  startError?: string | null
+  onStartOperationalPeriod: () => Promise<{ ok: boolean; message?: string }>
+}
+
+export function OperationalPeriodSettingsSection({
+  canEdit,
+  isSupabaseEnabled,
+  startedOperationalPeriodCount,
+  workingOperationalPeriodNumber,
+  periods,
+  isLoadingPeriods = false,
+  isStarting = false,
+  startError = null,
+  onStartOperationalPeriod,
+}: OperationalPeriodSettingsSectionProps) {
+  const [confirmOpen, setConfirmOpen] = useState(false)
+  const nextPeriodNumber = startedOperationalPeriodCount + 1
+
+  const handleConfirmStart = async () => {
+    const result = await onStartOperationalPeriod()
+    if (result.ok) {
+      setConfirmOpen(false)
+    }
+  }
+
+  return (
+    <div className="mx-auto w-full max-w-2xl space-y-4 border-t pt-4">
+      <div className="space-y-1">
+        <h3 className="text-sm font-semibold">Operational Periods</h3>
+        <p className="text-xs text-muted-foreground">
+          Starting an operational period freezes the current ICS-201, IAP, ICS-202, ICS-203, and
+          ICS-204 forms as a read-only snapshot, then clones them into the next working period.
+        </p>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2 text-xs">
+        <Badge variant="outline">
+          {formatWorkingOperationalPeriodLabel(workingOperationalPeriodNumber)} (editable)
+        </Badge>
+        {startedOperationalPeriodCount > 0 ? (
+          <Badge variant="secondary">
+            Latest started: {formatOperationalPeriodLabel(startedOperationalPeriodCount)}
+          </Badge>
+        ) : (
+          <Badge variant="outline">No operational periods started yet</Badge>
+        )}
+      </div>
+
+      {!isSupabaseEnabled ? (
+        <p className="text-xs text-muted-foreground">
+          Operational period tracking requires Supabase persistence.
+        </p>
+      ) : (
+        <>
+          <Button
+            type="button"
+            onClick={() => setConfirmOpen(true)}
+            disabled={!canEdit || isStarting}
+          >
+            {isStarting
+              ? 'Starting…'
+              : `Start ${formatOperationalPeriodLabel(nextPeriodNumber)}`}
+          </Button>
+          {startError ? <p className="text-xs text-destructive">{startError}</p> : null}
+        </>
+      )}
+
+      <div className="space-y-2">
+        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          Started periods
+        </p>
+        {isLoadingPeriods ? (
+          <p className="text-xs text-muted-foreground">Loading operational periods…</p>
+        ) : periods.length === 0 ? (
+          <p className="text-xs text-muted-foreground">
+            No operational periods have been started for this incident yet.
+          </p>
+        ) : (
+          <ul className="space-y-2">
+            {periods.map((period) => (
+              <li
+                key={period.id}
+                className="flex items-center justify-between rounded-md border px-3 py-2 text-xs"
+              >
+                <div className="flex items-center gap-2">
+                  <Lock className="h-3.5 w-3.5 text-muted-foreground" />
+                  <span className="font-medium">
+                    {formatOperationalPeriodLabel(period.periodNumber)}
+                  </span>
+                </div>
+                <span className="inline-flex items-center gap-1 text-muted-foreground">
+                  <Clock3 className="h-3.5 w-3.5" />
+                  {new Date(period.startedAt).toLocaleString()}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Start {formatOperationalPeriodLabel(nextPeriodNumber)}?</DialogTitle>
+            <DialogDescription>
+              This will snapshot the current ICS-201, IAP, ICS-202, ICS-203, and ICS-204 forms
+              for {formatOperationalPeriodLabel(nextPeriodNumber)} and begin{' '}
+              {formatWorkingOperationalPeriodLabel(nextPeriodNumber + 1)} as the editable working
+              set. Started periods cannot be edited.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setConfirmOpen(false)}>
+              Cancel
+            </Button>
+            <Button type="button" onClick={() => void handleConfirmStart()} disabled={isStarting}>
+              {isStarting ? 'Starting…' : `Start ${formatOperationalPeriodLabel(nextPeriodNumber)}`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  )
+}

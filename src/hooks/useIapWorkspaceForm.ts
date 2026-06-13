@@ -23,6 +23,7 @@ type UseIapWorkspaceFormOptions = {
   profileEmail: string | null
   workspaceDefaults?: Partial<IapFormState>
   onLoaded: (payload: { form: IapFormState; versions: IapVersion[] }) => void
+  reloadKey?: number
 }
 
 export function useIapWorkspaceForm({
@@ -32,6 +33,7 @@ export function useIapWorkspaceForm({
   profileEmail,
   workspaceDefaults,
   onLoaded,
+  reloadKey = 0,
 }: UseIapWorkspaceFormOptions) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -97,7 +99,7 @@ export function useIapWorkspaceForm({
     return () => {
       cancelled = true
     }
-  }, [authorColor, authorName, enabled, userId, workspaceDefaults, workspaceId])
+  }, [authorColor, authorName, enabled, userId, workspaceDefaults, workspaceId, reloadKey])
 
   const saveDraft = useCallback(
     async (

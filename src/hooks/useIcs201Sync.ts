@@ -43,6 +43,7 @@ type UseIcs201SyncOptions = {
   }) => void
   onRemoteFormUpdated: (form: Ics201FormState) => void
   onRemoteVersionInserted: (version: Ics201Version) => void
+  reloadKey?: number
 }
 
 export function useIcs201Sync({
@@ -55,6 +56,7 @@ export function useIcs201Sync({
   onLoaded,
   onRemoteFormUpdated,
   onRemoteVersionInserted,
+  reloadKey = 0,
 }: UseIcs201SyncOptions) {
   const [documentId, setDocumentId] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -115,7 +117,7 @@ export function useIcs201Sync({
     return () => {
       cancelled = true
     }
-  }, [enabled, workspaceId, onLoaded])
+  }, [enabled, workspaceId, onLoaded, reloadKey])
 
   useEffect(() => {
     if (!enabled || !documentId) return undefined

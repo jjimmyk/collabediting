@@ -527,7 +527,21 @@ import { useIcs233NotificationSync } from '@/hooks/useIcs233NotificationSync'
 import { useHubNotificationSync } from '@/hooks/useHubNotificationSync'
 import { useIcs201TextSectionEditor } from '@/hooks/useIcs201TextSectionEditor'
 import { useWorkspacePermissions } from '@/hooks/useWorkspacePermissions'
+import { Ics201OperationalPeriodSnapshotPanel } from '@/features/operational-periods/Ics201OperationalPeriodSnapshotPanel'
+import { useOperationalPeriods } from '@/hooks/useOperationalPeriods'
 import { patchIcs201DocumentForm } from '@/lib/ics201-service'
+import { isOperationalPeriodFormTab } from '@/lib/operational-period-form-registry'
+import {
+  resolveHistoricalIcs201View,
+  resolveHistoricalIcs202View,
+  resolveHistoricalIcs203View,
+  resolveHistoricalIcs204View,
+  resolveHistoricalIapView,
+} from '@/lib/operational-period-snapshot-view'
+import {
+  formatOperationalPeriodLabel,
+  formatWorkingOperationalPeriodLabel,
+} from '@/lib/operational-period-utils'
 import { PlanningPStepper } from '@/features/planning-p/PlanningPStepper'
 import { PLANNING_P_STEPS } from '@/features/planning-p/planning-p-steps'
 import { WorkspaceSettingsPage } from '@/features/workspace-settings/WorkspaceSettingsPage'
@@ -1080,6 +1094,8 @@ type IncidentListItem = {
   incidentComplexity?: string
   hasSequentialWorkflow?: boolean
   sequentialWorkflowType?: string | null
+  startedOperationalPeriodCount?: number
+  workingOperationalPeriodNumber?: number
   archivedAt?: string | null
   templateId?: string
   locationMethod?: WorkspaceLocationMethod
@@ -8519,6 +8535,7 @@ function App() {
     []
   )
   const [activeWorkspaceSupabaseId, setActiveWorkspaceSupabaseId] = useState<string | null>(null)
+  const [workspaceFormsReloadKey, setWorkspaceFormsReloadKey] = useState(0)
   const [isRosterLoading, setIsRosterLoading] = useState(false)
   const [isInvitingRosterMember, setIsInvitingRosterMember] = useState(false)
   const [isAddRosterMemberOpen, setIsAddRosterMemberOpen] = useState(false)
@@ -11167,6 +11184,8 @@ function App() {
             }),
             workspaceId: workspace.workspaceId,
             archivedAt: workspace.archivedAt ?? existing.archivedAt ?? null,
+            startedOperationalPeriodCount: workspace.startedOperationalPeriodCount,
+            workingOperationalPeriodNumber: workspace.workingOperationalPeriodNumber,
           })
           continue
         }
@@ -11194,6 +11213,8 @@ function App() {
               incidentComplexity: workspace.incidentComplexity ?? undefined,
               hasSequentialWorkflow: workspace.hasSequentialWorkflow,
               sequentialWorkflowType: workspace.sequentialWorkflowType ?? undefined,
+              startedOperationalPeriodCount: workspace.startedOperationalPeriodCount,
+              workingOperationalPeriodNumber: workspace.workingOperationalPeriodNumber,
               templateId: workspace.metadata.templateId,
               locationMethod: asWorkspaceLocationMethod(workspace.metadata.locationMethod),
               geometrySummary: workspace.metadata.geometrySummary,
@@ -12465,6 +12486,7 @@ function App() {
     onLoaded: handleIcs201Loaded,
     onRemoteFormUpdated: handleIcs201RemoteFormUpdated,
     onRemoteVersionInserted: handleIcs201RemoteVersionInserted,
+    reloadKey: workspaceFormsReloadKey,
   })
   const {
     loading: isIcs204Loading,
@@ -12484,6 +12506,7 @@ function App() {
     userId: user?.id ?? null,
     profileEmail,
     onLoaded: handleIcs204Loaded,
+    reloadKey: workspaceFormsReloadKey,
   })
   const ics202WorkspaceDefaults = useMemo(
     (): Partial<Ics202FormState> => ({
@@ -12508,6 +12531,7 @@ function App() {
     profileEmail,
     workspaceDefaults: ics202WorkspaceDefaults,
     onLoaded: handleIcs202Loaded,
+    reloadKey: workspaceFormsReloadKey,
   })
   const iapWorkspaceDefaults = useMemo(
     (): Partial<IapFormState> => ({
@@ -12530,6 +12554,7 @@ function App() {
     profileEmail,
     workspaceDefaults: iapWorkspaceDefaults,
     onLoaded: handleIapLoaded,
+    reloadKey: workspaceFormsReloadKey,
   })
   const iapAppendableForms = useMemo(
     (): IapAppendableForms => ({
@@ -12565,6 +12590,7 @@ function App() {
     profileEmail,
     workspaceDefaults: ics203WorkspaceDefaults,
     onLoaded: handleIcs203Loaded,
+    reloadKey: workspaceFormsReloadKey,
   })
   const ics234WorkspaceDefaults = useMemo(
     (): Partial<Ics234FormState> => ({
@@ -12786,6 +12812,70 @@ function App() {
     isInIncidentWorkspace || isInExerciseWorkspace ? activeWorkspaceSupabaseId : null,
     isOrgAdmin
   )
+  const startedOperationalPeriodCount =
+    activeIncidentWorkspace?.startedOperationalPeriodCount ?? 0
+  const workingOperationalPeriodNumber =
+    activeIncidentWorkspace?.workingOperationalPeriodNumber ?? 1
+  const operationalPeriodsEnabled =
+    showPlanningPStepper && isInIncidentWorkspace && activeWorkspaceSupabaseId !== null
+  const {
+    periods: operationalPeriods,
+    isLoadingPeriods: isLoadingOperationalPeriods,
+    isStarting: isStartingOperationalPeriod,
+    startError: operationalPeriodStartError,
+    formsView: formsOperationalPeriodView,
+    setFormsView: setFormsOperationalPeriodView,
+    historicalBundle,
+    isLoadingHistorical: isLoadingHistoricalOperationalPeriod,
+    historicalError: historicalOperationalPeriodError,
+    isViewingHistorical: isViewingHistoricalOperationalPeriod,
+    handleStartOperationalPeriod,
+  } = useOperationalPeriods({
+    enabled: operationalPeriodsEnabled,
+    workspaceId: activeWorkspaceSupabaseId,
+    getAccessToken,
+    startedOperationalPeriodCount,
+    workingOperationalPeriodNumber,
+    onCountersUpdated: () => {
+      void refreshAccess()
+    },
+    onFormsReload: () => {
+      setWorkspaceFormsReloadKey((value) => value + 1)
+    },
+  })
+  const effectiveCanEditWorkspaceForms =
+    canEditIcs201Form && !isViewingHistoricalOperationalPeriod
+  const historicalIcs201View = useMemo(
+    () => resolveHistoricalIcs201View(historicalBundle),
+    [historicalBundle]
+  )
+  const historicalIcs202View = useMemo(
+    () => resolveHistoricalIcs202View(historicalBundle),
+    [historicalBundle]
+  )
+  const historicalIcs203View = useMemo(
+    () => resolveHistoricalIcs203View(historicalBundle),
+    [historicalBundle]
+  )
+  const historicalIapView = useMemo(
+    () => resolveHistoricalIapView(historicalBundle),
+    [historicalBundle]
+  )
+  const historicalIcs204View = useMemo(
+    () => resolveHistoricalIcs204View(historicalBundle),
+    [historicalBundle]
+  )
+  const displayIcs202Form = historicalIcs202View?.form ?? ics202Form
+  const displayIcs202Versions = historicalIcs202View?.versions ?? ics202Versions
+  const displayIcs203Form = historicalIcs203View?.form ?? ics203Form
+  const displayIcs203Versions = historicalIcs203View?.versions ?? ics203Versions
+  const displayIapForm = historicalIapView?.form ?? iapForm
+  const displayIapVersions = historicalIapView?.versions ?? iapVersions
+  const displayIcs204Forms = historicalIcs204View?.forms ?? ics204Forms
+  const displayIcs204VersionsById = historicalIcs204View?.versionsById ?? ics204VersionsById
+  const showOperationalPeriodFormSelector =
+    operationalPeriodsEnabled &&
+    (activeTab === 'briefing' || isOperationalPeriodFormTab(activeTab))
   useEffect(() => {
     const cleanupWorkspaceSettingsSketch = () => {
       setIsDrawingWorkspaceSettingsOnMap(false)
@@ -21347,6 +21437,11 @@ function App() {
                     ? activeIncidentWorkspace.name
                     : 'United States Coast Guard'}
               </span>
+              {showPlanningPStepper && startedOperationalPeriodCount > 0 ? (
+                <Badge variant="secondary" className="ml-2">
+                  {formatOperationalPeriodLabel(startedOperationalPeriodCount)}
+                </Badge>
+              ) : null}
               <StartHereButton
                 className={cn('ml-2 h-10', glassIconButtonClasses)}
                 data-ics201-tutorial="workspace-menu"
@@ -21862,6 +21957,36 @@ function App() {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="start" className="w-56">
+                            {operationalPeriodsEnabled ? (
+                              <>
+                                <DropdownMenuLabel>Operational Period</DropdownMenuLabel>
+                                <DropdownMenuItem
+                                  onSelect={() => setFormsOperationalPeriodView('working')}
+                                  className={cn(
+                                    'gap-2',
+                                    formsOperationalPeriodView === 'working' && 'bg-accent'
+                                  )}
+                                >
+                                  {formatWorkingOperationalPeriodLabel(workingOperationalPeriodNumber)}
+                                </DropdownMenuItem>
+                                {operationalPeriods.map((period) => (
+                                  <DropdownMenuItem
+                                    key={period.id}
+                                    onSelect={() =>
+                                      setFormsOperationalPeriodView(period.periodNumber)
+                                    }
+                                    className={cn(
+                                      'gap-2',
+                                      formsOperationalPeriodView === period.periodNumber &&
+                                        'bg-accent'
+                                    )}
+                                  >
+                                    {formatOperationalPeriodLabel(period.periodNumber)} (read-only)
+                                  </DropdownMenuItem>
+                                ))}
+                                <DropdownMenuSeparator />
+                              </>
+                            ) : null}
                             <DropdownMenuLabel>Forms</DropdownMenuLabel>
                             <DropdownMenuSeparator />
                             {WORKSPACE_FORMS_MENU.map((form) => (
@@ -22193,6 +22318,12 @@ function App() {
                     activeTab !== 'form-ICS-209' &&
                     activeFormTabLabel}
                 </CardTitle>
+                {isViewingHistoricalOperationalPeriod && showOperationalPeriodFormSelector ? (
+                  <Badge variant="outline">
+                    Viewing {formatOperationalPeriodLabel(formsOperationalPeriodView as number)}{' '}
+                    (read-only)
+                  </Badge>
+                ) : null}
                 {activeTab === 'roster' && (isInIncidentWorkspace || isInExerciseWorkspace) && (
                   <div className="flex flex-wrap items-center justify-end gap-2">
                     <ToggleGroup
@@ -22745,7 +22876,7 @@ function App() {
                     </DropdownMenu>
                   </div>
                 )}
-                {activeTab === 'briefing' && (isInIncidentWorkspace || isInExerciseWorkspace) && (
+                {activeTab === 'briefing' && (isInIncidentWorkspace || isInExerciseWorkspace) && !isViewingHistoricalOperationalPeriod && (
                   <div className="flex items-center gap-2">
                     <TooltipProvider delayDuration={150}>
                       <div className="flex items-center gap-1 rounded-md border bg-background/70 p-0.5">
@@ -26635,6 +26766,37 @@ function App() {
                 )}
 
                 {activeTab === 'briefing' && (isInIncidentWorkspace || isInExerciseWorkspace) && (
+                  isViewingHistoricalOperationalPeriod ? (
+                    isLoadingHistoricalOperationalPeriod ? (
+                      <Item variant="outline" className={glassItemBorderClasses}>
+                        <ItemContent>
+                          <ItemTitle>Loading operational period snapshot…</ItemTitle>
+                        </ItemContent>
+                      </Item>
+                    ) : historicalOperationalPeriodError ? (
+                      <Item variant="outline" className={glassItemBorderClasses}>
+                        <ItemContent>
+                          <ItemTitle>Could not load snapshot</ItemTitle>
+                          <ItemDescription>{historicalOperationalPeriodError}</ItemDescription>
+                        </ItemContent>
+                      </Item>
+                    ) : historicalIcs201View?.form ? (
+                      <Ics201OperationalPeriodSnapshotPanel
+                        form={historicalIcs201View.form}
+                        periodNumber={formsOperationalPeriodView as number}
+                        glassItemBorderClasses={glassItemBorderClasses}
+                      />
+                    ) : (
+                      <Item variant="outline" className={glassItemBorderClasses}>
+                        <ItemContent>
+                          <ItemTitle>No ICS-201 snapshot</ItemTitle>
+                          <ItemDescription>
+                            This operational period does not include an ICS-201 snapshot.
+                          </ItemDescription>
+                        </ItemContent>
+                      </Item>
+                    )
+                  ) : (
                   <div className="space-y-3" data-ics201-tutorial="ics201-panel">
                     {ics201GeneratingFromFile && (
                       <div className="flex items-center gap-2 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-800 dark:border-blue-800/60 dark:bg-blue-500/10 dark:text-blue-200">
@@ -28736,6 +28898,7 @@ function App() {
                       </div>
                     )}
                   </div>
+                  )
                 )}
 
                 {activeTab === 'msel' && isInExerciseWorkspace && (
@@ -30705,10 +30868,10 @@ function App() {
 
                 {activeTab === 'form-ICS-203' && (isInIncidentWorkspace || isInExerciseWorkspace) && (
                   <Ics203WorkspacePanel
-                    form={ics203Form}
+                    form={displayIcs203Form}
                     setForm={setIcs203Form}
-                    versions={ics203Versions}
-                    canEdit={canEditIcs201Form}
+                    versions={displayIcs203Versions}
+                    canEdit={effectiveCanEditWorkspaceForms}
                     isLoading={isIcs203Loading}
                     isSaving={isIcs203Saving}
                     glassItemBorderClasses={glassItemBorderClasses}
@@ -30731,10 +30894,10 @@ function App() {
 
                 {activeTab === 'form-IAP' && isInIncidentWorkspace && (
                   <IapWorkspacePanel
-                    form={iapForm}
+                    form={displayIapForm}
                     setForm={setIapForm}
-                    versions={iapVersions}
-                    canEdit={canEditIcs201Form}
+                    versions={displayIapVersions}
+                    canEdit={effectiveCanEditWorkspaceForms}
                     isLoading={isIapLoading}
                     isSaving={isIapSaving}
                     glassItemBorderClasses={glassItemBorderClasses}
@@ -30756,10 +30919,10 @@ function App() {
 
                 {activeTab === 'form-ICS-202' && (isInIncidentWorkspace || isInExerciseWorkspace) && (
                   <Ics202WorkspacePanel
-                    form={ics202Form}
+                    form={displayIcs202Form}
                     setForm={setIcs202Form}
-                    versions={ics202Versions}
-                    canEdit={canEditIcs201Form}
+                    versions={displayIcs202Versions}
+                    canEdit={effectiveCanEditWorkspaceForms}
                     isLoading={isIcs202Loading}
                     isSaving={isIcs202Saving}
                     glassItemBorderClasses={glassItemBorderClasses}
@@ -30790,16 +30953,16 @@ function App() {
                         type="button"
                         size="sm"
                         variant="outline"
-                        disabled={!canEditIcs201Form || isIcs204Saving}
+                        disabled={!effectiveCanEditWorkspaceForms || isIcs204Saving}
                         onClick={() => void addIcs204Form()}
                       >
                         + Add ICS-204
                       </Button>
                     </div>
 
-                        {ics204Forms.map((form) => {
+                        {displayIcs204Forms.map((form) => {
                           const isFormOpen = expandedIcs204FormId === form.id
-                          const formVersions = ics204VersionsById[form.id] ?? []
+                          const formVersions = displayIcs204VersionsById[form.id] ?? []
                           const latestFormVersion = formVersions[formVersions.length - 1]
                           const isLatestFormSigned =
                             !!latestFormVersion && latestFormVersion.signatures.length > 0
@@ -30826,7 +30989,7 @@ function App() {
                           const isFormAssigned = !!ics204AssignedByFormId[form.id]
                           const ics204ListTitle = resolveIcs204ListTitle(form)
                           const assignedUnitEditable =
-                            canEditIcs201Form &&
+                            effectiveCanEditWorkspaceForms &&
                             !formIsLocked &&
                             !viewingPastFormVersion &&
                             !isDraftingFormSigned &&
@@ -30910,7 +31073,7 @@ function App() {
                                         </DropdownMenuItem>
                                       </DropdownMenuContent>
                                     </DropdownMenu>
-                                    {canEditIcs201Form ? (
+                                    {effectiveCanEditWorkspaceForms ? (
                                       <Button
                                         type="button"
                                         size="sm"
@@ -31144,7 +31307,7 @@ function App() {
                                           size="sm"
                                           variant="outline"
                                           className="h-7 gap-1 text-xs"
-                                          disabled={!canEditIcs201Form || isIcs204Saving}
+                                          disabled={!effectiveCanEditWorkspaceForms || isIcs204Saving}
                                           onClick={() => {
                                             if (isLatestFormSigned) {
                                               handleIcs204AppendVersion(form.id, form, [])
@@ -31202,7 +31365,7 @@ function App() {
                                     >
                                     <Ics204FormSections
                                       form={form}
-                                      canEdit={canEditIcs201Form}
+                                      canEdit={effectiveCanEditWorkspaceForms}
                                       formIsLocked={formIsLocked}
                                       isSaving={isIcs204Saving}
                                       glassItemBorderClasses={glassItemBorderClasses}
@@ -31930,6 +32093,15 @@ function App() {
                     }))}
                     isDrawingOnPrimaryMap={isDrawingWorkspaceSettingsOnMap}
                     onRestartMapDraw={restartWorkspaceSettingsLocationDraw}
+                    showOperationalPeriods={operationalPeriodsEnabled}
+                    isSupabaseEnabled={isSupabaseEnabled}
+                    startedOperationalPeriodCount={startedOperationalPeriodCount}
+                    workingOperationalPeriodNumber={workingOperationalPeriodNumber}
+                    operationalPeriods={operationalPeriods}
+                    isLoadingOperationalPeriods={isLoadingOperationalPeriods}
+                    isStartingOperationalPeriod={isStartingOperationalPeriod}
+                    operationalPeriodStartError={operationalPeriodStartError}
+                    onStartOperationalPeriod={handleStartOperationalPeriod}
                   />
                 )}
 

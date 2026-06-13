@@ -27,6 +27,7 @@ type UseIcs204WorkspaceFormsOptions = {
     forms: Ics204FormState[]
     versionsById: Record<string, Ics204Version[]>
   }) => void
+  reloadKey?: number
 }
 
 export function useIcs204WorkspaceForms({
@@ -35,6 +36,7 @@ export function useIcs204WorkspaceForms({
   userId,
   profileEmail,
   onLoaded,
+  reloadKey = 0,
 }: UseIcs204WorkspaceFormsOptions) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -80,7 +82,7 @@ export function useIcs204WorkspaceForms({
     return () => {
       cancelled = true
     }
-  }, [enabled, workspaceId])
+  }, [enabled, workspaceId, reloadKey])
 
   const createForm = useCallback(
     async (

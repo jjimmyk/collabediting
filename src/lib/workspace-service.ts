@@ -137,6 +137,8 @@ function mapAccessibleWorkspaceFields(row: {
   incident_complexity?: string | null
   has_sequential_workflow?: boolean | null
   sequential_workflow_type?: string | null
+  started_operational_period_count?: number | null
+  working_operational_period_number?: number | null
   metadata?: unknown
 }) {
   return {
@@ -144,6 +146,8 @@ function mapAccessibleWorkspaceFields(row: {
     incidentComplexity: row.incident_complexity ?? null,
     hasSequentialWorkflow: row.has_sequential_workflow ?? false,
     sequentialWorkflowType: row.sequential_workflow_type ?? null,
+    startedOperationalPeriodCount: row.started_operational_period_count ?? 0,
+    workingOperationalPeriodNumber: row.working_operational_period_number ?? 1,
     metadata: mapWorkspaceMetadata(row.metadata),
   }
 }
@@ -159,7 +163,7 @@ export async function fetchAccessibleWorkspaces(
     const { data, error } = await supabase
       .from('workspaces')
       .select(
-        'id, kind, legacy_id, name, region, summary, archived_at, workspace_format, incident_complexity, has_sequential_workflow, sequential_workflow_type, metadata'
+        'id, kind, legacy_id, name, region, summary, archived_at, workspace_format, incident_complexity, has_sequential_workflow, sequential_workflow_type, started_operational_period_count, working_operational_period_number, metadata'
       )
       .order('name')
 
@@ -199,6 +203,8 @@ export async function fetchAccessibleWorkspaces(
         incident_complexity,
         has_sequential_workflow,
         sequential_workflow_type,
+        started_operational_period_count,
+        working_operational_period_number,
         metadata
       )
     `
@@ -225,6 +231,8 @@ export async function fetchAccessibleWorkspaces(
             incident_complexity?: string | null
             has_sequential_workflow?: boolean | null
             sequential_workflow_type?: string | null
+            started_operational_period_count?: number | null
+            working_operational_period_number?: number | null
             metadata?: unknown
           }
         | {
@@ -239,6 +247,8 @@ export async function fetchAccessibleWorkspaces(
             incident_complexity?: string | null
             has_sequential_workflow?: boolean | null
             sequential_workflow_type?: string | null
+            started_operational_period_count?: number | null
+            working_operational_period_number?: number | null
             metadata?: unknown
           }[]
         | null

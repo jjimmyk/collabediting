@@ -38,6 +38,8 @@ export type AccessibleWorkspace = {
   incidentComplexity: string | null
   hasSequentialWorkflow: boolean
   sequentialWorkflowType: string | null
+  startedOperationalPeriodCount: number
+  workingOperationalPeriodNumber: number
   metadata: WorkspaceMetadataRecord
 }
 
@@ -66,6 +68,8 @@ export type DbWorkspace = {
   incident_complexity?: string | null
   has_sequential_workflow?: boolean | null
   sequential_workflow_type?: string | null
+  started_operational_period_count?: number | null
+  working_operational_period_number?: number | null
   metadata?: WorkspaceMetadataRecord | null
 }
 

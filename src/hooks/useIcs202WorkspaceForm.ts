@@ -23,6 +23,7 @@ type UseIcs202WorkspaceFormOptions = {
   profileEmail: string | null
   workspaceDefaults?: Partial<Ics202FormState>
   onLoaded: (payload: { form: Ics202FormState; versions: Ics202Version[] }) => void
+  reloadKey?: number
 }
 
 export function useIcs202WorkspaceForm({
@@ -32,6 +33,7 @@ export function useIcs202WorkspaceForm({
   profileEmail,
   workspaceDefaults,
   onLoaded,
+  reloadKey = 0,
 }: UseIcs202WorkspaceFormOptions) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -97,7 +99,7 @@ export function useIcs202WorkspaceForm({
     return () => {
       cancelled = true
     }
-  }, [authorColor, authorName, enabled, userId, workspaceDefaults, workspaceId])
+  }, [authorColor, authorName, enabled, userId, workspaceDefaults, workspaceId, reloadKey])
 
   const saveDraft = useCallback(
     async (
