@@ -13,6 +13,17 @@ export type WorkspaceRosterMember = {
   userId: string | null
 }
 
+export type WorkspaceMetadataRecord = {
+  category?: string
+  templateId?: string
+  relatedEventIds?: number[]
+  locationMethod?: string
+  geometrySummary?: string
+  aors?: string[]
+  address?: string
+  location?: [number, number]
+}
+
 export type AccessibleWorkspace = {
   workspaceId: string
   kind: WorkspaceKind
@@ -27,6 +38,7 @@ export type AccessibleWorkspace = {
   incidentComplexity: string | null
   hasSequentialWorkflow: boolean
   sequentialWorkflowType: string | null
+  metadata: WorkspaceMetadataRecord
 }
 
 export type WorkspacePermissions = {
@@ -54,6 +66,7 @@ export type DbWorkspace = {
   incident_complexity?: string | null
   has_sequential_workflow?: boolean | null
   sequential_workflow_type?: string | null
+  metadata?: WorkspaceMetadataRecord | null
 }
 
 export type DbWorkspaceMember = {

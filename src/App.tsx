@@ -202,6 +202,7 @@ import {
   setWorkspaceArchived,
   setWorkspacePositionEditIcs201,
   updateRosterMemberPositions,
+  updateWorkspace,
 } from '@/lib/workspace-service'
 import type {
   Ics204FormSectionDrafts,
@@ -529,6 +530,18 @@ import { useWorkspacePermissions } from '@/hooks/useWorkspacePermissions'
 import { patchIcs201DocumentForm } from '@/lib/ics201-service'
 import { PlanningPStepper } from '@/features/planning-p/PlanningPStepper'
 import { PLANNING_P_STEPS } from '@/features/planning-p/planning-p-steps'
+import { WorkspaceSettingsPage } from '@/features/workspace-settings/WorkspaceSettingsPage'
+import {
+  applyNameLocationDraftToWorkspace,
+  asWorkspaceLocationMethod,
+  metadataFromDraft,
+  mergeWorkspaceMetadataFromAccessible,
+  workspaceToNameLocationDraft,
+} from '@/features/workspace-settings/utils'
+import type {
+  WorkspaceLocationMethod,
+  WorkspaceNameLocationDraft,
+} from '@/features/workspace-settings/types'
 import {
   DEFAULT_INCIDENT_COMPLEXITY,
   getIncidentComplexityOptionsForWorkflow,
@@ -1068,6 +1081,11 @@ type IncidentListItem = {
   hasSequentialWorkflow?: boolean
   sequentialWorkflowType?: string | null
   archivedAt?: string | null
+  templateId?: string
+  locationMethod?: WorkspaceLocationMethod
+  geometrySummary?: string
+  address?: string
+  aors?: string[]
 }
 
 const INCIDENT_CATEGORY_OPTIONS = [
@@ -4000,6 +4018,7 @@ type LeftTab =
   | 'msel'
   | 'sitreps'
   | 'seerist'
+  | 'workspace-settings'
   | 'files'
   | `form-${string}`
 
@@ -6272,6 +6291,9 @@ function App() {
   const createIncidentMapViewRef = useRef<MapView | null>(null)
   const createIncidentDrawLayerRef = useRef<GraphicsLayer | null>(null)
   const createIncidentSketchViewModelRef = useRef<SketchViewModel | null>(null)
+  const workspaceSettingsSketchViewModelRef = useRef<SketchViewModel | null>(null)
+  const preserveWorkspaceSettingsGeometryRef = useRef(false)
+  const [isDrawingWorkspaceSettingsOnMap, setIsDrawingWorkspaceSettingsOnMap] = useState(false)
   const ics201SketchLayerRef = useRef<GraphicsLayer | null>(null)
   const ics201SketchViewModelRef = useRef<SketchViewModel | null>(null)
   const [isDrawingIcs201Polygon, setIsDrawingIcs201Polygon] = useState(false)
@@ -8528,6 +8550,12 @@ function App() {
   const [eventBusinessUnitFilters, setEventBusinessUnitFilters] = useState<string[]>([])
   const [isEventsSettingsOpen, setIsEventsSettingsOpen] = useState(false)
   const [isNotificationSettingsOpen, setIsNotificationSettingsOpen] = useState(false)
+  const [workspaceSettingsDraft, setWorkspaceSettingsDraft] =
+    useState<WorkspaceNameLocationDraft | null>(null)
+  const [workspaceSettingsKind, setWorkspaceSettingsKind] = useState<'incident' | 'exercise'>(
+    'incident'
+  )
+  const [isSavingWorkspaceSettings, setIsSavingWorkspaceSettings] = useState(false)
   const [isCreateHubNotificationOpen, setIsCreateHubNotificationOpen] = useState(false)
   const [hubNotificationRecipients, setHubNotificationRecipients] = useState<
     HubNotificationRecipient[]
@@ -10283,6 +10311,9 @@ function App() {
     if (tab === 'msel') return 'MSEL'
     if (tab === 'sitreps') return 'SITREPs'
     if (tab === 'seerist') return 'Seerist'
+    if (tab === 'workspace-settings') {
+      return isInExerciseWorkspace ? 'Exercise Settings' : 'Incident Settings'
+    }
     if (tab === 'form-ICS-204') return 'ICS-204 Assignment List'
     if (tab === 'form-ICS-202') return 'ICS-202 Incident Objectives'
     if (tab === 'form-IAP') return 'Incident Action Plan'
@@ -11125,43 +11156,62 @@ function App() {
         const existing = byId.get(workspace.legacyId)
         if (existing) {
           byId.set(workspace.legacyId, {
-            ...existing,
+            ...mergeWorkspaceMetadataFromAccessible(existing, workspace.metadata, {
+              name: workspace.name,
+              region: workspace.region,
+              summary: workspace.summary,
+              workspaceFormat: workspace.workspaceFormat,
+              incidentComplexity: workspace.incidentComplexity,
+              hasSequentialWorkflow: workspace.hasSequentialWorkflow,
+              sequentialWorkflowType: workspace.sequentialWorkflowType,
+            }),
             workspaceId: workspace.workspaceId,
-            name: workspace.name,
-            region: workspace.region ?? existing.region,
-            summary: workspace.summary ?? existing.summary,
             archivedAt: workspace.archivedAt ?? existing.archivedAt ?? null,
-            workspaceFormat: workspace.workspaceFormat ?? existing.workspaceFormat,
-            incidentComplexity: workspace.incidentComplexity ?? existing.incidentComplexity,
-            hasSequentialWorkflow:
-              workspace.hasSequentialWorkflow || existing.hasSequentialWorkflow === true,
-            sequentialWorkflowType:
-              workspace.sequentialWorkflowType ?? existing.sequentialWorkflowType ?? null,
           })
           continue
         }
-        byId.set(workspace.legacyId, {
-          id: workspace.legacyId,
-          workspaceId: workspace.workspaceId,
-          name: workspace.name,
-          type: 'Incident Workspace',
-          category: 'Special Event',
-          status: 'Active',
-          severity: 'Medium',
-          region: workspace.region ?? 'Unassigned AOR',
-          location: [-98.5795, 39.8283],
-          lead: profileEmail ?? 'You',
-          startedAt: nowLabel,
-          lastUpdate: nowLabel,
-          summary: workspace.summary ?? '',
-          resourcesCommitted: 'Initial responders mobilizing',
-          relatedEventIds: [],
-          archivedAt: workspace.archivedAt ?? null,
-          workspaceFormat: workspace.workspaceFormat ?? undefined,
-          incidentComplexity: workspace.incidentComplexity ?? undefined,
-          hasSequentialWorkflow: workspace.hasSequentialWorkflow,
-          sequentialWorkflowType: workspace.sequentialWorkflowType ?? undefined,
-        })
+        byId.set(
+          workspace.legacyId,
+          mergeWorkspaceMetadataFromAccessible(
+            {
+              id: workspace.legacyId,
+              workspaceId: workspace.workspaceId,
+              name: workspace.name,
+              type: 'Incident Workspace',
+              category: workspace.metadata.category ?? 'Special Event',
+              status: 'Active',
+              severity: 'Medium',
+              region: workspace.region ?? 'Unassigned AOR',
+              location: workspace.metadata.location ?? [-98.5795, 39.8283],
+              lead: profileEmail ?? 'You',
+              startedAt: nowLabel,
+              lastUpdate: nowLabel,
+              summary: workspace.summary ?? '',
+              resourcesCommitted: 'Initial responders mobilizing',
+              relatedEventIds: workspace.metadata.relatedEventIds ?? [],
+              archivedAt: workspace.archivedAt ?? null,
+              workspaceFormat: workspace.workspaceFormat ?? undefined,
+              incidentComplexity: workspace.incidentComplexity ?? undefined,
+              hasSequentialWorkflow: workspace.hasSequentialWorkflow,
+              sequentialWorkflowType: workspace.sequentialWorkflowType ?? undefined,
+              templateId: workspace.metadata.templateId,
+              locationMethod: asWorkspaceLocationMethod(workspace.metadata.locationMethod),
+              geometrySummary: workspace.metadata.geometrySummary,
+              address: workspace.metadata.address,
+              aors: workspace.metadata.aors,
+            } satisfies IncidentListItem,
+            workspace.metadata,
+            {
+              name: workspace.name,
+              region: workspace.region,
+              summary: workspace.summary,
+              workspaceFormat: workspace.workspaceFormat,
+              incidentComplexity: workspace.incidentComplexity,
+              hasSequentialWorkflow: workspace.hasSequentialWorkflow,
+              sequentialWorkflowType: workspace.sequentialWorkflowType,
+            }
+          )
+        )
       }
     }
     return sortIncidentsBySeverity(
@@ -11268,35 +11318,59 @@ function App() {
         const existing = byId.get(workspace.legacyId)
         if (existing) {
           byId.set(workspace.legacyId, {
-            ...existing,
+            ...mergeWorkspaceMetadataFromAccessible(existing, workspace.metadata, {
+              name: workspace.name,
+              region: workspace.region,
+              summary: workspace.summary,
+              workspaceFormat: workspace.workspaceFormat,
+              incidentComplexity: workspace.incidentComplexity,
+              hasSequentialWorkflow: workspace.hasSequentialWorkflow,
+              sequentialWorkflowType: workspace.sequentialWorkflowType,
+            }),
             workspaceId: workspace.workspaceId,
-            name: workspace.name,
-            region: workspace.region ?? existing.region,
-            summary: workspace.summary ?? existing.summary,
-            workspaceFormat: workspace.workspaceFormat ?? existing.workspaceFormat,
-            incidentComplexity: workspace.incidentComplexity ?? existing.incidentComplexity,
+            archivedAt: workspace.archivedAt ?? existing.archivedAt ?? null,
           })
           continue
         }
-        byId.set(workspace.legacyId, {
-          id: workspace.legacyId,
-          workspaceId: workspace.workspaceId,
-          name: workspace.name,
-          type: 'Exercise Workspace',
-          category: 'Exercise',
-          status: 'Active',
-          severity: 'Medium',
-          region: workspace.region ?? 'Unassigned AOR',
-          location: [-98.5795, 39.8283],
-          lead: profileEmail ?? 'You',
-          startedAt: nowLabel,
-          lastUpdate: nowLabel,
-          summary: workspace.summary ?? '',
-          resourcesCommitted: 'Exercise planning cell forming',
-          relatedEventIds: [],
-          workspaceFormat: workspace.workspaceFormat ?? undefined,
-          incidentComplexity: workspace.incidentComplexity ?? undefined,
-        })
+        byId.set(
+          workspace.legacyId,
+          mergeWorkspaceMetadataFromAccessible(
+            {
+              id: workspace.legacyId,
+              workspaceId: workspace.workspaceId,
+              name: workspace.name,
+              type: 'Exercise Workspace',
+              category: workspace.metadata.category ?? 'Exercise',
+              status: 'Active',
+              severity: 'Medium',
+              region: workspace.region ?? 'Unassigned AOR',
+              location: workspace.metadata.location ?? [-98.5795, 39.8283],
+              lead: profileEmail ?? 'You',
+              startedAt: nowLabel,
+              lastUpdate: nowLabel,
+              summary: workspace.summary ?? '',
+              resourcesCommitted: 'Exercise planning cell forming',
+              relatedEventIds: [],
+              workspaceFormat: workspace.workspaceFormat ?? undefined,
+              incidentComplexity: workspace.incidentComplexity ?? undefined,
+              templateId: workspace.metadata.templateId,
+              locationMethod: asWorkspaceLocationMethod(workspace.metadata.locationMethod),
+              geometrySummary: workspace.metadata.geometrySummary,
+              address: workspace.metadata.address,
+              aors: workspace.metadata.aors,
+            } satisfies IncidentListItem,
+            workspace.metadata,
+            {
+              name: workspace.name,
+              region: workspace.region,
+              summary: workspace.summary,
+              workspaceFormat: workspace.workspaceFormat,
+              incidentComplexity: workspace.incidentComplexity,
+              hasSequentialWorkflow: workspace.hasSequentialWorkflow,
+              sequentialWorkflowType: workspace.sequentialWorkflowType,
+            }
+          )
+        )
       }
     }
     return sortIncidentsBySeverity([...byId.values()])
@@ -11606,6 +11680,12 @@ function App() {
   }, [activeWorkspaceRosterKey])
   useEffect(() => {
     if (activeTab === 'msel' && !isInExerciseWorkspace) {
+      setActiveTab('sitreps')
+    } else if (
+      activeTab === 'workspace-settings' &&
+      !isInIncidentWorkspace &&
+      !isInExerciseWorkspace
+    ) {
       setActiveTab('sitreps')
     } else if (
       !isInIncidentWorkspace &&
@@ -12706,6 +12786,145 @@ function App() {
     isInIncidentWorkspace || isInExerciseWorkspace ? activeWorkspaceSupabaseId : null,
     isOrgAdmin
   )
+  useEffect(() => {
+    const cleanupWorkspaceSettingsSketch = () => {
+      setIsDrawingWorkspaceSettingsOnMap(false)
+      const sketchViewModel = workspaceSettingsSketchViewModelRef.current
+      if (sketchViewModel) {
+        try {
+          sketchViewModel.cancel()
+          sketchViewModel.destroy()
+        } catch {
+          /* ignore */
+        }
+        workspaceSettingsSketchViewModelRef.current = null
+      }
+    }
+
+    if (activeTab !== 'workspace-settings' || !workspaceSettingsDraft || !canEditIcs201Form) {
+      cleanupWorkspaceSettingsSketch()
+      if (activeTab !== 'workspace-settings' && !drawMapTarget) {
+        drawLocationLayerRef.current?.removeAll()
+        drawLocationGraphicRef.current = null
+      }
+      return
+    }
+
+    const locationMethod = workspaceSettingsDraft.locationMethod
+    if (locationMethod !== 'draw-point' && locationMethod !== 'draw-polygon') {
+      cleanupWorkspaceSettingsSketch()
+      return
+    }
+
+    setDrawMapTarget(null)
+    setIsMapVisible(true)
+
+    const view = mapViewRef.current
+    const layer = drawLocationLayerRef.current
+    if (!view || !layer) {
+      cleanupWorkspaceSettingsSketch()
+      return
+    }
+
+    let cancelled = false
+    let sketchViewModel: SketchViewModel | null = null
+
+    const updateDraftFromMapGeometry = (
+      geometrySummary: string,
+      latitude: number,
+      longitude: number
+    ) => {
+      setWorkspaceSettingsDraft((previous) =>
+        previous
+          ? {
+              ...previous,
+              geometrySummary,
+              latitude: latitude.toFixed(5),
+              longitude: longitude.toFixed(5),
+            }
+          : previous
+      )
+    }
+
+    const start = async () => {
+      try {
+        await view.when()
+      } catch {
+        return
+      }
+      if (cancelled) {
+        return
+      }
+
+      sketchViewModel = new SketchViewModel({
+        view,
+        layer,
+        updateOnGraphicClick: true,
+      })
+      workspaceSettingsSketchViewModelRef.current = sketchViewModel
+      setIsDrawingWorkspaceSettingsOnMap(true)
+
+      sketchViewModel.on('create', (event) => {
+        if (event.state !== 'complete' || !event.graphic?.geometry) {
+          return
+        }
+
+        layer.removeAll()
+        layer.add(event.graphic)
+
+        const geometry = event.graphic.geometry
+        if (geometry.type === 'point') {
+          const point = geometry as Point
+          if (point.latitude == null || point.longitude == null) {
+            updateDraftFromMapGeometry('Point selected', 0, 0)
+            return
+          }
+          updateDraftFromMapGeometry(
+            `Point selected at ${point.latitude.toFixed(5)}, ${point.longitude.toFixed(5)}`,
+            point.latitude,
+            point.longitude
+          )
+          return
+        }
+
+        if (geometry.type === 'polygon') {
+          const centroid = geometry.extent?.center
+          if (centroid?.latitude != null && centroid.longitude != null) {
+            updateDraftFromMapGeometry(
+              `Polygon selected near ${centroid.latitude.toFixed(5)}, ${centroid.longitude.toFixed(5)}`,
+              centroid.latitude,
+              centroid.longitude
+            )
+          } else {
+            setWorkspaceSettingsDraft((previous) =>
+              previous ? { ...previous, geometrySummary: 'Polygon selected' } : previous
+            )
+          }
+        }
+      })
+
+      if (preserveWorkspaceSettingsGeometryRef.current) {
+        preserveWorkspaceSettingsGeometryRef.current = false
+        return
+      }
+
+      if (workspaceSettingsDraft.geometrySummary) {
+        preserveWorkspaceSettingsGeometryRef.current = true
+        return
+      }
+
+      sketchViewModel.cancel()
+      layer.removeAll()
+      void sketchViewModel.create(locationMethod === 'draw-point' ? 'point' : 'polygon')
+    }
+
+    void start()
+
+    return () => {
+      cancelled = true
+      cleanupWorkspaceSettingsSketch()
+    }
+  }, [activeTab, canEditIcs201Form, workspaceSettingsDraft?.locationMethod])
   const activePositionPermissions = isSupabaseEnabled
     ? activeWorkspacePositionPermissions
     : activeWorkspaceRosterKey !== null
@@ -13669,6 +13888,136 @@ function App() {
     )
     liveIcs201FormRef.current = null
     applySitrepScope(`exercise-${exercise.id}`, { persistCurrent: false })
+  }
+  const syncWorkspaceSettingsDraft = () => {
+    const kind = isInExerciseWorkspace ? 'exercise' : 'incident'
+    const workspace = kind === 'incident' ? activeIncidentWorkspace : activeExerciseWorkspace
+    if (!workspace) {
+      return
+    }
+    const accessible = accessibleWorkspaces.find(
+      (entry) =>
+        entry.kind === kind &&
+        (entry.legacyId === workspace.id ||
+          (workspace.workspaceId != null && entry.workspaceId === workspace.workspaceId))
+    )
+    setWorkspaceSettingsKind(kind)
+    const draft = workspaceToNameLocationDraft(workspace, accessible?.metadata)
+    preserveWorkspaceSettingsGeometryRef.current = Boolean(
+      draft.geometrySummary &&
+        (draft.locationMethod === 'draw-point' || draft.locationMethod === 'draw-polygon')
+    )
+    setWorkspaceSettingsDraft(draft)
+  }
+  const restartWorkspaceSettingsLocationDraw = () => {
+    if (!workspaceSettingsDraft) {
+      return
+    }
+    const method = workspaceSettingsDraft.locationMethod
+    if (method !== 'draw-point' && method !== 'draw-polygon') {
+      return
+    }
+    preserveWorkspaceSettingsGeometryRef.current = false
+    drawLocationLayerRef.current?.removeAll()
+    drawLocationGraphicRef.current = null
+    setWorkspaceSettingsDraft((previous) =>
+      previous ? { ...previous, geometrySummary: '', latitude: '', longitude: '' } : previous
+    )
+    const sketchViewModel = workspaceSettingsSketchViewModelRef.current
+    if (sketchViewModel) {
+      sketchViewModel.cancel()
+      void sketchViewModel.create(method === 'draw-point' ? 'point' : 'polygon')
+    }
+  }
+  const openWorkspaceSettingsTab = () => {
+    syncWorkspaceSettingsDraft()
+    setActiveTab('workspace-settings')
+  }
+  const handleWorkspaceSettingsSave = async () => {
+    if (!workspaceSettingsDraft) {
+      return
+    }
+    const kind = workspaceSettingsKind
+    const workspace = kind === 'incident' ? activeIncidentWorkspace : activeExerciseWorkspace
+    if (!workspace) {
+      return
+    }
+    if (!canEditIcs201Form) {
+      toast.error('You do not have permission to edit workspace settings.')
+      return
+    }
+    if (!workspaceSettingsDraft.name.trim()) {
+      toast.error('Workspace name is required.')
+      return
+    }
+
+    setIsSavingWorkspaceSettings(true)
+    try {
+      const updated = applyNameLocationDraftToWorkspace(
+        workspaceSettingsDraft,
+        workspace,
+        kind
+      ) as IncidentListItem
+      const metadata = metadataFromDraft(workspaceSettingsDraft)
+
+      if (isSupabaseEnabled) {
+        const workspaceId =
+          updated.workspaceId ??
+          findAccessibleWorkspaceUuid(accessibleWorkspaces, kind, updated.id) ??
+          (await resolveWorkspaceId(kind, updated.id))
+        if (workspaceId) {
+          const accessToken = await getAccessToken()
+          if (!accessToken) {
+            toast.error('Sign in required to save workspace settings.')
+            return
+          }
+          const result = await updateWorkspace({
+            accessToken,
+            workspaceId,
+            name: updated.name,
+            region: updated.region,
+            summary: updated.summary,
+            workspaceFormat: updated.workspaceFormat ?? null,
+            incidentComplexity: updated.incidentComplexity ?? null,
+            metadata,
+          })
+          if (!result.ok) {
+            toast.error(result.message)
+            return
+          }
+          await refreshAccess()
+        }
+      }
+
+      if (kind === 'incident') {
+        setIncidentList((previous) =>
+          previous.map((item) => (item.id === updated.id ? updated : item))
+        )
+      } else {
+        setExerciseList((previous) =>
+          previous.map((item) => (item.id === updated.id ? updated : item))
+        )
+      }
+
+      if (
+        (kind === 'incident' && activeIncidentWorkspaceId === updated.id) ||
+        (kind === 'exercise' && activeExerciseWorkspaceId === updated.id)
+      ) {
+        setIcs201Form((previous) =>
+          cloneIcs201FormState({
+            ...previous,
+            incidentName: updated.name,
+            currentSituationSummary: updated.summary,
+            jurisdiction: updated.region,
+          })
+        )
+      }
+
+      toast.success('Workspace settings saved.')
+      syncWorkspaceSettingsDraft()
+    } finally {
+      setIsSavingWorkspaceSettings(false)
+    }
   }
   useEffect(() => {
     if (!isSupabaseEnabled || accessibleWorkspaces.length === 0 || hasHandledInviteRedirectRef.current) {
@@ -21607,6 +21956,42 @@ function App() {
                         </TooltipContent>
                       </Tooltip>
                     )}
+                    {!isCompactPanelTabs &&
+                      (isInIncidentWorkspace || isInExerciseWorkspace) && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              type="button"
+                              size="icon"
+                              variant={
+                                isGlassMode
+                                  ? 'outline'
+                                  : activeTab === 'workspace-settings'
+                                    ? 'default'
+                                    : 'outline'
+                              }
+                              className={selectedGlassTabClasses(
+                                activeTab === 'workspace-settings'
+                              )}
+                              onClick={openWorkspaceSettingsTab}
+                              aria-label={
+                                isInExerciseWorkspace
+                                  ? 'Open Exercise Settings tab'
+                                  : 'Open Incident Settings tab'
+                              }
+                              data-pratus-context-id="tab:workspace-settings"
+                              data-pratus-context-label={
+                                isInExerciseWorkspace ? 'Exercise Settings' : 'Incident Settings'
+                              }
+                            >
+                              <Settings className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent side="bottom" sideOffset={6}>
+                            {isInExerciseWorkspace ? 'Exercise Settings' : 'Incident Settings'}
+                          </TooltipContent>
+                        </Tooltip>
+                      )}
                   </div>
                 </TooltipProvider>
                 <div className="flex items-center gap-2">
@@ -21723,6 +22108,7 @@ function App() {
                     activeTab === 'exercises' ||
                     activeTab === 'events' ||
                     isEventsSettingsOpen ||
+                    activeTab === 'workspace-settings' ||
                     activeTab === 'notifications' ||
                     isNotificationSettingsOpen ||
                     activeTab === 'resources' ||
@@ -21776,6 +22162,8 @@ function App() {
                   {activeTab === 'msel' && 'MSEL'}
                   {activeTab === 'sitreps' && null}
                   {activeTab === 'seerist' && 'Seerist'}
+                  {activeTab === 'workspace-settings' &&
+                    (isInExerciseWorkspace ? 'Exercise Settings' : 'Incident Settings')}
                   {activeTab === 'files' && 'Incident Files'}
                   {activeTab === 'form-ICS-204' && 'ICS-204 Assignment List'}
                   {activeTab === 'form-IAP' && 'Incident Action Plan'}
@@ -31521,6 +31909,28 @@ function App() {
                       </Item>
                     )}
                   </div>
+                )}
+
+                {activeTab === 'workspace-settings' && workspaceSettingsDraft && (
+                  <WorkspaceSettingsPage
+                    kind={workspaceSettingsKind}
+                    draft={workspaceSettingsDraft}
+                    onDraftChange={setWorkspaceSettingsDraft}
+                    onSave={() => void handleWorkspaceSettingsSave()}
+                    onCancel={syncWorkspaceSettingsDraft}
+                    canEdit={canEditIcs201Form}
+                    isSaving={isSavingWorkspaceSettings}
+                    eventList={eventList.map((event) => ({
+                      id: event.id,
+                      name: event.name,
+                    }))}
+                    femaAors={femaAors.map((aor) => ({
+                      id: String(aor.id),
+                      name: aor.name,
+                    }))}
+                    isDrawingOnPrimaryMap={isDrawingWorkspaceSettingsOnMap}
+                    onRestartMapDraw={restartWorkspaceSettingsLocationDraw}
+                  />
                 )}
 
                 {activeTab === 'files' && (

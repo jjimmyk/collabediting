@@ -16,9 +16,11 @@ import type {
   DbWorkspaceMember,
   UserProfile,
   WorkspaceKind,
+  WorkspaceMetadataRecord,
   WorkspacePermissions,
   WorkspaceRosterMember,
 } from '@/lib/workspace-types'
+import type { WorkspaceLocationMethod } from '@/features/workspace-settings/types'
 
 export type ResolvedWorkspacePermissions = WorkspacePermissions
 
@@ -84,17 +86,65 @@ export async function activatePendingInvites(): Promise<void> {
   await supabase.rpc('activate_my_invites')
 }
 
+function isWorkspaceLocationMethod(value: string): value is WorkspaceLocationMethod {
+  return (
+    value === '' ||
+    value === 'draw-point' ||
+    value === 'draw-polygon' ||
+    value === 'enter-coordinates' ||
+    value === 'enter-address'
+  )
+}
+
+function mapWorkspaceMetadata(value: unknown): WorkspaceMetadataRecord {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return {}
+  }
+  const record = value as Record<string, unknown>
+  const locationRaw = record.location
+  const location =
+    Array.isArray(locationRaw) &&
+    locationRaw.length === 2 &&
+    typeof locationRaw[0] === 'number' &&
+    typeof locationRaw[1] === 'number'
+      ? ([locationRaw[0], locationRaw[1]] as [number, number])
+      : undefined
+  const locationMethodRaw =
+    typeof record.locationMethod === 'string' ? record.locationMethod : undefined
+
+  return {
+    category: typeof record.category === 'string' ? record.category : undefined,
+    templateId: typeof record.templateId === 'string' ? record.templateId : undefined,
+    relatedEventIds: Array.isArray(record.relatedEventIds)
+      ? record.relatedEventIds.filter((entry): entry is number => typeof entry === 'number')
+      : undefined,
+    locationMethod:
+      locationMethodRaw && isWorkspaceLocationMethod(locationMethodRaw)
+        ? locationMethodRaw
+        : undefined,
+    geometrySummary:
+      typeof record.geometrySummary === 'string' ? record.geometrySummary : undefined,
+    aors: Array.isArray(record.aors)
+      ? record.aors.filter((entry): entry is string => typeof entry === 'string')
+      : undefined,
+    address: typeof record.address === 'string' ? record.address : undefined,
+    location,
+  }
+}
+
 function mapAccessibleWorkspaceFields(row: {
   workspace_format?: string | null
   incident_complexity?: string | null
   has_sequential_workflow?: boolean | null
   sequential_workflow_type?: string | null
+  metadata?: unknown
 }) {
   return {
     workspaceFormat: row.workspace_format ?? null,
     incidentComplexity: row.incident_complexity ?? null,
     hasSequentialWorkflow: row.has_sequential_workflow ?? false,
     sequentialWorkflowType: row.sequential_workflow_type ?? null,
+    metadata: mapWorkspaceMetadata(row.metadata),
   }
 }
 
@@ -109,7 +159,7 @@ export async function fetchAccessibleWorkspaces(
     const { data, error } = await supabase
       .from('workspaces')
       .select(
-        'id, kind, legacy_id, name, region, summary, archived_at, workspace_format, incident_complexity, has_sequential_workflow, sequential_workflow_type'
+        'id, kind, legacy_id, name, region, summary, archived_at, workspace_format, incident_complexity, has_sequential_workflow, sequential_workflow_type, metadata'
       )
       .order('name')
 
@@ -148,7 +198,8 @@ export async function fetchAccessibleWorkspaces(
         workspace_format,
         incident_complexity,
         has_sequential_workflow,
-        sequential_workflow_type
+        sequential_workflow_type,
+        metadata
       )
     `
     )
@@ -174,6 +225,7 @@ export async function fetchAccessibleWorkspaces(
             incident_complexity?: string | null
             has_sequential_workflow?: boolean | null
             sequential_workflow_type?: string | null
+            metadata?: unknown
           }
         | {
             id: string
@@ -187,6 +239,7 @@ export async function fetchAccessibleWorkspaces(
             incident_complexity?: string | null
             has_sequential_workflow?: boolean | null
             sequential_workflow_type?: string | null
+            metadata?: unknown
           }[]
         | null
       const workspace = Array.isArray(workspaceRaw) ? workspaceRaw[0] : workspaceRaw
@@ -575,6 +628,56 @@ export async function createWorkspace(params: {
     return {
       ok: false,
       message: payload.error ?? 'Could not create workspace.',
+    }
+  }
+
+  return { ok: true, workspace: payload.workspace }
+}
+
+export type UpdatedWorkspace = CreatedWorkspace & {
+  metadata: WorkspaceMetadataRecord
+}
+
+export async function updateWorkspace(params: {
+  accessToken: string
+  workspaceId: string
+  name: string
+  region?: string | null
+  summary?: string | null
+  workspaceFormat?: string | null
+  incidentComplexity?: string | null
+  metadata?: WorkspaceMetadataRecord | null
+}): Promise<{ ok: true; workspace: UpdatedWorkspace } | { ok: false; message: string }> {
+  if (!isSupabaseConfigured) {
+    return { ok: false, message: 'Supabase is not configured.' }
+  }
+
+  const response = await fetch('/api/update-workspace', {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${params.accessToken}`,
+    },
+    body: JSON.stringify({
+      workspaceId: params.workspaceId,
+      name: params.name,
+      region: params.region,
+      summary: params.summary,
+      workspaceFormat: params.workspaceFormat,
+      incidentComplexity: params.incidentComplexity,
+      metadata: params.metadata,
+    }),
+  })
+
+  const payload = (await response.json().catch(() => ({}))) as {
+    error?: string
+    workspace?: UpdatedWorkspace
+  }
+
+  if (!response.ok || !payload.workspace) {
+    return {
+      ok: false,
+      message: payload.error ?? 'Could not update workspace.',
     }
   }
 
