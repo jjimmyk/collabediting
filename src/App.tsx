@@ -21264,11 +21264,11 @@ function App() {
           </div>
         </div>
       </div>
-      <div className="absolute inset-0 flex overflow-hidden">
+      <div className="absolute top-14 bottom-0 left-0 right-0 flex overflow-hidden">
       {isPlanningPStepperVisible && (
         <aside
           className={cn(
-            'absolute top-14 left-0 z-20 h-[calc(100%-3.5rem)] w-56 shrink-0 border-r shadow-lg backdrop-blur',
+            'relative z-10 h-full w-56 shrink-0 border-r shadow-lg backdrop-blur',
             glassPanelClasses,
             !isGlassMode && 'bg-background/95 supports-[backdrop-filter]:bg-background/80'
           )}
@@ -21281,12 +21281,7 @@ function App() {
           />
         </aside>
       )}
-      <div
-        className={cn(
-          'relative min-w-0 flex-1 overflow-hidden transition-[width,padding] duration-300',
-          isPlanningPStepperVisible && 'pl-56'
-        )}
-      >
+      <div className="relative min-h-0 min-w-0 flex-1 overflow-hidden">
       <div
         ref={mapContainerRef}
         className={cn(
@@ -21298,15 +21293,14 @@ function App() {
       <div
         ref={leftPanelRef}
         className={cn(
-          'absolute top-14 z-10 h-[calc(100%-3.5rem)] min-w-0 transition-[width,left] duration-300',
-          isPlanningPStepperVisible ? 'left-56' : 'left-0',
+          'absolute top-0 z-10 h-full min-w-0 transition-[width,left,right] duration-300',
           isObjectivesOpen
             ? isMapVisible
               ? panelWidthMode === 'one-half'
                 ? 'w-[50vw] max-w-[50vw]'
                 : 'w-[33.333vw] max-w-[33.333vw]'
-              : 'w-full max-w-full'
-            : 'w-14'
+              : 'left-0 right-0'
+            : 'left-0 w-14'
         )}
       >
       <Collapsible
@@ -32402,8 +32396,8 @@ function App() {
             'z-30 shrink-0 border-l transition-[width] duration-300',
             glassPanelClasses,
             isMapVisible
-              ? 'absolute top-14 right-0 h-[calc(100%-3.5rem)] w-[33.333vw] min-w-[33.333vw]'
-              : 'mt-14 h-[calc(100%-3.5rem)] w-[33.333vw] min-w-[33.333vw]'
+              ? 'absolute top-0 right-0 h-full w-[33.333vw] min-w-[33.333vw]'
+              : 'h-full w-[33.333vw] min-w-[33.333vw]'
           )}
         >
           <div
