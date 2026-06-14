@@ -19,10 +19,12 @@ import { Item, ItemActions, ItemContent, ItemTitle } from '@/components/ui/item'
 import { AssetListHeaderRow, ASSET_LIST_ROW_GRID_CLASS } from '@/features/resources/AssetListHeaderRow'
 import { AssetStatusIndicator } from '@/features/resources/AssetStatusIndicator'
 import { AlmisDataSourceIcon } from '@/features/resources/AlmisDataSourceIcon'
-import type { ResourceCostUnitType, ResourceListItemData } from '@/features/resources/types'
+import type { AssetWorkspaceOption, ResourceCostUnitType, ResourceListItemData } from '@/features/resources/types'
+import { AssetWorkspaceAssignmentSelect } from '@/features/resources/AssetWorkspaceAssignmentSelect'
 import {
   formatResourceCostPerUnit,
   formatResourceCostUnitType,
+  getResourceWorkspaceAssignmentLabel,
 } from '@/features/resources/utils'
 import { cn } from '@/lib/utils'
 
@@ -38,6 +40,8 @@ type ResourceListItemCardProps = {
   onFocusMap?: () => void
   onSave?: (resource: ResourceListItemData) => void
   showMapAction?: boolean
+  workspaceOptions?: AssetWorkspaceOption[]
+  onAssignmentChange?: (workspaceId: string | null) => void
 }
 
 const COST_UNIT_TYPE_OPTIONS: ResourceCostUnitType[] = ['per day', 'per hour', 'to purchase']
@@ -92,6 +96,8 @@ export function ResourceListItemCard({
   onFocusMap,
   onSave,
   showMapAction = true,
+  workspaceOptions = [],
+  onAssignmentChange,
 }: ResourceListItemCardProps) {
   const [internalOpen, setInternalOpen] = useState(defaultOpen)
   const [isEditing, setIsEditing] = useState(false)
@@ -149,7 +155,6 @@ export function ResourceListItemCard({
       opcon: resource.opcon,
       unitType: resource.unitType,
       unitName: resource.unitName,
-      assignedIncidentName: draft.assignedIncidentName?.trim() || null,
       quantity: Number(draft.quantity) || 0,
       costPerUnit: Number(draft.costPerUnit) || 0,
     })
@@ -425,17 +430,20 @@ export function ResourceListItemCard({
               </div>
               <div className="col-span-2 rounded-md border bg-muted/20 p-3">
                 <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  Incident Assignment Details
+                  Workspace Assignment
                 </p>
                 <div className="grid grid-cols-2 gap-2">
-                  <div className="col-span-2">
-                    <IncidentAssignmentSubfield
-                      label="Assigned to Incident:"
-                      isEditing={isEditing}
-                      value={activeResource.assignedIncidentName ?? ''}
-                      field="assignedIncidentName"
-                      onRenderInput={renderEditableInput}
-                    />
+                  <div className="col-span-2 space-y-1">
+                    <ResourceFieldLabel>Assigned Workspace:</ResourceFieldLabel>
+                    {onAssignmentChange ? (
+                      <AssetWorkspaceAssignmentSelect
+                        value={activeResource.assignedWorkspaceId}
+                        options={workspaceOptions}
+                        onChange={onAssignmentChange}
+                      />
+                    ) : (
+                      <p>{getResourceWorkspaceAssignmentLabel(activeResource) || 'Unassigned'}</p>
+                    )}
                   </div>
                   <IncidentAssignmentSubfield
                     label="Current Op Period:"

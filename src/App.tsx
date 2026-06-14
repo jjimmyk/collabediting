@@ -483,10 +483,14 @@ import { ResourceListItemCard } from '@/features/resources/ResourceListItemCard'
 import { AssetListHeaderRow } from '@/features/resources/AssetListHeaderRow'
 import type { ResourceListItemData } from '@/features/resources/types'
 import {
+  buildAssetWorkspaceOptions,
   formatResourceCostPerUnit,
   formatResourceCostUnitType,
   getResourceIncidentAssignmentLabel,
 } from '@/features/resources/utils'
+import { getAssetMapKey } from '@/data/hub-asset-catalog'
+import { useWorkspaceAssetAssignments } from '@/hooks/useWorkspaceAssetAssignments'
+import { WorkspaceAssignedAssetsPanel } from '@/features/resources/WorkspaceAssignedAssetsPanel'
 import { isIncidentArchived } from '@/lib/incident-archive'
 import { WorkspacePositionRosterTable } from '@/features/roster/WorkspacePositionRosterTable'
 import { WorkspaceOrgChartRoster } from '@/features/roster/WorkspaceOrgChartRoster'
@@ -818,47 +822,7 @@ const NOTIFICATION_TASK_RESOURCE_CATALOG: Record<string, NotificationTaskResourc
     ],
 }
 
-type ResourceCostUnitType = 'per day' | 'per hour' | 'to purchase'
-type ResourceDeploymentKind = 'available' | 'incident' | 'exercise'
-
-type ResourceItem = {
-  id: number
-  name: string
-  assetStatus: 'FMC' | 'PMC' | 'NMC'
-  assetStatusUpdatedAt: string
-  owner: string
-  status: 'Assigned' | 'Staged' | 'Available'
-  type: string
-  teamLead: string
-  eta: string
-  location: string
-  notes: string
-  mapLocation: [number, number]
-  currentLocation: string
-  datetimeOrdered: string
-  opcon: string
-  tacon: string
-  pointOfContact: string
-  owningOrganization: string
-  quantity: number
-  unitType: string
-  unitName: string
-  hullTailNumber: string
-  symbology: string
-  latitude: string
-  longitude: string
-  capabilities: string
-  currentOpPeriod: string
-  nextOpPeriod: string
-  currentOpPeriodAssignment: string
-  nextOpPeriodAssignment: string
-  checkInStatus: string
-  costUnitType: ResourceCostUnitType
-  costPerUnit: number
-  deploymentKind: ResourceDeploymentKind
-  assignedIncidentName: string | null
-  assignedExerciseName: string | null
-}
+type ResourceItem = ResourceListItemData
 
 const RESOURCE_REQUEST_FILTER_FIELD_OPTIONS = [
   { id: 'incidentName', label: 'Incident Name' },
@@ -8410,130 +8374,6 @@ function App() {
       location: [-90.82, 30.02],
     },
   ])
-  const [resources, setResources] = useState<ResourceItem[]>([
-    {
-      id: 1,
-      name: 'CGC Forward',
-      assetStatus: 'FMC',
-      assetStatusUpdatedAt: '06/08/2026 08:45 UTC',
-      owner: 'USCG Sector Virginia',
-      status: 'Assigned',
-      type: 'Medium Endurance Cutter (WMEC)',
-      teamLead: 'CDR J. Whitfield',
-      eta: 'On-site',
-      location: 'Hampton Roads — Chesapeake Bay patrol area',
-      notes:
-        'USCGC Forward (WMEC-911) providing port and waterway security, maritime domain awareness, and hurricane sortie readiness in Sector Virginia AOR.',
-      mapLocation: [-76.298, 36.835],
-      currentLocation: '4000 Coast Guard Boulevard Portsmouth VA',
-      datetimeOrdered: '06/01/2026 14:00 UTC',
-      opcon: 'USCG Atlantic Area',
-      tacon: 'USCG Sector Virginia',
-      pointOfContact: 'Sector Virginia Command Center (757-398-6390)',
-      owningOrganization: 'U.S. Coast Guard',
-      quantity: 1,
-      unitType: 'cutter',
-      unitName: 'USCGC Forward (WMEC-911)',
-      hullTailNumber: 'WMEC-911',
-      symbology: 'Coast Guard cutter',
-      latitude: '36.835',
-      longitude: '-76.298',
-      capabilities:
-        'Law enforcement; fisheries enforcement; search and rescue; port and waterway security; hurricane response sortie',
-      currentOpPeriod: 'Op Period 1',
-      nextOpPeriod: 'Op Period 2',
-      currentOpPeriodAssignment:
-        'Hampton Roads port security patrol and hurricane pre-landfall sortie staging',
-      nextOpPeriodAssignment: 'Post-storm SAR, navigational hazard assessment, and channel clearance support',
-      checkInStatus: 'Onsite',
-      costUnitType: 'per day',
-      costPerUnit: 18500,
-      deploymentKind: 'incident',
-      assignedIncidentName: 'Hurricane Edgar — Gulf Coast Refinery & Pipeline Watch',
-      assignedExerciseName: null,
-    },
-    {
-      id: 2,
-      name: 'C20B',
-      assetStatus: 'PMC',
-      assetStatusUpdatedAt: '06/08/2026 07:30 UTC',
-      owner: 'USCG Aviation Forces Atlantic',
-      status: 'Staged',
-      type: 'Fixed-Wing Aircraft (Gulfstream C-20B)',
-      teamLead: 'LT C. Morales',
-      eta: '2 hr',
-      location: 'Coast Guard Air Station Elizabeth City, NC',
-      notes:
-        'Gulfstream C-20B staged for district staff transport, hurricane liaison flights, and priority logistics support to Gulf Coast sector commands.',
-      mapLocation: [-76.174, 36.261],
-      currentLocation: '4000 Coast Guard Boulevard Portsmouth VA',
-      datetimeOrdered: '06/02/2026 09:30 UTC',
-      opcon: 'USCG Atlantic Area',
-      tacon: 'USCG Aviation Forces Atlantic',
-      pointOfContact: 'AIRSTA Elizabeth City Ops (252-335-3300)',
-      owningOrganization: 'U.S. Coast Guard',
-      quantity: 1,
-      unitType: 'aircraft',
-      unitName: 'Gulfstream C-20B — CG-0202',
-      hullTailNumber: 'CG-0202',
-      symbology: 'Coast Guard fixed-wing',
-      latitude: '36.261',
-      longitude: '-76.174',
-      capabilities:
-        'Long-range transport; command liaison; priority cargo; hurricane response air support',
-      currentOpPeriod: 'Op Period 1',
-      nextOpPeriod: 'Op Period 2',
-      currentOpPeriodAssignment:
-        'District staff transport and hurricane recon staging — Elizabeth City AIRSTA',
-      nextOpPeriodAssignment: 'Air liaison support to Sector Mobile and Sector New Orleans',
-      checkInStatus: 'Staged',
-      costUnitType: 'per hour',
-      costPerUnit: 4200,
-      deploymentKind: 'incident',
-      assignedIncidentName: 'Hurricane Edgar — Gulf Coast Refinery & Pipeline Watch',
-      assignedExerciseName: null,
-    },
-    {
-      id: 3,
-      name: 'VC4',
-      assetStatus: 'FMC',
-      assetStatusUpdatedAt: '06/07/2026 22:10 UTC',
-      owner: 'USCG Station Portsmouth',
-      status: 'Available',
-      type: 'Response Boat — Medium (RB-M)',
-      teamLead: 'BM1 R. Santos',
-      eta: 'On-site',
-      location: 'Sector Virginia small-boat facility — Portsmouth, VA',
-      notes:
-        'RB-M patrol boat available for near-shore SAR, escort operations, and security zone enforcement supporting hurricane response tasking.',
-      mapLocation: [-76.298, 36.835],
-      currentLocation: '4000 Coast Guard Boulevard Portsmouth VA',
-      datetimeOrdered: '06/01/2026 08:00 UTC',
-      opcon: 'USCG Sector Virginia',
-      tacon: 'USCG Station Portsmouth',
-      pointOfContact: 'Station Portsmouth Ops (757-398-6231)',
-      owningOrganization: 'U.S. Coast Guard',
-      quantity: 1,
-      unitType: 'boat',
-      unitName: 'Response Boat-Medium — VC4',
-      hullTailNumber: 'VC4',
-      symbology: 'Coast Guard response boat',
-      latitude: '36.835',
-      longitude: '-76.298',
-      capabilities:
-        'Near-shore SAR; maritime law enforcement; escort operations; security zone enforcement',
-      currentOpPeriod: 'Op Period 1',
-      nextOpPeriod: 'Op Period 2',
-      currentOpPeriodAssignment: 'Portsmouth small-boat SAR standby and security zone patrol',
-      nextOpPeriodAssignment: 'Hurricane post-landfall shallow-water response support',
-      checkInStatus: 'Onsite',
-      costUnitType: 'per day',
-      costPerUnit: 2400,
-      deploymentKind: 'incident',
-      assignedIncidentName: 'Hurricane Edgar — Gulf Coast Refinery & Pipeline Watch',
-      assignedExerciseName: null,
-    },
-  ])
   const [resourceRequests] = useState<ResourceRequestItem[]>(DEFAULT_ICS213RR_RESOURCE_REQUESTS)
   const [resourcesPanelView, setResourcesPanelView] = useState<ResourcesPanelView>('resources')
   const [resourcesDisplayMode, setResourcesDisplayMode] = useState<ResourcesDisplayMode>('list')
@@ -8623,6 +8463,41 @@ function App() {
     []
   )
   const [activeWorkspaceSupabaseId, setActiveWorkspaceSupabaseId] = useState<string | null>(null)
+  const {
+    hubAssets,
+    isLoading: isAssetAssignmentsLoading,
+    assignAsset,
+    unassignAsset,
+    getAssetsForWorkspace,
+  } = useWorkspaceAssetAssignments({
+    enabled: true,
+    accessibleWorkspaces,
+    userId: user?.id ?? null,
+  })
+  const assetWorkspaceOptions = useMemo(
+    () => buildAssetWorkspaceOptions(accessibleWorkspaces),
+    [accessibleWorkspaces]
+  )
+  const handleAssetAssignmentChange = useCallback(
+    (assetKey: string, workspaceId: string | null) => {
+      void (async () => {
+        try {
+          if (workspaceId) {
+            await assignAsset(assetKey, workspaceId)
+          } else {
+            await unassignAsset(assetKey)
+          }
+        } catch (assignmentError) {
+          console.error(assignmentError)
+        }
+      })()
+    },
+    [assignAsset, unassignAsset]
+  )
+  const workspaceAssignedAssets = useMemo(
+    () => getAssetsForWorkspace(activeWorkspaceSupabaseId),
+    [activeWorkspaceSupabaseId, getAssetsForWorkspace]
+  )
   const [workspaceFormsReloadKey, setWorkspaceFormsReloadKey] = useState(0)
   const [isRosterLoading, setIsRosterLoading] = useState(false)
   const [isInvitingRosterMember, setIsInvitingRosterMember] = useState(false)
@@ -9521,8 +9396,8 @@ function App() {
         impact: item.impact,
       })),
       ...notificationThreatPointGraphics,
-      ...resources.map((item) => ({
-        mapKey: `resource-${item.id}`,
+      ...hubAssets.map((item) => ({
+        mapKey: getAssetMapKey(item.assetKey),
         title: item.name,
         kind: 'Asset',
         coordinates: item.mapLocation,
@@ -9888,7 +9763,7 @@ function App() {
     incidentList,
     calendarItems,
     notifications,
-    resources,
+    hubAssets,
     rosterPositions,
     safetyAnalyses,
   ])
@@ -10870,7 +10745,7 @@ function App() {
       .toLowerCase()
       .includes(normalizedQuery)
   })
-  const searchFilteredResources = resources.filter((item) => {
+  const searchFilteredResources = hubAssets.filter((item) => {
     if (!normalizedQuery) {
       return true
     }
@@ -11019,7 +10894,7 @@ function App() {
       .toLowerCase()
       .includes(activePanelSearchQuery)
   })
-  const cardFilteredResources = resources.filter((item) => {
+  const cardFilteredResources = hubAssets.filter((item) => {
     const query = normalizedResourcesSearchQuery || activePanelSearchQuery
     if (query) {
       const matchesSearch = [
@@ -11230,8 +11105,8 @@ function App() {
       ? femaAors.filter((aor) => area.districtIds.includes(aor.id))
       : cardFilteredFemaAors.filter((aor) => area.districtIds.includes(aor.id))
     const assets = areaMatchesSearch
-      ? filterCoastGuardAreaAssets(area.key, '')
-      : filterCoastGuardAreaAssets(area.key, activePanelSearchQuery)
+      ? filterCoastGuardAreaAssets(area.key, hubAssets, '')
+      : filterCoastGuardAreaAssets(area.key, hubAssets, activePanelSearchQuery)
 
     return {
       ...area,
@@ -15976,7 +15851,7 @@ function App() {
           scale: 45000,
         })),
         ...searchFilteredResources.map((item) => ({
-          id: `resource-${item.id}`,
+          id: getAssetMapKey(item.assetKey),
           kind: 'resource' as const,
           title: item.name,
           subtitle: `${item.status} • ${item.type}`,
@@ -22047,11 +21922,13 @@ function App() {
   const selectedPratusResource =
     selectedPratusResourceId === null
       ? null
-      : resources.find((resource) => resource.id === selectedPratusResourceId) ?? null
+      : hubAssets.find((resource) => resource.id === selectedPratusResourceId) ?? null
   const ics204AttachableResources: ResourceItem[] = [
-    ...resources,
+    ...hubAssets,
     {
       id: 901,
+      assetKey: 'ics204-law-group-1',
+      areaKey: 'atlantic',
       name: 'Law Group 1',
       assetStatus: 'FMC',
       assetStatusUpdatedAt: '04/07/2026 21:00 UTC',
@@ -22085,11 +21962,15 @@ function App() {
       costUnitType: 'per day',
       costPerUnit: 2800,
       deploymentKind: 'incident',
+      assignedWorkspaceId: null,
+      assignedWorkspaceKind: null,
       assignedIncidentName: 'Hurricane Edgar — Florida Landfall',
       assignedExerciseName: null,
     } as ResourceItem,
     {
       id: 902,
+      assetKey: 'ics204-planning-staffing-cell',
+      areaKey: 'atlantic',
       name: 'Planning Section Staffing Cell',
       assetStatus: 'PMC',
       assetStatusUpdatedAt: '04/07/2026 20:45 UTC',
@@ -22123,6 +22004,8 @@ function App() {
       costUnitType: 'per hour',
       costPerUnit: 95,
       deploymentKind: 'available',
+      assignedWorkspaceId: null,
+      assignedWorkspaceKind: null,
       assignedIncidentName: null,
       assignedExerciseName: null,
     } as ResourceItem,
@@ -22951,7 +22834,7 @@ function App() {
                     )}
                   </div>
                 )}
-                {activeTab === 'resources' && (
+                {activeTab === 'resources' && !isInWorkspaceContext && (
                   <div className="flex flex-wrap items-center justify-end gap-2">
                     {resourcesPanelView === 'resources' && (
                       <div className="flex w-56 items-center gap-2 rounded-md border px-2 py-1.5">
@@ -24031,7 +23914,28 @@ function App() {
                   )
                 )}
 
+                {activeTab === 'resources' && isInWorkspaceContext && (
+                  <WorkspaceAssignedAssetsPanel
+                    assets={workspaceAssignedAssets}
+                    isLoading={isAssetAssignmentsLoading}
+                    workspaceLabel={activeWorkspaceRosterLabel}
+                    glassItemBorderClasses={glassItemBorderClasses}
+                    onFocusMap={(asset) => {
+                      const mapKey = getAssetMapKey(asset.assetKey)
+                      setSelectedPanelItemId(mapKey)
+                      void focusMapItem(mapKey, asset.mapLocation, 30000)
+                    }}
+                    onUnassign={(assetKey) => handleAssetAssignmentChange(assetKey, null)}
+                    onOpenHubAssets={() => {
+                      setActiveIncidentWorkspaceId(null)
+                      setActiveExerciseWorkspaceId(null)
+                      setActiveTab('fema-regions')
+                    }}
+                  />
+                )}
+
                 {activeTab === 'resources' &&
+                  !isInWorkspaceContext &&
                   resourcesPanelView === 'resources' &&
                   cardFilteredResources.length === 0 && (
                     <Item variant="outline" className={glassItemBorderClasses}>
@@ -24045,6 +23949,7 @@ function App() {
                   )}
 
                 {activeTab === 'resources' &&
+                  !isInWorkspaceContext &&
                   resourcesPanelView === 'resources' &&
                   cardFilteredResources.length > 0 &&
                   resourcesDisplayMode === 'table' && (
@@ -24086,10 +23991,10 @@ function App() {
                         </thead>
                         <tbody>
                           {cardFilteredResources.map((resource) => {
-                            const key = `resource-${resource.id}`
+                            const key = getAssetMapKey(resource.assetKey)
                             return (
                               <tr
-                                key={resource.id}
+                                key={resource.assetKey}
                                 className={cn(
                                   'border-b',
                                   selectedPanelItemId === key && 'bg-primary/5'
@@ -24136,7 +24041,7 @@ function App() {
                                     onClick={() => {
                                       setSelectedPanelItemId(key)
                                       void focusMapItem(
-                                        `resource-${resource.id}`,
+                                        getAssetMapKey(resource.assetKey),
                                         resource.mapLocation,
                                         30000
                                       )
@@ -24154,40 +24059,32 @@ function App() {
                   )}
 
                 {activeTab === 'resources' &&
+                  !isInWorkspaceContext &&
                   resourcesPanelView === 'resources' &&
                   cardFilteredResources.length > 0 &&
                   resourcesDisplayMode === 'list' && (
                     <div className="flex flex-col gap-2 px-0.5 pt-1">
                       <AssetListHeaderRow />
                       {cardFilteredResources.map((resource) => {
-                        const key = `resource-${resource.id}`
+                        const key = getAssetMapKey(resource.assetKey)
                         const isOpen = expandedItemId === key
                         return (
                           <ResourceListItemCard
-                            key={resource.id}
+                            key={resource.assetKey}
                             resource={resource as ResourceListItemData}
                             glassItemBorderClasses={glassItemBorderClasses}
                             selected={selectedPanelItemId === key}
                             open={isOpen}
                             editable
+                            workspaceOptions={assetWorkspaceOptions}
+                            onAssignmentChange={(workspaceId) =>
+                              handleAssetAssignmentChange(resource.assetKey, workspaceId)
+                            }
                             onOpenChange={(open) => setExpandedItemId(open ? key : null)}
                             onHeaderClick={() => toggleExpandedItem(key)}
                             onFocusMap={() => {
                               setSelectedPanelItemId(key)
-                              void focusMapItem(
-                                `resource-${resource.id}`,
-                                resource.mapLocation,
-                                30000
-                              )
-                            }}
-                            onSave={(updatedResource) => {
-                              setResources((previous) =>
-                                previous.map((item) =>
-                                  item.id === updatedResource.id
-                                    ? { ...item, ...updatedResource }
-                                    : item
-                                )
-                              )
+                              void focusMapItem(key, resource.mapLocation, 30000)
                             }}
                           />
                         )
@@ -25989,15 +25886,20 @@ function App() {
                                     <div className="flex flex-col gap-2 px-0.5">
                                       <AssetListHeaderRow />
                                       {area.assets.map((asset) => {
-                                        const key = `aor-area-${area.key}-asset-${asset.id}`
+                                        const key = `aor-area-${area.key}-asset-${asset.assetKey}`
                                         const isOpen = expandedItemId === key
                                         return (
                                           <ResourceListItemCard
-                                            key={asset.id}
+                                            key={asset.assetKey}
                                             resource={asset}
                                             glassItemBorderClasses={glassItemBorderClasses}
                                             selected={selectedPanelItemId === key}
                                             open={isOpen}
+                                            editable
+                                            workspaceOptions={assetWorkspaceOptions}
+                                            onAssignmentChange={(workspaceId) =>
+                                              handleAssetAssignmentChange(asset.assetKey, workspaceId)
+                                            }
                                             onOpenChange={(open) =>
                                               setExpandedItemId(open ? key : null)
                                             }
@@ -26005,7 +25907,7 @@ function App() {
                                             onFocusMap={() => {
                                               setSelectedPanelItemId(key)
                                               void focusMapItem(
-                                                `resource-${asset.id}`,
+                                                getAssetMapKey(asset.assetKey),
                                                 asset.mapLocation,
                                                 30000
                                               )
@@ -34563,7 +34465,7 @@ function App() {
                     aria-label="Zoom map to selected recommended resource"
                     onClick={() =>
                       void focusMapItem(
-                        `resource-${selectedPratusResource.id}`,
+                        getAssetMapKey(selectedPratusResource.assetKey),
                         selectedPratusResource.mapLocation,
                         30000
                       )

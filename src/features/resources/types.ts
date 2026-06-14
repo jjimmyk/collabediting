@@ -1,3 +1,6 @@
+import type { UscgCoastGuardAreaKey } from '@/data/uscg-coast-guard-area-geometries'
+import type { WorkspaceKind } from '@/lib/workspace-types'
+
 export type ResourceCostUnitType = 'per day' | 'per hour' | 'to purchase'
 
 export type ResourceDeploymentKind = 'available' | 'incident' | 'exercise'
@@ -6,8 +9,10 @@ export type AssetStatus = 'FMC' | 'PMC' | 'NMC'
 
 export const ASSET_STATUS_OPTIONS: AssetStatus[] = ['FMC', 'PMC', 'NMC']
 
-export type ResourceListItemData = {
+export type HubAssetCatalogRecord = {
+  assetKey: string
   id: number
+  areaKey: UscgCoastGuardAreaKey
   name: string
   assetStatus: AssetStatus
   assetStatusUpdatedAt: string
@@ -40,7 +45,24 @@ export type ResourceListItemData = {
   checkInStatus: string
   costUnitType: ResourceCostUnitType
   costPerUnit: number
+}
+
+export type ResourceListItemData = HubAssetCatalogRecord & {
   deploymentKind: ResourceDeploymentKind
+  assignedWorkspaceId: string | null
+  assignedWorkspaceKind: WorkspaceKind | null
+  /** Display label resolved from assigned workspace name. */
   assignedIncidentName: string | null
   assignedExerciseName: string | null
+}
+
+export type AssetWorkspaceOption = {
+  workspaceId: string
+  kind: WorkspaceKind
+  name: string
+}
+
+export type WorkspaceAssetAssignment = {
+  assetKey: string
+  workspaceId: string
 }
