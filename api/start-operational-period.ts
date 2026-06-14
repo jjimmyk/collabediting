@@ -117,9 +117,14 @@ async function fetchWorkspaceDocuments(
   entry: OperationalPeriodFormRegistryEntry,
   workspaceId: string
 ) {
+  const selectColumns =
+    entry.key === 'ics201'
+      ? 'id, form_data, latest_version_id, structure_mode'
+      : 'id, form_data, latest_version_id'
+
   const baseQuery = admin
     .from(entry.documentsTable)
-    .select('id, form_data, latest_version_id, structure_mode')
+    .select(selectColumns)
     .eq('workspace_id', workspaceId)
 
   // ics201_documents has updated_at but no created_at; other form tables use created_at.

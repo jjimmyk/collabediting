@@ -163,8 +163,14 @@ export async function startOperationalPeriod(params: {
     startedAt?: string
   }
 
+  if (!response.ok) {
+    return {
+      ok: false,
+      message: payload.error ?? `Could not start operational period (HTTP ${response.status}).`,
+    }
+  }
+
   if (
-    !response.ok ||
     payload.periodNumber === undefined ||
     payload.startedOperationalPeriodCount === undefined ||
     payload.workingOperationalPeriodNumber === undefined ||
