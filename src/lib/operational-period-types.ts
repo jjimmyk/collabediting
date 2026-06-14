@@ -10,6 +10,18 @@ export type WorkspaceOperationalPeriod = {
   startedByName: string | null
 }
 
+/** Frozen version row captured at operational period start (matches live *_versions tables). */
+export type FrozenFormVersionSnapshot = {
+  id: string
+  created_at: string
+  author_id: string | null
+  author_name: string
+  author_color: string
+  snapshot: unknown
+  signatures: unknown[]
+  section_id: string | null
+}
+
 export type OperationalPeriodFormSnapshot = {
   id: string
   operationalPeriodId: string
@@ -17,7 +29,21 @@ export type OperationalPeriodFormSnapshot = {
   documentId: string | null
   snapshot: unknown
   sourceVersionId: string | null
+  versionSnapshots: FrozenFormVersionSnapshot[]
   createdAt: string
+}
+
+export type OperationalPeriodSingleFormBundleEntry = {
+  kind: 'single'
+  snapshot: unknown
+  documentId: string | null
+  versionSnapshots: FrozenFormVersionSnapshot[]
+}
+
+export type OperationalPeriodMultipleFormBundleItem = {
+  documentId: string
+  snapshot: unknown
+  versionSnapshots: FrozenFormVersionSnapshot[]
 }
 
 export type OperationalPeriodSnapshotBundle = {
@@ -25,8 +51,7 @@ export type OperationalPeriodSnapshotBundle = {
   byFormKey: Partial<
     Record<
       OperationalPeriodFormKey,
-      | { kind: 'single'; snapshot: unknown; documentId: string | null }
-      | { kind: 'multiple'; items: Array<{ documentId: string; snapshot: unknown }> }
+      OperationalPeriodSingleFormBundleEntry | { kind: 'multiple'; items: OperationalPeriodMultipleFormBundleItem[] }
     >
   >
 }

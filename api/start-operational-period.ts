@@ -142,11 +142,6 @@ type RowsDocumentRow = {
   rows_data: unknown
 }
 
-type VersionRow = {
-  id: string
-  snapshot: unknown
-}
-
 const DEFAULT_OPERATIONAL_PERIOD_DURATION_MS = 12 * 60 * 60 * 1000
 
 type OperationalPeriodWindow = {
@@ -236,29 +231,63 @@ function parseBody(req: VercelRequest): StartOperationalPeriodBody {
   return (req.body ?? {}) as StartOperationalPeriodBody
 }
 
-async function getLatestDocumentSnapshot(
+type LiveVersionRow = {
+  id: string
+  created_at: string
+  author_id: string | null
+  author_name: string
+  author_color: string
+  snapshot: unknown
+  signatures: unknown
+  section_id: string | null
+}
+
+async function fetchDocumentVersionBundle(
   admin: SupabaseClient,
   entry: OperationalPeriodFormRegistryEntry,
   document: StandardDocumentRow
-): Promise<{ snapshot: unknown; sourceVersionId: string | null }> {
-  if (document.latest_version_id && entry.versionsTable) {
-    const { data: version, error } = await admin
-      .from(entry.versionsTable)
-      .select('id, snapshot')
-      .eq('id', document.latest_version_id)
-      .maybeSingle()
+): Promise<{
+  versionSnapshots: LiveVersionRow[]
+  latestSnapshot: unknown
+  sourceVersionId: string | null
+}> {
+  if (!entry.versionsTable) {
+    return {
+      versionSnapshots: [],
+      latestSnapshot: document.form_data,
+      sourceVersionId: null,
+    }
+  }
 
-    if (!error && version) {
-      const versionRow = version as VersionRow
-      return {
-        snapshot: versionRow.snapshot,
-        sourceVersionId: versionRow.id,
-      }
+  const { data: versions, error } = await admin
+    .from(entry.versionsTable)
+    .select(
+      'id, created_at, author_id, author_name, author_color, snapshot, signatures, section_id'
+    )
+    .eq('document_id', document.id)
+    .order('created_at', { ascending: true })
+
+  if (error) {
+    throw new Error(error.message)
+  }
+
+  const versionSnapshots = (versions ?? []) as LiveVersionRow[]
+
+  if (versionSnapshots.length > 0) {
+    const latestById = document.latest_version_id
+      ? versionSnapshots.find((row) => row.id === document.latest_version_id)
+      : null
+    const latest = latestById ?? versionSnapshots[versionSnapshots.length - 1]
+    return {
+      versionSnapshots,
+      latestSnapshot: latest.snapshot,
+      sourceVersionId: latest.id,
     }
   }
 
   return {
-    snapshot: document.form_data,
+    versionSnapshots: [],
+    latestSnapshot: document.form_data,
     sourceVersionId: null,
   }
 }
@@ -404,6 +433,7 @@ async function snapshotAndCloneFormEntry(
           document_id: rowsDocument.id,
           snapshot,
           source_version_id: null,
+          version_snapshots: [],
         })
 
       if (snapshotError) {
@@ -415,19 +445,16 @@ async function snapshotAndCloneFormEntry(
     }
 
     const standardDocument = document as StandardDocumentRow
-    const { snapshot, sourceVersionId } = await getLatestDocumentSnapshot(
-      admin,
-      entry,
-      standardDocument
-    )
+    const { versionSnapshots, latestSnapshot, sourceVersionId } =
+      await fetchDocumentVersionBundle(admin, entry, standardDocument)
 
     const frozenSnapshot = applyOperationalPeriodTimestampsToSnapshot(
-      snapshot,
+      latestSnapshot,
       entry.key,
       periodWindows.frozen
     )
     const workingSnapshot = applyOperationalPeriodTimestampsToSnapshot(
-      snapshot,
+      latestSnapshot,
       entry.key,
       periodWindows.working
     )
@@ -440,6 +467,7 @@ async function snapshotAndCloneFormEntry(
         document_id: standardDocument.id,
         snapshot: frozenSnapshot,
         source_version_id: sourceVersionId,
+        version_snapshots: versionSnapshots,
       })
 
     if (snapshotError) {

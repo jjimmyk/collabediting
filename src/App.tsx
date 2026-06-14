@@ -26988,10 +26988,10 @@ function App() {
                     ) : historicalIcs201View?.form ? (
                       <Ics201OperationalPeriodSnapshotPanel
                         form={historicalIcs201View.form}
+                        versions={historicalIcs201View.versions}
                         periodNumber={formsOperationalPeriodView as number}
                         glassItemBorderClasses={glassItemBorderClasses}
-                        onExportWord={() => {
-                          const exportForm = historicalIcs201View!.form!
+                        onExportWord={(exportForm) => {
                           const stamp = new Date().toISOString().slice(0, 10)
                           downloadDocx(
                             `ICS-201_${exportForm.incidentName.trim().replace(/[^a-zA-Z0-9-_]+/g, '_') || 'Incident'}_${stamp}.docx`,
@@ -26999,8 +26999,7 @@ function App() {
                             buildIcs201ExportOptions(exportForm)
                           )
                         }}
-                        onExportPdf={() => {
-                          const exportForm = historicalIcs201View!.form!
+                        onExportPdf={(exportForm) => {
                           const stamp = new Date().toISOString().slice(0, 10)
                           downloadPdf(
                             `ICS-201_${exportForm.incidentName.trim().replace(/[^a-zA-Z0-9-_]+/g, '_') || 'Incident'}_${stamp}.pdf`,

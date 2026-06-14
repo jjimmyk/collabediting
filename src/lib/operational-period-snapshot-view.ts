@@ -30,12 +30,33 @@ import { cloneIapFormState } from '@/features/iap/utils'
 import { normalizeIcs233RowsFromDb } from '@/lib/ics233-service'
 import type { Ics233TaskRow } from '@/lib/ics233-workflow'
 import type { OperationalPeriodFormKey } from '@/lib/operational-period-form-registry'
-import type { OperationalPeriodSnapshotBundle } from '@/lib/operational-period-types'
+import type {
+  FrozenFormVersionSnapshot,
+  OperationalPeriodSingleFormBundleEntry,
+  OperationalPeriodSnapshotBundle,
+} from '@/lib/operational-period-types'
+import {
+  mapFrozenVersionsToIcs201Versions,
+  mapFrozenVersionsToIcs202Versions,
+  mapFrozenVersionsToIcs203Versions,
+  mapFrozenVersionsToIcs204Versions,
+  mapFrozenVersionsToIapVersions,
+  mapFrozenVersionsToIcs234Versions,
+  mapFrozenVersionsToIcs215Versions,
+  mapFrozenVersionsToIcs215aVersions,
+  mapFrozenVersionsToIcs205Versions,
+  mapFrozenVersionsToIcs205aVersions,
+  mapFrozenVersionsToIcs206Versions,
+  mapFrozenVersionsToIcs208Versions,
+  mapFrozenVersionsToIcs208hmVersions,
+  mapFrozenVersionsToIcs209Versions,
+  normalizeFrozenVersionSnapshots,
+} from '@/lib/operational-period-version-map'
 
 const SNAPSHOT_AUTHOR_NAME = 'Operational Period Snapshot'
 const SNAPSHOT_AUTHOR_COLOR = '#64748b'
 
-function buildSnapshotVersion<T>(
+function buildFallbackVersion<T>(
   snapshot: T,
   clone: (value: T) => T
 ): {
@@ -47,7 +68,7 @@ function buildSnapshotVersion<T>(
   signatures: Ics201VersionSignature[]
 } {
   return {
-    id: `op-snapshot-${Date.now()}`,
+    id: `op-snapshot-fallback`,
     createdAt: Date.now(),
     authorName: SNAPSHOT_AUTHOR_NAME,
     authorColor: SNAPSHOT_AUTHOR_COLOR,
@@ -56,96 +77,166 @@ function buildSnapshotVersion<T>(
   }
 }
 
-function resolveHistoricalSingleFormView<TForm>(
-  bundle: OperationalPeriodSnapshotBundle | null,
-  formKey: OperationalPeriodFormKey,
+function resolveHistoricalSingleFormView<TForm, TVersion extends { snapshot: TForm }>(
+  entry: OperationalPeriodSingleFormBundleEntry | undefined,
+  mapVersions: (rows: FrozenFormVersionSnapshot[]) => TVersion[],
   clone: (value: TForm) => TForm
-): { form: TForm | null; versions: ReturnType<typeof buildSnapshotVersion<TForm>>[] } | null {
-  const entry = bundle?.byFormKey[formKey]
+): { form: TForm | null; versions: TVersion[] } | null {
   if (!entry || entry.kind !== 'single') return null
+
+  const mappedVersions = mapVersions(entry.versionSnapshots)
+  if (mappedVersions.length > 0) {
+    const latest = mappedVersions[mappedVersions.length - 1]
+    return {
+      form: clone(latest.snapshot),
+      versions: mappedVersions,
+    }
+  }
+
   const form = clone(entry.snapshot as TForm)
   return {
     form,
-    versions: [buildSnapshotVersion(form, clone)],
+    versions: [buildFallbackVersion(form, clone) as unknown as TVersion],
   }
+}
+
+function getSingleEntry(
+  bundle: OperationalPeriodSnapshotBundle | null,
+  formKey: OperationalPeriodFormKey
+): OperationalPeriodSingleFormBundleEntry | undefined {
+  const entry = bundle?.byFormKey[formKey]
+  if (!entry || entry.kind !== 'single') return undefined
+  return entry
 }
 
 export function resolveHistoricalIcs201View(
   bundle: OperationalPeriodSnapshotBundle | null
 ): { form: Ics201FormState | null; versions: Ics201Version[] } | null {
-  return resolveHistoricalSingleFormView(bundle, 'ics201', cloneIcs201FormState)
+  return resolveHistoricalSingleFormView(
+    getSingleEntry(bundle, 'ics201'),
+    mapFrozenVersionsToIcs201Versions,
+    cloneIcs201FormState
+  )
 }
 
 export function resolveHistoricalIcs202View(
   bundle: OperationalPeriodSnapshotBundle | null
 ): { form: Ics202FormState | null; versions: Ics202Version[] } | null {
-  return resolveHistoricalSingleFormView(bundle, 'ics202', cloneIcs202FormState)
+  return resolveHistoricalSingleFormView(
+    getSingleEntry(bundle, 'ics202'),
+    mapFrozenVersionsToIcs202Versions,
+    cloneIcs202FormState
+  )
 }
 
 export function resolveHistoricalIcs203View(
   bundle: OperationalPeriodSnapshotBundle | null
 ): { form: Ics203FormState | null; versions: Ics203Version[] } | null {
-  return resolveHistoricalSingleFormView(bundle, 'ics203', cloneIcs203FormState)
+  return resolveHistoricalSingleFormView(
+    getSingleEntry(bundle, 'ics203'),
+    mapFrozenVersionsToIcs203Versions,
+    cloneIcs203FormState
+  )
 }
 
 export function resolveHistoricalIapView(
   bundle: OperationalPeriodSnapshotBundle | null
 ): { form: IapFormState | null; versions: IapVersion[] } | null {
-  return resolveHistoricalSingleFormView(bundle, 'iap', cloneIapFormState)
+  return resolveHistoricalSingleFormView(
+    getSingleEntry(bundle, 'iap'),
+    mapFrozenVersionsToIapVersions,
+    cloneIapFormState
+  )
 }
 
 export function resolveHistoricalIcs234View(
   bundle: OperationalPeriodSnapshotBundle | null
 ): { form: Ics234FormState | null; versions: Ics234Version[] } | null {
-  return resolveHistoricalSingleFormView(bundle, 'ics234', cloneIcs234FormState)
+  return resolveHistoricalSingleFormView(
+    getSingleEntry(bundle, 'ics234'),
+    mapFrozenVersionsToIcs234Versions,
+    cloneIcs234FormState
+  )
 }
 
 export function resolveHistoricalIcs215View(
   bundle: OperationalPeriodSnapshotBundle | null
 ): { form: Ics215FormState | null; versions: Ics215Version[] } | null {
-  return resolveHistoricalSingleFormView(bundle, 'ics215', cloneIcs215FormState)
+  return resolveHistoricalSingleFormView(
+    getSingleEntry(bundle, 'ics215'),
+    mapFrozenVersionsToIcs215Versions,
+    cloneIcs215FormState
+  )
 }
 
 export function resolveHistoricalIcs215aView(
   bundle: OperationalPeriodSnapshotBundle | null
 ): { form: Ics215aFormState | null; versions: Ics215aVersion[] } | null {
-  return resolveHistoricalSingleFormView(bundle, 'ics215a', cloneIcs215aFormState)
+  return resolveHistoricalSingleFormView(
+    getSingleEntry(bundle, 'ics215a'),
+    mapFrozenVersionsToIcs215aVersions,
+    cloneIcs215aFormState
+  )
 }
 
 export function resolveHistoricalIcs205View(
   bundle: OperationalPeriodSnapshotBundle | null
 ): { form: Ics205FormState | null; versions: Ics205Version[] } | null {
-  return resolveHistoricalSingleFormView(bundle, 'ics205', cloneIcs205FormState)
+  return resolveHistoricalSingleFormView(
+    getSingleEntry(bundle, 'ics205'),
+    mapFrozenVersionsToIcs205Versions,
+    cloneIcs205FormState
+  )
 }
 
 export function resolveHistoricalIcs205aView(
   bundle: OperationalPeriodSnapshotBundle | null
 ): { form: Ics205aFormState | null; versions: Ics205aVersion[] } | null {
-  return resolveHistoricalSingleFormView(bundle, 'ics205a', cloneIcs205aFormState)
+  return resolveHistoricalSingleFormView(
+    getSingleEntry(bundle, 'ics205a'),
+    mapFrozenVersionsToIcs205aVersions,
+    cloneIcs205aFormState
+  )
 }
 
 export function resolveHistoricalIcs206View(
   bundle: OperationalPeriodSnapshotBundle | null
 ): { form: Ics206FormState | null; versions: Ics206Version[] } | null {
-  return resolveHistoricalSingleFormView(bundle, 'ics206', cloneIcs206FormState)
+  return resolveHistoricalSingleFormView(
+    getSingleEntry(bundle, 'ics206'),
+    mapFrozenVersionsToIcs206Versions,
+    cloneIcs206FormState
+  )
 }
 
 export function resolveHistoricalIcs208View(
   bundle: OperationalPeriodSnapshotBundle | null
 ): { form: Ics208FormState | null; versions: Ics208Version[] } | null {
-  return resolveHistoricalSingleFormView(bundle, 'ics208', cloneIcs208FormState)
+  return resolveHistoricalSingleFormView(
+    getSingleEntry(bundle, 'ics208'),
+    mapFrozenVersionsToIcs208Versions,
+    cloneIcs208FormState
+  )
 }
 
 export function resolveHistoricalIcs208hmView(
   bundle: OperationalPeriodSnapshotBundle | null
 ): { form: Ics208hmFormState | null; versions: Ics208hmVersion[] } | null {
-  return resolveHistoricalSingleFormView(bundle, 'ics208hm', cloneIcs208hmFormState)
+  return resolveHistoricalSingleFormView(
+    getSingleEntry(bundle, 'ics208hm'),
+    mapFrozenVersionsToIcs208hmVersions,
+    cloneIcs208hmFormState
+  )
 }
 
 export function resolveHistoricalIcs209View(
   bundle: OperationalPeriodSnapshotBundle | null
 ): { form: Ics209FormState | null; versions: Ics209Version[] } | null {
-  return resolveHistoricalSingleFormView(bundle, 'ics209', cloneIcs209FormState)
+  return resolveHistoricalSingleFormView(
+    getSingleEntry(bundle, 'ics209'),
+    mapFrozenVersionsToIcs209Versions,
+    cloneIcs209FormState
+  )
 }
 
 export function resolveHistoricalIcs204View(bundle: OperationalPeriodSnapshotBundle | null): {
@@ -159,9 +250,19 @@ export function resolveHistoricalIcs204View(bundle: OperationalPeriodSnapshotBun
   const versionsById: Record<string, Ics204Version[]> = {}
 
   for (const item of entry.items) {
+    const mappedVersions = mapFrozenVersionsToIcs204Versions(item.versionSnapshots)
+    if (mappedVersions.length > 0) {
+      const latest = mappedVersions[mappedVersions.length - 1]
+      forms.push(cloneIcs204FormState(latest.snapshot))
+      versionsById[latest.snapshot.id] = mappedVersions
+      continue
+    }
+
     const form = cloneIcs204FormState(item.snapshot as Ics204FormState)
     forms.push(form)
-    versionsById[form.id] = [buildSnapshotVersion(form, cloneIcs204FormState)]
+    versionsById[form.id] = [
+      buildFallbackVersion(form, cloneIcs204FormState) as unknown as Ics204Version,
+    ]
   }
 
   return { forms, versionsById }
@@ -215,3 +316,5 @@ export function hasOperationalPeriodIcs233Snapshot(
 ): boolean {
   return bundle?.byFormKey.ics233?.kind === 'single'
 }
+
+export { normalizeFrozenVersionSnapshots }

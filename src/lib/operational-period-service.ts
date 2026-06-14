@@ -5,6 +5,7 @@ import type {
   StartOperationalPeriodResult,
   WorkspaceOperationalPeriod,
 } from '@/lib/operational-period-types'
+import { normalizeFrozenVersionSnapshots } from '@/lib/operational-period-version-map'
 import { getSupabaseClient, isSupabaseConfigured } from '@/lib/supabase'
 
 type DbOperationalPeriodRow = {
@@ -43,6 +44,7 @@ type DbSnapshotRow = {
   document_id: string | null
   snapshot: unknown
   source_version_id: string | null
+  version_snapshots: unknown
   created_at: string
 }
 
@@ -54,6 +56,7 @@ function mapSnapshot(row: DbSnapshotRow): OperationalPeriodFormSnapshot {
     documentId: row.document_id,
     snapshot: row.snapshot,
     sourceVersionId: row.source_version_id,
+    versionSnapshots: normalizeFrozenVersionSnapshots(row.version_snapshots),
     createdAt: row.created_at,
   }
 }
@@ -109,7 +112,7 @@ export async function fetchOperationalPeriodSnapshots(
   const { data, error } = await supabase
     .from('workspace_operational_period_form_snapshots')
     .select(
-      'id, operational_period_id, form_key, document_id, snapshot, source_version_id, created_at'
+      'id, operational_period_id, form_key, document_id, snapshot, source_version_id, version_snapshots, created_at'
     )
     .eq('operational_period_id', operationalPeriodId)
     .order('form_key', { ascending: true })
@@ -135,13 +138,20 @@ export function bundleOperationalPeriodSnapshots(
           existing.items.push({
             documentId: snapshot.documentId,
             snapshot: snapshot.snapshot,
+            versionSnapshots: snapshot.versionSnapshots,
           })
         }
       } else {
         byFormKey.ics204 = {
           kind: 'multiple',
           items: snapshot.documentId
-            ? [{ documentId: snapshot.documentId, snapshot: snapshot.snapshot }]
+            ? [
+                {
+                  documentId: snapshot.documentId,
+                  snapshot: snapshot.snapshot,
+                  versionSnapshots: snapshot.versionSnapshots,
+                },
+              ]
             : [],
         }
       }
@@ -152,6 +162,7 @@ export function bundleOperationalPeriodSnapshots(
       kind: 'single',
       snapshot: snapshot.snapshot,
       documentId: snapshot.documentId,
+      versionSnapshots: snapshot.versionSnapshots,
     }
   }
 
