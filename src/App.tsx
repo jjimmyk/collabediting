@@ -11573,6 +11573,14 @@ function App() {
   )
   const isInExerciseWorkspace = activeExerciseWorkspace !== null
   const isInIncidentWorkspace = activeIncidentWorkspace !== null
+  const isInWorkspaceContext = isInIncidentWorkspace || isInExerciseWorkspace
+  const isWorkspaceMoreTabActive =
+    activeTab === 'fema-regions' ||
+    activeTab === 'events' ||
+    activeTab === 'analytics' ||
+    activeTab === 'sitreps' ||
+    activeTab === 'seerist' ||
+    activeTab === 'workspace-settings'
   const activePlanningPWorkspace = activeIncidentWorkspace ?? activeExerciseWorkspace
   const showPlanningPStepper =
     activePlanningPWorkspace !== null &&
@@ -22033,6 +22041,7 @@ function App() {
                         <TooltipContent side="bottom" sideOffset={6}>Objectives &amp; Actions</TooltipContent>
                       </Tooltip>
                     )}
+                    {!isInWorkspaceContext && (
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <Button
@@ -22050,6 +22059,7 @@ function App() {
                       </TooltipTrigger>
                       <TooltipContent side="bottom" sideOffset={6}>Business Units</TooltipContent>
                     </Tooltip>
+                    )}
                     {!isInExerciseWorkspace && !isInIncidentWorkspace && (
                       <Tooltip>
                         <TooltipTrigger asChild>
@@ -22109,7 +22119,7 @@ function App() {
                         <TooltipContent side="bottom" sideOffset={6}>Exercises</TooltipContent>
                       </Tooltip>
                     )}
-                    {!isInExerciseWorkspace && (
+                    {!isInExerciseWorkspace && !isInWorkspaceContext && (
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <Button
@@ -22129,6 +22139,7 @@ function App() {
                         <TooltipContent side="bottom" sideOffset={6}>Events</TooltipContent>
                       </Tooltip>
                     )}
+                    {!isInWorkspaceContext && (
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <Button
@@ -22147,6 +22158,7 @@ function App() {
                       </TooltipTrigger>
                       <TooltipContent side="bottom" sideOffset={6}>Analytics</TooltipContent>
                     </Tooltip>
+                    )}
                     {(isInIncidentWorkspace || isInExerciseWorkspace) && (
                       <>
                         <DropdownMenu>
@@ -22247,9 +22259,84 @@ function App() {
                             <TooltipContent side="bottom" sideOffset={6}>MSEL</TooltipContent>
                           </Tooltip>
                         )}
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant={
+                                isGlassMode
+                                  ? 'outline'
+                                  : isWorkspaceMoreTabActive
+                                    ? 'default'
+                                    : 'outline'
+                              }
+                              className={cn(
+                                'h-8 gap-1',
+                                glassIconButtonClasses,
+                                selectedGlassTabClasses(isWorkspaceMoreTabActive)
+                              )}
+                              aria-label="Open more menu"
+                              data-pratus-context-id="tab:more"
+                              data-pratus-context-label="More"
+                            >
+                              More
+                              <ChevronDown className="h-3.5 w-3.5" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="start" className="w-56">
+                            <DropdownMenuLabel>More</DropdownMenuLabel>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              onSelect={() => setActiveTab('fema-regions')}
+                              className={cn('gap-2', activeTab === 'fema-regions' && 'bg-accent')}
+                            >
+                              <MapPin className="h-4 w-4" />
+                              Business Units
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onSelect={() => setActiveTab('events')}
+                              className={cn('gap-2', activeTab === 'events' && 'bg-accent')}
+                            >
+                              <Radio className="h-4 w-4" />
+                              Events
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onSelect={() => setActiveTab('analytics')}
+                              className={cn('gap-2', activeTab === 'analytics' && 'bg-accent')}
+                            >
+                              <BarChart3 className="h-4 w-4" />
+                              Analytics
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onSelect={() => setActiveTab('sitreps')}
+                              className={cn('gap-2', activeTab === 'sitreps' && 'bg-accent')}
+                            >
+                              <FileText className="h-4 w-4" />
+                              SITREPs
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onSelect={() => setActiveTab('seerist')}
+                              className={cn('gap-2', activeTab === 'seerist' && 'bg-accent')}
+                            >
+                              <Radar className="h-4 w-4" />
+                              Seerist
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onSelect={openWorkspaceSettingsTab}
+                              className={cn(
+                                'gap-2',
+                                activeTab === 'workspace-settings' && 'bg-accent'
+                              )}
+                            >
+                              <Settings className="h-4 w-4" />
+                              {isInExerciseWorkspace ? 'Exercise Settings' : 'Incident Settings'}
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </>
                     )}
-                    {!isCompactPanelTabs && (
+                    {!isCompactPanelTabs && !isInWorkspaceContext && (
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <Button
@@ -22281,7 +22368,7 @@ function App() {
                         </TooltipContent>
                       </Tooltip>
                     )}
-                    {!isCompactPanelTabs && (
+                    {!isCompactPanelTabs && !isInWorkspaceContext && (
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <Button
@@ -22302,42 +22389,6 @@ function App() {
                         </TooltipContent>
                       </Tooltip>
                     )}
-                    {!isCompactPanelTabs &&
-                      (isInIncidentWorkspace || isInExerciseWorkspace) && (
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              type="button"
-                              size="icon"
-                              variant={
-                                isGlassMode
-                                  ? 'outline'
-                                  : activeTab === 'workspace-settings'
-                                    ? 'default'
-                                    : 'outline'
-                              }
-                              className={selectedGlassTabClasses(
-                                activeTab === 'workspace-settings'
-                              )}
-                              onClick={openWorkspaceSettingsTab}
-                              aria-label={
-                                isInExerciseWorkspace
-                                  ? 'Open Exercise Settings tab'
-                                  : 'Open Incident Settings tab'
-                              }
-                              data-pratus-context-id="tab:workspace-settings"
-                              data-pratus-context-label={
-                                isInExerciseWorkspace ? 'Exercise Settings' : 'Incident Settings'
-                              }
-                            >
-                              <Settings className="h-4 w-4" />
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent side="bottom" sideOffset={6}>
-                            {isInExerciseWorkspace ? 'Exercise Settings' : 'Incident Settings'}
-                          </TooltipContent>
-                        </Tooltip>
-                      )}
                   </div>
                 </TooltipProvider>
                 <div className="flex items-center gap-2">
