@@ -112,6 +112,28 @@ async function cloneSnapshotToDocument(
   }
 }
 
+async function fetchWorkspaceDocuments(
+  admin: SupabaseClient,
+  entry: OperationalPeriodFormRegistryEntry,
+  workspaceId: string
+) {
+  const baseQuery = admin
+    .from(entry.documentsTable)
+    .select('id, form_data, latest_version_id, structure_mode')
+    .eq('workspace_id', workspaceId)
+
+  // ics201_documents has updated_at but no created_at; other form tables use created_at.
+  if (entry.key === 'ics201') {
+    return baseQuery.order('updated_at', { ascending: true })
+  }
+
+  if (entry.multipleDocuments) {
+    return baseQuery.order('created_at', { ascending: true })
+  }
+
+  return baseQuery
+}
+
 async function snapshotAndCloneFormEntry(
   admin: SupabaseClient,
   workspaceId: string,
@@ -120,11 +142,11 @@ async function snapshotAndCloneFormEntry(
   userId: string,
   authorName: string
 ): Promise<void> {
-  const { data: documents, error: documentsError } = await admin
-    .from(entry.documentsTable)
-    .select('id, form_data, latest_version_id, structure_mode')
-    .eq('workspace_id', workspaceId)
-    .order('created_at', { ascending: true })
+  const { data: documents, error: documentsError } = await fetchWorkspaceDocuments(
+    admin,
+    entry,
+    workspaceId
+  )
 
   if (documentsError) {
     throw new Error(documentsError.message)
@@ -253,6 +275,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const nextWorkingPeriodNumber = periodNumber + 1
     const authorName = profile?.email ?? user.email ?? 'System'
 
+    await admin
+      .from('workspace_operational_periods')
+      .delete()
+      .eq('workspace_id', workspaceId)
+      .gt('period_number', startedCount)
+
     const { data: periodRow, error: periodError } = await admin
       .from('workspace_operational_periods')
       .insert({
@@ -269,15 +297,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       })
     }
 
-    for (const entry of OPERATIONAL_PERIOD_FORM_REGISTRY) {
-      await snapshotAndCloneFormEntry(
-        admin,
-        workspaceId,
-        periodRow.id,
-        entry,
-        user.id,
-        authorName
-      )
+    try {
+      for (const entry of OPERATIONAL_PERIOD_FORM_REGISTRY) {
+        await snapshotAndCloneFormEntry(
+          admin,
+          workspaceId,
+          periodRow.id,
+          entry,
+          user.id,
+          authorName
+        )
+      }
+    } catch (formError) {
+      await admin.from('workspace_operational_periods').delete().eq('id', periodRow.id)
+      throw formError
     }
 
     const { error: updateWorkspaceError } = await admin
