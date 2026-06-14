@@ -528,14 +528,29 @@ import { useHubNotificationSync } from '@/hooks/useHubNotificationSync'
 import { useIcs201TextSectionEditor } from '@/hooks/useIcs201TextSectionEditor'
 import { useWorkspacePermissions } from '@/hooks/useWorkspacePermissions'
 import { Ics201OperationalPeriodSnapshotPanel } from '@/features/operational-periods/Ics201OperationalPeriodSnapshotPanel'
+import { OperationalPeriodHistoricalFormShell } from '@/features/operational-periods/OperationalPeriodHistoricalFormShell'
 import { useOperationalPeriods } from '@/hooks/useOperationalPeriods'
 import { patchIcs201DocumentForm } from '@/lib/ics201-service'
 import { isOperationalPeriodFormTab } from '@/lib/operational-period-form-registry'
 import {
+  hasOperationalPeriodFormSnapshot,
+  hasOperationalPeriodIcs233Snapshot,
+  resolveDisplayForm,
+  resolveDisplayVersions,
   resolveHistoricalIcs201View,
   resolveHistoricalIcs202View,
   resolveHistoricalIcs203View,
   resolveHistoricalIcs204View,
+  resolveHistoricalIcs205View,
+  resolveHistoricalIcs205aView,
+  resolveHistoricalIcs206View,
+  resolveHistoricalIcs208View,
+  resolveHistoricalIcs208hmView,
+  resolveHistoricalIcs209View,
+  resolveHistoricalIcs215View,
+  resolveHistoricalIcs215aView,
+  resolveHistoricalIcs233Rows,
+  resolveHistoricalIcs234View,
   resolveHistoricalIapView,
 } from '@/lib/operational-period-snapshot-view'
 import {
@@ -12845,6 +12860,8 @@ function App() {
   })
   const effectiveCanEditWorkspaceForms =
     canEditIcs201Form && !isViewingHistoricalOperationalPeriod
+  const effectiveCanEditWorkspaceFormsRef = useRef(effectiveCanEditWorkspaceForms)
+  effectiveCanEditWorkspaceFormsRef.current = effectiveCanEditWorkspaceForms
   const historicalIcs201View = useMemo(
     () => resolveHistoricalIcs201View(historicalBundle),
     [historicalBundle]
@@ -12865,14 +12882,177 @@ function App() {
     () => resolveHistoricalIcs204View(historicalBundle),
     [historicalBundle]
   )
-  const displayIcs202Form = historicalIcs202View?.form ?? ics202Form
-  const displayIcs202Versions = historicalIcs202View?.versions ?? ics202Versions
-  const displayIcs203Form = historicalIcs203View?.form ?? ics203Form
-  const displayIcs203Versions = historicalIcs203View?.versions ?? ics203Versions
-  const displayIapForm = historicalIapView?.form ?? iapForm
-  const displayIapVersions = historicalIapView?.versions ?? iapVersions
-  const displayIcs204Forms = historicalIcs204View?.forms ?? ics204Forms
-  const displayIcs204VersionsById = historicalIcs204View?.versionsById ?? ics204VersionsById
+  const historicalIcs234View = useMemo(
+    () => resolveHistoricalIcs234View(historicalBundle),
+    [historicalBundle]
+  )
+  const historicalIcs215View = useMemo(
+    () => resolveHistoricalIcs215View(historicalBundle),
+    [historicalBundle]
+  )
+  const historicalIcs215aView = useMemo(
+    () => resolveHistoricalIcs215aView(historicalBundle),
+    [historicalBundle]
+  )
+  const historicalIcs205View = useMemo(
+    () => resolveHistoricalIcs205View(historicalBundle),
+    [historicalBundle]
+  )
+  const historicalIcs205aView = useMemo(
+    () => resolveHistoricalIcs205aView(historicalBundle),
+    [historicalBundle]
+  )
+  const historicalIcs206View = useMemo(
+    () => resolveHistoricalIcs206View(historicalBundle),
+    [historicalBundle]
+  )
+  const historicalIcs208View = useMemo(
+    () => resolveHistoricalIcs208View(historicalBundle),
+    [historicalBundle]
+  )
+  const historicalIcs208hmView = useMemo(
+    () => resolveHistoricalIcs208hmView(historicalBundle),
+    [historicalBundle]
+  )
+  const historicalIcs209View = useMemo(
+    () => resolveHistoricalIcs209View(historicalBundle),
+    [historicalBundle]
+  )
+  const historicalIcs233RowsSnapshot = useMemo(
+    () => resolveHistoricalIcs233Rows(historicalBundle),
+    [historicalBundle]
+  )
+  const displayIcs202Form = resolveDisplayForm(
+    isViewingHistoricalOperationalPeriod,
+    ics202Form,
+    historicalIcs202View
+  )
+  const displayIcs202Versions = resolveDisplayVersions(
+    isViewingHistoricalOperationalPeriod,
+    ics202Versions,
+    historicalIcs202View
+  )
+  const displayIcs203Form = resolveDisplayForm(
+    isViewingHistoricalOperationalPeriod,
+    ics203Form,
+    historicalIcs203View
+  )
+  const displayIcs203Versions = resolveDisplayVersions(
+    isViewingHistoricalOperationalPeriod,
+    ics203Versions,
+    historicalIcs203View
+  )
+  const displayIapForm = resolveDisplayForm(
+    isViewingHistoricalOperationalPeriod,
+    iapForm,
+    historicalIapView
+  )
+  const displayIapVersions = resolveDisplayVersions(
+    isViewingHistoricalOperationalPeriod,
+    iapVersions,
+    historicalIapView
+  )
+  const displayIcs204Forms = isViewingHistoricalOperationalPeriod
+    ? (historicalIcs204View?.forms ?? [])
+    : ics204Forms
+  const displayIcs204VersionsById = isViewingHistoricalOperationalPeriod
+    ? (historicalIcs204View?.versionsById ?? {})
+    : ics204VersionsById
+  const displayIcs234Form = resolveDisplayForm(
+    isViewingHistoricalOperationalPeriod,
+    ics234Form,
+    historicalIcs234View
+  )
+  const displayIcs234Versions = resolveDisplayVersions(
+    isViewingHistoricalOperationalPeriod,
+    ics234Versions,
+    historicalIcs234View
+  )
+  const displayIcs215Form = resolveDisplayForm(
+    isViewingHistoricalOperationalPeriod,
+    ics215Form,
+    historicalIcs215View
+  )
+  const displayIcs215Versions = resolveDisplayVersions(
+    isViewingHistoricalOperationalPeriod,
+    ics215Versions,
+    historicalIcs215View
+  )
+  const displayIcs215aForm = resolveDisplayForm(
+    isViewingHistoricalOperationalPeriod,
+    ics215aForm,
+    historicalIcs215aView
+  )
+  const displayIcs215aVersions = resolveDisplayVersions(
+    isViewingHistoricalOperationalPeriod,
+    ics215aVersions,
+    historicalIcs215aView
+  )
+  const displayIcs205Form = resolveDisplayForm(
+    isViewingHistoricalOperationalPeriod,
+    ics205Form,
+    historicalIcs205View
+  )
+  const displayIcs205Versions = resolveDisplayVersions(
+    isViewingHistoricalOperationalPeriod,
+    ics205Versions,
+    historicalIcs205View
+  )
+  const displayIcs205aForm = resolveDisplayForm(
+    isViewingHistoricalOperationalPeriod,
+    ics205aForm,
+    historicalIcs205aView
+  )
+  const displayIcs205aVersions = resolveDisplayVersions(
+    isViewingHistoricalOperationalPeriod,
+    ics205aVersions,
+    historicalIcs205aView
+  )
+  const displayIcs206Form = resolveDisplayForm(
+    isViewingHistoricalOperationalPeriod,
+    ics206Form,
+    historicalIcs206View
+  )
+  const displayIcs206Versions = resolveDisplayVersions(
+    isViewingHistoricalOperationalPeriod,
+    ics206Versions,
+    historicalIcs206View
+  )
+  const displayIcs208Form = resolveDisplayForm(
+    isViewingHistoricalOperationalPeriod,
+    ics208Form,
+    historicalIcs208View
+  )
+  const displayIcs208Versions = resolveDisplayVersions(
+    isViewingHistoricalOperationalPeriod,
+    ics208Versions,
+    historicalIcs208View
+  )
+  const displayIcs208hmForm = resolveDisplayForm(
+    isViewingHistoricalOperationalPeriod,
+    ics208hmForm,
+    historicalIcs208hmView
+  )
+  const displayIcs208hmVersions = resolveDisplayVersions(
+    isViewingHistoricalOperationalPeriod,
+    ics208hmVersions,
+    historicalIcs208hmView
+  )
+  const displayIcs209Form = resolveDisplayForm(
+    isViewingHistoricalOperationalPeriod,
+    ics209Form,
+    historicalIcs209View
+  )
+  const displayIcs209Versions = resolveDisplayVersions(
+    isViewingHistoricalOperationalPeriod,
+    ics209Versions,
+    historicalIcs209View
+  )
+  const displayIcs233Rows = isViewingHistoricalOperationalPeriod
+    ? (historicalIcs233RowsSnapshot ?? [])
+    : ics233Rows
+  const viewingHistoricalOperationalPeriodNumber =
+    formsOperationalPeriodView === 'working' ? null : formsOperationalPeriodView
   const showOperationalPeriodFormSelector =
     operationalPeriodsEnabled &&
     (activeTab === 'briefing' || isOperationalPeriodFormTab(activeTab))
@@ -21033,6 +21213,7 @@ function App() {
     field: K,
     value: Ics233TaskRow[K]
   ) => {
+    if (!effectiveCanEditWorkspaceFormsRef.current) return
     setIcs233Rows((previous) =>
       previous.map((row) =>
         row.id === rowId
@@ -21216,6 +21397,7 @@ function App() {
     }
   }
   const deleteIcs233Row = (rowId: number) => {
+    if (!effectiveCanEditWorkspaceFormsRef.current) return
     setIcs233Rows((previous) => previous.filter((row) => row.id !== rowId))
     if (activeIcs233CellEdit?.rowId === rowId) {
       setActiveIcs233CellEdit(null)
@@ -21236,6 +21418,7 @@ function App() {
     'Lt. A. Rivera (555-0171)',
   ]
   const addIcs233Action = () => {
+    if (!effectiveCanEditWorkspaceFormsRef.current) return
     const now = new Date()
     const defaultDateTime = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}T${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
     const nextId =
@@ -21246,7 +21429,7 @@ function App() {
     setActiveIcs233CellEdit(null)
     setIcs233TaskDraftEdit(null)
   }
-  const filteredIcs233Rows = ics233Rows.filter((row) => {
+  const filteredIcs233Rows = displayIcs233Rows.filter((row) => {
     const assigneeLabel = formatIcs233AssigneeLabel(row, activeWorkspaceRoster)
     const matchesTask = row.task.toLowerCase().includes(ics233Filters.task.trim().toLowerCase())
     const matchesAssignee =
@@ -22587,7 +22770,7 @@ function App() {
                     />
                   </div>
                 )}
-                {activeTab === 'form-ICS-233' && (isInIncidentWorkspace || isInExerciseWorkspace) && (
+                {activeTab === 'form-ICS-233' && (isInIncidentWorkspace || isInExerciseWorkspace) && effectiveCanEditWorkspaceForms && (
                   <div className="flex items-center gap-2">
                     <Button
                       type="button"
@@ -26785,6 +26968,24 @@ function App() {
                         form={historicalIcs201View.form}
                         periodNumber={formsOperationalPeriodView as number}
                         glassItemBorderClasses={glassItemBorderClasses}
+                        onExportWord={() => {
+                          const exportForm = historicalIcs201View!.form!
+                          const stamp = new Date().toISOString().slice(0, 10)
+                          downloadDocx(
+                            `ICS-201_${exportForm.incidentName.trim().replace(/[^a-zA-Z0-9-_]+/g, '_') || 'Incident'}_${stamp}.docx`,
+                            buildIcs201DocxBlocks(exportForm),
+                            buildIcs201ExportOptions(exportForm)
+                          )
+                        }}
+                        onExportPdf={() => {
+                          const exportForm = historicalIcs201View!.form!
+                          const stamp = new Date().toISOString().slice(0, 10)
+                          downloadPdf(
+                            `ICS-201_${exportForm.incidentName.trim().replace(/[^a-zA-Z0-9-_]+/g, '_') || 'Incident'}_${stamp}.pdf`,
+                            buildIcs201DocxBlocks(exportForm),
+                            buildIcs201ExportOptions(exportForm)
+                          )
+                        }}
                       />
                     ) : (
                       <Item variant="outline" className={glassItemBorderClasses}>
@@ -30621,11 +30822,20 @@ function App() {
                 )}
 
                 {activeTab === 'form-ICS-234' && (isInIncidentWorkspace || isInExerciseWorkspace) && (
+                  <OperationalPeriodHistoricalFormShell
+                    isViewingHistorical={isViewingHistoricalOperationalPeriod}
+                    isLoading={isLoadingHistoricalOperationalPeriod}
+                    error={historicalOperationalPeriodError}
+                    periodNumber={viewingHistoricalOperationalPeriodNumber ?? 0}
+                    formLabel="ICS-234 Work Analysis Matrix"
+                    hasSnapshot={hasOperationalPeriodFormSnapshot(historicalBundle, 'ics234')}
+                    glassItemBorderClasses={glassItemBorderClasses}
+                  >
                   <Ics234WorkspacePanel
-                    form={ics234Form}
+                    form={displayIcs234Form}
                     setForm={setIcs234Form}
-                    versions={ics234Versions}
-                    canEdit={canEditIcs201Form}
+                    versions={displayIcs234Versions}
+                    canEdit={effectiveCanEditWorkspaceForms}
                     isLoading={isIcs234Loading}
                     isSaving={isIcs234Saving}
                     glassItemBorderClasses={glassItemBorderClasses}
@@ -30656,14 +30866,24 @@ function App() {
                     downloadDocx={downloadDocx}
                     downloadPdf={downloadPdf}
                   />
+                  </OperationalPeriodHistoricalFormShell>
                 )}
 
                 {activeTab === 'form-ICS-215' && (isInIncidentWorkspace || isInExerciseWorkspace) && (
+                  <OperationalPeriodHistoricalFormShell
+                    isViewingHistorical={isViewingHistoricalOperationalPeriod}
+                    isLoading={isLoadingHistoricalOperationalPeriod}
+                    error={historicalOperationalPeriodError}
+                    periodNumber={viewingHistoricalOperationalPeriodNumber ?? 0}
+                    formLabel="ICS-215 Operational Planning Worksheet"
+                    hasSnapshot={hasOperationalPeriodFormSnapshot(historicalBundle, 'ics215')}
+                    glassItemBorderClasses={glassItemBorderClasses}
+                  >
                   <Ics215WorkspacePanel
-                    form={ics215Form}
+                    form={displayIcs215Form}
                     setForm={setIcs215Form}
-                    versions={ics215Versions}
-                    canEdit={canEditIcs201Form}
+                    versions={displayIcs215Versions}
+                    canEdit={effectiveCanEditWorkspaceForms}
                     isLoading={isIcs215Loading}
                     isSaving={isIcs215Saving}
                     glassItemBorderClasses={glassItemBorderClasses}
@@ -30682,14 +30902,24 @@ function App() {
                     downloadDocx={downloadDocx}
                     downloadPdf={downloadPdf}
                   />
+                  </OperationalPeriodHistoricalFormShell>
                 )}
 
                 {activeTab === 'form-ICS-215A' && (isInIncidentWorkspace || isInExerciseWorkspace) && (
+                  <OperationalPeriodHistoricalFormShell
+                    isViewingHistorical={isViewingHistoricalOperationalPeriod}
+                    isLoading={isLoadingHistoricalOperationalPeriod}
+                    error={historicalOperationalPeriodError}
+                    periodNumber={viewingHistoricalOperationalPeriodNumber ?? 0}
+                    formLabel="ICS-215A Safety Analysis"
+                    hasSnapshot={hasOperationalPeriodFormSnapshot(historicalBundle, 'ics215a')}
+                    glassItemBorderClasses={glassItemBorderClasses}
+                  >
                   <Ics215aWorkspacePanel
-                    form={ics215aForm}
+                    form={displayIcs215aForm}
                     setForm={setIcs215aForm}
-                    versions={ics215aVersions}
-                    canEdit={canEditIcs201Form}
+                    versions={displayIcs215aVersions}
+                    canEdit={effectiveCanEditWorkspaceForms}
                     isLoading={isIcs215aLoading}
                     isSaving={isIcs215aSaving}
                     glassItemBorderClasses={glassItemBorderClasses}
@@ -30708,14 +30938,24 @@ function App() {
                     downloadDocx={downloadDocx}
                     downloadPdf={downloadPdf}
                   />
+                  </OperationalPeriodHistoricalFormShell>
                 )}
 
                 {activeTab === 'form-ICS-205' && (isInIncidentWorkspace || isInExerciseWorkspace) && (
+                  <OperationalPeriodHistoricalFormShell
+                    isViewingHistorical={isViewingHistoricalOperationalPeriod}
+                    isLoading={isLoadingHistoricalOperationalPeriod}
+                    error={historicalOperationalPeriodError}
+                    periodNumber={viewingHistoricalOperationalPeriodNumber ?? 0}
+                    formLabel="ICS-205 Incident Radio Communications Plan"
+                    hasSnapshot={hasOperationalPeriodFormSnapshot(historicalBundle, 'ics205')}
+                    glassItemBorderClasses={glassItemBorderClasses}
+                  >
                   <Ics205WorkspacePanel
-                    form={ics205Form}
+                    form={displayIcs205Form}
                     setForm={setIcs205Form}
-                    versions={ics205Versions}
-                    canEdit={canEditIcs201Form}
+                    versions={displayIcs205Versions}
+                    canEdit={effectiveCanEditWorkspaceForms}
                     isLoading={isIcs205Loading}
                     isSaving={isIcs205Saving}
                     glassItemBorderClasses={glassItemBorderClasses}
@@ -30734,14 +30974,24 @@ function App() {
                     downloadDocx={downloadDocx}
                     downloadPdf={downloadPdf}
                   />
+                  </OperationalPeriodHistoricalFormShell>
                 )}
 
                 {activeTab === 'form-ICS-205A' && (isInIncidentWorkspace || isInExerciseWorkspace) && (
+                  <OperationalPeriodHistoricalFormShell
+                    isViewingHistorical={isViewingHistoricalOperationalPeriod}
+                    isLoading={isLoadingHistoricalOperationalPeriod}
+                    error={historicalOperationalPeriodError}
+                    periodNumber={viewingHistoricalOperationalPeriodNumber ?? 0}
+                    formLabel="ICS-205A Communications List"
+                    hasSnapshot={hasOperationalPeriodFormSnapshot(historicalBundle, 'ics205a')}
+                    glassItemBorderClasses={glassItemBorderClasses}
+                  >
                   <Ics205aWorkspacePanel
-                    form={ics205aForm}
+                    form={displayIcs205aForm}
                     setForm={setIcs205aForm}
-                    versions={ics205aVersions}
-                    canEdit={canEditIcs201Form}
+                    versions={displayIcs205aVersions}
+                    canEdit={effectiveCanEditWorkspaceForms}
                     isLoading={isIcs205aLoading}
                     isSaving={isIcs205aSaving}
                     glassItemBorderClasses={glassItemBorderClasses}
@@ -30760,14 +31010,24 @@ function App() {
                     downloadDocx={downloadDocx}
                     downloadPdf={downloadPdf}
                   />
+                  </OperationalPeriodHistoricalFormShell>
                 )}
 
                 {activeTab === 'form-ICS-206' && (isInIncidentWorkspace || isInExerciseWorkspace) && (
+                  <OperationalPeriodHistoricalFormShell
+                    isViewingHistorical={isViewingHistoricalOperationalPeriod}
+                    isLoading={isLoadingHistoricalOperationalPeriod}
+                    error={historicalOperationalPeriodError}
+                    periodNumber={viewingHistoricalOperationalPeriodNumber ?? 0}
+                    formLabel="ICS-206 Medical Plan"
+                    hasSnapshot={hasOperationalPeriodFormSnapshot(historicalBundle, 'ics206')}
+                    glassItemBorderClasses={glassItemBorderClasses}
+                  >
                   <Ics206WorkspacePanel
-                    form={ics206Form}
+                    form={displayIcs206Form}
                     setForm={setIcs206Form}
-                    versions={ics206Versions}
-                    canEdit={canEditIcs201Form}
+                    versions={displayIcs206Versions}
+                    canEdit={effectiveCanEditWorkspaceForms}
                     isLoading={isIcs206Loading}
                     isSaving={isIcs206Saving}
                     glassItemBorderClasses={glassItemBorderClasses}
@@ -30786,14 +31046,24 @@ function App() {
                     downloadDocx={downloadDocx}
                     downloadPdf={downloadPdf}
                   />
+                  </OperationalPeriodHistoricalFormShell>
                 )}
 
                 {activeTab === 'form-ICS-208' && (isInIncidentWorkspace || isInExerciseWorkspace) && (
+                  <OperationalPeriodHistoricalFormShell
+                    isViewingHistorical={isViewingHistoricalOperationalPeriod}
+                    isLoading={isLoadingHistoricalOperationalPeriod}
+                    error={historicalOperationalPeriodError}
+                    periodNumber={viewingHistoricalOperationalPeriodNumber ?? 0}
+                    formLabel="ICS-208 Safety & Health Plan"
+                    hasSnapshot={hasOperationalPeriodFormSnapshot(historicalBundle, 'ics208')}
+                    glassItemBorderClasses={glassItemBorderClasses}
+                  >
                   <Ics208WorkspacePanel
-                    form={ics208Form}
+                    form={displayIcs208Form}
                     setForm={setIcs208Form}
-                    versions={ics208Versions}
-                    canEdit={canEditIcs201Form}
+                    versions={displayIcs208Versions}
+                    canEdit={effectiveCanEditWorkspaceForms}
                     isLoading={isIcs208Loading}
                     isSaving={isIcs208Saving}
                     glassItemBorderClasses={glassItemBorderClasses}
@@ -30812,14 +31082,24 @@ function App() {
                     downloadDocx={downloadDocx}
                     downloadPdf={downloadPdf}
                   />
+                  </OperationalPeriodHistoricalFormShell>
                 )}
 
                 {activeTab === 'form-ICS-208HM' && (isInIncidentWorkspace || isInExerciseWorkspace) && (
+                  <OperationalPeriodHistoricalFormShell
+                    isViewingHistorical={isViewingHistoricalOperationalPeriod}
+                    isLoading={isLoadingHistoricalOperationalPeriod}
+                    error={historicalOperationalPeriodError}
+                    periodNumber={viewingHistoricalOperationalPeriodNumber ?? 0}
+                    formLabel="ICS-208HM Site Safety & Control Plan"
+                    hasSnapshot={hasOperationalPeriodFormSnapshot(historicalBundle, 'ics208hm')}
+                    glassItemBorderClasses={glassItemBorderClasses}
+                  >
                   <Ics208hmWorkspacePanel
-                    form={ics208hmForm}
+                    form={displayIcs208hmForm}
                     setForm={setIcs208hmForm}
-                    versions={ics208hmVersions}
-                    canEdit={canEditIcs201Form}
+                    versions={displayIcs208hmVersions}
+                    canEdit={effectiveCanEditWorkspaceForms}
                     isLoading={isIcs208hmLoading}
                     isSaving={isIcs208hmSaving}
                     glassItemBorderClasses={glassItemBorderClasses}
@@ -30838,14 +31118,24 @@ function App() {
                     downloadDocx={downloadDocx}
                     downloadPdf={downloadPdf}
                   />
+                  </OperationalPeriodHistoricalFormShell>
                 )}
 
                 {activeTab === 'form-ICS-209' && (isInIncidentWorkspace || isInExerciseWorkspace) && (
+                  <OperationalPeriodHistoricalFormShell
+                    isViewingHistorical={isViewingHistoricalOperationalPeriod}
+                    isLoading={isLoadingHistoricalOperationalPeriod}
+                    error={historicalOperationalPeriodError}
+                    periodNumber={viewingHistoricalOperationalPeriodNumber ?? 0}
+                    formLabel="ICS-209 Incident Status Summary"
+                    hasSnapshot={hasOperationalPeriodFormSnapshot(historicalBundle, 'ics209')}
+                    glassItemBorderClasses={glassItemBorderClasses}
+                  >
                   <Ics209WorkspacePanel
-                    form={ics209Form}
+                    form={displayIcs209Form}
                     setForm={setIcs209Form}
-                    versions={ics209Versions}
-                    canEdit={canEditIcs201Form}
+                    versions={displayIcs209Versions}
+                    canEdit={effectiveCanEditWorkspaceForms}
                     isLoading={isIcs209Loading}
                     isSaving={isIcs209Saving}
                     glassItemBorderClasses={glassItemBorderClasses}
@@ -30864,9 +31154,19 @@ function App() {
                     downloadDocx={downloadDocx}
                     downloadPdf={downloadPdf}
                   />
+                  </OperationalPeriodHistoricalFormShell>
                 )}
 
                 {activeTab === 'form-ICS-203' && (isInIncidentWorkspace || isInExerciseWorkspace) && (
+                  <OperationalPeriodHistoricalFormShell
+                    isViewingHistorical={isViewingHistoricalOperationalPeriod}
+                    isLoading={isLoadingHistoricalOperationalPeriod}
+                    error={historicalOperationalPeriodError}
+                    periodNumber={viewingHistoricalOperationalPeriodNumber ?? 0}
+                    formLabel="ICS-203 Organization Assignment List"
+                    hasSnapshot={hasOperationalPeriodFormSnapshot(historicalBundle, 'ics203')}
+                    glassItemBorderClasses={glassItemBorderClasses}
+                  >
                   <Ics203WorkspacePanel
                     form={displayIcs203Form}
                     setForm={setIcs203Form}
@@ -30890,9 +31190,19 @@ function App() {
                     downloadDocx={downloadDocx}
                     downloadPdf={downloadPdf}
                   />
+                  </OperationalPeriodHistoricalFormShell>
                 )}
 
                 {activeTab === 'form-IAP' && isInIncidentWorkspace && (
+                  <OperationalPeriodHistoricalFormShell
+                    isViewingHistorical={isViewingHistoricalOperationalPeriod}
+                    isLoading={isLoadingHistoricalOperationalPeriod}
+                    error={historicalOperationalPeriodError}
+                    periodNumber={viewingHistoricalOperationalPeriodNumber ?? 0}
+                    formLabel="Incident Action Plan"
+                    hasSnapshot={hasOperationalPeriodFormSnapshot(historicalBundle, 'iap')}
+                    glassItemBorderClasses={glassItemBorderClasses}
+                  >
                   <IapWorkspacePanel
                     form={displayIapForm}
                     setForm={setIapForm}
@@ -30915,9 +31225,19 @@ function App() {
                     downloadDocx={downloadDocx}
                     downloadPdf={downloadPdf}
                   />
+                  </OperationalPeriodHistoricalFormShell>
                 )}
 
                 {activeTab === 'form-ICS-202' && (isInIncidentWorkspace || isInExerciseWorkspace) && (
+                  <OperationalPeriodHistoricalFormShell
+                    isViewingHistorical={isViewingHistoricalOperationalPeriod}
+                    isLoading={isLoadingHistoricalOperationalPeriod}
+                    error={historicalOperationalPeriodError}
+                    periodNumber={viewingHistoricalOperationalPeriodNumber ?? 0}
+                    formLabel="ICS-202 Incident Objectives"
+                    hasSnapshot={hasOperationalPeriodFormSnapshot(historicalBundle, 'ics202')}
+                    glassItemBorderClasses={glassItemBorderClasses}
+                  >
                   <Ics202WorkspacePanel
                     form={displayIcs202Form}
                     setForm={setIcs202Form}
@@ -30941,9 +31261,19 @@ function App() {
                     downloadDocx={downloadDocx}
                     downloadPdf={downloadPdf}
                   />
+                  </OperationalPeriodHistoricalFormShell>
                 )}
 
                 {activeTab === 'form-ICS-204' && (isInIncidentWorkspace || isInExerciseWorkspace) && (
+                  <OperationalPeriodHistoricalFormShell
+                    isViewingHistorical={isViewingHistoricalOperationalPeriod}
+                    isLoading={isLoadingHistoricalOperationalPeriod}
+                    error={historicalOperationalPeriodError}
+                    periodNumber={viewingHistoricalOperationalPeriodNumber ?? 0}
+                    formLabel="ICS-204 Assignment List"
+                    hasSnapshot={hasOperationalPeriodFormSnapshot(historicalBundle, 'ics204')}
+                    glassItemBorderClasses={glassItemBorderClasses}
+                  >
                   <div className="space-y-3">
                     <div className="flex items-center justify-end gap-2">
                       {isIcs204Loading ? (
@@ -31527,6 +31857,7 @@ function App() {
                           )
                         })}
                   </div>
+                  </OperationalPeriodHistoricalFormShell>
                 )}
 
                 {activeTab === 'seerist' && (
@@ -32245,6 +32576,15 @@ function App() {
                 )}
 
                 {activeTab === 'form-ICS-233' && (isInIncidentWorkspace || isInExerciseWorkspace) && (
+                  <OperationalPeriodHistoricalFormShell
+                    isViewingHistorical={isViewingHistoricalOperationalPeriod}
+                    isLoading={isLoadingHistoricalOperationalPeriod}
+                    error={historicalOperationalPeriodError}
+                    periodNumber={viewingHistoricalOperationalPeriodNumber ?? 0}
+                    formLabel="ICS-233 Open Actions"
+                    hasSnapshot={hasOperationalPeriodIcs233Snapshot(historicalBundle)}
+                    glassItemBorderClasses={glassItemBorderClasses}
+                  >
                   <Item
                     variant="outline"
                     className={cn(
@@ -32922,10 +33262,10 @@ function App() {
                           <Item variant="outline" className={glassItemBorderClasses}>
                             <ItemContent>
                               <ItemTitle>
-                                {ics233Rows.length === 0 ? 'No actions yet' : 'No matching tasks'}
+                                {displayIcs233Rows.length === 0 ? 'No actions yet' : 'No matching tasks'}
                               </ItemTitle>
                               <ItemDescription>
-                                {ics233Rows.length === 0
+                                {displayIcs233Rows.length === 0
                                   ? 'Click + Add Action to create an open action for this workspace.'
                                   : 'Adjust the table filters to broaden results.'}
                               </ItemDescription>
@@ -32935,6 +33275,7 @@ function App() {
                       </div>
                     )}
                   </Item>
+                  </OperationalPeriodHistoricalFormShell>
                 )}
 
                 {activeTab.startsWith('form-') &&

@@ -1,13 +1,29 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 
-type OperationalPeriodFormKey = 'ics201' | 'iap' | 'ics202' | 'ics203' | 'ics204'
+type OperationalPeriodFormKey =
+  | 'ics201'
+  | 'iap'
+  | 'ics202'
+  | 'ics203'
+  | 'ics234'
+  | 'ics215'
+  | 'ics215a'
+  | 'ics205'
+  | 'ics205a'
+  | 'ics206'
+  | 'ics204'
+  | 'ics233'
+  | 'ics208'
+  | 'ics208hm'
+  | 'ics209'
 
 type OperationalPeriodFormRegistryEntry = {
   key: OperationalPeriodFormKey
   documentsTable: string
-  versionsTable: string
+  versionsTable?: string
   multipleDocuments: boolean
+  rowsBased?: boolean
 }
 
 const OPERATIONAL_PERIOD_FORM_REGISTRY: OperationalPeriodFormRegistryEntry[] = [
@@ -36,10 +52,70 @@ const OPERATIONAL_PERIOD_FORM_REGISTRY: OperationalPeriodFormRegistryEntry[] = [
     multipleDocuments: false,
   },
   {
+    key: 'ics234',
+    documentsTable: 'ics234_documents',
+    versionsTable: 'ics234_versions',
+    multipleDocuments: false,
+  },
+  {
+    key: 'ics215',
+    documentsTable: 'ics215_documents',
+    versionsTable: 'ics215_versions',
+    multipleDocuments: false,
+  },
+  {
+    key: 'ics215a',
+    documentsTable: 'ics215a_documents',
+    versionsTable: 'ics215a_versions',
+    multipleDocuments: false,
+  },
+  {
+    key: 'ics205',
+    documentsTable: 'ics205_documents',
+    versionsTable: 'ics205_versions',
+    multipleDocuments: false,
+  },
+  {
+    key: 'ics205a',
+    documentsTable: 'ics205a_documents',
+    versionsTable: 'ics205a_versions',
+    multipleDocuments: false,
+  },
+  {
+    key: 'ics206',
+    documentsTable: 'ics206_documents',
+    versionsTable: 'ics206_versions',
+    multipleDocuments: false,
+  },
+  {
     key: 'ics204',
     documentsTable: 'ics204_documents',
     versionsTable: 'ics204_versions',
     multipleDocuments: true,
+  },
+  {
+    key: 'ics233',
+    documentsTable: 'ics233_documents',
+    multipleDocuments: false,
+    rowsBased: true,
+  },
+  {
+    key: 'ics208',
+    documentsTable: 'ics208_documents',
+    versionsTable: 'ics208_versions',
+    multipleDocuments: false,
+  },
+  {
+    key: 'ics208hm',
+    documentsTable: 'ics208hm_documents',
+    versionsTable: 'ics208hm_versions',
+    multipleDocuments: false,
+  },
+  {
+    key: 'ics209',
+    documentsTable: 'ics209_documents',
+    versionsTable: 'ics209_versions',
+    multipleDocuments: false,
   },
 ]
 
@@ -54,11 +130,16 @@ type StartOperationalPeriodBody = {
   workspaceId?: string
 }
 
-type DocumentRow = {
+type StandardDocumentRow = {
   id: string
   form_data: unknown
   latest_version_id: string | null
   structure_mode?: string | null
+}
+
+type RowsDocumentRow = {
+  id: string
+  rows_data: unknown
 }
 
 type VersionRow = {
@@ -80,9 +161,9 @@ function parseBody(req: VercelRequest): StartOperationalPeriodBody {
 async function getLatestDocumentSnapshot(
   admin: SupabaseClient,
   entry: OperationalPeriodFormRegistryEntry,
-  document: DocumentRow
+  document: StandardDocumentRow
 ): Promise<{ snapshot: unknown; sourceVersionId: string | null }> {
-  if (document.latest_version_id) {
+  if (document.latest_version_id && entry.versionsTable) {
     const { data: version, error } = await admin
       .from(entry.versionsTable)
       .select('id, snapshot')
@@ -107,11 +188,15 @@ async function getLatestDocumentSnapshot(
 async function cloneSnapshotToDocument(
   admin: SupabaseClient,
   entry: OperationalPeriodFormRegistryEntry,
-  document: DocumentRow,
+  document: StandardDocumentRow,
   snapshot: unknown,
   userId: string,
   authorName: string
 ): Promise<void> {
+  if (!entry.versionsTable) {
+    throw new Error(`Form ${entry.key} does not support versioned clone.`)
+  }
+
   const clonedSnapshot = JSON.parse(JSON.stringify(snapshot))
   const authorColor = '#64748b'
 
@@ -150,11 +235,39 @@ async function cloneSnapshotToDocument(
   }
 }
 
+async function cloneRowsToDocument(
+  admin: SupabaseClient,
+  entry: OperationalPeriodFormRegistryEntry,
+  document: RowsDocumentRow,
+  rows: unknown,
+  userId: string
+): Promise<void> {
+  const { error: documentError } = await admin
+    .from(entry.documentsTable)
+    .update({
+      rows_data: JSON.parse(JSON.stringify(rows)),
+      updated_at: new Date().toISOString(),
+      updated_by: userId,
+    })
+    .eq('id', document.id)
+
+  if (documentError) {
+    throw new Error(documentError.message)
+  }
+}
+
 async function fetchWorkspaceDocuments(
   admin: SupabaseClient,
   entry: OperationalPeriodFormRegistryEntry,
   workspaceId: string
 ) {
+  if (entry.rowsBased) {
+    return admin
+      .from(entry.documentsTable)
+      .select('id, rows_data')
+      .eq('workspace_id', workspaceId)
+  }
+
   const selectColumns =
     entry.key === 'ics201'
       ? 'id, form_data, latest_version_id, structure_mode'
@@ -165,7 +278,6 @@ async function fetchWorkspaceDocuments(
     .select(selectColumns)
     .eq('workspace_id', workspaceId)
 
-  // ics201_documents has updated_at but no created_at; other form tables use created_at.
   if (entry.key === 'ics201') {
     return baseQuery.order('updated_at', { ascending: true })
   }
@@ -195,16 +307,39 @@ async function snapshotAndCloneFormEntry(
     throw new Error(documentsError.message)
   }
 
-  const rows = (documents ?? []) as DocumentRow[]
+  const rows = (documents ?? []) as Array<StandardDocumentRow | RowsDocumentRow>
   if (rows.length === 0) {
     return
   }
 
   for (const document of rows) {
+    if (entry.rowsBased) {
+      const rowsDocument = document as RowsDocumentRow
+      const snapshot = rowsDocument.rows_data ?? []
+
+      const { error: snapshotError } = await admin
+        .from('workspace_operational_period_form_snapshots')
+        .insert({
+          operational_period_id: operationalPeriodId,
+          form_key: entry.key,
+          document_id: rowsDocument.id,
+          snapshot,
+          source_version_id: null,
+        })
+
+      if (snapshotError) {
+        throw new Error(snapshotError.message)
+      }
+
+      await cloneRowsToDocument(admin, entry, rowsDocument, snapshot, userId)
+      continue
+    }
+
+    const standardDocument = document as StandardDocumentRow
     const { snapshot, sourceVersionId } = await getLatestDocumentSnapshot(
       admin,
       entry,
-      document
+      standardDocument
     )
 
     const { error: snapshotError } = await admin
@@ -212,7 +347,7 @@ async function snapshotAndCloneFormEntry(
       .insert({
         operational_period_id: operationalPeriodId,
         form_key: entry.key,
-        document_id: document.id,
+        document_id: standardDocument.id,
         snapshot,
         source_version_id: sourceVersionId,
       })
@@ -221,7 +356,14 @@ async function snapshotAndCloneFormEntry(
       throw new Error(snapshotError.message)
     }
 
-    await cloneSnapshotToDocument(admin, entry, document, snapshot, userId, authorName)
+    await cloneSnapshotToDocument(
+      admin,
+      entry,
+      standardDocument,
+      snapshot,
+      userId,
+      authorName
+    )
   }
 }
 
