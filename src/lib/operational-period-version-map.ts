@@ -18,6 +18,8 @@ import type { Ics208hmVersion, Ics208hmVersionRow } from '@/features/ics208hm/ty
 import { mapIcs208hmVersionRow } from '@/features/ics208hm/utils'
 import type { Ics209Version, Ics209VersionRow } from '@/features/ics209/types'
 import { mapIcs209VersionRow } from '@/features/ics209/utils'
+import type { Ics214Version, Ics214VersionRow } from '@/features/ics214/types'
+import { mapIcs214VersionRow } from '@/features/ics214/utils'
 import type { Ics215Version, Ics215VersionRow } from '@/features/ics215/types'
 import { mapIcs215VersionRow } from '@/features/ics215/utils'
 import type { Ics215aVersion, Ics215aVersionRow } from '@/features/ics215a/types'
@@ -140,4 +142,10 @@ export function mapFrozenVersionsToIcs209Versions(
   rows: FrozenFormVersionSnapshot[]
 ): Ics209Version[] {
   return rows.map((row) => mapIcs209VersionRow(asVersionRow<Ics209VersionRow>(row)))
+}
+
+export function mapFrozenVersionsToIcs214Versions(
+  rows: FrozenFormVersionSnapshot[]
+): Ics214Version[] {
+  return rows.map((row) => mapIcs214VersionRow(asVersionRow<Ics214VersionRow>(row)))
 }

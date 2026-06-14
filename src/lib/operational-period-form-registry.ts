@@ -14,6 +14,7 @@ export type OperationalPeriodFormKey =
   | 'ics208'
   | 'ics208hm'
   | 'ics209'
+  | 'ics214'
 
 export type OperationalPeriodFormRegistryEntry = {
   key: OperationalPeriodFormKey
@@ -148,6 +149,14 @@ export const OPERATIONAL_PERIOD_FORM_REGISTRY: OperationalPeriodFormRegistryEntr
     tab: 'form-ICS-209',
     documentsTable: 'ics209_documents',
     versionsTable: 'ics209_versions',
+    multipleDocuments: false,
+  },
+  {
+    key: 'ics214',
+    label: 'ICS-214 Activity Log',
+    tab: 'form-ICS-214',
+    documentsTable: 'ics214_documents',
+    versionsTable: 'ics214_versions',
     multipleDocuments: false,
   },
 ]

@@ -53,7 +53,7 @@ export function PositionRosterCard({
   const isOrg = variant === 'org'
 
   const cardBody = (
-    <div className={cn('space-y-3', isOrg ? 'px-2.5 py-2.5' : 'px-3 py-3')}>
+    <div className={cn('space-y-2 overflow-hidden', isOrg ? 'px-2 py-2' : 'space-y-3 px-3 py-3')}>
       <div className="space-y-1">
         <ItemTitle className={cn('leading-snug', isOrg ? 'text-xs' : 'text-sm')}>
           {entry.position}
@@ -126,17 +126,20 @@ export function PositionRosterCard({
       )}
 
       {canManageRoster && (
-        <div className="space-y-1.5">
+        <div className="space-y-1">
           <Button
             type="button"
             size="sm"
             variant="default"
-            className={cn('w-full gap-1 text-xs', isOrg ? 'h-6' : 'h-7')}
+            className={cn(
+              'w-full min-w-0 gap-1 px-1.5 text-[10px] leading-tight',
+              isOrg ? 'h-6' : 'h-7 text-xs'
+            )}
             disabled={isAssignBusy}
             onClick={() => onInviteToPosition(entry.position)}
           >
-            <Plus className="h-3.5 w-3.5" />
-            Add new user
+            <Plus className={cn('shrink-0', isOrg ? 'h-3 w-3' : 'h-3.5 w-3.5')} />
+            <span className="truncate">{isOrg ? 'Add user' : 'Add new user'}</span>
           </Button>
 
           <Popover>
@@ -145,11 +148,14 @@ export function PositionRosterCard({
                 type="button"
                 size="sm"
                 variant="outline"
-                className={cn('gap-1 text-xs', isOrg ? 'h-6 w-full' : 'h-7 w-full')}
+                className={cn(
+                  'w-full min-w-0 gap-1 px-1.5 text-[10px] leading-tight',
+                  isOrg ? 'h-6' : 'h-7 text-xs'
+                )}
                 disabled={isAssignBusy || assignable.length === 0}
               >
-                <UserPlus className="h-3.5 w-3.5" />
-                {isOrg ? 'Assign existing' : 'Assign existing user'}
+                <UserPlus className={cn('shrink-0', isOrg ? 'h-3 w-3' : 'h-3.5 w-3.5')} />
+                <span className="truncate">{isOrg ? 'Assign' : 'Assign existing user'}</span>
               </Button>
             </PopoverTrigger>
             <PopoverContent
@@ -292,8 +298,8 @@ export function PositionRosterCard({
         'flex min-w-0 flex-col items-stretch p-0',
         isOrg
           ? cn(
-              'w-full max-w-full shadow-sm',
-              layoutMode === 'wide' ? 'min-w-[9.5rem] max-w-[11rem]' : 'min-w-0',
+              'w-full max-w-full min-w-0 overflow-hidden shadow-sm',
+              layoutMode === 'wide' ? 'min-w-[10rem] max-w-[12rem]' : 'min-w-0',
               orgChartColorClasses(color)
             )
           : glassItemBorderClasses

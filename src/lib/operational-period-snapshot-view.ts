@@ -19,6 +19,8 @@ import type { Ics208hmFormState, Ics208hmVersion } from '@/features/ics208hm/typ
 import { cloneIcs208hmFormState } from '@/features/ics208hm/utils'
 import type { Ics209FormState, Ics209Version } from '@/features/ics209/types'
 import { cloneIcs209FormState } from '@/features/ics209/utils'
+import type { Ics214FormState, Ics214Version } from '@/features/ics214/types'
+import { cloneIcs214FormState } from '@/features/ics214/utils'
 import type { Ics215FormState, Ics215Version } from '@/features/ics215/types'
 import { cloneIcs215FormState } from '@/features/ics215/utils'
 import type { Ics215aFormState, Ics215aVersion } from '@/features/ics215a/types'
@@ -50,6 +52,7 @@ import {
   mapFrozenVersionsToIcs208Versions,
   mapFrozenVersionsToIcs208hmVersions,
   mapFrozenVersionsToIcs209Versions,
+  mapFrozenVersionsToIcs214Versions,
   normalizeFrozenVersionSnapshots,
 } from '@/lib/operational-period-version-map'
 
@@ -236,6 +239,16 @@ export function resolveHistoricalIcs209View(
     getSingleEntry(bundle, 'ics209'),
     mapFrozenVersionsToIcs209Versions,
     cloneIcs209FormState
+  )
+}
+
+export function resolveHistoricalIcs214View(
+  bundle: OperationalPeriodSnapshotBundle | null
+): { form: Ics214FormState | null; versions: Ics214Version[] } | null {
+  return resolveHistoricalSingleFormView(
+    getSingleEntry(bundle, 'ics214'),
+    mapFrozenVersionsToIcs214Versions,
+    cloneIcs214FormState
   )
 }
 

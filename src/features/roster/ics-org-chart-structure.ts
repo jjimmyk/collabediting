@@ -23,7 +23,19 @@ export const ICS_ORG_CHART_ROOT: OrgChartNode = {
   position: ICS_ORG_CHART_ROOT_POSITION,
 }
 
-export const ICS_ORG_CHART_BRANCHES: Extract<OrgChartNode, { kind: 'group' }>[] = [
+export const ICS_ORG_CHART_COMMAND_STAFF_BRANCH: Extract<OrgChartNode, { kind: 'group' }> = {
+  kind: 'group',
+  label: 'Command Staff',
+  type: 'Command Staff',
+  color: 'neutral',
+  children: [
+    { kind: 'position', position: 'Public Information Officer', color: 'neutral' },
+    { kind: 'position', position: 'Safety Officer', color: 'neutral' },
+    { kind: 'position', position: 'Liaison Officer', color: 'neutral' },
+  ],
+}
+
+export const ICS_ORG_CHART_SECTION_BRANCHES: Extract<OrgChartNode, { kind: 'group' }>[] = [
   {
     kind: 'group',
     label: 'Operations Section',
@@ -59,17 +71,11 @@ export const ICS_ORG_CHART_BRANCHES: Extract<OrgChartNode, { kind: 'group' }>[] 
     color: 'green',
     children: [{ kind: 'position', position: 'Finance/Admin Section Chief', color: 'green' }],
   },
-  {
-    kind: 'group',
-    label: 'Command Staff',
-    type: 'Command Staff',
-    color: 'neutral',
-    children: [
-      { kind: 'position', position: 'Public Information Officer', color: 'neutral' },
-      { kind: 'position', position: 'Safety Officer', color: 'neutral' },
-      { kind: 'position', position: 'Liaison Officer', color: 'neutral' },
-    ],
-  },
+]
+
+export const ICS_ORG_CHART_BRANCHES: Extract<OrgChartNode, { kind: 'group' }>[] = [
+  ...ICS_ORG_CHART_SECTION_BRANCHES,
+  ICS_ORG_CHART_COMMAND_STAFF_BRANCH,
 ]
 
 export function collectOrgChartPositions(nodes: OrgChartNode[]): string[] {

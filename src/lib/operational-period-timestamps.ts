@@ -61,6 +61,11 @@ export function applyOperationalPeriodTimestampsToSnapshot(
       data.operationalPeriodFrom = formatOperationalPeriodDatetimeLocal(window.from)
       data.operationalPeriodTo = formatOperationalPeriodDatetimeLocal(window.to)
       break
+    case 'ics214':
+      data.operationalPeriodFrom = formatOperationalPeriodDatetimeLocal(window.from)
+      data.operationalPeriodTo = formatOperationalPeriodDatetimeLocal(window.to)
+      data.dateOfActivity = formatOperationalPeriodDate(window.from)
+      break
     case 'ics215':
     case 'ics215a':
     case 'ics205':

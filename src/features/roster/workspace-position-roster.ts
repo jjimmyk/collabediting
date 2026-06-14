@@ -9,6 +9,51 @@ export type PositionRosterEntry = {
   editIcs201: boolean
 }
 
+export type PositionRosterAssignmentFilter = {
+  searchQuery: string
+  status: 'all' | 'assigned' | 'unassigned'
+}
+
+export function formatPositionAssignmentCount(memberCount: number): string {
+  if (memberCount === 0) return 'Unassigned'
+  if (memberCount === 1) return '1 person assigned'
+  return `${memberCount} people assigned`
+}
+
+export function filterPositionRosterMembers(
+  members: WorkspaceRosterMember[],
+  searchQuery: string
+): WorkspaceRosterMember[] {
+  const normalizedQuery = searchQuery.trim().toLowerCase()
+  if (!normalizedQuery) return members
+
+  return members.filter((member) =>
+    [member.email, member.status, member.addedAt].join(' ').toLowerCase().includes(normalizedQuery)
+  )
+}
+
+export function filterPositionRosterEntriesByAssignment(
+  entries: PositionRosterEntry[],
+  filters: PositionRosterAssignmentFilter
+): PositionRosterEntry[] {
+  const normalizedQuery = filters.searchQuery.trim().toLowerCase()
+
+  return entries.filter((entry) => {
+    if (filters.status === 'assigned' && entry.members.length === 0) return false
+    if (filters.status === 'unassigned' && entry.members.length > 0) return false
+
+    if (!normalizedQuery) return true
+
+    if (entry.members.length === 0) {
+      return 'unassigned'.includes(normalizedQuery)
+    }
+
+    return entry.members.some((member) =>
+      [member.email, member.status, member.addedAt].join(' ').toLowerCase().includes(normalizedQuery)
+    )
+  })
+}
+
 export function buildDefaultPositionPermissionMap(): PositionPermissionMap {
   return Object.fromEntries(
     WORKSPACE_ROSTER_POSITIONS.map((position) => [position, { editIcs201: true }])

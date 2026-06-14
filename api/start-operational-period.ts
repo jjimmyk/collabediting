@@ -17,6 +17,7 @@ type OperationalPeriodFormKey =
   | 'ics208'
   | 'ics208hm'
   | 'ics209'
+  | 'ics214'
 
 type OperationalPeriodFormRegistryEntry = {
   key: OperationalPeriodFormKey
@@ -117,6 +118,12 @@ const OPERATIONAL_PERIOD_FORM_REGISTRY: OperationalPeriodFormRegistryEntry[] = [
     versionsTable: 'ics209_versions',
     multipleDocuments: false,
   },
+  {
+    key: 'ics214',
+    documentsTable: 'ics214_documents',
+    versionsTable: 'ics214_versions',
+    multipleDocuments: false,
+  },
 ]
 
 const supabaseUrl =
@@ -197,8 +204,12 @@ function applyOperationalPeriodTimestampsToSnapshot(
     case 'ics202':
     case 'ics203':
     case 'ics234':
+    case 'ics214':
       data.operationalPeriodFrom = formatOperationalPeriodDatetimeLocal(window.from)
       data.operationalPeriodTo = formatOperationalPeriodDatetimeLocal(window.to)
+      if (formKey === 'ics214') {
+        data.dateOfActivity = formatOperationalPeriodDate(window.from)
+      }
       break
     case 'ics215':
     case 'ics215a':
