@@ -236,6 +236,11 @@ import {
 import { useIcs202WorkspaceForm } from '@/hooks/useIcs202WorkspaceForm'
 import { IapWorkspacePanel } from '@/features/iap/IapWorkspacePanel'
 import type { IapAppendableForms } from '@/features/iap/export'
+import type { IapChecklistFormId } from '@/features/iap/types'
+import {
+  buildIapAppendableFormsFromSnapshotBundle,
+  IAP_CHECKLIST_FORM_TABS,
+} from '@/lib/iap-operational-period-links'
 import type {
   IapFormSectionDrafts,
   IapFormState,
@@ -12571,17 +12576,6 @@ function App() {
     onLoaded: handleIapLoaded,
     reloadKey: workspaceFormsReloadKey,
   })
-  const iapAppendableForms = useMemo(
-    (): IapAppendableForms => ({
-      ics202: ics202Form,
-      ics203: ics203Form,
-      ics204: ics204Forms,
-      ics205: ics205Form,
-      ics206: ics206Form,
-      ics208: ics208Form,
-    }),
-    [ics202Form, ics203Form, ics204Forms, ics205Form, ics206Form, ics208Form]
-  )
   const ics203WorkspaceDefaults = useMemo(
     (): Partial<Ics203FormState> => ({
       incidentName: activeIncidentWorkspace?.name ?? activeExerciseWorkspace?.name ?? '',
@@ -13053,6 +13047,34 @@ function App() {
     : ics233Rows
   const viewingHistoricalOperationalPeriodNumber =
     formsOperationalPeriodView === 'working' ? null : formsOperationalPeriodView
+  const iapAppendableForms = useMemo((): IapAppendableForms => {
+    if (isViewingHistoricalOperationalPeriod) {
+      return buildIapAppendableFormsFromSnapshotBundle(historicalBundle)
+    }
+
+    return {
+      ics202: ics202Form,
+      ics203: ics203Form,
+      ics204: ics204Forms,
+      ics205: ics205Form,
+      ics206: ics206Form,
+      ics208: ics208Form,
+    }
+  }, [
+    historicalBundle,
+    ics202Form,
+    ics203Form,
+    ics204Forms,
+    ics205Form,
+    ics206Form,
+    ics208Form,
+    isViewingHistoricalOperationalPeriod,
+  ])
+  const handleOpenIapChecklistForm = useCallback((formId: IapChecklistFormId) => {
+    const tab = IAP_CHECKLIST_FORM_TABS[formId]
+    if (!tab) return
+    setActiveTab(tab)
+  }, [])
   const showOperationalPeriodFormSelector =
     operationalPeriodsEnabled &&
     (activeTab === 'briefing' || isOperationalPeriodFormTab(activeTab))
@@ -31213,6 +31235,8 @@ function App() {
                     glassItemBorderClasses={glassItemBorderClasses}
                     incidentName={activeIncidentWorkspace?.name ?? ''}
                     appendableForms={iapAppendableForms}
+                    checklistLinksEnabled={operationalPeriodsEnabled}
+                    onOpenChecklistForm={handleOpenIapChecklistForm}
                     editingSections={iapEditingSections}
                     sectionDrafts={iapSectionDrafts}
                     onStartSectionEdit={startIapSectionEdit}

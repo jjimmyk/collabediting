@@ -15,6 +15,27 @@ type DbOperationalPeriodRow = {
   started_by: string | null
 }
 
+type DbProfileRow = {
+  id: string
+  email: string
+  full_name: string | null
+}
+
+function mapOperationalPeriod(
+  row: DbOperationalPeriodRow,
+  starter?: DbProfileRow | null
+): WorkspaceOperationalPeriod {
+  return {
+    id: row.id,
+    workspaceId: row.workspace_id,
+    periodNumber: row.period_number,
+    startedAt: row.started_at,
+    startedBy: row.started_by,
+    startedByEmail: starter?.email ?? null,
+    startedByName: starter?.full_name ?? null,
+  }
+}
+
 type DbSnapshotRow = {
   id: string
   operational_period_id: string
@@ -23,16 +44,6 @@ type DbSnapshotRow = {
   snapshot: unknown
   source_version_id: string | null
   created_at: string
-}
-
-function mapOperationalPeriod(row: DbOperationalPeriodRow): WorkspaceOperationalPeriod {
-  return {
-    id: row.id,
-    workspaceId: row.workspace_id,
-    periodNumber: row.period_number,
-    startedAt: row.started_at,
-    startedBy: row.started_by,
-  }
 }
 
 function mapSnapshot(row: DbSnapshotRow): OperationalPeriodFormSnapshot {
@@ -63,7 +74,30 @@ export async function fetchWorkspaceOperationalPeriods(
     throw new Error(error.message)
   }
 
-  return ((data ?? []) as DbOperationalPeriodRow[]).map(mapOperationalPeriod)
+  const rows = (data ?? []) as DbOperationalPeriodRow[]
+  const starterIds = [
+    ...new Set(rows.map((row) => row.started_by).filter((id): id is string => !!id)),
+  ]
+
+  let startersById = new Map<string, DbProfileRow>()
+  if (starterIds.length > 0) {
+    const { data: profiles, error: profilesError } = await supabase
+      .from('profiles')
+      .select('id, email, full_name')
+      .in('id', starterIds)
+
+    if (profilesError) {
+      throw new Error(profilesError.message)
+    }
+
+    startersById = new Map(
+      ((profiles ?? []) as DbProfileRow[]).map((profile) => [profile.id, profile])
+    )
+  }
+
+  return rows.map((row) =>
+    mapOperationalPeriod(row, row.started_by ? startersById.get(row.started_by) : null)
+  )
 }
 
 export async function fetchOperationalPeriodSnapshots(

@@ -15,3 +15,12 @@ export function formatOperationalPeriodLabel(periodNumber: number): string {
 export function formatWorkingOperationalPeriodLabel(periodNumber: number): string {
   return `Working OP ${periodNumber}`
 }
+
+export function formatOperationalPeriodStarterLabel(period: {
+  startedByName?: string | null
+  startedByEmail?: string | null
+}): string {
+  if (period.startedByName?.trim()) return period.startedByName.trim()
+  if (period.startedByEmail?.trim()) return period.startedByEmail.trim()
+  return 'Unknown user'
+}

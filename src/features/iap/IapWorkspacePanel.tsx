@@ -34,6 +34,7 @@ import {
 import type {
   IapFormSectionDrafts,
   IapFormState,
+  IapChecklistFormId,
   IapSectionId,
   IapVersion,
 } from '@/features/iap/types'
@@ -62,6 +63,8 @@ type IapWorkspacePanelProps = {
     value: IapFormSectionDrafts[S]
   ) => void
   onSignIncidentCommander: (rowId: number) => void
+  checklistLinksEnabled?: boolean
+  onOpenChecklistForm?: (formId: IapChecklistFormId) => void
   onAppendVersion: (
     form: IapFormState,
     signatures?: Ics201VersionSignature[],
@@ -93,6 +96,8 @@ export function IapWorkspacePanel({
   onSaveSection,
   onPatchSectionDraft,
   onSignIncidentCommander,
+  checklistLinksEnabled,
+  onOpenChecklistForm,
   onAppendVersion,
   onSignReview,
   downloadDocx,
@@ -437,6 +442,8 @@ export function IapWorkspacePanel({
             onSaveSection={onSaveSection}
             onPatchDraft={onPatchSectionDraft}
             onSignIncidentCommander={onSignIncidentCommander}
+            checklistLinksEnabled={checklistLinksEnabled}
+            onOpenChecklistForm={onOpenChecklistForm}
           />
         </div>
 

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Clock3, Lock } from 'lucide-react'
+import { Clock3, Lock, UserRound } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/dialog'
 import {
   formatOperationalPeriodLabel,
+  formatOperationalPeriodStarterLabel,
   formatWorkingOperationalPeriodLabel,
 } from '@/lib/operational-period-utils'
 import type { WorkspaceOperationalPeriod } from '@/lib/operational-period-types'
@@ -54,8 +55,9 @@ export function OperationalPeriodSettingsSection({
       <div className="space-y-1">
         <h3 className="text-sm font-semibold">Operational Periods</h3>
         <p className="text-xs text-muted-foreground">
-          Starting an operational period freezes the current ICS-201, IAP, ICS-202, ICS-203, and
-          ICS-204 forms as a read-only snapshot, then clones them into the next working period.
+          Starting an operational period freezes all workspace ICS forms as a read-only snapshot,
+          stamps operational period dates on eligible forms, and clones them into the next working
+          period.
         </p>
       </div>
 
@@ -93,7 +95,7 @@ export function OperationalPeriodSettingsSection({
 
       <div className="space-y-2">
         <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-          Started periods
+          Audit log
         </p>
         {isLoadingPeriods ? (
           <p className="text-xs text-muted-foreground">Loading operational periods…</p>
@@ -103,21 +105,27 @@ export function OperationalPeriodSettingsSection({
           </p>
         ) : (
           <ul className="space-y-2">
-            {periods.map((period) => (
+            {[...periods].reverse().map((period) => (
               <li
                 key={period.id}
-                className="flex items-center justify-between rounded-md border px-3 py-2 text-xs"
+                className="rounded-md border px-3 py-2 text-xs"
               >
-                <div className="flex items-center gap-2">
-                  <Lock className="h-3.5 w-3.5 text-muted-foreground" />
-                  <span className="font-medium">
-                    {formatOperationalPeriodLabel(period.periodNumber)}
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <Lock className="h-3.5 w-3.5 text-muted-foreground" />
+                    <span className="font-medium">
+                      {formatOperationalPeriodLabel(period.periodNumber)} started
+                    </span>
+                  </div>
+                  <span className="inline-flex items-center gap-1 text-muted-foreground">
+                    <Clock3 className="h-3.5 w-3.5" />
+                    {new Date(period.startedAt).toLocaleString()}
                   </span>
                 </div>
-                <span className="inline-flex items-center gap-1 text-muted-foreground">
-                  <Clock3 className="h-3.5 w-3.5" />
-                  {new Date(period.startedAt).toLocaleString()}
-                </span>
+                <p className="mt-1 inline-flex items-center gap-1 text-muted-foreground">
+                  <UserRound className="h-3.5 w-3.5" />
+                  Started by {formatOperationalPeriodStarterLabel(period)}
+                </p>
               </li>
             ))}
           </ul>
@@ -129,8 +137,9 @@ export function OperationalPeriodSettingsSection({
           <DialogHeader>
             <DialogTitle>Start {formatOperationalPeriodLabel(nextPeriodNumber)}?</DialogTitle>
             <DialogDescription>
-              This will snapshot the current ICS-201, IAP, ICS-202, ICS-203, and ICS-204 forms
-              for {formatOperationalPeriodLabel(nextPeriodNumber)} and begin{' '}
+              This will snapshot all workspace forms for{' '}
+              {formatOperationalPeriodLabel(nextPeriodNumber)}, apply default 12-hour operational
+              period timestamps to eligible forms, and begin{' '}
               {formatWorkingOperationalPeriodLabel(nextPeriodNumber + 1)} as the editable working
               set. Started periods cannot be edited.
             </DialogDescription>

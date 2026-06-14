@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { Check, Plus, Trash2 } from 'lucide-react'
+import { Check, ExternalLink, Plus, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Item } from '@/components/ui/item'
@@ -10,6 +10,7 @@ import {
   IapSectionHeader,
 } from '@/features/iap/IapSectionToolbar'
 import type {
+  IapChecklistFormId,
   IapCoverSheetDraft,
   IapFormChecklistItem,
   IapFormSectionDrafts,
@@ -23,6 +24,7 @@ import {
   extractIapCoverSheetDraft,
   nextIapRowId,
 } from '@/features/iap/utils'
+import { isIapChecklistFormLinkable } from '@/lib/iap-operational-period-links'
 import { cn } from '@/lib/utils'
 
 type IapFormSectionsProps = {
@@ -41,6 +43,8 @@ type IapFormSectionsProps = {
     value: IapFormSectionDrafts[S]
   ) => void
   onSignIncidentCommander: (rowId: number) => void
+  checklistLinksEnabled?: boolean
+  onOpenChecklistForm?: (formId: IapChecklistFormId) => void
 }
 
 function isSectionEditing(
@@ -63,6 +67,8 @@ export function IapFormSections({
   onSaveSection,
   onPatchDraft,
   onSignIncidentCommander,
+  checklistLinksEnabled = false,
+  onOpenChecklistForm,
 }: IapFormSectionsProps) {
   const coverSheet =
     isSectionEditing(editingSections, 'cover-sheet') && drafts['cover-sheet']
@@ -283,10 +289,18 @@ export function IapFormSections({
         <div className="space-y-2">
           <p className="text-xs text-muted-foreground">
             The items checked below are included in this Incident Action Plan export.
+            {checklistLinksEnabled
+              ? ' Open linked forms to view the operational period snapshot used for this IAP.'
+              : null}
           </p>
           {formsChecklist.map((item) => {
             const isOther = item.id.startsWith('other-')
             const editingChecklist = isSectionEditing(editingSections, 'forms-checklist')
+            const canOpenForm =
+              checklistLinksEnabled &&
+              !editingChecklist &&
+              isIapChecklistFormLinkable(item.id) &&
+              !!onOpenChecklistForm
             return (
               <div key={item.id} className="flex items-start gap-2 rounded-md border px-2 py-2">
                 {editingChecklist ? (
@@ -322,6 +336,18 @@ export function IapFormSections({
                           : item.label}
                       </p>
                     </div>
+                    {canOpenForm ? (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="h-7 shrink-0 gap-1 text-[10px]"
+                        onClick={() => onOpenChecklistForm(item.id)}
+                      >
+                        <ExternalLink className="h-3 w-3" />
+                        Open form
+                      </Button>
+                    ) : null}
                   </>
                 )}
               </div>

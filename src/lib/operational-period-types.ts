@@ -6,6 +6,8 @@ export type WorkspaceOperationalPeriod = {
   periodNumber: number
   startedAt: string
   startedBy: string | null
+  startedByEmail: string | null
+  startedByName: string | null
 }
 
 export type OperationalPeriodFormSnapshot = {
