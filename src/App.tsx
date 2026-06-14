@@ -6608,6 +6608,11 @@ function App() {
     const resourcesCommitted = incidentTeamTemplate
       ? `${incidentTeamTemplate} exercise team standing up`
       : 'Exercise planning cell forming'
+    const exerciseWorkflowMetadata = getWorkspaceSequentialWorkflowMetadata({
+      workspaceFormat: incidentWorkflow,
+      incidentComplexity,
+      kind: 'exercise',
+    })
     const newExercise: ExerciseListItem = {
       id: Date.now(),
       name: displayName,
@@ -6623,8 +6628,10 @@ function App() {
       summary,
       resourcesCommitted,
       relatedEventIds: [],
-      workspaceFormat: incidentWorkflow,
-      incidentComplexity,
+      workspaceFormat: exerciseWorkflowMetadata.workspaceFormat ?? incidentWorkflow,
+      incidentComplexity: exerciseWorkflowMetadata.incidentComplexity ?? incidentComplexity,
+      hasSequentialWorkflow: exerciseWorkflowMetadata.hasSequentialWorkflow,
+      sequentialWorkflowType: exerciseWorkflowMetadata.sequentialWorkflowType,
     }
 
     if (isSupabaseEnabled) {
@@ -11370,6 +11377,8 @@ function App() {
             }),
             workspaceId: workspace.workspaceId,
             archivedAt: workspace.archivedAt ?? existing.archivedAt ?? null,
+            startedOperationalPeriodCount: workspace.startedOperationalPeriodCount,
+            workingOperationalPeriodNumber: workspace.workingOperationalPeriodNumber,
           })
           continue
         }
@@ -11394,6 +11403,10 @@ function App() {
               relatedEventIds: [],
               workspaceFormat: workspace.workspaceFormat ?? undefined,
               incidentComplexity: workspace.incidentComplexity ?? undefined,
+              hasSequentialWorkflow: workspace.hasSequentialWorkflow,
+              sequentialWorkflowType: workspace.sequentialWorkflowType ?? undefined,
+              startedOperationalPeriodCount: workspace.startedOperationalPeriodCount,
+              workingOperationalPeriodNumber: workspace.workingOperationalPeriodNumber,
               templateId: workspace.metadata.templateId,
               locationMethod: asWorkspaceLocationMethod(workspace.metadata.locationMethod),
               geometrySummary: workspace.metadata.geometrySummary,
@@ -11560,13 +11573,14 @@ function App() {
   )
   const isInExerciseWorkspace = activeExerciseWorkspace !== null
   const isInIncidentWorkspace = activeIncidentWorkspace !== null
+  const activePlanningPWorkspace = activeIncidentWorkspace ?? activeExerciseWorkspace
   const showPlanningPStepper =
-    isInIncidentWorkspace &&
+    activePlanningPWorkspace !== null &&
     workspaceHasPlanningPStepper({
-      workspaceFormat: activeIncidentWorkspace?.workspaceFormat,
-      incidentComplexity: activeIncidentWorkspace?.incidentComplexity,
-      hasSequentialWorkflow: activeIncidentWorkspace?.hasSequentialWorkflow,
-      sequentialWorkflowType: activeIncidentWorkspace?.sequentialWorkflowType,
+      workspaceFormat: activePlanningPWorkspace.workspaceFormat,
+      incidentComplexity: activePlanningPWorkspace.incidentComplexity,
+      hasSequentialWorkflow: activePlanningPWorkspace.hasSequentialWorkflow,
+      sequentialWorkflowType: activePlanningPWorkspace.sequentialWorkflowType,
     })
   const isPlanningPStepperVisible = showPlanningPStepper && isPlanningPStepperOpen
   useEffect(() => {
@@ -11574,7 +11588,7 @@ function App() {
       setPlanningPStepId(PLANNING_P_STEPS[0]?.id ?? 'objectives-meeting')
       setIsPlanningPStepperOpen(true)
     }
-  }, [activeIncidentWorkspaceId, showPlanningPStepper])
+  }, [activeIncidentWorkspaceId, activeExerciseWorkspaceId, showPlanningPStepper])
   const activeWorkspaceRosterKey =
     activeIncidentWorkspace !== null
       ? `incident-${activeIncidentWorkspace.id}`
@@ -12822,11 +12836,13 @@ function App() {
     isOrgAdmin
   )
   const startedOperationalPeriodCount =
-    activeIncidentWorkspace?.startedOperationalPeriodCount ?? 0
+    activePlanningPWorkspace?.startedOperationalPeriodCount ?? 0
   const workingOperationalPeriodNumber =
-    activeIncidentWorkspace?.workingOperationalPeriodNumber ?? 1
+    activePlanningPWorkspace?.workingOperationalPeriodNumber ?? 1
   const operationalPeriodsEnabled =
-    showPlanningPStepper && isInIncidentWorkspace && activeWorkspaceSupabaseId !== null
+    showPlanningPStepper &&
+    (isInIncidentWorkspace || isInExerciseWorkspace) &&
+    activeWorkspaceSupabaseId !== null
   const {
     periods: operationalPeriods,
     isLoadingPeriods: isLoadingOperationalPeriods,

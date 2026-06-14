@@ -46,14 +46,24 @@ export const SEQUENTIAL_WORKFLOW_PLANNING_P = USCG_PLANNING_P_COMPLEXITY
 
 export type SequentialWorkflowType = typeof SEQUENTIAL_WORKFLOW_PLANNING_P
 
-export function isPlanningPIncidentWorkspace(options: {
-  workspaceFormat?: string
-  incidentComplexity?: string
+export function isPlanningPWorkspace(options: {
+  workspaceFormat?: string | null
+  incidentComplexity?: string | null
 }) {
   return (
     options.workspaceFormat === USCG_ICS_WORKFLOW &&
     options.incidentComplexity === USCG_PLANNING_P_COMPLEXITY
   )
+}
+
+/** @deprecated Use {@link isPlanningPWorkspace} */
+export const isPlanningPIncidentWorkspace = isPlanningPWorkspace
+
+export function workspaceSupportsOperationalPeriods(options: {
+  workspaceFormat?: string | null
+  incidentComplexity?: string | null
+}) {
+  return isPlanningPWorkspace(options)
 }
 
 export function getWorkspaceSequentialWorkflowMetadata(options: {
@@ -63,12 +73,10 @@ export function getWorkspaceSequentialWorkflowMetadata(options: {
 }) {
   const workspaceFormat = options.workspaceFormat?.trim() || null
   const incidentComplexity = options.incidentComplexity?.trim() || null
-  const isPlanningP =
-    options.kind !== 'exercise' &&
-    isPlanningPIncidentWorkspace({
-      workspaceFormat: workspaceFormat ?? undefined,
-      incidentComplexity: incidentComplexity ?? undefined,
-    })
+  const isPlanningP = isPlanningPWorkspace({
+    workspaceFormat,
+    incidentComplexity,
+  })
 
   return {
     workspaceFormat,
@@ -91,7 +99,7 @@ export function workspaceHasPlanningPStepper(options: {
     return true
   }
 
-  return isPlanningPIncidentWorkspace({
+  return isPlanningPWorkspace({
     workspaceFormat: options.workspaceFormat,
     incidentComplexity: options.incidentComplexity,
   })

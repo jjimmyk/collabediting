@@ -18,15 +18,10 @@ type CreateWorkspaceBody = {
 }
 
 function deriveSequentialWorkflow(
-  kind: 'incident' | 'exercise',
   workspaceFormat: string | null,
   incidentComplexity: string | null
 ) {
-  if (
-    kind === 'incident' &&
-    workspaceFormat === 'uscg-ics' &&
-    incidentComplexity === 'planning-p'
-  ) {
+  if (workspaceFormat === 'uscg-ics' && incidentComplexity === 'planning-p') {
     return {
       has_sequential_workflow: true,
       sequential_workflow_type: 'planning-p',
@@ -81,7 +76,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(400).json({ error: 'kind must be incident or exercise.' })
     }
 
-    const sequentialWorkflow = deriveSequentialWorkflow(kind, workspaceFormat, incidentComplexity)
+    const sequentialWorkflow = deriveSequentialWorkflow(workspaceFormat, incidentComplexity)
 
     if (!name) {
       return res.status(400).json({ error: 'name is required.' })

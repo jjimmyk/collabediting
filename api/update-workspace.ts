@@ -19,15 +19,10 @@ type UpdateWorkspaceBody = {
 }
 
 function deriveSequentialWorkflow(
-  kind: 'incident' | 'exercise',
   workspaceFormat: string | null,
   incidentComplexity: string | null
 ) {
-  if (
-    kind === 'incident' &&
-    workspaceFormat === 'uscg-ics' &&
-    incidentComplexity === 'planning-p'
-  ) {
+  if (workspaceFormat === 'uscg-ics' && incidentComplexity === 'planning-p') {
     return {
       has_sequential_workflow: true,
       sequential_workflow_type: 'planning-p',
@@ -133,11 +128,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const summary = body.summary?.trim() || null
     const workspaceFormat = body.workspaceFormat?.trim() || null
     const incidentComplexity = body.incidentComplexity?.trim() || null
-    const sequentialWorkflow = deriveSequentialWorkflow(
-      existing.kind as 'incident' | 'exercise',
-      workspaceFormat,
-      incidentComplexity
-    )
+    const sequentialWorkflow = deriveSequentialWorkflow(workspaceFormat, incidentComplexity)
 
     const updatePayload: Record<string, unknown> = {
       name,

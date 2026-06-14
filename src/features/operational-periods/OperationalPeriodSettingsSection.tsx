@@ -101,7 +101,7 @@ export function OperationalPeriodSettingsSection({
           <p className="text-xs text-muted-foreground">Loading operational periods…</p>
         ) : periods.length === 0 ? (
           <p className="text-xs text-muted-foreground">
-            No operational periods have been started for this incident yet.
+            No operational periods have been started for this workspace yet.
           </p>
         ) : (
           <ul className="space-y-2">

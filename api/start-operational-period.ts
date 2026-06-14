@@ -560,16 +560,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(404).json({ error: 'Workspace not found.' })
     }
 
-    if (workspace.kind !== 'incident') {
-      return res.status(400).json({ error: 'Operational periods are only available for incidents.' })
-    }
-
     if (
       workspace.workspace_format !== 'uscg-ics' ||
       workspace.incident_complexity !== 'planning-p'
     ) {
       return res.status(400).json({
-        error: 'Operational periods are only available for USCG ICS Planning-P incidents.',
+        error:
+          'Operational periods are only available for USCG ICS Planning-P incident and exercise workspaces.',
       })
     }
 
