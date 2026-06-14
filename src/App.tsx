@@ -566,6 +566,10 @@ import { PlanningPStepper } from '@/features/planning-p/PlanningPStepper'
 import { PLANNING_P_STEPS } from '@/features/planning-p/planning-p-steps'
 import { WorkspaceSettingsPage } from '@/features/workspace-settings/WorkspaceSettingsPage'
 import {
+  WorkspaceSearchableTabMenu,
+  type WorkspaceSearchableTabMenuGroup,
+} from '@/features/workspace-navigation/WorkspaceSearchableTabMenu'
+import {
   applyNameLocationDraftToWorkspace,
   asWorkspaceLocationMethod,
   metadataFromDraft,
@@ -4075,6 +4079,30 @@ const WORKSPACE_FORMS_MENU: Array<{ id: string; tab: LeftTab; label: string }> =
   { id: 'ICS-208HM', tab: 'form-ICS-208HM', label: 'HM Site Safety & Control Plan / ICS-208HM' },
   { id: 'ICS-209', tab: 'form-ICS-209', label: 'Incident Status Summary / ICS-209' },
 ]
+
+const WORKSPACE_MORE_MENU: Array<{ tab: LeftTab; label: string }> = [
+  { tab: 'aors', label: 'Objectives & Actions' },
+  { tab: 'fema-regions', label: 'Business Units' },
+  { tab: 'events', label: 'Events' },
+  { tab: 'analytics', label: 'Analytics' },
+  { tab: 'sitreps', label: 'SITREPs' },
+  { tab: 'seerist', label: 'Seerist' },
+  { tab: 'workspace-settings', label: 'Settings' },
+]
+
+const HUB_MORE_MENU: Array<{ tab: LeftTab; label: string }> = [
+  { tab: 'analytics', label: 'Analytics' },
+  { tab: 'seerist', label: 'Seerist' },
+  { tab: 'resources', label: 'Assets' },
+  { tab: 'exercises', label: 'Exercises' },
+  { tab: 'incident-list', label: 'Incidents' },
+  { tab: 'sitreps', label: 'SITREPs' },
+]
+
+function formatWorkspaceDropdownTriggerLabel(menuLabel: string, selectedItemLabel: string | null) {
+  if (!selectedItemLabel) return menuLabel
+  return `${menuLabel} · ${selectedItemLabel}`
+}
 
 type PratusPlanStatus = 'pending' | 'accepted' | 'cancelled'
 type PratusAssignmentRecommendation = {
@@ -11575,12 +11603,48 @@ function App() {
   const isInIncidentWorkspace = activeIncidentWorkspace !== null
   const isInWorkspaceContext = isInIncidentWorkspace || isInExerciseWorkspace
   const isWorkspaceMoreTabActive =
+    activeTab === 'aors' ||
     activeTab === 'fema-regions' ||
     activeTab === 'events' ||
     activeTab === 'analytics' ||
     activeTab === 'sitreps' ||
     activeTab === 'seerist' ||
     activeTab === 'workspace-settings'
+  const selectedWorkspaceFormMenuItem = useMemo(
+    () => WORKSPACE_FORMS_MENU.find((form) => form.tab === activeTab) ?? null,
+    [activeTab]
+  )
+  const selectedWorkspaceMoreMenuItem = useMemo(
+    () => WORKSPACE_MORE_MENU.find((item) => item.tab === activeTab) ?? null,
+    [activeTab]
+  )
+  const workspaceFormsTriggerLabel = formatWorkspaceDropdownTriggerLabel(
+    'Forms',
+    selectedWorkspaceFormMenuItem?.id ?? null
+  )
+  const workspaceMoreTriggerLabel = formatWorkspaceDropdownTriggerLabel(
+    'More',
+    selectedWorkspaceMoreMenuItem
+      ? selectedWorkspaceMoreMenuItem.tab === 'workspace-settings'
+        ? isInExerciseWorkspace
+          ? 'Exercise Settings'
+          : 'Incident Settings'
+        : selectedWorkspaceMoreMenuItem.label
+      : null
+  )
+  const selectedHubMoreMenuItem = useMemo(
+    () =>
+      isInWorkspaceContext
+        ? null
+        : (HUB_MORE_MENU.find((item) => item.tab === activeTab) ?? null),
+    [activeTab, isInWorkspaceContext]
+  )
+  const isHubMoreTabActive =
+    !isInWorkspaceContext && HUB_MORE_MENU.some((item) => item.tab === activeTab)
+  const hubMoreTriggerLabel = formatWorkspaceDropdownTriggerLabel(
+    'More',
+    selectedHubMoreMenuItem?.label ?? null
+  )
   const activePlanningPWorkspace = activeIncidentWorkspace ?? activeExerciseWorkspace
   const showPlanningPStepper =
     activePlanningPWorkspace !== null &&
@@ -13102,6 +13166,52 @@ function App() {
   const showOperationalPeriodFormSelector =
     operationalPeriodsEnabled &&
     (activeTab === 'briefing' || isOperationalPeriodFormTab(activeTab))
+  const workspaceFormsMenuGroups = useMemo((): WorkspaceSearchableTabMenuGroup[] => {
+    const groups: WorkspaceSearchableTabMenuGroup[] = []
+
+    if (operationalPeriodsEnabled) {
+      groups.push({
+        heading: 'Operational Period',
+        items: [
+          {
+            id: 'op-working',
+            value: `working ${formatWorkingOperationalPeriodLabel(workingOperationalPeriodNumber)}`,
+            label: formatWorkingOperationalPeriodLabel(workingOperationalPeriodNumber),
+            isSelected: formsOperationalPeriodView === 'working',
+            onSelect: () => setFormsOperationalPeriodView('working'),
+          },
+          ...operationalPeriods.map((period) => ({
+            id: `op-${period.id}`,
+            value: `${formatOperationalPeriodLabel(period.periodNumber)} read-only`,
+            label: `${formatOperationalPeriodLabel(period.periodNumber)} (read-only)`,
+            isSelected: formsOperationalPeriodView === period.periodNumber,
+            onSelect: () => setFormsOperationalPeriodView(period.periodNumber),
+          })),
+        ],
+      })
+    }
+
+    groups.push({
+      heading: 'Forms',
+      items: WORKSPACE_FORMS_MENU.map((form) => ({
+        id: form.id,
+        value: `${form.id} ${form.label}`,
+        label: form.label,
+        icon: <FileText className="h-4 w-4" />,
+        isSelected: activeTab === form.tab,
+        onSelect: () => setActiveTab(form.tab),
+      })),
+    })
+
+    return groups
+  }, [
+    activeTab,
+    formsOperationalPeriodView,
+    operationalPeriods,
+    operationalPeriodsEnabled,
+    setFormsOperationalPeriodView,
+    workingOperationalPeriodNumber,
+  ])
   useEffect(() => {
     const cleanupWorkspaceSettingsSketch = () => {
       setIsDrawingWorkspaceSettingsOnMap(false)
@@ -14249,6 +14359,80 @@ function App() {
     syncWorkspaceSettingsDraft()
     setActiveTab('workspace-settings')
   }
+  const workspaceMoreMenuGroups = useMemo((): WorkspaceSearchableTabMenuGroup[] => {
+    return [
+      {
+        heading: 'More',
+        items: WORKSPACE_MORE_MENU.map((item) => {
+          const itemLabel =
+            item.tab === 'workspace-settings'
+              ? isInExerciseWorkspace
+                ? 'Exercise Settings'
+                : 'Incident Settings'
+              : item.label
+
+          return {
+            id: item.tab,
+            value: itemLabel,
+            label: itemLabel,
+            icon:
+              item.tab === 'aors' ? (
+                <Target className="h-4 w-4" />
+              ) : item.tab === 'fema-regions' ? (
+                <MapPin className="h-4 w-4" />
+              ) : item.tab === 'events' ? (
+                <Radio className="h-4 w-4" />
+              ) : item.tab === 'analytics' ? (
+                <BarChart3 className="h-4 w-4" />
+              ) : item.tab === 'sitreps' ? (
+                <FileText className="h-4 w-4" />
+              ) : item.tab === 'seerist' ? (
+                <Radar className="h-4 w-4" />
+              ) : (
+                <Settings className="h-4 w-4" />
+              ),
+            isSelected: activeTab === item.tab,
+            onSelect: () =>
+              item.tab === 'workspace-settings'
+                ? openWorkspaceSettingsTab()
+                : setActiveTab(item.tab),
+          }
+        }),
+      },
+    ]
+  }, [activeTab, isInExerciseWorkspace, openWorkspaceSettingsTab])
+  const hubMoreMenuGroups = useMemo((): WorkspaceSearchableTabMenuGroup[] => {
+    if (isInWorkspaceContext) {
+      return []
+    }
+
+    return [
+      {
+        heading: 'More',
+        items: HUB_MORE_MENU.map((item) => ({
+          id: item.tab,
+          value: item.label,
+          label: item.label,
+          icon:
+            item.tab === 'analytics' ? (
+              <BarChart3 className="h-4 w-4" />
+            ) : item.tab === 'seerist' ? (
+              <Radar className="h-4 w-4" />
+            ) : item.tab === 'resources' ? (
+              <Box className="h-4 w-4" />
+            ) : item.tab === 'exercises' ? (
+              <Shield className="h-4 w-4" />
+            ) : item.tab === 'sitreps' ? (
+              <FileText className="h-4 w-4" />
+            ) : (
+              <AlertTriangle className="h-4 w-4" />
+            ),
+          isSelected: activeTab === item.tab,
+          onSelect: () => setActiveTab(item.tab),
+        })),
+      },
+    ]
+  }, [activeTab, isInWorkspaceContext])
   const handleWorkspaceSettingsSave = async () => {
     if (!workspaceSettingsDraft) {
       return
@@ -22007,6 +22191,7 @@ function App() {
                       </TooltipTrigger>
                       <TooltipContent side="bottom" sideOffset={6}>Notifications</TooltipContent>
                     </Tooltip>
+                    {isInWorkspaceContext && (
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <Button
@@ -22022,24 +22207,6 @@ function App() {
                       </TooltipTrigger>
                       <TooltipContent side="bottom" sideOffset={6}>Assets</TooltipContent>
                     </Tooltip>
-                    {isInIncidentWorkspace && (
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button
-                            type="button"
-                            size="icon"
-                            variant={isGlassMode ? 'outline' : activeTab === 'aors' ? 'default' : 'outline'}
-                            className={selectedGlassTabClasses(activeTab === 'aors')}
-                            onClick={() => setActiveTab('aors')}
-                            aria-label="Open Objectives & Actions tab"
-                            data-pratus-context-id="tab:aors"
-                            data-pratus-context-label="Objectives & Actions"
-                          >
-                            <Target className="h-4 w-4" />
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent side="bottom" sideOffset={6}>Objectives &amp; Actions</TooltipContent>
-                      </Tooltip>
                     )}
                     {!isInWorkspaceContext && (
                     <Tooltip>
@@ -22060,26 +22227,6 @@ function App() {
                       <TooltipContent side="bottom" sideOffset={6}>Business Units</TooltipContent>
                     </Tooltip>
                     )}
-                    {!isInExerciseWorkspace && !isInIncidentWorkspace && (
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button
-                            type="button"
-                            size="icon"
-                            variant={isGlassMode ? 'outline' : activeTab === 'incident-list' ? 'default' : 'outline'}
-                            className={selectedGlassTabClasses(activeTab === 'incident-list')}
-                            onClick={() => setActiveTab('incident-list')}
-                            aria-label="Open Incidents tab"
-                            data-pratus-context-id="tab:incident-list"
-                            data-pratus-context-label="Incidents"
-                            data-hub-tutorial="incidents-tab"
-                          >
-                            <AlertTriangle className="h-4 w-4" />
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent side="bottom" sideOffset={6}>Incidents</TooltipContent>
-                      </Tooltip>
-                    )}
                     {(isInIncidentWorkspace || isInExerciseWorkspace) && (
                       <Tooltip>
                         <TooltipTrigger asChild>
@@ -22097,26 +22244,6 @@ function App() {
                           </Button>
                         </TooltipTrigger>
                         <TooltipContent side="bottom" sideOffset={6}>Roster</TooltipContent>
-                      </Tooltip>
-                    )}
-                    {!isInIncidentWorkspace && !isInExerciseWorkspace && (
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button
-                            type="button"
-                            size="icon"
-                            variant={isGlassMode ? 'outline' : activeTab === 'exercises' ? 'default' : 'outline'}
-                            className={selectedGlassTabClasses(activeTab === 'exercises')}
-                            onClick={() => setActiveTab('exercises')}
-                            aria-label="Open Exercises tab"
-                            data-pratus-context-id="tab:exercises"
-                            data-pratus-context-label="Exercises"
-                            data-hub-tutorial="exercises-tab"
-                          >
-                            <Shield className="h-4 w-4" />
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent side="bottom" sideOffset={6}>Exercises</TooltipContent>
                       </Tooltip>
                     )}
                     {!isInExerciseWorkspace && !isInWorkspaceContext && (
@@ -22140,100 +22267,46 @@ function App() {
                       </Tooltip>
                     )}
                     {!isInWorkspaceContext && (
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          type="button"
-                          size="icon"
-                          variant={isGlassMode ? 'outline' : activeTab === 'analytics' ? 'default' : 'outline'}
-                          className={selectedGlassTabClasses(activeTab === 'analytics')}
-                          onClick={() => setActiveTab('analytics')}
-                          aria-label="Open Analytics tab"
-                          data-pratus-context-id="tab:analytics"
-                          data-pratus-context-label="Analytics"
-                          data-hub-tutorial="analytics-tab"
-                        >
-                          <BarChart3 className="h-4 w-4" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent side="bottom" sideOffset={6}>Analytics</TooltipContent>
-                    </Tooltip>
+                      <WorkspaceSearchableTabMenu
+                        triggerLabel={hubMoreTriggerLabel}
+                        triggerAriaLabel={
+                          selectedHubMoreMenuItem
+                            ? `More: ${selectedHubMoreMenuItem.label}`
+                            : 'Open more menu'
+                        }
+                        isTriggerActive={isHubMoreTabActive}
+                        searchPlaceholder="Search more..."
+                        emptyMessage="No items found."
+                        groups={hubMoreMenuGroups}
+                        glassIconButtonClasses={glassIconButtonClasses}
+                        selectedGlassTabClasses={selectedGlassTabClasses}
+                        isGlassMode={isGlassMode}
+                        data-pratus-context-id="tab:more"
+                        data-pratus-context-label="More"
+                      />
                     )}
                     {(isInIncidentWorkspace || isInExerciseWorkspace) && (
                       <>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant={
-                                isGlassMode
-                                  ? 'outline'
-                                  : activeTab === 'briefing' || activeTab.startsWith('form-')
-                                    ? 'default'
-                                    : 'outline'
-                              }
-                              className={cn(
-                                'h-8 gap-1',
-                                glassIconButtonClasses,
-                                selectedGlassTabClasses(
-                                  activeTab === 'briefing' || activeTab.startsWith('form-')
-                                )
-                              )}
-                              aria-label="Open forms menu"
-                              data-pratus-context-id="tab:forms"
-                              data-pratus-context-label="Forms"
-                              data-ics201-tutorial="forms-menu"
-                            >
-                              Forms
-                              <ChevronDown className="h-3.5 w-3.5" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="start" className="w-56">
-                            {operationalPeriodsEnabled ? (
-                              <>
-                                <DropdownMenuLabel>Operational Period</DropdownMenuLabel>
-                                <DropdownMenuItem
-                                  onSelect={() => setFormsOperationalPeriodView('working')}
-                                  className={cn(
-                                    'gap-2',
-                                    formsOperationalPeriodView === 'working' && 'bg-accent'
-                                  )}
-                                >
-                                  {formatWorkingOperationalPeriodLabel(workingOperationalPeriodNumber)}
-                                </DropdownMenuItem>
-                                {operationalPeriods.map((period) => (
-                                  <DropdownMenuItem
-                                    key={period.id}
-                                    onSelect={() =>
-                                      setFormsOperationalPeriodView(period.periodNumber)
-                                    }
-                                    className={cn(
-                                      'gap-2',
-                                      formsOperationalPeriodView === period.periodNumber &&
-                                        'bg-accent'
-                                    )}
-                                  >
-                                    {formatOperationalPeriodLabel(period.periodNumber)} (read-only)
-                                  </DropdownMenuItem>
-                                ))}
-                                <DropdownMenuSeparator />
-                              </>
-                            ) : null}
-                            <DropdownMenuLabel>Forms</DropdownMenuLabel>
-                            <DropdownMenuSeparator />
-                            {WORKSPACE_FORMS_MENU.map((form) => (
-                              <DropdownMenuItem
-                                key={form.id}
-                                onSelect={() => setActiveTab(form.tab)}
-                                className={cn('gap-2', activeTab === form.tab && 'bg-accent')}
-                              >
-                                <FileText className="h-4 w-4" />
-                                {form.label}
-                              </DropdownMenuItem>
-                            ))}
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                        <WorkspaceSearchableTabMenu
+                          triggerLabel={workspaceFormsTriggerLabel}
+                          triggerAriaLabel={
+                            selectedWorkspaceFormMenuItem
+                              ? `Forms: ${selectedWorkspaceFormMenuItem.label}`
+                              : 'Open forms menu'
+                          }
+                          isTriggerActive={
+                            activeTab === 'briefing' || activeTab.startsWith('form-')
+                          }
+                          searchPlaceholder="Search forms..."
+                          emptyMessage="No forms found."
+                          groups={workspaceFormsMenuGroups}
+                          glassIconButtonClasses={glassIconButtonClasses}
+                          selectedGlassTabClasses={selectedGlassTabClasses}
+                          isGlassMode={isGlassMode}
+                          data-ics201-tutorial="forms-menu"
+                          data-pratus-context-id="tab:forms"
+                          data-pratus-context-label="Forms"
+                        />
                         {isInExerciseWorkspace && (
                           <Tooltip>
                             <TooltipTrigger asChild>
@@ -22259,179 +22332,34 @@ function App() {
                             <TooltipContent side="bottom" sideOffset={6}>MSEL</TooltipContent>
                           </Tooltip>
                         )}
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant={
-                                isGlassMode
-                                  ? 'outline'
-                                  : isWorkspaceMoreTabActive
-                                    ? 'default'
-                                    : 'outline'
-                              }
-                              className={cn(
-                                'h-8 gap-1',
-                                glassIconButtonClasses,
-                                selectedGlassTabClasses(isWorkspaceMoreTabActive)
-                              )}
-                              aria-label="Open more menu"
-                              data-pratus-context-id="tab:more"
-                              data-pratus-context-label="More"
-                            >
-                              More
-                              <ChevronDown className="h-3.5 w-3.5" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="start" className="w-56">
-                            <DropdownMenuLabel>More</DropdownMenuLabel>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem
-                              onSelect={() => setActiveTab('fema-regions')}
-                              className={cn('gap-2', activeTab === 'fema-regions' && 'bg-accent')}
-                            >
-                              <MapPin className="h-4 w-4" />
-                              Business Units
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onSelect={() => setActiveTab('events')}
-                              className={cn('gap-2', activeTab === 'events' && 'bg-accent')}
-                            >
-                              <Radio className="h-4 w-4" />
-                              Events
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onSelect={() => setActiveTab('analytics')}
-                              className={cn('gap-2', activeTab === 'analytics' && 'bg-accent')}
-                            >
-                              <BarChart3 className="h-4 w-4" />
-                              Analytics
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onSelect={() => setActiveTab('sitreps')}
-                              className={cn('gap-2', activeTab === 'sitreps' && 'bg-accent')}
-                            >
-                              <FileText className="h-4 w-4" />
-                              SITREPs
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onSelect={() => setActiveTab('seerist')}
-                              className={cn('gap-2', activeTab === 'seerist' && 'bg-accent')}
-                            >
-                              <Radar className="h-4 w-4" />
-                              Seerist
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onSelect={openWorkspaceSettingsTab}
-                              className={cn(
-                                'gap-2',
-                                activeTab === 'workspace-settings' && 'bg-accent'
-                              )}
-                            >
-                              <Settings className="h-4 w-4" />
-                              {isInExerciseWorkspace ? 'Exercise Settings' : 'Incident Settings'}
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                        <WorkspaceSearchableTabMenu
+                          triggerLabel={workspaceMoreTriggerLabel}
+                          triggerAriaLabel={
+                            selectedWorkspaceMoreMenuItem
+                              ? `More: ${
+                                  selectedWorkspaceMoreMenuItem.tab === 'workspace-settings'
+                                    ? isInExerciseWorkspace
+                                      ? 'Exercise Settings'
+                                      : 'Incident Settings'
+                                    : selectedWorkspaceMoreMenuItem.label
+                                }`
+                              : 'Open more menu'
+                          }
+                          isTriggerActive={isWorkspaceMoreTabActive}
+                          searchPlaceholder="Search more..."
+                          emptyMessage="No items found."
+                          groups={workspaceMoreMenuGroups}
+                          glassIconButtonClasses={glassIconButtonClasses}
+                          selectedGlassTabClasses={selectedGlassTabClasses}
+                          isGlassMode={isGlassMode}
+                          data-pratus-context-id="tab:more"
+                          data-pratus-context-label="More"
+                        />
                       </>
-                    )}
-                    {!isCompactPanelTabs && !isInWorkspaceContext && (
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button
-                            type="button"
-                            size="icon"
-                            variant={isGlassMode ? 'outline' : activeTab === 'sitreps' ? 'default' : 'outline'}
-                            className={selectedGlassTabClasses(activeTab === 'sitreps')}
-                            onClick={() => setActiveTab('sitreps')}
-                            aria-label="Open SITREPs tab"
-                            data-has-form-badge="true"
-                            data-pratus-context-id="tab:sitreps"
-                            data-pratus-context-label="SITREPs"
-                          >
-                            <span className="relative inline-flex h-4 w-4 items-center justify-center">
-                              <FileText className="h-4 w-4" />
-                              <span
-                                className={cn(
-                                  'absolute -right-2 -bottom-2 rounded bg-foreground px-0.5 py-px text-[7px] leading-none text-background',
-                                  isGlassMode && 'z-20'
-                                )}
-                              >
-                                SR
-                              </span>
-                            </span>
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent side="bottom" sideOffset={6}>
-                          SITREPs
-                        </TooltipContent>
-                      </Tooltip>
-                    )}
-                    {!isCompactPanelTabs && !isInWorkspaceContext && (
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button
-                            type="button"
-                            size="icon"
-                            variant={isGlassMode ? 'outline' : activeTab === 'seerist' ? 'default' : 'outline'}
-                            className={selectedGlassTabClasses(activeTab === 'seerist')}
-                            onClick={() => setActiveTab('seerist')}
-                            aria-label="Open Seerist tab"
-                            data-pratus-context-id="tab:seerist"
-                            data-pratus-context-label="Seerist"
-                          >
-                            <Radar className="h-4 w-4" />
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent side="bottom" sideOffset={6}>
-                          Seerist
-                        </TooltipContent>
-                      </Tooltip>
                     )}
                   </div>
                 </TooltipProvider>
                 <div className="flex items-center gap-2">
-                  <ToggleGroup
-                    type="single"
-                    value={appearanceMode}
-                    onValueChange={(value) => {
-                      if (
-                        value === 'light' ||
-                        value === 'dark' ||
-                        value === 'glass'
-                      ) {
-                        setAppearanceMode(value)
-                      }
-                    }}
-                    variant="outline"
-                    size="sm"
-                    spacing={0}
-                    aria-label="Appearance mode"
-                    className={glassToggleGroupClasses}
-                  >
-                    <ToggleGroupItem
-                      value="light"
-                      aria-label="Light mode"
-                      className={glassToggleItemClasses}
-                    >
-                      <Sun className="h-4 w-4" />
-                    </ToggleGroupItem>
-                    <ToggleGroupItem
-                      value="dark"
-                      aria-label="Dark mode"
-                      className={glassToggleItemClasses}
-                    >
-                      <Moon className="h-4 w-4" />
-                    </ToggleGroupItem>
-                    <ToggleGroupItem
-                      value="glass"
-                      aria-label="Glass mode"
-                      className={glassToggleItemClasses}
-                    >
-                      <Square className="h-4 w-4" />
-                    </ToggleGroupItem>
-                  </ToggleGroup>
                   <CollapsibleTrigger asChild>
                     <Button
                       variant="outline"
@@ -22456,13 +22384,65 @@ function App() {
                         <MoreVertical className="h-4 w-4" />
                       </Button>
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
+                    <DropdownMenuContent align="end" className="w-52">
                       <DropdownMenuItem onClick={() => setPanelWidthMode('one-half')}>
                         Panel width: 1/2
                       </DropdownMenuItem>
                       <DropdownMenuItem onClick={() => setPanelWidthMode('one-third')}>
                         Panel width: 1/3
                       </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <div
+                        className="px-2 py-2"
+                        onPointerDown={(event) => event.preventDefault()}
+                      >
+                        <DropdownMenuLabel className="px-0 pb-2 pt-0 text-xs">
+                          Appearance
+                        </DropdownMenuLabel>
+                        <ToggleGroup
+                          type="single"
+                          value={appearanceMode}
+                          onValueChange={(value) => {
+                            if (
+                              value === 'light' ||
+                              value === 'dark' ||
+                              value === 'glass'
+                            ) {
+                              setAppearanceMode(value)
+                            }
+                          }}
+                          variant="outline"
+                          size="sm"
+                          spacing={0}
+                          aria-label="Appearance mode"
+                          className={cn('w-full', glassToggleGroupClasses)}
+                        >
+                          <ToggleGroupItem
+                            value="light"
+                            aria-label="Light mode"
+                            className={cn('flex-1', glassToggleItemClasses)}
+                          >
+                            <Sun className="h-4 w-4" />
+                            <span>Light</span>
+                          </ToggleGroupItem>
+                          <ToggleGroupItem
+                            value="dark"
+                            aria-label="Dark mode"
+                            className={cn('flex-1', glassToggleItemClasses)}
+                          >
+                            <Moon className="h-4 w-4" />
+                            <span>Dark</span>
+                          </ToggleGroupItem>
+                          <ToggleGroupItem
+                            value="glass"
+                            aria-label="Glass mode"
+                            className={cn('flex-1', glassToggleItemClasses)}
+                          >
+                            <Square className="h-4 w-4" />
+                            <span>Glass</span>
+                          </ToggleGroupItem>
+                        </ToggleGroup>
+                      </div>
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </div>
