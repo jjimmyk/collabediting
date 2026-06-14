@@ -69,6 +69,7 @@ export function useOperationalPeriods({
     setFormsView('working')
     setHistoricalBundle(null)
     setHistoricalError(null)
+    setStartError(null)
   }, [workspaceId])
 
   useEffect(() => {

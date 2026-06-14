@@ -1,9 +1,47 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
-import {
-  OPERATIONAL_PERIOD_FORM_REGISTRY,
-  type OperationalPeriodFormRegistryEntry,
-} from '../src/lib/operational-period-form-registry'
+
+type OperationalPeriodFormKey = 'ics201' | 'iap' | 'ics202' | 'ics203' | 'ics204'
+
+type OperationalPeriodFormRegistryEntry = {
+  key: OperationalPeriodFormKey
+  documentsTable: string
+  versionsTable: string
+  multipleDocuments: boolean
+}
+
+const OPERATIONAL_PERIOD_FORM_REGISTRY: OperationalPeriodFormRegistryEntry[] = [
+  {
+    key: 'ics201',
+    documentsTable: 'ics201_documents',
+    versionsTable: 'ics201_versions',
+    multipleDocuments: false,
+  },
+  {
+    key: 'iap',
+    documentsTable: 'iap_documents',
+    versionsTable: 'iap_versions',
+    multipleDocuments: false,
+  },
+  {
+    key: 'ics202',
+    documentsTable: 'ics202_documents',
+    versionsTable: 'ics202_versions',
+    multipleDocuments: false,
+  },
+  {
+    key: 'ics203',
+    documentsTable: 'ics203_documents',
+    versionsTable: 'ics203_versions',
+    multipleDocuments: false,
+  },
+  {
+    key: 'ics204',
+    documentsTable: 'ics204_documents',
+    versionsTable: 'ics204_versions',
+    multipleDocuments: true,
+  },
+]
 
 const supabaseUrl =
   process.env.VITE_SUPABASE_URL ??
