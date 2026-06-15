@@ -77,6 +77,7 @@ export function applyAssignmentsToHubAssets(
         assignedExerciseName: null,
         orgChartReportsTo: null,
         orgChartSortOrder: 0,
+        ics204DocumentId: null,
       }
     }
 
@@ -89,6 +90,7 @@ export function applyAssignmentsToHubAssets(
       assignedExerciseName: workspace.kind === 'exercise' ? workspace.name : null,
       orgChartReportsTo: assignment?.orgChartReportsTo ?? null,
       orgChartSortOrder: assignment?.orgChartSortOrder ?? 0,
+      ics204DocumentId: assignment?.ics204DocumentId ?? null,
     }
   })
 }

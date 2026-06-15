@@ -6,6 +6,8 @@ export type Ics204ResourceSnapshot = ResourceListItemData
 export type Ics204ResourceAssignedRow = {
   id: number
   resourceId: number | null
+  /** Stable link to hub asset catalog entry. */
+  assetKey: string | null
   reportingInfoNotes: string
   has204A: boolean
   resourceSnapshot: Ics204ResourceSnapshot | null

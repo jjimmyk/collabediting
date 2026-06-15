@@ -13,6 +13,7 @@ type DbWorkspaceAssetAssignmentRow = {
   workspace_id: string
   org_chart_reports_to: string | null
   org_chart_sort_order: number | null
+  ics204_document_id: string | null
 }
 
 function mapAssignmentRow(row: DbWorkspaceAssetAssignmentRow): WorkspaceAssetAssignment {
@@ -21,6 +22,7 @@ function mapAssignmentRow(row: DbWorkspaceAssetAssignmentRow): WorkspaceAssetAss
     workspaceId: row.workspace_id,
     orgChartReportsTo: row.org_chart_reports_to,
     orgChartSortOrder: row.org_chart_sort_order ?? 0,
+    ics204DocumentId: row.ics204_document_id,
   }
 }
 
@@ -78,6 +80,7 @@ export function buildDefaultAssetAssignments(
     workspaceId: defaultWorkspaceId!,
     orgChartReportsTo: null,
     orgChartSortOrder: 0,
+    ics204DocumentId: null,
   }))
 }
 
@@ -93,7 +96,7 @@ export async function fetchAllAssetAssignments(): Promise<WorkspaceAssetAssignme
 
   const { data, error } = await supabase
     .from('workspace_asset_assignments')
-    .select('asset_key, workspace_id, org_chart_reports_to, org_chart_sort_order')
+    .select('asset_key, workspace_id, org_chart_reports_to, org_chart_sort_order, ics204_document_id')
 
   if (error) {
     throw error
@@ -118,12 +121,15 @@ export async function assignAssetToWorkspace(
           orgChartReportsTo: null,
           orgChartSortOrder: 0,
         }
+  const preserveIcs204 =
+    existing?.workspaceId === workspaceId ? (existing.ics204DocumentId ?? null) : null
 
   if (!isSupabaseConfigured) {
     upsertLocalAssignment({
       assetKey,
       workspaceId,
       ...preserveOrgChart,
+      ics204DocumentId: preserveIcs204,
     })
     return
   }
@@ -134,6 +140,7 @@ export async function assignAssetToWorkspace(
       assetKey,
       workspaceId,
       ...preserveOrgChart,
+      ics204DocumentId: preserveIcs204,
     })
     return
   }
@@ -145,6 +152,7 @@ export async function assignAssetToWorkspace(
       assigned_by: assignedByUserId,
       org_chart_reports_to: preserveOrgChart.orgChartReportsTo,
       org_chart_sort_order: preserveOrgChart.orgChartSortOrder,
+      ics204_document_id: preserveIcs204,
       updated_at: new Date().toISOString(),
     },
     { onConflict: 'asset_key' }
@@ -195,6 +203,71 @@ export async function setAssetOrgChartPlacement(
 
   if (error) {
     throw error
+  }
+}
+
+export async function setAssetIcs204Attachment(
+  assetKey: string,
+  documentId: string | null
+): Promise<void> {
+  const assignments = await fetchAllAssetAssignments()
+  const existing = assignments.find((row) => row.assetKey === assetKey)
+  if (!existing) {
+    if (documentId === null) {
+      return
+    }
+    throw new Error('Assign the asset to a workspace before attaching it to an ICS-204.')
+  }
+
+  const nextRow: WorkspaceAssetAssignment = {
+    ...existing,
+    ics204DocumentId: documentId,
+  }
+
+  if (!isSupabaseConfigured) {
+    upsertLocalAssignment(nextRow)
+    return
+  }
+
+  const supabase = getSupabaseClient()
+  if (!supabase) {
+    upsertLocalAssignment(nextRow)
+    return
+  }
+
+  const { error } = await supabase
+    .from('workspace_asset_assignments')
+    .update({
+      ics204_document_id: documentId,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('asset_key', assetKey)
+
+  if (error) {
+    throw error
+  }
+}
+
+export async function syncIcs204ResourceAttachmentsForDocument(
+  workspaceId: string,
+  documentId: string,
+  assetKeys: string[]
+): Promise<void> {
+  const assignments = await fetchAllAssetAssignments()
+  const workspaceAssignments = assignments.filter((row) => row.workspaceId === workspaceId)
+  const assetKeySet = new Set(assetKeys)
+
+  for (const row of workspaceAssignments) {
+    if (row.ics204DocumentId === documentId && !assetKeySet.has(row.assetKey)) {
+      await setAssetIcs204Attachment(row.assetKey, null)
+    }
+  }
+
+  for (const assetKey of assetKeys) {
+    const assignment = workspaceAssignments.find((row) => row.assetKey === assetKey)
+    if (assignment && assignment.ics204DocumentId !== documentId) {
+      await setAssetIcs204Attachment(assetKey, documentId)
+    }
   }
 }
 

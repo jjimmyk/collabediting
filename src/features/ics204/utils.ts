@@ -66,6 +66,7 @@ const EMPTY_RESOURCE_SNAPSHOT = (id: number, name: string): Ics204ResourceSnapsh
   assignedExerciseName: null,
   orgChartReportsTo: null,
   orgChartSortOrder: 0,
+  ics204DocumentId: null,
 })
 
 export function snapshotFromResourceListItem(resource: ResourceListItemData): Ics204ResourceSnapshot {
@@ -81,6 +82,7 @@ export function createIcs204ResourceAssignedRow(
   return {
     id: rowId,
     resourceId: resource.id,
+    assetKey: resource.assetKey,
     reportingInfoNotes,
     has204A,
     resourceSnapshot: snapshotFromResourceListItem(resource),
@@ -142,6 +144,7 @@ export function normalizeIcs204ResourceAssignedRow(
   return {
     id: typeof row.id === 'number' ? row.id : 0,
     resourceId: row.resourceId ?? resourceSnapshot?.id ?? null,
+    assetKey: row.assetKey ?? resourceSnapshot?.assetKey ?? null,
     reportingInfoNotes: String(row.reportingInfoNotes ?? row.location ?? ''),
     has204A: Boolean(row.has204A),
     resourceSnapshot,
@@ -154,6 +157,34 @@ export function normalizeIcs204FormState(form: Ics204FormState): Ics204FormState
     resourcesAssigned: (form.resourcesAssigned ?? []).map(normalizeIcs204ResourceAssignedRow),
     emergencyCommunications: form.emergencyCommunications ?? '',
   }
+}
+
+export function getIcs204ResourceRowAssetKey(row: Ics204ResourceAssignedRow): string | null {
+  return row.assetKey ?? row.resourceSnapshot?.assetKey ?? null
+}
+
+export function getIcs204ResourceAssetKeysForForm(
+  form: Ics204FormState,
+  drafts: Ics204FormSectionDrafts | undefined,
+  editingSections: Partial<Record<Ics204SectionId, boolean>> | undefined
+): Set<string> {
+  const rows =
+    editingSections?.['resources-assigned'] && drafts?.['resources-assigned']
+      ? drafts['resources-assigned']
+      : form.resourcesAssigned
+
+  return new Set(
+    rows
+      .map(getIcs204ResourceRowAssetKey)
+      .filter((assetKey): assetKey is string => Boolean(assetKey))
+  )
+}
+
+export function filterIcs204AttachableWorkspaceAssets(
+  workspaceAssets: ResourceListItemData[],
+  excludedAssetKeys: Set<string>
+): ResourceListItemData[] {
+  return workspaceAssets.filter((asset) => !excludedAssetKeys.has(asset.assetKey))
 }
 
 export function cloneIcs204FormState(form: Ics204FormState): Ics204FormState {

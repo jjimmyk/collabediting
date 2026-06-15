@@ -478,6 +478,9 @@ import {
   getIcs204FormForExport,
   ics204AuthorColor as resolveIcs204AuthorColor,
   resolveIcs204ListTitle,
+  filterIcs204AttachableWorkspaceAssets,
+  getIcs204ResourceAssetKeysForForm,
+  getIcs204ResourceRowAssetKey,
 } from '@/features/ics204/utils'
 import { ResourceListItemCard } from '@/features/resources/ResourceListItemCard'
 import { AssetListHeaderRow } from '@/features/resources/AssetListHeaderRow'
@@ -7045,6 +7048,11 @@ function App() {
   const [ics204ResourceCurrentLocationFilter, setIcs204ResourceCurrentLocationFilter] = useState('')
   const [ics204ResourceCurrentOpFilter, setIcs204ResourceCurrentOpFilter] = useState('all')
   const [ics204ResourceNextOpFilter, setIcs204ResourceNextOpFilter] = useState('all')
+  const [ics204MoveConfirm, setIcs204MoveConfirm] = useState<{
+    formId: string
+    resource: ResourceListItemData
+    fromLabel: string
+  } | null>(null)
   const [pratusAiSelectedContexts, setPratusAiSelectedContexts] = useState<
     Array<{ id: string; label: string }>
   >([])
@@ -8476,6 +8484,7 @@ function App() {
     assignAsset,
     unassignAsset,
     setOrgChartPlacement,
+    syncIcs204AttachmentsForDocument,
     getAssetsForWorkspace,
     getAssetsForWorkspaceNotOnOrgChart,
   } = useWorkspaceAssetAssignments({
@@ -19182,39 +19191,81 @@ function App() {
         },
       }))
     } else {
+      const currentForm = ics204Forms.find((entry) => entry.id === formId)
+      if (!currentForm) return
+      const nextRows = [
+        ...currentForm.resourcesAssigned,
+        {
+          ...newRow,
+          id:
+            currentForm.resourcesAssigned.length === 0
+              ? 1
+              : Math.max(...currentForm.resourcesAssigned.map((row) => row.id)) + 1,
+        },
+      ]
       setIcs204Forms((previous) =>
         previous.map((form) =>
           form.id === formId
             ? {
                 ...form,
-                resourcesAssigned: [
-                  ...form.resourcesAssigned,
-                  {
-                    ...newRow,
-                    id:
-                      form.resourcesAssigned.length === 0
-                        ? 1
-                        : Math.max(...form.resourcesAssigned.map((row) => row.id)) + 1,
-                  },
-                ],
+                resourcesAssigned: nextRows,
               }
             : form
         )
       )
+      if (activeWorkspaceSupabaseId) {
+        void syncIcs204AttachmentsForDocument(
+          activeWorkspaceSupabaseId,
+          formId,
+          nextRows
+            .map(getIcs204ResourceRowAssetKey)
+            .filter((assetKey): assetKey is string => Boolean(assetKey))
+        ).catch((syncError) => {
+          console.error(syncError)
+          toast.error('Failed to sync resource attachment.')
+        })
+      }
     }
     setIcs204ResourcePickerFormId(null)
   }
+  const handleIcs204AttachResourceClick = (formId: string, resource: ResourceListItemData) => {
+    const attachedDocumentId = resource.ics204DocumentId
+    if (attachedDocumentId && attachedDocumentId !== formId) {
+      setIcs204MoveConfirm({
+        formId,
+        resource,
+        fromLabel: ics204LabelsByDocumentId[attachedDocumentId] ?? 'another ICS-204',
+      })
+      return
+    }
+    addIcs204ResourceAssigned(formId, resource)
+  }
   const deleteIcs204ResourceAssignedRow = (formId: string, rowId: number) => {
+    const currentForm = ics204Forms.find((entry) => entry.id === formId)
+    if (!currentForm) return
+    const nextRows = currentForm.resourcesAssigned.filter((row) => row.id !== rowId)
     setIcs204Forms((previous) =>
       previous.map((form) =>
         form.id === formId
           ? {
               ...form,
-              resourcesAssigned: form.resourcesAssigned.filter((row) => row.id !== rowId),
+              resourcesAssigned: nextRows,
             }
           : form
       )
     )
+    if (activeWorkspaceSupabaseId) {
+      void syncIcs204AttachmentsForDocument(
+        activeWorkspaceSupabaseId,
+        formId,
+        nextRows
+          .map(getIcs204ResourceRowAssetKey)
+          .filter((assetKey): assetKey is string => Boolean(assetKey))
+      ).catch((syncError) => {
+        console.error(syncError)
+        toast.error('Failed to sync resource attachment.')
+      })
+    }
   }
   const updateIcs204WorkAssignment = (
     formId: string,
@@ -19431,6 +19482,18 @@ function App() {
     const latestVersion = ics204VersionsById[formId]?.[ics204VersionsById[formId].length - 1]
     if (latestVersion && latestVersion.signatures.length === 0) {
       handleIcs204SaveDraft(formId, nextForm, latestVersion)
+    }
+    if (section === 'resources-assigned' && activeWorkspaceSupabaseId) {
+      void syncIcs204AttachmentsForDocument(
+        activeWorkspaceSupabaseId,
+        formId,
+        nextForm.resourcesAssigned
+          .map(getIcs204ResourceRowAssetKey)
+          .filter((assetKey): assetKey is string => Boolean(assetKey))
+      ).catch((syncError) => {
+        console.error(syncError)
+        toast.error('Failed to sync resource attachments.')
+      })
     }
     cancelIcs204SectionEdit(formId, section)
   }
@@ -22064,93 +22127,30 @@ function App() {
     selectedPratusResourceId === null
       ? null
       : hubAssets.find((resource) => resource.id === selectedPratusResourceId) ?? null
-  const ics204AttachableResources: ResourceItem[] = [
-    ...hubAssets,
-    {
-      id: 901,
-      assetKey: 'ics204-law-group-1',
-      areaKey: 'atlantic',
-      name: 'Law Group 1',
-      assetStatus: 'FMC',
-      assetStatusUpdatedAt: '04/07/2026 21:00 UTC',
-      owner: 'Operations Section',
-      status: 'Assigned',
-      type: 'Law Enforcement Team',
-      teamLead: 'Capt. R. Wallace',
-      eta: 'On-site',
-      location: 'Division A Command Post',
-      notes: 'Traffic and perimeter enforcement team.',
-      mapLocation: [-96.7831, 32.7912],
-      currentLocation: '4000 Coast Guard Boulevard Portsmouth VA',
-      datetimeOrdered: '04/07/2026 21:00 UTC',
-      opcon: 'Operations',
-      tacon: 'Division A',
-      pointOfContact: 'CAPT Wallace (555-0104)',
-      owningOrganization: 'Metro Police',
-      quantity: 1,
-      unitType: 'Team',
-      unitName: 'Metro Police Law Group 1',
-      hullTailNumber: 'N/A',
-      symbology: 'Law',
-      latitude: '32.7912',
-      longitude: '-96.7831',
-      capabilities: 'Perimeter control, route security, crowd control',
-      currentOpPeriod: 'Current',
-      nextOpPeriod: 'Next',
-      currentOpPeriodAssignment: 'Division A perimeter hold',
-      nextOpPeriodAssignment: 'Division B handoff perimeter sweep',
-      checkInStatus: 'Onsite',
-      costUnitType: 'per day',
-      costPerUnit: 2800,
-      deploymentKind: 'incident',
-      assignedWorkspaceId: null,
-      assignedWorkspaceKind: null,
-      assignedIncidentName: 'Hurricane Edgar — Florida Landfall',
-      assignedExerciseName: null,
-    } as ResourceItem,
-    {
-      id: 902,
-      assetKey: 'ics204-planning-staffing-cell',
-      areaKey: 'atlantic',
-      name: 'Planning Section Staffing Cell',
-      assetStatus: 'PMC',
-      assetStatusUpdatedAt: '04/07/2026 20:45 UTC',
-      owner: 'Planning Section',
-      status: 'Available',
-      type: 'Planning Support Team',
-      teamLead: 'M. Bennett',
-      eta: 'Ready now',
-      location: 'Planning Tent',
-      notes: 'Staffing and handoff scheduling support.',
-      mapLocation: [-96.7869, 32.7871],
-      currentLocation: '4000 Coast Guard Boulevard Portsmouth VA',
-      datetimeOrdered: '04/07/2026 21:00 UTC',
-      opcon: 'Planning',
-      tacon: 'Planning',
-      pointOfContact: 'M. Bennett (555-0113)',
-      owningOrganization: 'SEOC',
-      quantity: 1,
-      unitType: 'Cell',
-      unitName: 'Planning Section Staffing Cell',
-      hullTailNumber: 'N/A',
-      symbology: 'Staff',
-      latitude: '32.7871',
-      longitude: '-96.7869',
-      capabilities: 'Staffing matrix, shift handoff, assignment coordination',
-      currentOpPeriod: 'Current',
-      nextOpPeriod: 'Next',
-      currentOpPeriodAssignment: 'Situation board updates',
-      nextOpPeriodAssignment: '---',
-      checkInStatus: 'Onsite',
-      costUnitType: 'per hour',
-      costPerUnit: 95,
-      deploymentKind: 'available',
-      assignedWorkspaceId: null,
-      assignedWorkspaceKind: null,
-      assignedIncidentName: null,
-      assignedExerciseName: null,
-    } as ResourceItem,
-  ].slice(0, 5)
+  const ics204LabelsByDocumentId = useMemo(
+    () => Object.fromEntries(ics204Forms.map((form) => [form.id, resolveIcs204ListTitle(form)])),
+    [ics204Forms]
+  )
+  const ics204PickerForm =
+    ics204ResourcePickerFormId === null
+      ? null
+      : ics204Forms.find((entry) => entry.id === ics204ResourcePickerFormId) ?? null
+  const ics204AttachableResources: ResourceItem[] = useMemo(() => {
+    if (!ics204PickerForm || !activeWorkspaceSupabaseId) return []
+    const assignedToWorkspace = getAssetsForWorkspace(activeWorkspaceSupabaseId)
+    const excludedAssetKeys = getIcs204ResourceAssetKeysForForm(
+      ics204PickerForm,
+      ics204SectionDraftsByFormId[ics204PickerForm.id],
+      ics204EditingSectionsByFormId[ics204PickerForm.id]
+    )
+    return filterIcs204AttachableWorkspaceAssets(assignedToWorkspace, excludedAssetKeys)
+  }, [
+    ics204PickerForm,
+    activeWorkspaceSupabaseId,
+    getAssetsForWorkspace,
+    ics204SectionDraftsByFormId,
+    ics204EditingSectionsByFormId,
+  ])
   const normalizedIcs204ResourceQuery = ics204ResourceNameFilter.trim().toLowerCase()
   const filteredIcs204AttachableResources = ics204AttachableResources.filter((resource) => {
     const isScheduledCurrentOp =
@@ -24066,6 +24066,7 @@ function App() {
                     positionCatalog={workspacePositionCatalog}
                     workspaceLabel={activeWorkspaceRosterLabel}
                     glassItemBorderClasses={glassItemBorderClasses}
+                    ics204LabelsByDocumentId={ics204LabelsByDocumentId}
                     onFocusMap={(asset) => {
                       const mapKey = getAssetMapKey(asset.assetKey)
                       setSelectedPanelItemId(mapKey)
@@ -34579,7 +34580,11 @@ function App() {
                   <div className="px-3 py-2.5">
                     <ItemContent>
                       <ItemTitle>No matching resources</ItemTitle>
-                      <ItemDescription>Try a broader search term.</ItemDescription>
+                      <ItemDescription>
+                        {ics204AttachableResources.length === 0
+                          ? 'Assign assets to this workspace from the Assets tab, then attach them here.'
+                          : 'Try a broader search term.'}
+                      </ItemDescription>
                     </ItemContent>
                   </div>
                 </Item>
@@ -34593,7 +34598,7 @@ function App() {
                   resource.nextOpPeriodAssignment !== '---'
                 return (
                   <Item
-                    key={`ics204-resource-option-${resource.id}`}
+                    key={`ics204-resource-option-${resource.assetKey}`}
                     variant="outline"
                     className={cn('flex-col items-stretch p-0', glassItemBorderClasses)}
                   >
@@ -34612,7 +34617,7 @@ function App() {
                           size="sm"
                           onClick={() => {
                             if (ics204ResourcePickerFormId !== null) {
-                              addIcs204ResourceAssigned(ics204ResourcePickerFormId, resource)
+                              handleIcs204AttachResourceClick(ics204ResourcePickerFormId, resource)
                             }
                           }}
                         >
@@ -34623,6 +34628,41 @@ function App() {
                   </Item>
                 )
               })}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={ics204MoveConfirm !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setIcs204MoveConfirm(null)
+          }
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <p className="text-sm font-semibold">Move resource to this ICS-204?</p>
+              <p className="text-xs text-muted-foreground">
+                {ics204MoveConfirm?.resource.name} is currently attached to{' '}
+                {ics204MoveConfirm?.fromLabel}. Attach it to this ICS-204 instead?
+              </p>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="outline" onClick={() => setIcs204MoveConfirm(null)}>
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                onClick={() => {
+                  if (!ics204MoveConfirm) return
+                  addIcs204ResourceAssigned(ics204MoveConfirm.formId, ics204MoveConfirm.resource)
+                  setIcs204MoveConfirm(null)
+                }}
+              >
+                Move resource
+              </Button>
             </div>
           </div>
         </DialogContent>

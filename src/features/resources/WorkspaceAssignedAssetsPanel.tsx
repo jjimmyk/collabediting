@@ -1,4 +1,5 @@
 import { Map as MapIcon } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Item, ItemActions, ItemContent, ItemDescription, ItemTitle } from '@/components/ui/item'
 import { Label } from '@/components/ui/label'
@@ -26,6 +27,7 @@ type WorkspaceAssignedAssetsPanelProps = {
   onOrgChartPlacementChange?: (assetKey: string, reportsTo: string | null) => void
   onAssignAsset?: (assetKey: string) => void
   onOpenHubAssets?: () => void
+  ics204LabelsByDocumentId?: Record<string, string>
 }
 
 export function WorkspaceAssignedAssetsPanel({
@@ -43,6 +45,7 @@ export function WorkspaceAssignedAssetsPanel({
   onOrgChartPlacementChange,
   onAssignAsset,
   onOpenHubAssets,
+  ics204LabelsByDocumentId,
 }: WorkspaceAssignedAssetsPanelProps) {
   if (isLoading) {
     return (
@@ -114,6 +117,12 @@ export function WorkspaceAssignedAssetsPanel({
                     <ItemDescription className="truncate">
                       {asset.type} · {asset.owner}
                     </ItemDescription>
+                    {asset.ics204DocumentId &&
+                    ics204LabelsByDocumentId?.[asset.ics204DocumentId] ? (
+                      <Badge variant="secondary" className="mt-1 w-fit text-[10px]">
+                        ICS-204: {ics204LabelsByDocumentId[asset.ics204DocumentId]}
+                      </Badge>
+                    ) : null}
                   </div>
                 </div>
               </ItemContent>

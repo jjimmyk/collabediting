@@ -56,6 +56,8 @@ export type ResourceListItemData = HubAssetCatalogRecord & {
   assignedExerciseName: string | null
   orgChartReportsTo: string | null
   orgChartSortOrder: number
+  /** ICS-204 document id when this asset is attached to a 204 Resources Assigned section. */
+  ics204DocumentId: string | null
 }
 
 export type AssetWorkspaceOption = {
@@ -69,4 +71,5 @@ export type WorkspaceAssetAssignment = {
   workspaceId: string
   orgChartReportsTo?: string | null
   orgChartSortOrder?: number
+  ics204DocumentId?: string | null
 }

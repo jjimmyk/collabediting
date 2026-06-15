@@ -10,7 +10,9 @@ import {
   assignAssetToWorkspace,
   fetchAllAssetAssignments,
   seedDefaultAssetAssignmentsIfEmpty,
+  setAssetIcs204Attachment,
   setAssetOrgChartPlacement,
+  syncIcs204ResourceAttachmentsForDocument,
   unassignAsset,
 } from '@/lib/workspace-asset-service'
 import type { AccessibleWorkspace } from '@/lib/workspace-types'
@@ -122,6 +124,21 @@ export function useWorkspaceAssetAssignments({
     [getAssetsForWorkspace]
   )
 
+  const setIcs204Attachment = useCallback(async (assetKey: string, documentId: string | null) => {
+    await setAssetIcs204Attachment(assetKey, documentId)
+    const rows = await fetchAllAssetAssignments()
+    setAssignmentRows(rows)
+  }, [])
+
+  const syncIcs204AttachmentsForDocument = useCallback(
+    async (workspaceId: string, documentId: string, assetKeys: string[]) => {
+      await syncIcs204ResourceAttachmentsForDocument(workspaceId, documentId, assetKeys)
+      const rows = await fetchAllAssetAssignments()
+      setAssignmentRows(rows)
+    },
+    []
+  )
+
   const refreshAssignments = useCallback(async () => {
     const rows = await fetchAllAssetAssignments()
     setAssignmentRows(rows)
@@ -136,6 +153,8 @@ export function useWorkspaceAssetAssignments({
     assignAsset,
     unassignAsset: unassignAssetByKey,
     setOrgChartPlacement,
+    setIcs204Attachment,
+    syncIcs204AttachmentsForDocument,
     getAssetsForWorkspace,
     getAssetsForWorkspaceNotOnOrgChart,
     refreshAssignments,
