@@ -487,10 +487,12 @@ import {
   formatResourceCostPerUnit,
   formatResourceCostUnitType,
   getResourceIncidentAssignmentLabel,
+  getUnassignedHubAssets,
 } from '@/features/resources/utils'
 import { getAssetMapKey } from '@/data/hub-asset-catalog'
 import { useWorkspaceAssetAssignments } from '@/hooks/useWorkspaceAssetAssignments'
 import { WorkspaceAssignedAssetsPanel } from '@/features/resources/WorkspaceAssignedAssetsPanel'
+import { AssetWorkspaceAssignmentSelect } from '@/features/resources/AssetWorkspaceAssignmentSelect'
 import { isIncidentArchived } from '@/lib/incident-archive'
 import { WorkspacePositionRosterTable } from '@/features/roster/WorkspacePositionRosterTable'
 import { WorkspaceOrgChartRoster } from '@/features/roster/WorkspaceOrgChartRoster'
@@ -853,7 +855,7 @@ const RESOURCE_FILTER_FIELD_OPTIONS = [
   { id: 'assetStatus', label: 'Asset Status' },
   { id: 'owner', label: 'Owner' },
   { id: 'status', label: 'Status' },
-  { id: 'assignment', label: 'Incident Assignment' },
+  { id: 'assignment', label: 'Workspace assignment' },
   { id: 'type', label: 'Type' },
   { id: 'teamLead', label: 'Team Lead' },
   { id: 'eta', label: 'ETA' },
@@ -8497,6 +8499,14 @@ function App() {
   const workspaceAssignedAssets = useMemo(
     () => getAssetsForWorkspace(activeWorkspaceSupabaseId),
     [activeWorkspaceSupabaseId, getAssetsForWorkspace]
+  )
+  const unassignedHubAssets = useMemo(() => getUnassignedHubAssets(hubAssets), [hubAssets])
+  const handleAssignAssetToCurrentWorkspace = useCallback(
+    (assetKey: string) => {
+      if (!activeWorkspaceSupabaseId) return
+      handleAssetAssignmentChange(assetKey, activeWorkspaceSupabaseId)
+    },
+    [activeWorkspaceSupabaseId, handleAssetAssignmentChange]
   )
   const [workspaceFormsReloadKey, setWorkspaceFormsReloadKey] = useState(0)
   const [isRosterLoading, setIsRosterLoading] = useState(false)
@@ -23917,7 +23927,10 @@ function App() {
                 {activeTab === 'resources' && isInWorkspaceContext && (
                   <WorkspaceAssignedAssetsPanel
                     assets={workspaceAssignedAssets}
+                    unassignedAssets={unassignedHubAssets}
+                    workspaceOptions={assetWorkspaceOptions}
                     isLoading={isAssetAssignmentsLoading}
+                    assignmentDisabled={isAssetAssignmentsLoading}
                     workspaceLabel={activeWorkspaceRosterLabel}
                     glassItemBorderClasses={glassItemBorderClasses}
                     onFocusMap={(asset) => {
@@ -23925,11 +23938,17 @@ function App() {
                       setSelectedPanelItemId(mapKey)
                       void focusMapItem(mapKey, asset.mapLocation, 30000)
                     }}
-                    onUnassign={(assetKey) => handleAssetAssignmentChange(assetKey, null)}
+                    onAssignmentChange={handleAssetAssignmentChange}
+                    onAssignAsset={
+                      activeWorkspaceSupabaseId
+                        ? handleAssignAssetToCurrentWorkspace
+                        : undefined
+                    }
                     onOpenHubAssets={() => {
                       setActiveIncidentWorkspaceId(null)
                       setActiveExerciseWorkspaceId(null)
-                      setActiveTab('fema-regions')
+                      setActiveTab('resources')
+                      setResourcesPanelView('resources')
                     }}
                   />
                 )}
@@ -23959,7 +23978,7 @@ function App() {
                           <tr className="border-b bg-muted/30 text-left text-muted-foreground">
                             <th className="whitespace-nowrap px-2 py-2 font-semibold">Name</th>
                             <th className="whitespace-nowrap px-2 py-2 font-semibold">Owner</th>
-                            <th className="whitespace-nowrap px-2 py-2 font-semibold">Incident Assignment</th>
+                            <th className="whitespace-nowrap px-2 py-2 font-semibold">Workspace assignment</th>
                             <th className="whitespace-nowrap px-2 py-2 font-semibold">Type</th>
                             <th className="whitespace-nowrap px-2 py-2 font-semibold">Team Lead</th>
                             <th className="whitespace-nowrap px-2 py-2 font-semibold">ETA</th>
@@ -24002,7 +24021,17 @@ function App() {
                               >
                                 <td className="px-2 py-2 font-medium">{resource.name}</td>
                                 <td className="px-2 py-2">{resource.owner}</td>
-                                <td className="px-2 py-2">{getResourceIncidentAssignmentLabel(resource)}</td>
+                                <td className="min-w-[14rem] px-2 py-2">
+                                  <AssetWorkspaceAssignmentSelect
+                                    value={resource.assignedWorkspaceId}
+                                    options={assetWorkspaceOptions}
+                                    compact
+                                    disabled={isAssetAssignmentsLoading}
+                                    onChange={(workspaceId) =>
+                                      handleAssetAssignmentChange(resource.assetKey, workspaceId)
+                                    }
+                                  />
+                                </td>
                                 <td className="px-2 py-2">{resource.type}</td>
                                 <td className="px-2 py-2">{resource.teamLead}</td>
                                 <td className="px-2 py-2">{resource.eta}</td>
@@ -24077,6 +24106,7 @@ function App() {
                             open={isOpen}
                             editable
                             workspaceOptions={assetWorkspaceOptions}
+                            assignmentDisabled={isAssetAssignmentsLoading}
                             onAssignmentChange={(workspaceId) =>
                               handleAssetAssignmentChange(resource.assetKey, workspaceId)
                             }
@@ -25897,6 +25927,7 @@ function App() {
                                             open={isOpen}
                                             editable
                                             workspaceOptions={assetWorkspaceOptions}
+                                            assignmentDisabled={isAssetAssignmentsLoading}
                                             onAssignmentChange={(workspaceId) =>
                                               handleAssetAssignmentChange(asset.assetKey, workspaceId)
                                             }

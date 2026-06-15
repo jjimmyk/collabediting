@@ -97,3 +97,7 @@ export function getAssetsAssignedToWorkspace(
   if (!workspaceId) return []
   return assets.filter((asset) => asset.assignedWorkspaceId === workspaceId)
 }
+
+export function getUnassignedHubAssets(assets: ResourceListItemData[]): ResourceListItemData[] {
+  return assets.filter((asset) => asset.assignedWorkspaceId === null)
+}

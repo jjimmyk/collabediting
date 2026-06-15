@@ -42,6 +42,8 @@ type ResourceListItemCardProps = {
   showMapAction?: boolean
   workspaceOptions?: AssetWorkspaceOption[]
   onAssignmentChange?: (workspaceId: string | null) => void
+  showInlineAssignment?: boolean
+  assignmentDisabled?: boolean
 }
 
 const COST_UNIT_TYPE_OPTIONS: ResourceCostUnitType[] = ['per day', 'per hour', 'to purchase']
@@ -98,12 +100,15 @@ export function ResourceListItemCard({
   showMapAction = true,
   workspaceOptions = [],
   onAssignmentChange,
+  showInlineAssignment,
+  assignmentDisabled = false,
 }: ResourceListItemCardProps) {
   const [internalOpen, setInternalOpen] = useState(defaultOpen)
   const [isEditing, setIsEditing] = useState(false)
   const [draft, setDraft] = useState<ResourceListItemData | null>(null)
   const isOpen = open ?? internalOpen
   const activeResource = isEditing && draft ? draft : resource
+  const showAssignmentInline = showInlineAssignment ?? Boolean(onAssignmentChange)
 
   useEffect(() => {
     if (!isEditing) {
@@ -284,6 +289,23 @@ export function ResourceListItemCard({
             )}
           </ItemActions>
         </div>
+        {showAssignmentInline && onAssignmentChange ? (
+          <div
+            className="border-t px-3 py-2"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="space-y-1">
+              <ResourceFieldLabel>Incident / Exercise workspace:</ResourceFieldLabel>
+              <AssetWorkspaceAssignmentSelect
+                value={activeResource.assignedWorkspaceId}
+                options={workspaceOptions}
+                compact
+                disabled={assignmentDisabled}
+                onChange={onAssignmentChange}
+              />
+            </div>
+          </div>
+        ) : null}
         <CollapsibleContent>
           <div className="border-t px-3 py-2 text-sm" onClick={(event) => event.stopPropagation()}>
             <div className="grid grid-cols-2 gap-2">
@@ -430,21 +452,24 @@ export function ResourceListItemCard({
               </div>
               <div className="col-span-2 rounded-md border bg-muted/20 p-3">
                 <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  Workspace Assignment
+                  {showAssignmentInline ? 'Operational Assignment Details' : 'Workspace Assignment'}
                 </p>
                 <div className="grid grid-cols-2 gap-2">
-                  <div className="col-span-2 space-y-1">
-                    <ResourceFieldLabel>Assigned Workspace:</ResourceFieldLabel>
-                    {onAssignmentChange ? (
-                      <AssetWorkspaceAssignmentSelect
-                        value={activeResource.assignedWorkspaceId}
-                        options={workspaceOptions}
-                        onChange={onAssignmentChange}
-                      />
-                    ) : (
-                      <p>{getResourceWorkspaceAssignmentLabel(activeResource) || 'Unassigned'}</p>
-                    )}
-                  </div>
+                  {!showAssignmentInline ? (
+                    <div className="col-span-2 space-y-1">
+                      <ResourceFieldLabel>Incident / Exercise workspace:</ResourceFieldLabel>
+                      {onAssignmentChange ? (
+                        <AssetWorkspaceAssignmentSelect
+                          value={activeResource.assignedWorkspaceId}
+                          options={workspaceOptions}
+                          disabled={assignmentDisabled}
+                          onChange={onAssignmentChange}
+                        />
+                      ) : (
+                        <p>{getResourceWorkspaceAssignmentLabel(activeResource) || 'Unassigned'}</p>
+                      )}
+                    </div>
+                  ) : null}
                   <IncidentAssignmentSubfield
                     label="Current Op Period:"
                     isEditing={isEditing}

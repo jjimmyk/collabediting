@@ -16,6 +16,7 @@ type AssetWorkspaceAssignmentSelectProps = {
   value: string | null
   options: AssetWorkspaceOption[]
   disabled?: boolean
+  compact?: boolean
   className?: string
   onChange: (workspaceId: string | null) => void
 }
@@ -24,6 +25,7 @@ export function AssetWorkspaceAssignmentSelect({
   value,
   options,
   disabled = false,
+  compact = false,
   className,
   onChange,
 }: AssetWorkspaceAssignmentSelectProps) {
@@ -38,7 +40,9 @@ export function AssetWorkspaceAssignmentSelect({
         onChange(nextValue === UNASSIGNED_VALUE ? null : nextValue)
       }}
     >
-      <SelectTrigger className={cn('h-8 w-full text-xs', className)}>
+      <SelectTrigger
+        className={cn(compact ? 'h-7 w-full min-w-[10rem] text-[11px]' : 'h-8 w-full text-xs', className)}
+      >
         <SelectValue placeholder="Select workspace" />
       </SelectTrigger>
       <SelectContent>

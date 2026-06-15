@@ -1,29 +1,39 @@
-import { Map as MapIcon, Trash2 } from 'lucide-react'
+import { Map as MapIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Item, ItemActions, ItemContent, ItemDescription, ItemTitle } from '@/components/ui/item'
+import { Label } from '@/components/ui/label'
 import { AssetStatusIndicator } from '@/features/resources/AssetStatusIndicator'
-import type { ResourceListItemData } from '@/features/resources/types'
-import { getResourceWorkspaceAssignmentLabel } from '@/features/resources/utils'
+import { AssetWorkspaceAssignmentSelect } from '@/features/resources/AssetWorkspaceAssignmentSelect'
+import { AssignAssetToWorkspacePicker } from '@/features/resources/AssignAssetToWorkspacePicker'
+import type { AssetWorkspaceOption, ResourceListItemData } from '@/features/resources/types'
 import { getAssetMapKey } from '@/data/hub-asset-catalog'
 import { cn } from '@/lib/utils'
 
 type WorkspaceAssignedAssetsPanelProps = {
   assets: ResourceListItemData[]
+  unassignedAssets: ResourceListItemData[]
+  workspaceOptions: AssetWorkspaceOption[]
   glassItemBorderClasses: string
   workspaceLabel: string
   isLoading?: boolean
+  assignmentDisabled?: boolean
   onFocusMap?: (asset: ResourceListItemData) => void
-  onUnassign?: (assetKey: string) => void
+  onAssignmentChange: (assetKey: string, workspaceId: string | null) => void
+  onAssignAsset?: (assetKey: string) => void
   onOpenHubAssets?: () => void
 }
 
 export function WorkspaceAssignedAssetsPanel({
   assets,
+  unassignedAssets,
+  workspaceOptions,
   glassItemBorderClasses,
   workspaceLabel,
   isLoading = false,
+  assignmentDisabled = false,
   onFocusMap,
-  onUnassign,
+  onAssignmentChange,
+  onAssignAsset,
   onOpenHubAssets,
 }: WorkspaceAssignedAssetsPanelProps) {
   if (isLoading) {
@@ -38,22 +48,33 @@ export function WorkspaceAssignedAssetsPanel({
 
   if (assets.length === 0) {
     return (
-      <Item variant="outline" className={glassItemBorderClasses}>
-        <ItemContent>
-          <ItemTitle>No assets assigned</ItemTitle>
-          <ItemDescription>
-            No assets are currently assigned to {workspaceLabel}. Assign assets from the hub
-            Business Units view.
-          </ItemDescription>
-        </ItemContent>
-        {onOpenHubAssets ? (
-          <ItemActions>
-            <Button type="button" size="sm" variant="outline" onClick={onOpenHubAssets}>
-              Open Business Units
-            </Button>
-          </ItemActions>
+      <div className="space-y-3">
+        <Item variant="outline" className={glassItemBorderClasses}>
+          <ItemContent>
+            <ItemTitle>No assets assigned</ItemTitle>
+            <ItemDescription>
+              No assets are currently assigned to {workspaceLabel}. Choose an unassigned asset
+              below or manage assignments from the hub Assets tab.
+            </ItemDescription>
+          </ItemContent>
+          {onOpenHubAssets ? (
+            <ItemActions>
+              <Button type="button" size="sm" variant="outline" onClick={onOpenHubAssets}>
+                Open Hub Assets
+              </Button>
+            </ItemActions>
+          ) : null}
+        </Item>
+        {onAssignAsset ? (
+          <div className={cn('rounded-md border px-3 py-2.5', glassItemBorderClasses)}>
+            <AssignAssetToWorkspacePicker
+              assets={unassignedAssets}
+              disabled={assignmentDisabled}
+              onAssign={onAssignAsset}
+            />
+          </div>
         ) : null}
-      </Item>
+      </div>
     )
   }
 
@@ -65,7 +86,7 @@ export function WorkspaceAssignedAssetsPanel({
         </p>
         {onOpenHubAssets ? (
           <Button type="button" size="sm" variant="outline" className="h-7 text-xs" onClick={onOpenHubAssets}>
-            Manage in Business Units
+            Open Hub Assets
           </Button>
         ) : null}
       </div>
@@ -74,49 +95,57 @@ export function WorkspaceAssignedAssetsPanel({
           <Item
             key={asset.assetKey}
             variant="outline"
-            className={cn('flex items-center gap-2 px-3 py-2.5', glassItemBorderClasses)}
+            className={cn('flex flex-col items-stretch gap-2 px-3 py-2.5', glassItemBorderClasses)}
           >
-            <ItemContent className="min-w-0">
-              <div className="flex min-w-0 items-center gap-2">
-                <AssetStatusIndicator status={asset.assetStatus} showLabel={false} />
-                <div className="min-w-0">
-                  <ItemTitle className="truncate text-sm">{asset.name}</ItemTitle>
-                  <ItemDescription className="truncate">
-                    {asset.type} · {asset.owner}
-                  </ItemDescription>
-                  <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
-                    {getResourceWorkspaceAssignmentLabel(asset)}
-                  </p>
+            <div className="flex items-center gap-2">
+              <ItemContent className="min-w-0">
+                <div className="flex min-w-0 items-center gap-2">
+                  <AssetStatusIndicator status={asset.assetStatus} showLabel={false} />
+                  <div className="min-w-0">
+                    <ItemTitle className="truncate text-sm">{asset.name}</ItemTitle>
+                    <ItemDescription className="truncate">
+                      {asset.type} · {asset.owner}
+                    </ItemDescription>
+                  </div>
                 </div>
-              </div>
-            </ItemContent>
-            <ItemActions>
-              {onFocusMap ? (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  aria-label={`Zoom map to ${asset.name}`}
-                  onClick={() => onFocusMap(asset)}
-                >
-                  <MapIcon className="h-4 w-4" />
-                </Button>
-              ) : null}
-              {onUnassign ? (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  aria-label={`Unassign ${asset.name}`}
-                  onClick={() => onUnassign(asset.assetKey)}
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              ) : null}
-            </ItemActions>
+              </ItemContent>
+              <ItemActions>
+                {onFocusMap ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    aria-label={`Zoom map to ${asset.name}`}
+                    onClick={() => onFocusMap(asset)}
+                  >
+                    <MapIcon className="h-4 w-4" />
+                  </Button>
+                ) : null}
+              </ItemActions>
+            </div>
+            <div className="space-y-1" onClick={(event) => event.stopPropagation()}>
+              <Label className="text-[11px] text-muted-foreground">Incident / Exercise workspace</Label>
+              <AssetWorkspaceAssignmentSelect
+                value={asset.assignedWorkspaceId}
+                options={workspaceOptions}
+                compact
+                disabled={assignmentDisabled}
+                onChange={(workspaceId) => onAssignmentChange(asset.assetKey, workspaceId)}
+              />
+            </div>
           </Item>
         ))}
       </div>
+      {onAssignAsset && unassignedAssets.length > 0 ? (
+        <div className={cn('rounded-md border px-3 py-2.5', glassItemBorderClasses)}>
+          <AssignAssetToWorkspacePicker
+            assets={unassignedAssets}
+            disabled={assignmentDisabled}
+            label="Assign another asset"
+            onAssign={onAssignAsset}
+          />
+        </div>
+      ) : null}
     </div>
   )
 }
