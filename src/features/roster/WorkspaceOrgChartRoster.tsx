@@ -3,13 +3,11 @@ import type { WorkspaceRosterMember } from '@/lib/workspace-types'
 import type { PositionRosterEntry } from '@/features/roster/workspace-position-roster'
 import { PositionRosterCard } from '@/features/roster/PositionRosterCard'
 import {
-  ICS_ORG_CHART_COMMAND_STAFF_BRANCH,
-  ICS_ORG_CHART_ROOT_POSITION,
-  ICS_ORG_CHART_SECTION_BRANCHES,
   orgChartColorClasses,
   type OrgChartColor,
   type OrgChartNode,
 } from '@/features/roster/ics-org-chart-structure'
+import type { WorkspaceOrgChartLayout } from '@/features/roster/workspace-positions'
 
 import {
   rosterOrgBranchClassName,
@@ -18,6 +16,7 @@ import {
 } from '@/features/roster/roster-layout'
 
 type WorkspaceOrgChartRosterProps = {
+  orgChartLayout: WorkspaceOrgChartLayout
   entriesByPosition: Record<string, PositionRosterEntry>
   visiblePositions: Set<string>
   assignableByPosition: Record<string, WorkspaceRosterMember[]>
@@ -36,6 +35,7 @@ type WorkspaceOrgChartRosterProps = {
 type PositionNodeProps = {
   position: string
   color?: OrgChartColor
+  children?: OrgChartNode[]
   layoutMode: RosterPanelLayoutMode
   entriesByPosition: Record<string, PositionRosterEntry>
   visiblePositions: Set<string>
@@ -53,6 +53,7 @@ type PositionNodeProps = {
 function PositionNode({
   position,
   color,
+  children = [],
   layoutMode,
   entriesByPosition,
   visiblePositions,
@@ -70,22 +71,61 @@ function PositionNode({
   const entry = entriesByPosition[position]
   if (!entry) return null
 
+  const visibleChildren = children.filter(
+    (child) => child.kind === 'position' && visiblePositions.has(child.position)
+  )
+
   return (
-    <PositionRosterCard
-      entry={entry}
-      assignable={assignableByPosition[position] ?? []}
-      canManageRoster={canManageRoster}
-      glassItemBorderClasses={glassItemBorderClasses}
-      isPermissionBusy={isUpdatingPermission === position}
-      isAssignBusy={isAssigningPosition === position}
-      variant="org"
-      color={color}
-      layoutMode={layoutMode}
-      onToggleEditIcs201={onToggleEditIcs201}
-      onAssignExistingMember={onAssignExistingMember}
-      onInviteToPosition={onInviteToPosition}
-      onUnassignMember={onUnassignMember}
-    />
+    <div className="flex w-full min-w-0 flex-col items-center">
+      <PositionRosterCard
+        entry={entry}
+        assignable={assignableByPosition[position] ?? []}
+        canManageRoster={canManageRoster}
+        glassItemBorderClasses={glassItemBorderClasses}
+        isPermissionBusy={isUpdatingPermission === position}
+        isAssignBusy={isAssigningPosition === position}
+        variant="org"
+        color={color}
+        layoutMode={layoutMode}
+        onToggleEditIcs201={onToggleEditIcs201}
+        onAssignExistingMember={onAssignExistingMember}
+        onInviteToPosition={onInviteToPosition}
+        onUnassignMember={onUnassignMember}
+      />
+
+      {visibleChildren.length > 0 && (
+        <>
+          <div className="h-4 w-px bg-border" />
+          <div className="flex w-full flex-col items-center gap-2">
+            {visibleChildren.map((child, index) => {
+              if (child.kind !== 'position') return null
+              return (
+                <div key={child.position} className="flex w-full flex-col items-center">
+                  {index > 0 && <div className="h-3 w-px bg-border" />}
+                  <PositionNode
+                    position={child.position}
+                    color={child.color ?? color}
+                    children={child.children}
+                    layoutMode={layoutMode}
+                    entriesByPosition={entriesByPosition}
+                    visiblePositions={visiblePositions}
+                    assignableByPosition={assignableByPosition}
+                    canManageRoster={canManageRoster}
+                    glassItemBorderClasses={glassItemBorderClasses}
+                    isUpdatingPermission={isUpdatingPermission}
+                    isAssigningPosition={isAssigningPosition}
+                    onToggleEditIcs201={onToggleEditIcs201}
+                    onAssignExistingMember={onAssignExistingMember}
+                    onInviteToPosition={onInviteToPosition}
+                    onUnassignMember={onUnassignMember}
+                  />
+                </div>
+              )
+            })}
+          </div>
+        </>
+      )}
+    </div>
   )
 }
 
@@ -118,9 +158,14 @@ function GroupBranch({
   onInviteToPosition: (position: string) => void
   onUnassignMember: (memberId: string, position: string) => void
 }) {
-  const visibleChildren = node.children.filter(
-    (child) => child.kind === 'position' && visiblePositions.has(child.position)
-  )
+  const visibleChildren = node.children.filter((child) => {
+    if (child.kind === 'position') {
+      return visiblePositions.has(child.position)
+    }
+    return child.children.some(
+      (grandchild) => grandchild.kind === 'position' && visiblePositions.has(grandchild.position)
+    )
+  })
   if (visibleChildren.length === 0) return null
 
   const leaderChild = node.children.find((child) => child.kind === 'position')
@@ -159,6 +204,7 @@ function GroupBranch({
               <PositionNode
                 position={child.position}
                 color={child.color ?? node.color}
+                children={child.children}
                 layoutMode={layoutMode}
                 entriesByPosition={entriesByPosition}
                 visiblePositions={visiblePositions}
@@ -187,7 +233,7 @@ function CommandStaffRow({
 }: {
   node: Extract<OrgChartNode, { kind: 'group' }>
   layoutMode: RosterPanelLayoutMode
-} & Omit<PositionNodeProps, 'position' | 'color'>) {
+} & Omit<PositionNodeProps, 'position' | 'color' | 'children'>) {
   const visibleChildren = node.children.filter(
     (child) => child.kind === 'position' && positionNodeProps.visiblePositions.has(child.position)
   )
@@ -212,6 +258,7 @@ function CommandStaffRow({
               key={child.position}
               position={child.position}
               color={child.color ?? node.color}
+              children={child.children}
               layoutMode={layoutMode}
               {...positionNodeProps}
             />
@@ -223,6 +270,7 @@ function CommandStaffRow({
 }
 
 export function WorkspaceOrgChartRoster({
+  orgChartLayout,
   entriesByPosition,
   visiblePositions,
   assignableByPosition,
@@ -237,15 +285,27 @@ export function WorkspaceOrgChartRoster({
   onInviteToPosition,
   onUnassignMember,
 }: WorkspaceOrgChartRosterProps) {
-  const visibleSectionBranches = ICS_ORG_CHART_SECTION_BRANCHES.filter((branch) =>
-    branch.children.some(
-      (child) => child.kind === 'position' && visiblePositions.has(child.position)
+  const visibleSectionBranches = orgChartLayout.sectionBranches.filter((branch) =>
+    branch.children.some((child) => {
+      if (child.kind !== 'position') return false
+      return (
+        visiblePositions.has(child.position) ||
+        (child.children ?? []).some(
+          (nested) => nested.kind === 'position' && visiblePositions.has(nested.position)
+        )
+      )
+    })
+  )
+  const showCommandStaff = orgChartLayout.commandStaffBranch.children.some((child) => {
+    if (child.kind !== 'position') return false
+    return (
+      visiblePositions.has(child.position) ||
+      (child.children ?? []).some(
+        (nested) => nested.kind === 'position' && visiblePositions.has(nested.position)
+      )
     )
-  )
-  const showCommandStaff = ICS_ORG_CHART_COMMAND_STAFF_BRANCH.children.some(
-    (child) => child.kind === 'position' && visiblePositions.has(child.position)
-  )
-  const showRoot = visiblePositions.has(ICS_ORG_CHART_ROOT_POSITION)
+  })
+  const showRoot = visiblePositions.has(orgChartLayout.rootPosition)
   const showBelowRoot = showCommandStaff || visibleSectionBranches.length > 0
 
   const positionNodeProps = {
@@ -281,7 +341,8 @@ export function WorkspaceOrgChartRoster({
               )}
             >
               <PositionNode
-                position={ICS_ORG_CHART_ROOT_POSITION}
+                position={orgChartLayout.rootPosition}
+                children={orgChartLayout.rootChildren}
                 layoutMode={layoutMode}
                 {...positionNodeProps}
               />
@@ -292,7 +353,7 @@ export function WorkspaceOrgChartRoster({
 
           {showCommandStaff && (
             <CommandStaffRow
-              node={ICS_ORG_CHART_COMMAND_STAFF_BRANCH}
+              node={orgChartLayout.commandStaffBranch}
               layoutMode={layoutMode}
               {...positionNodeProps}
             />

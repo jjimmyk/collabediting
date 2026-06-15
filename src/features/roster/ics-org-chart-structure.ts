@@ -7,6 +7,7 @@ export type OrgChartNode =
       kind: 'position'
       position: string
       color?: OrgChartColor
+      children?: OrgChartNode[]
     }
   | {
       kind: 'group'
@@ -94,15 +95,6 @@ export const ICS_ORG_CHART_POSITIONS: readonly string[] = [
   ICS_ORG_CHART_ROOT_POSITION,
   ...collectOrgChartPositions(ICS_ORG_CHART_BRANCHES),
 ]
-
-const rosterPositionSet = new Set<string>(WORKSPACE_ROSTER_POSITIONS)
-const orgChartPositionSet = new Set<string>(ICS_ORG_CHART_POSITIONS)
-if (
-  rosterPositionSet.size !== orgChartPositionSet.size ||
-  !WORKSPACE_ROSTER_POSITIONS.every((position) => orgChartPositionSet.has(position))
-) {
-  throw new Error('Org chart positions must match WORKSPACE_ROSTER_POSITIONS.')
-}
 
 export function orgChartColorClasses(color: OrgChartColor | undefined): string {
   switch (color) {

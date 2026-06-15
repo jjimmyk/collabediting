@@ -4,6 +4,7 @@ import {
   permissionsFromRows,
   type PositionPermissionMap,
 } from '@/features/roster/workspace-position-roster'
+import { buildWorkspacePositionCatalog } from '@/features/roster/workspace-positions'
 import { getAcceptInviteUrl } from '@/lib/app-url'
 import {
   hasDefaultFullWorkspaceAccess,
@@ -518,16 +519,30 @@ export async function fetchWorkspacePositionPermissions(
     return buildDefaultPositionPermissionMap()
   }
 
-  const { data, error } = await supabase
-    .from('workspace_position_permissions')
-    .select('ics_position, permission')
-    .eq('workspace_id', workspaceId)
+  const [permissionsResult, customResult] = await Promise.all([
+    supabase
+      .from('workspace_position_permissions')
+      .select('ics_position, permission')
+      .eq('workspace_id', workspaceId),
+    supabase.from('workspace_custom_positions').select('name').eq('workspace_id', workspaceId),
+  ])
 
-  if (error || !data) {
+  if (permissionsResult.error || !permissionsResult.data) {
     return buildDefaultPositionPermissionMap()
   }
 
-  return permissionsFromRows(data as Array<{ ics_position: string; permission: string }>)
+  const customPositions = (customResult.data ?? []).map((row: { name: string }) => ({
+    id: row.name,
+    name: row.name,
+    reportsTo: '',
+    sortOrder: 0,
+  }))
+  const catalog = buildWorkspacePositionCatalog(customPositions)
+
+  return permissionsFromRows(
+    permissionsResult.data as Array<{ ics_position: string; permission: string }>,
+    catalog
+  )
 }
 
 export async function setWorkspacePositionEditIcs201(

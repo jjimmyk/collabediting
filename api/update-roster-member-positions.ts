@@ -46,7 +46,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const body = parseBody(req)
     const memberId = body.memberId?.trim()
-    const icsPositions = parseIcsPositionsInput(body)
+    const allowed = await fetchWorkspacePositionAllowlist(admin, member.workspace_id)
+    const icsPositions = parseIcsPositionsInput(body, undefined, allowed)
 
     if (!memberId || icsPositions.length === 0) {
       return res.status(400).json({
@@ -95,7 +96,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     }
 
-    const assigned = await replaceWorkspaceMemberPositions(admin, memberId, icsPositions)
+    const assigned = await replaceWorkspaceMemberPositions(
+      admin,
+      memberId,
+      icsPositions,
+      allowed
+    )
 
     return res.status(200).json({
       ok: true,

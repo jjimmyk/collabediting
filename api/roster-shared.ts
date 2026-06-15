@@ -17,7 +17,13 @@ export const ICS_POSITIONS = [
 ] as const
 
 export function normalizeIcsPositions(positions: string[]): string[] {
-  const allowed = new Set<string>(ICS_POSITIONS)
+  return normalizeIcsPositionsWithAllowlist(positions, new Set<string>(ICS_POSITIONS))
+}
+
+export function normalizeIcsPositionsWithAllowlist(
+  positions: string[],
+  allowed: Set<string>
+): string[] {
   const seen = new Set<string>()
   const normalized: string[] = []
   for (const position of positions) {
@@ -29,6 +35,29 @@ export function normalizeIcsPositions(positions: string[]): string[] {
   return normalized
 }
 
+export async function fetchWorkspacePositionAllowlist(
+  admin: SupabaseClient,
+  workspaceId: string
+): Promise<Set<string>> {
+  const allowed = new Set<string>(ICS_POSITIONS)
+  const { data, error } = await admin
+    .from('workspace_custom_positions')
+    .select('name')
+    .eq('workspace_id', workspaceId)
+
+  if (error) {
+    throw error
+  }
+
+  for (const row of data ?? []) {
+    if (typeof row.name === 'string' && row.name.trim().length > 0) {
+      allowed.add(row.name.trim())
+    }
+  }
+
+  return allowed
+}
+
 export function primaryIcsPosition(positions: string[]): string {
   return positions[0] ?? 'Incident Commander'
 }
@@ -36,9 +65,11 @@ export function primaryIcsPosition(positions: string[]): string {
 export async function replaceWorkspaceMemberPositions(
   admin: SupabaseClient,
   memberId: string,
-  positions: string[]
+  positions: string[],
+  allowedPositions?: Set<string>
 ): Promise<string[]> {
-  const normalized = normalizeIcsPositions(positions)
+  const allowed = allowedPositions ?? new Set<string>(ICS_POSITIONS)
+  const normalized = normalizeIcsPositionsWithAllowlist(positions, allowed)
   if (normalized.length === 0) {
     throw new Error('At least one ICS position is required.')
   }
@@ -88,7 +119,8 @@ export async function upsertWorkspaceMemberWithPositions(
     joinedAt?: string | null
   }
 ): Promise<{ memberId: string; icsPositions: string[] }> {
-  const normalized = normalizeIcsPositions(params.icsPositions)
+  const allowed = await fetchWorkspacePositionAllowlist(admin, params.workspaceId)
+  const normalized = normalizeIcsPositionsWithAllowlist(params.icsPositions, allowed)
   if (normalized.length === 0) {
     throw new Error('At least one ICS position is required.')
   }
@@ -123,16 +155,21 @@ export async function upsertWorkspaceMemberWithPositions(
 
 export function parseIcsPositionsInput(
   body: { icsPositions?: unknown; icsPosition?: unknown },
-  fallback?: string
+  fallback?: string,
+  allowedPositions?: Set<string>
 ): string[] {
+  const allowed = allowedPositions ?? new Set<string>(ICS_POSITIONS)
   if (Array.isArray(body.icsPositions)) {
-    return normalizeIcsPositions(body.icsPositions.filter((entry) => typeof entry === 'string'))
+    return normalizeIcsPositionsWithAllowlist(
+      body.icsPositions.filter((entry) => typeof entry === 'string'),
+      allowed
+    )
   }
   if (typeof body.icsPosition === 'string' && body.icsPosition.trim().length > 0) {
-    return normalizeIcsPositions([body.icsPosition])
+    return normalizeIcsPositionsWithAllowlist([body.icsPosition], allowed)
   }
   if (fallback) {
-    return normalizeIcsPositions([fallback])
+    return normalizeIcsPositionsWithAllowlist([fallback], allowed)
   }
   return []
 }

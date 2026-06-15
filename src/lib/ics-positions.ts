@@ -16,6 +16,9 @@ export const ICS_POSITIONS = [
 
 export type IcsPosition = (typeof ICS_POSITIONS)[number]
 
+/** Standard positions shipped with the product (org chart + roster baseline). */
+export const STANDARD_ICS_POSITIONS: readonly IcsPosition[] = ICS_POSITIONS
+
 /** Positions shown in workspace roster grid and org chart (same set). */
 export const WORKSPACE_ROSTER_POSITIONS: readonly IcsPosition[] = ICS_POSITIONS
 

@@ -497,6 +497,9 @@ import { isIncidentArchived } from '@/lib/incident-archive'
 import { WorkspacePositionRosterTable } from '@/features/roster/WorkspacePositionRosterTable'
 import { WorkspaceOrgChartRoster } from '@/features/roster/WorkspaceOrgChartRoster'
 import { RosterAddMemberToolbar } from '@/features/roster/RosterAddMemberToolbar'
+import { AddWorkspacePositionDialog } from '@/features/roster/AddWorkspacePositionDialog'
+import { buildDynamicOrgChart } from '@/features/roster/build-dynamic-org-chart'
+import { useWorkspaceCustomPositions } from '@/hooks/useWorkspaceCustomPositions'
 import {
   buildDefaultPositionPermissionMap,
   buildPositionRosterEntries,
@@ -8512,6 +8515,9 @@ function App() {
   const [isRosterLoading, setIsRosterLoading] = useState(false)
   const [isInvitingRosterMember, setIsInvitingRosterMember] = useState(false)
   const [isAddRosterMemberOpen, setIsAddRosterMemberOpen] = useState(false)
+  const [isAddWorkspacePositionOpen, setIsAddWorkspacePositionOpen] = useState(false)
+  const [isSavingCustomPosition, setIsSavingCustomPosition] = useState(false)
+  const [deletingCustomPosition, setDeletingCustomPosition] = useState<string | null>(null)
   const [rosterMemberEmailDraft, setRosterMemberEmailDraft] = useState('')
   const [rosterMemberPasswordDraft, setRosterMemberPasswordDraft] = useState('')
   const [rosterMemberPasswordVisible, setRosterMemberPasswordVisible] = useState(false)
@@ -11593,6 +11599,21 @@ function App() {
       : []
   const activeWorkspaceRosterLabel =
     activeIncidentWorkspace?.name ?? activeExerciseWorkspace?.name ?? 'Workspace'
+  const {
+    catalog: workspacePositionCatalog,
+    isLoading: isCustomPositionsLoading,
+    addCustomPosition,
+    removeCustomPosition,
+  } = useWorkspaceCustomPositions({
+    enabled: isInIncidentWorkspace || isInExerciseWorkspace,
+    workspaceId: activeWorkspaceSupabaseId,
+    localWorkspaceKey: activeWorkspaceRosterKey,
+    userId: user?.id ?? null,
+  })
+  const workspaceOrgChartLayout = useMemo(
+    () => buildDynamicOrgChart(workspacePositionCatalog),
+    [workspacePositionCatalog]
+  )
   const persistActiveWorkspaceForms = (workspaceKey: string) => {
     workspaceFormsCacheRef.current[workspaceKey] = {
       ics204Forms: isSupabaseEnabled ? [] : ics204FormsRef.current,
@@ -13333,16 +13354,22 @@ function App() {
     ? activeWorkspacePositionPermissions
     : activeWorkspaceRosterKey !== null
       ? (localPositionPermissionsByKey[activeWorkspaceRosterKey] ??
-        buildDefaultPositionPermissionMap())
-      : buildDefaultPositionPermissionMap()
+        buildDefaultPositionPermissionMap(workspacePositionCatalog))
+      : buildDefaultPositionPermissionMap(workspacePositionCatalog)
   const positionRosterEntries = useMemo(
     () =>
       buildPositionRosterEntries(
         activeWorkspaceRoster,
         activePositionPermissions,
-        activePanelSearchQuery
+        activePanelSearchQuery,
+        workspacePositionCatalog
       ),
-    [activeWorkspaceRoster, activePositionPermissions, activePanelSearchQuery]
+    [
+      activeWorkspaceRoster,
+      activePositionPermissions,
+      activePanelSearchQuery,
+      workspacePositionCatalog,
+    ]
   )
   const positionRosterEntriesByPosition = useMemo(
     () => Object.fromEntries(positionRosterEntries.map((entry) => [entry.position, entry])),
@@ -13354,11 +13381,11 @@ function App() {
   )
   const assignableByPosition = useMemo(() => {
     const map: Record<string, WorkspaceRosterMember[]> = {}
-    for (const position of WORKSPACE_ROSTER_POSITIONS) {
+    for (const position of workspacePositionCatalog.allPositionNames) {
       map[position] = rosterMembersAssignableToPosition(activeWorkspaceRoster, position)
     }
     return map
-  }, [activeWorkspaceRoster])
+  }, [activeWorkspaceRoster, workspacePositionCatalog])
   useEffect(() => {
     if (canEditIcs201Form) {
       return
@@ -14172,7 +14199,9 @@ function App() {
     }
 
     setLocalPositionPermissionsByKey((previous) => {
-      const current = previous[activeWorkspaceRosterKey] ?? buildDefaultPositionPermissionMap()
+      const current =
+        previous[activeWorkspaceRosterKey] ??
+        buildDefaultPositionPermissionMap(workspacePositionCatalog)
       return {
         ...previous,
         [activeWorkspaceRosterKey]: {
@@ -14182,6 +14211,60 @@ function App() {
       }
     })
     setRosterPermissionUpdatingPosition(null)
+  }
+  const handleCreateCustomPosition = async (name: string, reportsTo: string) => {
+    setIsSavingCustomPosition(true)
+    try {
+      const created = await addCustomPosition(name, reportsTo)
+      if (isSupabaseEnabled && activeWorkspaceSupabaseId) {
+        const permissions = await fetchWorkspacePositionPermissions(activeWorkspaceSupabaseId)
+        setActiveWorkspacePositionPermissions(permissions)
+      } else if (activeWorkspaceRosterKey) {
+        setLocalPositionPermissionsByKey((previous) => ({
+          ...previous,
+          [activeWorkspaceRosterKey]: {
+            ...(previous[activeWorkspaceRosterKey] ??
+              buildDefaultPositionPermissionMap(workspacePositionCatalog)),
+            [created.name]: { editIcs201: false },
+          },
+        }))
+      }
+      toast.success(`Added position "${created.name}".`)
+    } finally {
+      setIsSavingCustomPosition(false)
+    }
+  }
+  const handleDeleteCustomPosition = async (positionName: string) => {
+    const customPosition = workspacePositionCatalog.customPositions.find(
+      (row) => row.name === positionName
+    )
+    if (!customPosition) return
+
+    const assignedMemberCount = activeWorkspaceRoster.filter((member) =>
+      member.icsPositions.includes(positionName)
+    ).length
+
+    setDeletingCustomPosition(positionName)
+    try {
+      await removeCustomPosition(customPosition.id, assignedMemberCount)
+      if (isSupabaseEnabled && activeWorkspaceSupabaseId) {
+        const permissions = await fetchWorkspacePositionPermissions(activeWorkspaceSupabaseId)
+        setActiveWorkspacePositionPermissions(permissions)
+      } else if (activeWorkspaceRosterKey) {
+        setLocalPositionPermissionsByKey((previous) => {
+          const current = previous[activeWorkspaceRosterKey]
+          if (!current) return previous
+          const next = { ...current }
+          delete next[positionName]
+          return { ...previous, [activeWorkspaceRosterKey]: next }
+        })
+      }
+      toast.success(`Removed position "${positionName}".`)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not delete custom position.')
+    } finally {
+      setDeletingCustomPosition(null)
+    }
   }
   const removeWorkspaceRosterMember = async (memberId: string) => {
     if (activeWorkspaceRosterKey === null) return
@@ -21663,8 +21746,8 @@ function App() {
     setActiveTab('form-ICS-204')
   }
   const ics233AssignmentOptions = useMemo(
-    () => buildIcs233AssignmentOptions(activeWorkspaceRoster, ICS_POSITIONS),
-    [activeWorkspaceRoster]
+    () => buildIcs233AssignmentOptions(activeWorkspaceRoster, workspacePositionCatalog.allPositionNames),
+    [activeWorkspaceRoster, workspacePositionCatalog.allPositionNames]
   )
   const updateIcs233Row = <K extends keyof Omit<Ics233TaskRow, 'id'>>(
     rowId: number,
@@ -26071,7 +26154,7 @@ function App() {
                 )}
 
                 {activeTab === 'roster' && (isInIncidentWorkspace || isInExerciseWorkspace) && (
-                  isRosterLoading ? (
+                  isRosterLoading || isCustomPositionsLoading ? (
                     <Item variant="outline" className={glassItemBorderClasses}>
                       <ItemContent>
                         <ItemTitle>Loading roster…</ItemTitle>
@@ -26091,10 +26174,12 @@ function App() {
                         canManageRoster={canManageWorkspaceRoster}
                         isSupabaseEnabled={isSupabaseEnabled}
                         onAddMember={openAddRosterMemberDialog}
+                        onAddPosition={() => setIsAddWorkspacePositionOpen(true)}
                         layoutMode={rosterPanelLayoutMode}
                       />
                       {rosterViewMode === 'org-chart' ? (
                         <WorkspaceOrgChartRoster
+                      orgChartLayout={workspaceOrgChartLayout}
                       entriesByPosition={positionRosterEntriesByPosition}
                       visiblePositions={visibleRosterPositions}
                       assignableByPosition={assignableByPosition}
@@ -26123,6 +26208,7 @@ function App() {
                       glassItemBorderClasses={glassItemBorderClasses}
                       isUpdatingPermission={rosterPermissionUpdatingPosition}
                       isAssigningPosition={rosterAssigningPosition}
+                      isDeletingCustomPosition={deletingCustomPosition}
                       onToggleEditIcs201={(position, enabled) => {
                         void toggleWorkspacePositionEditIcs201(position, enabled)
                       }}
@@ -26132,6 +26218,9 @@ function App() {
                       onInviteToPosition={openInviteToPosition}
                       onUnassignMember={(memberId, position) => {
                         void unassignMemberFromPosition(memberId, position)
+                      }}
+                      onDeleteCustomPosition={(position) => {
+                        void handleDeleteCustomPosition(position)
                       }}
                     />
                       )}
@@ -35384,6 +35473,20 @@ function App() {
                     <span>{position}</span>
                   </label>
                 ))}
+                {workspacePositionCatalog.customPositions.map((position) => (
+                  <label
+                    key={position.id}
+                    htmlFor={`roster-add-position-${position.id}`}
+                    className="flex cursor-pointer items-center gap-2 text-sm"
+                  >
+                    <Checkbox
+                      id={`roster-add-position-${position.id}`}
+                      checked={rosterMemberPositionsDraft.includes(position.name)}
+                      onCheckedChange={() => toggleRosterMemberPositionsDraft(position.name)}
+                    />
+                    <span>{position.name}</span>
+                  </label>
+                ))}
               </div>
             </div>
           </div>
@@ -35420,6 +35523,13 @@ function App() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <AddWorkspacePositionDialog
+        open={isAddWorkspacePositionOpen}
+        onOpenChange={setIsAddWorkspacePositionOpen}
+        catalog={workspacePositionCatalog}
+        isSaving={isSavingCustomPosition}
+        onSubmit={handleCreateCustomPosition}
+      />
       <Dialog
         open={isRosterPasswordOverwriteConfirmOpen}
         onOpenChange={setIsRosterPasswordOverwriteConfirmOpen}

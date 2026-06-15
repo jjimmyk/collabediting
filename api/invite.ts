@@ -3,8 +3,10 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import {
   MIN_AUTH_PASSWORD_LENGTH,
   provisionWorkspaceRosterMember,
+  fetchWorkspacePositionAllowlist,
+  parseIcsPositionsInput,
+  upsertWorkspaceMemberWithPositions,
 } from './roster-shared.js'
-import { parseIcsPositionsInput, upsertWorkspaceMemberWithPositions } from './roster-shared.js'
 
 const supabaseUrl =
   process.env.VITE_SUPABASE_URL ??
@@ -178,12 +180,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const workspaceId = body.workspaceId?.trim()
     const email = body.email?.trim().toLowerCase()
     const icsPosition = body.icsPosition?.trim()
-    const icsPositions = parseIcsPositionsInput(body, icsPosition)
     const password = typeof body.password === 'string' ? body.password : ''
     const confirmPasswordOverwrite = body.confirmPasswordOverwrite === true
     const hasPassword = password.length > 0
 
-    if (!workspaceId || !email || icsPositions.length === 0) {
+    if (!workspaceId || !email) {
+      return res.status(400).json({
+        error: 'workspaceId, email, and at least one icsPosition are required.',
+      })
+    }
+
+    const admin = createClient(supabaseUrl, supabaseServiceRoleKey)
+
+    const allowed = await fetchWorkspacePositionAllowlist(admin, workspaceId)
+    const icsPositions = parseIcsPositionsInput(body, icsPosition, allowed)
+
+    if (icsPositions.length === 0) {
       return res.status(400).json({
         error: 'workspaceId, email, and at least one icsPosition are required.',
       })
@@ -199,8 +211,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         code: 'password_too_short',
       })
     }
-
-    const admin = createClient(supabaseUrl, supabaseServiceRoleKey)
 
     const {
       data: { user },

@@ -1,4 +1,4 @@
-import { Plus } from 'lucide-react'
+import { Plus, UserPlus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import type { RosterPanelLayoutMode } from '@/features/roster/roster-layout'
 
@@ -7,6 +7,7 @@ type RosterAddMemberToolbarProps = {
   isSupabaseEnabled: boolean
   layoutMode?: RosterPanelLayoutMode
   onAddMember: () => void
+  onAddPosition?: () => void
 }
 
 export function RosterAddMemberToolbar({
@@ -14,6 +15,7 @@ export function RosterAddMemberToolbar({
   isSupabaseEnabled,
   layoutMode = 'wide',
   onAddMember,
+  onAddPosition,
 }: RosterAddMemberToolbarProps) {
   if (!canManageRoster) return null
 
@@ -27,13 +29,21 @@ export function RosterAddMemberToolbar({
     >
       <p className="max-w-prose text-xs text-muted-foreground">
         {isSupabaseEnabled
-          ? 'Add a user by email. Optionally set a password to create their account immediately, or leave it blank to send an invite email.'
-          : 'Add a user by email and assign one or more ICS positions.'}
+          ? 'Add workspace positions or roster members. Custom positions appear in the org chart under the position they report to.'
+          : 'Add custom positions or roster members by email.'}
       </p>
-      <Button type="button" size="sm" className="shrink-0 gap-1" onClick={onAddMember}>
-        <Plus className="h-3.5 w-3.5" />
-        Add member
-      </Button>
+      <div className="flex flex-wrap items-center gap-2">
+        {onAddPosition && (
+          <Button type="button" size="sm" variant="outline" className="shrink-0 gap-1" onClick={onAddPosition}>
+            <Plus className="h-3.5 w-3.5" />
+            Add position
+          </Button>
+        )}
+        <Button type="button" size="sm" className="shrink-0 gap-1" onClick={onAddMember}>
+          <UserPlus className="h-3.5 w-3.5" />
+          Add member
+        </Button>
+      </div>
     </div>
   )
 }

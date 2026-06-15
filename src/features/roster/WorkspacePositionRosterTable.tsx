@@ -41,10 +41,12 @@ type WorkspacePositionRosterTableProps = {
   glassItemBorderClasses: string
   isUpdatingPermission: string | null
   isAssigningPosition: string | null
+  isDeletingCustomPosition?: string | null
   onToggleEditIcs201: (position: string, enabled: boolean) => void
   onAssignExistingMember: (memberId: string, position: string) => void
   onInviteToPosition: (position: string) => void
   onUnassignMember: (memberId: string, position: string) => void
+  onDeleteCustomPosition?: (position: string) => void
 }
 
 function AssignedMembersList({
@@ -123,10 +125,12 @@ export function WorkspacePositionRosterTable({
   glassItemBorderClasses,
   isUpdatingPermission,
   isAssigningPosition,
+  isDeletingCustomPosition = null,
   onToggleEditIcs201,
   onAssignExistingMember,
   onInviteToPosition,
   onUnassignMember,
+  onDeleteCustomPosition,
 }: WorkspacePositionRosterTableProps) {
   const [expandedPositions, setExpandedPositions] = useState<Set<string>>(() => new Set())
   const [assignedSearchQuery, setAssignedSearchQuery] = useState('')
@@ -244,7 +248,16 @@ export function WorkspacePositionRosterTable({
 
               return (
                 <TableRow key={entry.position}>
-                  <TableCell className="align-top font-medium">{entry.position}</TableCell>
+                  <TableCell className="align-top">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium">{entry.position}</span>
+                      {entry.isCustom ? (
+                        <Badge variant="outline" className="h-5 px-1.5 text-[10px]">
+                          Custom
+                        </Badge>
+                      ) : null}
+                    </div>
+                  </TableCell>
                   <TableCell className="align-top">
                     <div className="space-y-2">
                       <Button
@@ -352,6 +365,19 @@ export function WorkspacePositionRosterTable({
                             </div>
                           </PopoverContent>
                         </Popover>
+                        {entry.isCustom && onDeleteCustomPosition ? (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="h-7 gap-1 px-2 text-[11px] text-destructive hover:text-destructive"
+                            disabled={isDeletingCustomPosition === entry.position}
+                            onClick={() => onDeleteCustomPosition(entry.position)}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                            Delete
+                          </Button>
+                        ) : null}
                       </div>
                     </TableCell>
                   ) : null}
