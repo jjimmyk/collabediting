@@ -1,14 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { getAllHubAssets } from '@/data/hub-asset-catalog'
-import type { ResourceListItemData } from '@/features/resources/types'
+import type { ResourceListItemData, WorkspaceAssetAssignment } from '@/features/resources/types'
 import {
   applyAssignmentsToHubAssets,
   assignmentsRecordFromRows,
+  getAssignedAssetsNotOnOrgChart,
 } from '@/features/resources/utils'
 import {
   assignAssetToWorkspace,
   fetchAllAssetAssignments,
   seedDefaultAssetAssignmentsIfEmpty,
+  setAssetOrgChartPlacement,
   unassignAsset,
 } from '@/lib/workspace-asset-service'
 import type { AccessibleWorkspace } from '@/lib/workspace-types'
@@ -24,7 +26,7 @@ export function useWorkspaceAssetAssignments({
   accessibleWorkspaces,
   userId,
 }: UseWorkspaceAssetAssignmentsOptions) {
-  const [assignmentsByAssetKey, setAssignmentsByAssetKey] = useState<Record<string, string>>({})
+  const [assignmentRows, setAssignmentRows] = useState<WorkspaceAssetAssignment[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -38,10 +40,14 @@ export function useWorkspaceAssetAssignments({
     [accessibleWorkspaces]
   )
 
+  const assignmentsByAssetKey = useMemo(
+    () => assignmentsRecordFromRows(assignmentRows),
+    [assignmentRows]
+  )
+
   const hubAssets = useMemo(
-    () =>
-      applyAssignmentsToHubAssets(getAllHubAssets(), assignmentsByAssetKey, workspacesById),
-    [assignmentsByAssetKey, workspacesById]
+    () => applyAssignmentsToHubAssets(getAllHubAssets(), assignmentRows, workspacesById),
+    [assignmentRows, workspacesById]
   )
 
   useEffect(() => {
@@ -57,7 +63,7 @@ export function useWorkspaceAssetAssignments({
       try {
         const rows = await seedDefaultAssetAssignmentsIfEmpty(workspaceIdByName)
         if (cancelled) return
-        setAssignmentsByAssetKey(assignmentsRecordFromRows(rows))
+        setAssignmentRows(rows)
       } catch (loadError) {
         if (cancelled) return
         setError(loadError instanceof Error ? loadError.message : 'Failed to load asset assignments.')
@@ -78,19 +84,28 @@ export function useWorkspaceAssetAssignments({
   const assignAsset = useCallback(
     async (assetKey: string, workspaceId: string) => {
       await assignAssetToWorkspace(assetKey, workspaceId, userId)
-      setAssignmentsByAssetKey((previous) => ({ ...previous, [assetKey]: workspaceId }))
+      const rows = await fetchAllAssetAssignments()
+      setAssignmentRows(rows)
     },
     [userId]
   )
 
   const unassignAssetByKey = useCallback(async (assetKey: string) => {
     await unassignAsset(assetKey)
-    setAssignmentsByAssetKey((previous) => {
-      const next = { ...previous }
-      delete next[assetKey]
-      return next
-    })
+    setAssignmentRows((previous) => previous.filter((row) => row.assetKey !== assetKey))
   }, [])
+
+  const setOrgChartPlacement = useCallback(async (assetKey: string, reportsTo: string | null) => {
+    const sortOrder =
+      reportsTo === null
+        ? 0
+        : hubAssets.filter(
+            (asset) => asset.orgChartReportsTo === reportsTo && asset.assetKey !== assetKey
+          ).length
+    await setAssetOrgChartPlacement(assetKey, reportsTo, sortOrder)
+    const rows = await fetchAllAssetAssignments()
+    setAssignmentRows(rows)
+  }, [hubAssets])
 
   const getAssetsForWorkspace = useCallback(
     (workspaceId: string | null): ResourceListItemData[] => {
@@ -100,19 +115,29 @@ export function useWorkspaceAssetAssignments({
     [hubAssets]
   )
 
+  const getAssetsForWorkspaceNotOnOrgChart = useCallback(
+    (workspaceId: string | null): ResourceListItemData[] => {
+      return getAssignedAssetsNotOnOrgChart(getAssetsForWorkspace(workspaceId))
+    },
+    [getAssetsForWorkspace]
+  )
+
   const refreshAssignments = useCallback(async () => {
     const rows = await fetchAllAssetAssignments()
-    setAssignmentsByAssetKey(assignmentsRecordFromRows(rows))
+    setAssignmentRows(rows)
   }, [])
 
   return {
     hubAssets,
+    assignmentRows,
     assignmentsByAssetKey,
     isLoading,
     error,
     assignAsset,
     unassignAsset: unassignAssetByKey,
+    setOrgChartPlacement,
     getAssetsForWorkspace,
+    getAssetsForWorkspaceNotOnOrgChart,
     refreshAssignments,
   }
 }

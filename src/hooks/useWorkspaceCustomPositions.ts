@@ -97,7 +97,7 @@ export function useWorkspaceCustomPositions({
   )
 
   const removeCustomPosition = useCallback(
-    async (positionId: string, assignedMemberCount = 0) => {
+    async (positionId: string, assignedMemberCount = 0, reportingAssetCount = 0) => {
       if (!storageKey) {
         throw new Error('Workspace is not available.')
       }
@@ -106,6 +106,7 @@ export function useWorkspaceCustomPositions({
         positionId,
         existingCustomPositions: customPositions,
         assignedMemberCount,
+        reportingAssetCount,
       })
       setCustomPositions((previous) => previous.filter((row) => row.id !== positionId))
     },

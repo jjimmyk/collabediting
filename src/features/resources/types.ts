@@ -54,6 +54,8 @@ export type ResourceListItemData = HubAssetCatalogRecord & {
   /** Display label resolved from assigned workspace name. */
   assignedIncidentName: string | null
   assignedExerciseName: string | null
+  orgChartReportsTo: string | null
+  orgChartSortOrder: number
 }
 
 export type AssetWorkspaceOption = {
@@ -65,4 +67,6 @@ export type AssetWorkspaceOption = {
 export type WorkspaceAssetAssignment = {
   assetKey: string
   workspaceId: string
+  orgChartReportsTo?: string | null
+  orgChartSortOrder?: number
 }

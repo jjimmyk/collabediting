@@ -133,6 +133,7 @@ export async function deleteWorkspaceCustomPosition(params: {
   positionId: string
   existingCustomPositions?: WorkspaceCustomPosition[]
   assignedMemberCount?: number
+  reportingAssetCount?: number
 }): Promise<void> {
   const existing = params.existingCustomPositions ?? (await fetchWorkspaceCustomPositions(params.workspaceId))
   const target = existing.find((row) => row.id === params.positionId)
@@ -147,6 +148,10 @@ export async function deleteWorkspaceCustomPosition(params: {
 
   if ((params.assignedMemberCount ?? 0) > 0) {
     throw new Error('Unassign all members from this position before deleting it.')
+  }
+
+  if ((params.reportingAssetCount ?? 0) > 0) {
+    throw new Error('Remove assets from the org chart that report to this position before deleting it.')
   }
 
   if (!isSupabaseConfigured) {

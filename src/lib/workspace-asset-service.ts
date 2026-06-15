@@ -3,6 +3,7 @@ import {
   DEFAULT_ASSIGNED_ATLANTIC_ASSET_KEYS,
 } from '@/data/hub-asset-catalog'
 import type { WorkspaceAssetAssignment } from '@/features/resources/types'
+import { normalizePositionName } from '@/features/roster/workspace-positions'
 import { getSupabaseClient, isSupabaseConfigured } from '@/lib/supabase'
 
 const LOCAL_ASSIGNMENTS_STORAGE_KEY = 'pratus-workspace-asset-assignments-v1'
@@ -10,6 +11,17 @@ const LOCAL_ASSIGNMENTS_STORAGE_KEY = 'pratus-workspace-asset-assignments-v1'
 type DbWorkspaceAssetAssignmentRow = {
   asset_key: string
   workspace_id: string
+  org_chart_reports_to: string | null
+  org_chart_sort_order: number | null
+}
+
+function mapAssignmentRow(row: DbWorkspaceAssetAssignmentRow): WorkspaceAssetAssignment {
+  return {
+    assetKey: row.asset_key,
+    workspaceId: row.workspace_id,
+    orgChartReportsTo: row.org_chart_reports_to,
+    orgChartSortOrder: row.org_chart_sort_order ?? 0,
+  }
 }
 
 function readLocalAssignments(): WorkspaceAssetAssignment[] {
@@ -27,6 +39,11 @@ function readLocalAssignments(): WorkspaceAssetAssignment[] {
 function writeLocalAssignments(rows: WorkspaceAssetAssignment[]): void {
   if (typeof window === 'undefined') return
   window.localStorage.setItem(LOCAL_ASSIGNMENTS_STORAGE_KEY, JSON.stringify(rows))
+}
+
+function upsertLocalAssignment(row: WorkspaceAssetAssignment): void {
+  const current = readLocalAssignments().filter((entry) => entry.assetKey !== row.assetKey)
+  writeLocalAssignments([...current, row])
 }
 
 export function buildDefaultAssetAssignments(
@@ -58,7 +75,9 @@ export function buildDefaultAssetAssignments(
 
   return DEFAULT_ASSIGNED_ATLANTIC_ASSET_KEYS.map((assetKey) => ({
     assetKey,
-    workspaceId: defaultWorkspaceId,
+    workspaceId: defaultWorkspaceId!,
+    orgChartReportsTo: null,
+    orgChartSortOrder: 0,
   }))
 }
 
@@ -74,16 +93,13 @@ export async function fetchAllAssetAssignments(): Promise<WorkspaceAssetAssignme
 
   const { data, error } = await supabase
     .from('workspace_asset_assignments')
-    .select('asset_key, workspace_id')
+    .select('asset_key, workspace_id, org_chart_reports_to, org_chart_sort_order')
 
   if (error) {
     throw error
   }
 
-  return (data ?? []).map((row: DbWorkspaceAssetAssignmentRow) => ({
-    assetKey: row.asset_key,
-    workspaceId: row.workspace_id,
-  }))
+  return (data ?? []).map((row) => mapAssignmentRow(row as DbWorkspaceAssetAssignmentRow))
 }
 
 export async function assignAssetToWorkspace(
@@ -91,16 +107,34 @@ export async function assignAssetToWorkspace(
   workspaceId: string,
   assignedByUserId: string | null
 ): Promise<void> {
+  const existing = (await fetchAllAssetAssignments()).find((row) => row.assetKey === assetKey)
+  const preserveOrgChart =
+    existing?.workspaceId === workspaceId
+      ? {
+          orgChartReportsTo: existing.orgChartReportsTo ?? null,
+          orgChartSortOrder: existing.orgChartSortOrder ?? 0,
+        }
+      : {
+          orgChartReportsTo: null,
+          orgChartSortOrder: 0,
+        }
+
   if (!isSupabaseConfigured) {
-    const current = readLocalAssignments().filter((row) => row.assetKey !== assetKey)
-    writeLocalAssignments([...current, { assetKey, workspaceId }])
+    upsertLocalAssignment({
+      assetKey,
+      workspaceId,
+      ...preserveOrgChart,
+    })
     return
   }
 
   const supabase = getSupabaseClient()
   if (!supabase) {
-    const current = readLocalAssignments().filter((row) => row.assetKey !== assetKey)
-    writeLocalAssignments([...current, { assetKey, workspaceId }])
+    upsertLocalAssignment({
+      assetKey,
+      workspaceId,
+      ...preserveOrgChart,
+    })
     return
   }
 
@@ -109,10 +143,55 @@ export async function assignAssetToWorkspace(
       asset_key: assetKey,
       workspace_id: workspaceId,
       assigned_by: assignedByUserId,
+      org_chart_reports_to: preserveOrgChart.orgChartReportsTo,
+      org_chart_sort_order: preserveOrgChart.orgChartSortOrder,
       updated_at: new Date().toISOString(),
     },
     { onConflict: 'asset_key' }
   )
+
+  if (error) {
+    throw error
+  }
+}
+
+export async function setAssetOrgChartPlacement(
+  assetKey: string,
+  reportsTo: string | null,
+  sortOrder = 0
+): Promise<void> {
+  const normalizedReportsTo = reportsTo ? normalizePositionName(reportsTo) : null
+  const assignments = await fetchAllAssetAssignments()
+  const existing = assignments.find((row) => row.assetKey === assetKey)
+  if (!existing) {
+    throw new Error('Assign the asset to a workspace before placing it on the org chart.')
+  }
+
+  const nextRow: WorkspaceAssetAssignment = {
+    ...existing,
+    orgChartReportsTo: normalizedReportsTo,
+    orgChartSortOrder: sortOrder,
+  }
+
+  if (!isSupabaseConfigured) {
+    upsertLocalAssignment(nextRow)
+    return
+  }
+
+  const supabase = getSupabaseClient()
+  if (!supabase) {
+    upsertLocalAssignment(nextRow)
+    return
+  }
+
+  const { error } = await supabase
+    .from('workspace_asset_assignments')
+    .update({
+      org_chart_reports_to: normalizedReportsTo,
+      org_chart_sort_order: sortOrder,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('asset_key', assetKey)
 
   if (error) {
     throw error
@@ -161,4 +240,17 @@ export async function replaceAllLocalAssetAssignments(
   rows: WorkspaceAssetAssignment[]
 ): Promise<void> {
   writeLocalAssignments(rows)
+}
+
+export async function countAssetsReportingToPositionName(
+  workspaceId: string,
+  positionName: string
+): Promise<number> {
+  const normalized = normalizePositionName(positionName).toLowerCase()
+  const assignments = await fetchAllAssetAssignments()
+  return assignments.filter(
+    (row) =>
+      row.workspaceId === workspaceId &&
+      (row.orgChartReportsTo ?? '').toLowerCase() === normalized
+  ).length
 }

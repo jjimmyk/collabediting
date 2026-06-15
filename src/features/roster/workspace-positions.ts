@@ -201,6 +201,9 @@ function cloneOrgChartNode(node: OrgChartNode): OrgChartNode {
       children: node.children ? node.children.map(cloneOrgChartNode) : undefined,
     }
   }
+  if (node.kind === 'asset') {
+    return { ...node }
+  }
   return {
     ...node,
     children: node.children.map(cloneOrgChartNode),
@@ -213,6 +216,9 @@ function attachCustomPositionToTree(
   child: OrgChartNode
 ): boolean {
   for (const node of nodes) {
+    if (node.kind === 'asset') {
+      continue
+    }
     if (node.kind === 'position') {
       if (node.position === parentName) {
         node.children = [...(node.children ?? []), child]

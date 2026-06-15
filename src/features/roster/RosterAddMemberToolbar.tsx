@@ -1,4 +1,4 @@
-import { Plus, UserPlus } from 'lucide-react'
+import { Map as MapIcon, UserPlus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import type { RosterPanelLayoutMode } from '@/features/roster/roster-layout'
 
@@ -8,6 +8,8 @@ type RosterAddMemberToolbarProps = {
   layoutMode?: RosterPanelLayoutMode
   onAddMember: () => void
   onAddPosition?: () => void
+  onAddAssetToOrgChart?: () => void
+  showAddAssetToOrgChart?: boolean
 }
 
 export function RosterAddMemberToolbar({
@@ -16,6 +18,8 @@ export function RosterAddMemberToolbar({
   layoutMode = 'wide',
   onAddMember,
   onAddPosition,
+  onAddAssetToOrgChart,
+  showAddAssetToOrgChart = false,
 }: RosterAddMemberToolbarProps) {
   if (!canManageRoster) return null
 
@@ -29,16 +33,26 @@ export function RosterAddMemberToolbar({
     >
       <p className="max-w-prose text-xs text-muted-foreground">
         {isSupabaseEnabled
-          ? 'Add workspace positions or roster members. Custom positions appear in the org chart under the position they report to.'
-          : 'Add custom positions or roster members by email.'}
+          ? 'Manage positions, roster members, and assigned assets on the org chart.'
+          : 'Add custom positions, roster members, or assigned assets to the org chart.'}
       </p>
       <div className="flex flex-wrap items-center gap-2">
-        {onAddPosition && (
+        {showAddAssetToOrgChart && onAddAssetToOrgChart ? (
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="shrink-0 gap-1"
+            onClick={onAddAssetToOrgChart}
+          >
+            + Add asset
+          </Button>
+        ) : null}
+        {onAddPosition ? (
           <Button type="button" size="sm" variant="outline" className="shrink-0 gap-1" onClick={onAddPosition}>
-            <Plus className="h-3.5 w-3.5" />
             Add position
           </Button>
-        )}
+        ) : null}
         <Button type="button" size="sm" className="shrink-0 gap-1" onClick={onAddMember}>
           <UserPlus className="h-3.5 w-3.5" />
           Add member

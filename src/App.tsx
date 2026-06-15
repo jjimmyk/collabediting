@@ -498,7 +498,9 @@ import { WorkspacePositionRosterTable } from '@/features/roster/WorkspacePositio
 import { WorkspaceOrgChartRoster } from '@/features/roster/WorkspaceOrgChartRoster'
 import { RosterAddMemberToolbar } from '@/features/roster/RosterAddMemberToolbar'
 import { AddWorkspacePositionDialog } from '@/features/roster/AddWorkspacePositionDialog'
+import { AddAssetToOrgChartDialog } from '@/features/roster/AddAssetToOrgChartDialog'
 import { buildDynamicOrgChart } from '@/features/roster/build-dynamic-org-chart'
+import { countAssetsReportingToPosition } from '@/features/roster/workspace-asset-org-chart'
 import { useWorkspaceCustomPositions } from '@/hooks/useWorkspaceCustomPositions'
 import {
   buildDefaultPositionPermissionMap,
@@ -8473,7 +8475,9 @@ function App() {
     isLoading: isAssetAssignmentsLoading,
     assignAsset,
     unassignAsset,
+    setOrgChartPlacement,
     getAssetsForWorkspace,
+    getAssetsForWorkspaceNotOnOrgChart,
   } = useWorkspaceAssetAssignments({
     enabled: true,
     accessibleWorkspaces,
@@ -8516,6 +8520,8 @@ function App() {
   const [isInvitingRosterMember, setIsInvitingRosterMember] = useState(false)
   const [isAddRosterMemberOpen, setIsAddRosterMemberOpen] = useState(false)
   const [isAddWorkspacePositionOpen, setIsAddWorkspacePositionOpen] = useState(false)
+  const [isAddAssetToOrgChartOpen, setIsAddAssetToOrgChartOpen] = useState(false)
+  const [isSavingAssetOrgChartPlacement, setIsSavingAssetOrgChartPlacement] = useState(false)
   const [isSavingCustomPosition, setIsSavingCustomPosition] = useState(false)
   const [deletingCustomPosition, setDeletingCustomPosition] = useState<string | null>(null)
   const [rosterMemberEmailDraft, setRosterMemberEmailDraft] = useState('')
@@ -11611,8 +11617,16 @@ function App() {
     userId: user?.id ?? null,
   })
   const workspaceOrgChartLayout = useMemo(
-    () => buildDynamicOrgChart(workspacePositionCatalog),
-    [workspacePositionCatalog]
+    () => buildDynamicOrgChart(workspacePositionCatalog, workspaceAssignedAssets),
+    [workspacePositionCatalog, workspaceAssignedAssets]
+  )
+  const workspaceAssetsByKey = useMemo(
+    () => Object.fromEntries(workspaceAssignedAssets.map((asset) => [asset.assetKey, asset])),
+    [workspaceAssignedAssets]
+  )
+  const workspaceAssetsNotOnOrgChart = useMemo(
+    () => getAssetsForWorkspaceNotOnOrgChart(activeWorkspaceSupabaseId),
+    [activeWorkspaceSupabaseId, getAssetsForWorkspaceNotOnOrgChart]
   )
   const persistActiveWorkspaceForms = (workspaceKey: string) => {
     workspaceFormsCacheRef.current[workspaceKey] = {
@@ -14243,10 +14257,14 @@ function App() {
     const assignedMemberCount = activeWorkspaceRoster.filter((member) =>
       member.icsPositions.includes(positionName)
     ).length
+    const reportingAssetCount = countAssetsReportingToPosition(
+      workspaceAssignedAssets,
+      positionName
+    )
 
     setDeletingCustomPosition(positionName)
     try {
-      await removeCustomPosition(customPosition.id, assignedMemberCount)
+      await removeCustomPosition(customPosition.id, assignedMemberCount, reportingAssetCount)
       if (isSupabaseEnabled && activeWorkspaceSupabaseId) {
         const permissions = await fetchWorkspacePositionPermissions(activeWorkspaceSupabaseId)
         setActiveWorkspacePositionPermissions(permissions)
@@ -14265,6 +14283,36 @@ function App() {
     } finally {
       setDeletingCustomPosition(null)
     }
+  }
+  const handleAssetOrgChartPlacementChange = async (
+    assetKey: string,
+    reportsTo: string | null
+  ) => {
+    setIsSavingAssetOrgChartPlacement(true)
+    try {
+      await setOrgChartPlacement(assetKey, reportsTo)
+      toast.success(
+        reportsTo
+          ? 'Asset placed on the org chart.'
+          : 'Asset removed from the org chart.'
+      )
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not update asset org chart placement.')
+    } finally {
+      setIsSavingAssetOrgChartPlacement(false)
+    }
+  }
+  const handleAddAssetToOrgChart = async (assetKey: string, reportsTo: string) => {
+    setIsSavingAssetOrgChartPlacement(true)
+    try {
+      await setOrgChartPlacement(assetKey, reportsTo)
+      toast.success('Asset added to the org chart.')
+    } finally {
+      setIsSavingAssetOrgChartPlacement(false)
+    }
+  }
+  const handleRemoveAssetFromOrgChart = async (assetKey: string) => {
+    await handleAssetOrgChartPlacementChange(assetKey, null)
   }
   const removeWorkspaceRosterMember = async (memberId: string) => {
     if (activeWorkspaceRosterKey === null) return
@@ -24014,6 +24062,8 @@ function App() {
                     workspaceOptions={assetWorkspaceOptions}
                     isLoading={isAssetAssignmentsLoading}
                     assignmentDisabled={isAssetAssignmentsLoading}
+                    orgChartDisabled={isSavingAssetOrgChartPlacement}
+                    positionCatalog={workspacePositionCatalog}
                     workspaceLabel={activeWorkspaceRosterLabel}
                     glassItemBorderClasses={glassItemBorderClasses}
                     onFocusMap={(asset) => {
@@ -24022,6 +24072,9 @@ function App() {
                       void focusMapItem(mapKey, asset.mapLocation, 30000)
                     }}
                     onAssignmentChange={handleAssetAssignmentChange}
+                    onOrgChartPlacementChange={(assetKey, reportsTo) => {
+                      void handleAssetOrgChartPlacementChange(assetKey, reportsTo)
+                    }}
                     onAssignAsset={
                       activeWorkspaceSupabaseId
                         ? handleAssignAssetToCurrentWorkspace
@@ -26175,12 +26228,17 @@ function App() {
                         isSupabaseEnabled={isSupabaseEnabled}
                         onAddMember={openAddRosterMemberDialog}
                         onAddPosition={() => setIsAddWorkspacePositionOpen(true)}
+                        onAddAssetToOrgChart={() => setIsAddAssetToOrgChartOpen(true)}
+                        showAddAssetToOrgChart={
+                          rosterViewMode === 'org-chart' && workspaceAssetsNotOnOrgChart.length > 0
+                        }
                         layoutMode={rosterPanelLayoutMode}
                       />
                       {rosterViewMode === 'org-chart' ? (
                         <WorkspaceOrgChartRoster
                       orgChartLayout={workspaceOrgChartLayout}
                       entriesByPosition={positionRosterEntriesByPosition}
+                      assetsByKey={workspaceAssetsByKey}
                       visiblePositions={visibleRosterPositions}
                       assignableByPosition={assignableByPosition}
                       canManageRoster={canManageWorkspaceRoster}
@@ -26198,6 +26256,14 @@ function App() {
                       onInviteToPosition={openInviteToPosition}
                       onUnassignMember={(memberId, position) => {
                         void unassignMemberFromPosition(memberId, position)
+                      }}
+                      onFocusAsset={(asset) => {
+                        const mapKey = getAssetMapKey(asset.assetKey)
+                        setSelectedPanelItemId(mapKey)
+                        void focusMapItem(mapKey, asset.mapLocation, 30000)
+                      }}
+                      onRemoveAssetFromOrgChart={(assetKey) => {
+                        void handleRemoveAssetFromOrgChart(assetKey)
                       }}
                     />
                       ) : (
@@ -35529,6 +35595,14 @@ function App() {
         catalog={workspacePositionCatalog}
         isSaving={isSavingCustomPosition}
         onSubmit={handleCreateCustomPosition}
+      />
+      <AddAssetToOrgChartDialog
+        open={isAddAssetToOrgChartOpen}
+        onOpenChange={setIsAddAssetToOrgChartOpen}
+        assets={workspaceAssetsNotOnOrgChart}
+        catalog={workspacePositionCatalog}
+        isSaving={isSavingAssetOrgChartPlacement}
+        onSubmit={handleAddAssetToOrgChart}
       />
       <Dialog
         open={isRosterPasswordOverwriteConfirmOpen}

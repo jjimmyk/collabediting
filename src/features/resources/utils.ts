@@ -55,11 +55,16 @@ export function buildAssetWorkspaceOptions(
 
 export function applyAssignmentsToHubAssets(
   catalog: HubAssetCatalogRecord[],
-  assignmentsByAssetKey: Record<string, string>,
+  assignmentRows: WorkspaceAssetAssignment[],
   workspacesById: Record<string, AccessibleWorkspace>
 ): ResourceListItemData[] {
+  const assignmentsByAssetKey = Object.fromEntries(
+    assignmentRows.map((row) => [row.assetKey, row])
+  )
+
   return catalog.map((asset) => {
-    const workspaceId = assignmentsByAssetKey[asset.assetKey] ?? null
+    const assignment = assignmentsByAssetKey[asset.assetKey]
+    const workspaceId = assignment?.workspaceId ?? null
     const workspace = workspaceId ? workspacesById[workspaceId] : undefined
 
     if (!workspaceId || !workspace) {
@@ -70,6 +75,8 @@ export function applyAssignmentsToHubAssets(
         assignedWorkspaceKind: null,
         assignedIncidentName: null,
         assignedExerciseName: null,
+        orgChartReportsTo: null,
+        orgChartSortOrder: 0,
       }
     }
 
@@ -80,6 +87,8 @@ export function applyAssignmentsToHubAssets(
       assignedWorkspaceKind: workspace.kind,
       assignedIncidentName: workspace.kind === 'incident' ? workspace.name : null,
       assignedExerciseName: workspace.kind === 'exercise' ? workspace.name : null,
+      orgChartReportsTo: assignment?.orgChartReportsTo ?? null,
+      orgChartSortOrder: assignment?.orgChartSortOrder ?? 0,
     }
   })
 }
@@ -96,6 +105,10 @@ export function getAssetsAssignedToWorkspace(
 ): ResourceListItemData[] {
   if (!workspaceId) return []
   return assets.filter((asset) => asset.assignedWorkspaceId === workspaceId)
+}
+
+export function getAssignedAssetsNotOnOrgChart(assets: ResourceListItemData[]): ResourceListItemData[] {
+  return assets.filter((asset) => asset.orgChartReportsTo === null)
 }
 
 export function getUnassignedHubAssets(assets: ResourceListItemData[]): ResourceListItemData[] {

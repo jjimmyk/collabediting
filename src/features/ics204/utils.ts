@@ -64,6 +64,8 @@ const EMPTY_RESOURCE_SNAPSHOT = (id: number, name: string): Ics204ResourceSnapsh
   assignedWorkspaceKind: null,
   assignedIncidentName: null,
   assignedExerciseName: null,
+  orgChartReportsTo: null,
+  orgChartSortOrder: 0,
 })
 
 export function snapshotFromResourceListItem(resource: ResourceListItemData): Ics204ResourceSnapshot {

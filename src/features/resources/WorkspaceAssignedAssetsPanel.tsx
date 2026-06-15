@@ -5,7 +5,9 @@ import { Label } from '@/components/ui/label'
 import { AssetStatusIndicator } from '@/features/resources/AssetStatusIndicator'
 import { AssetWorkspaceAssignmentSelect } from '@/features/resources/AssetWorkspaceAssignmentSelect'
 import { AssignAssetToWorkspacePicker } from '@/features/resources/AssignAssetToWorkspacePicker'
+import { AssetOrgChartPlacementSelect } from '@/features/resources/AssetOrgChartPlacementSelect'
 import type { AssetWorkspaceOption, ResourceListItemData } from '@/features/resources/types'
+import type { WorkspacePositionCatalog } from '@/features/roster/workspace-positions'
 import { getAssetMapKey } from '@/data/hub-asset-catalog'
 import { cn } from '@/lib/utils'
 
@@ -17,8 +19,11 @@ type WorkspaceAssignedAssetsPanelProps = {
   workspaceLabel: string
   isLoading?: boolean
   assignmentDisabled?: boolean
+  positionCatalog?: WorkspacePositionCatalog
+  orgChartDisabled?: boolean
   onFocusMap?: (asset: ResourceListItemData) => void
   onAssignmentChange: (assetKey: string, workspaceId: string | null) => void
+  onOrgChartPlacementChange?: (assetKey: string, reportsTo: string | null) => void
   onAssignAsset?: (assetKey: string) => void
   onOpenHubAssets?: () => void
 }
@@ -31,8 +36,11 @@ export function WorkspaceAssignedAssetsPanel({
   workspaceLabel,
   isLoading = false,
   assignmentDisabled = false,
+  positionCatalog,
+  orgChartDisabled = false,
   onFocusMap,
   onAssignmentChange,
+  onOrgChartPlacementChange,
   onAssignAsset,
   onOpenHubAssets,
 }: WorkspaceAssignedAssetsPanelProps) {
@@ -133,6 +141,16 @@ export function WorkspaceAssignedAssetsPanel({
                 onChange={(workspaceId) => onAssignmentChange(asset.assetKey, workspaceId)}
               />
             </div>
+            {positionCatalog && onOrgChartPlacementChange ? (
+              <div onClick={(event) => event.stopPropagation()}>
+                <AssetOrgChartPlacementSelect
+                  value={asset.orgChartReportsTo}
+                  catalog={positionCatalog}
+                  disabled={orgChartDisabled || assignmentDisabled}
+                  onChange={(reportsTo) => onOrgChartPlacementChange(asset.assetKey, reportsTo)}
+                />
+              </div>
+            ) : null}
           </Item>
         ))}
       </div>

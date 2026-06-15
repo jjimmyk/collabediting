@@ -10,6 +10,13 @@ export type OrgChartNode =
       children?: OrgChartNode[]
     }
   | {
+      kind: 'asset'
+      assetKey: string
+      label: string
+      assetType?: string
+      color?: OrgChartColor
+    }
+  | {
       kind: 'group'
       label: string
       type: 'Section' | 'Command Staff'
@@ -84,7 +91,10 @@ export function collectOrgChartPositions(nodes: OrgChartNode[]): string[] {
   for (const node of nodes) {
     if (node.kind === 'position') {
       positions.push(node.position)
-    } else {
+      if (node.children) {
+        positions.push(...collectOrgChartPositions(node.children))
+      }
+    } else if (node.kind === 'group') {
       positions.push(...collectOrgChartPositions(node.children))
     }
   }

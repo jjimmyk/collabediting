@@ -1,7 +1,9 @@
 import { cn } from '@/lib/utils'
 import type { WorkspaceRosterMember } from '@/lib/workspace-types'
+import type { ResourceListItemData } from '@/features/resources/types'
 import type { PositionRosterEntry } from '@/features/roster/workspace-position-roster'
 import { PositionRosterCard } from '@/features/roster/PositionRosterCard'
+import { AssetOrgChartCard } from '@/features/roster/AssetOrgChartCard'
 import {
   orgChartColorClasses,
   type OrgChartColor,
@@ -18,6 +20,7 @@ import {
 type WorkspaceOrgChartRosterProps = {
   orgChartLayout: WorkspaceOrgChartLayout
   entriesByPosition: Record<string, PositionRosterEntry>
+  assetsByKey: Record<string, ResourceListItemData>
   visiblePositions: Set<string>
   assignableByPosition: Record<string, WorkspaceRosterMember[]>
   canManageRoster: boolean
@@ -30,14 +33,14 @@ type WorkspaceOrgChartRosterProps = {
   onAssignExistingMember: (memberId: string, position: string) => void
   onInviteToPosition: (position: string) => void
   onUnassignMember: (memberId: string, position: string) => void
+  onFocusAsset?: (asset: ResourceListItemData) => void
+  onRemoveAssetFromOrgChart?: (assetKey: string) => void
 }
 
-type PositionNodeProps = {
-  position: string
-  color?: OrgChartColor
-  children?: OrgChartNode[]
+type OrgChartRenderProps = {
   layoutMode: RosterPanelLayoutMode
   entriesByPosition: Record<string, PositionRosterEntry>
+  assetsByKey: Record<string, ResourceListItemData>
   visiblePositions: Set<string>
   assignableByPosition: Record<string, WorkspaceRosterMember[]>
   canManageRoster: boolean
@@ -48,6 +51,97 @@ type PositionNodeProps = {
   onAssignExistingMember: (memberId: string, position: string) => void
   onInviteToPosition: (position: string) => void
   onUnassignMember: (memberId: string, position: string) => void
+  onFocusAsset?: (asset: ResourceListItemData) => void
+  onRemoveAssetFromOrgChart?: (assetKey: string) => void
+}
+
+function filterVisibleOrgChartChildren(
+  children: OrgChartNode[],
+  visiblePositions: Set<string>
+): OrgChartNode[] {
+  return children.filter((child) => {
+    if (child.kind === 'asset') return true
+    if (child.kind === 'position') {
+      return (
+        visiblePositions.has(child.position) ||
+        filterVisibleOrgChartChildren(child.children ?? [], visiblePositions).length > 0
+      )
+    }
+    return false
+  })
+}
+
+function OrgChartChildren({
+  children,
+  parentColor,
+  renderProps,
+}: {
+  children: OrgChartNode[]
+  parentColor?: OrgChartColor
+  renderProps: OrgChartRenderProps
+}) {
+  const visibleChildren = filterVisibleOrgChartChildren(children, renderProps.visiblePositions)
+  if (visibleChildren.length === 0) return null
+
+  return (
+    <>
+      <div className="h-4 w-px bg-border" />
+      <div className="flex w-full flex-col items-center gap-2">
+        {visibleChildren.map((child, index) => (
+          <div
+            key={
+              child.kind === 'asset'
+                ? child.assetKey
+                : child.kind === 'position'
+                  ? child.position
+                  : child.label
+            }
+            className="flex w-full flex-col items-center"
+          >
+            {index > 0 && <div className="h-3 w-px bg-border" />}
+            <OrgChartChildNode node={child} parentColor={parentColor} renderProps={renderProps} />
+          </div>
+        ))}
+      </div>
+    </>
+  )
+}
+
+function OrgChartChildNode({
+  node,
+  parentColor,
+  renderProps,
+}: {
+  node: OrgChartNode
+  parentColor?: OrgChartColor
+  renderProps: OrgChartRenderProps
+}) {
+  if (node.kind === 'asset') {
+    const asset = renderProps.assetsByKey[node.assetKey]
+    if (!asset) return null
+    return (
+      <AssetOrgChartCard
+        asset={asset}
+        color={node.color ?? parentColor}
+        canManage={renderProps.canManageRoster}
+        onFocusMap={renderProps.onFocusAsset}
+        onRemoveFromOrgChart={renderProps.onRemoveAssetFromOrgChart}
+      />
+    )
+  }
+
+  if (node.kind !== 'position' || !renderProps.visiblePositions.has(node.position)) {
+    return null
+  }
+
+  return (
+    <PositionNode
+      position={node.position}
+      color={node.color ?? parentColor}
+      children={node.children ?? []}
+      {...renderProps}
+    />
+  )
 }
 
 function PositionNode({
@@ -56,6 +150,7 @@ function PositionNode({
   children = [],
   layoutMode,
   entriesByPosition,
+  assetsByKey,
   visiblePositions,
   assignableByPosition,
   canManageRoster,
@@ -66,14 +161,34 @@ function PositionNode({
   onAssignExistingMember,
   onInviteToPosition,
   onUnassignMember,
-}: PositionNodeProps) {
+  onFocusAsset,
+  onRemoveAssetFromOrgChart,
+}: {
+  position: string
+  color?: OrgChartColor
+  children?: OrgChartNode[]
+} & OrgChartRenderProps) {
   if (!visiblePositions.has(position)) return null
   const entry = entriesByPosition[position]
   if (!entry) return null
 
-  const visibleChildren = children.filter(
-    (child) => child.kind === 'position' && visiblePositions.has(child.position)
-  )
+  const renderProps: OrgChartRenderProps = {
+    layoutMode,
+    entriesByPosition,
+    assetsByKey,
+    visiblePositions,
+    assignableByPosition,
+    canManageRoster,
+    glassItemBorderClasses,
+    isUpdatingPermission,
+    isAssigningPosition,
+    onToggleEditIcs201,
+    onAssignExistingMember,
+    onInviteToPosition,
+    onUnassignMember,
+    onFocusAsset,
+    onRemoveAssetFromOrgChart,
+  }
 
   return (
     <div className="flex w-full min-w-0 flex-col items-center">
@@ -92,85 +207,36 @@ function PositionNode({
         onInviteToPosition={onInviteToPosition}
         onUnassignMember={onUnassignMember}
       />
-
-      {visibleChildren.length > 0 && (
-        <>
-          <div className="h-4 w-px bg-border" />
-          <div className="flex w-full flex-col items-center gap-2">
-            {visibleChildren.map((child, index) => {
-              if (child.kind !== 'position') return null
-              return (
-                <div key={child.position} className="flex w-full flex-col items-center">
-                  {index > 0 && <div className="h-3 w-px bg-border" />}
-                  <PositionNode
-                    position={child.position}
-                    color={child.color ?? color}
-                    children={child.children}
-                    layoutMode={layoutMode}
-                    entriesByPosition={entriesByPosition}
-                    visiblePositions={visiblePositions}
-                    assignableByPosition={assignableByPosition}
-                    canManageRoster={canManageRoster}
-                    glassItemBorderClasses={glassItemBorderClasses}
-                    isUpdatingPermission={isUpdatingPermission}
-                    isAssigningPosition={isAssigningPosition}
-                    onToggleEditIcs201={onToggleEditIcs201}
-                    onAssignExistingMember={onAssignExistingMember}
-                    onInviteToPosition={onInviteToPosition}
-                    onUnassignMember={onUnassignMember}
-                  />
-                </div>
-              )
-            })}
-          </div>
-        </>
-      )}
+      <OrgChartChildren children={children} parentColor={color} renderProps={renderProps} />
     </div>
+  )
+}
+
+function positionBranchIsVisible(
+  node: Extract<OrgChartNode, { kind: 'position' }>,
+  visiblePositions: Set<string>
+): boolean {
+  return (
+    visiblePositions.has(node.position) ||
+    filterVisibleOrgChartChildren(node.children ?? [], visiblePositions).length > 0
   )
 }
 
 function GroupBranch({
   node,
-  layoutMode,
-  entriesByPosition,
-  visiblePositions,
-  assignableByPosition,
-  canManageRoster,
-  glassItemBorderClasses,
-  isUpdatingPermission,
-  isAssigningPosition,
-  onToggleEditIcs201,
-  onAssignExistingMember,
-  onInviteToPosition,
-  onUnassignMember,
+  renderProps,
 }: {
   node: Extract<OrgChartNode, { kind: 'group' }>
-  layoutMode: RosterPanelLayoutMode
-  entriesByPosition: Record<string, PositionRosterEntry>
-  visiblePositions: Set<string>
-  assignableByPosition: Record<string, WorkspaceRosterMember[]>
-  canManageRoster: boolean
-  glassItemBorderClasses: string
-  isUpdatingPermission: string | null
-  isAssigningPosition: string | null
-  onToggleEditIcs201: (position: string, enabled: boolean) => void
-  onAssignExistingMember: (memberId: string, position: string) => void
-  onInviteToPosition: (position: string) => void
-  onUnassignMember: (memberId: string, position: string) => void
+  renderProps: OrgChartRenderProps
 }) {
-  const visibleChildren = node.children.filter((child) => {
-    if (child.kind === 'position') {
-      return visiblePositions.has(child.position)
-    }
-    return child.children.some(
-      (grandchild) => grandchild.kind === 'position' && visiblePositions.has(grandchild.position)
-    )
-  })
+  const visibleChildren = node.children.filter(
+    (child) => child.kind === 'position' && positionBranchIsVisible(child, renderProps.visiblePositions)
+  )
   if (visibleChildren.length === 0) return null
 
   const leaderChild = node.children.find((child) => child.kind === 'position')
   const leaderEntry =
-    leaderChild?.kind === 'position' ? entriesByPosition[leaderChild.position] : undefined
+    leaderChild?.kind === 'position' ? renderProps.entriesByPosition[leaderChild.position] : undefined
   const leaderEmail = leaderEntry?.members[0]?.email
 
   return (
@@ -194,29 +260,16 @@ function GroupBranch({
       <div className="h-4 w-px bg-border" />
 
       <div className="flex w-full flex-col items-center gap-2">
-        {node.children.map((child, index) => {
-          if (child.kind !== 'position' || !visiblePositions.has(child.position)) {
-            return null
-          }
+        {visibleChildren.map((child, index) => {
+          if (child.kind !== 'position') return null
           return (
             <div key={child.position} className="flex w-full flex-col items-center">
               {index > 0 && <div className="h-3 w-px bg-border" />}
               <PositionNode
                 position={child.position}
                 color={child.color ?? node.color}
-                children={child.children}
-                layoutMode={layoutMode}
-                entriesByPosition={entriesByPosition}
-                visiblePositions={visiblePositions}
-                assignableByPosition={assignableByPosition}
-                canManageRoster={canManageRoster}
-                glassItemBorderClasses={glassItemBorderClasses}
-                isUpdatingPermission={isUpdatingPermission}
-                isAssigningPosition={isAssigningPosition}
-                onToggleEditIcs201={onToggleEditIcs201}
-                onAssignExistingMember={onAssignExistingMember}
-                onInviteToPosition={onInviteToPosition}
-                onUnassignMember={onUnassignMember}
+                children={child.children ?? []}
+                {...renderProps}
               />
             </div>
           )
@@ -228,14 +281,13 @@ function GroupBranch({
 
 function CommandStaffRow({
   node,
-  layoutMode,
-  ...positionNodeProps
+  renderProps,
 }: {
   node: Extract<OrgChartNode, { kind: 'group' }>
-  layoutMode: RosterPanelLayoutMode
-} & Omit<PositionNodeProps, 'position' | 'color' | 'children'>) {
+  renderProps: OrgChartRenderProps
+}) {
   const visibleChildren = node.children.filter(
-    (child) => child.kind === 'position' && positionNodeProps.visiblePositions.has(child.position)
+    (child) => child.kind === 'position' && positionBranchIsVisible(child, renderProps.visiblePositions)
   )
   if (visibleChildren.length === 0) return null
 
@@ -250,7 +302,7 @@ function CommandStaffRow({
         <p className="text-[11px] font-semibold uppercase tracking-wide">{node.label}</p>
       </div>
       <div className="h-4 w-px bg-border" />
-      <div className={rosterOrgCommandStaffClassName(layoutMode)}>
+      <div className={rosterOrgCommandStaffClassName(renderProps.layoutMode)}>
         {visibleChildren.map((child) => {
           if (child.kind !== 'position') return null
           return (
@@ -258,9 +310,8 @@ function CommandStaffRow({
               key={child.position}
               position={child.position}
               color={child.color ?? node.color}
-              children={child.children}
-              layoutMode={layoutMode}
-              {...positionNodeProps}
+              children={child.children ?? []}
+              {...renderProps}
             />
           )
         })}
@@ -272,6 +323,7 @@ function CommandStaffRow({
 export function WorkspaceOrgChartRoster({
   orgChartLayout,
   entriesByPosition,
+  assetsByKey,
   visiblePositions,
   assignableByPosition,
   canManageRoster,
@@ -284,32 +336,26 @@ export function WorkspaceOrgChartRoster({
   onAssignExistingMember,
   onInviteToPosition,
   onUnassignMember,
+  onFocusAsset,
+  onRemoveAssetFromOrgChart,
 }: WorkspaceOrgChartRosterProps) {
   const visibleSectionBranches = orgChartLayout.sectionBranches.filter((branch) =>
-    branch.children.some((child) => {
-      if (child.kind !== 'position') return false
-      return (
-        visiblePositions.has(child.position) ||
-        (child.children ?? []).some(
-          (nested) => nested.kind === 'position' && visiblePositions.has(nested.position)
-        )
-      )
-    })
-  )
-  const showCommandStaff = orgChartLayout.commandStaffBranch.children.some((child) => {
-    if (child.kind !== 'position') return false
-    return (
-      visiblePositions.has(child.position) ||
-      (child.children ?? []).some(
-        (nested) => nested.kind === 'position' && visiblePositions.has(nested.position)
-      )
+    branch.children.some(
+      (child) => child.kind === 'position' && positionBranchIsVisible(child, visiblePositions)
     )
-  })
-  const showRoot = visiblePositions.has(orgChartLayout.rootPosition)
+  )
+  const showCommandStaff = orgChartLayout.commandStaffBranch.children.some(
+    (child) => child.kind === 'position' && positionBranchIsVisible(child, visiblePositions)
+  )
+  const showRoot =
+    visiblePositions.has(orgChartLayout.rootPosition) ||
+    filterVisibleOrgChartChildren(orgChartLayout.rootChildren, visiblePositions).length > 0
   const showBelowRoot = showCommandStaff || visibleSectionBranches.length > 0
 
-  const positionNodeProps = {
+  const renderProps: OrgChartRenderProps = {
+    layoutMode,
     entriesByPosition,
+    assetsByKey,
     visiblePositions,
     assignableByPosition,
     canManageRoster,
@@ -320,6 +366,8 @@ export function WorkspaceOrgChartRoster({
     onAssignExistingMember,
     onInviteToPosition,
     onUnassignMember,
+    onFocusAsset,
+    onRemoveAssetFromOrgChart,
   }
 
   return (
@@ -340,24 +388,24 @@ export function WorkspaceOrgChartRoster({
                 layoutMode === 'wide' && 'flex justify-center'
               )}
             >
-              <PositionNode
-                position={orgChartLayout.rootPosition}
-                children={orgChartLayout.rootChildren}
-                layoutMode={layoutMode}
-                {...positionNodeProps}
-              />
+              {visiblePositions.has(orgChartLayout.rootPosition) ? (
+                <PositionNode
+                  position={orgChartLayout.rootPosition}
+                  children={orgChartLayout.rootChildren}
+                  {...renderProps}
+                />
+              ) : (
+                <OrgChartChildren
+                  children={orgChartLayout.rootChildren}
+                  renderProps={renderProps}
+                />
+              )}
             </div>
           )}
 
           {showRoot && showBelowRoot && <div className="h-5 w-px bg-border" />}
 
-          {showCommandStaff && (
-            <CommandStaffRow
-              node={orgChartLayout.commandStaffBranch}
-              layoutMode={layoutMode}
-              {...positionNodeProps}
-            />
-          )}
+          {showCommandStaff && <CommandStaffRow node={orgChartLayout.commandStaffBranch} renderProps={renderProps} />}
 
           {showCommandStaff && visibleSectionBranches.length > 0 && (
             <div className="h-5 w-px bg-border" />
@@ -368,11 +416,7 @@ export function WorkspaceOrgChartRoster({
               {visibleSectionBranches.map((branch) => (
                 <div key={branch.label} className="flex min-w-0 w-full flex-col items-center">
                   {(showRoot || showCommandStaff) && <div className="h-4 w-px bg-border" />}
-                  <GroupBranch
-                    node={branch}
-                    layoutMode={layoutMode}
-                    {...positionNodeProps}
-                  />
+                  <GroupBranch node={branch} renderProps={renderProps} />
                 </div>
               ))}
             </div>
