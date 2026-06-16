@@ -6,6 +6,7 @@ import { Switch } from '@/components/ui/switch'
 import type { WorkspaceRosterMember } from '@/lib/workspace-types'
 import type { PositionRosterEntry } from '@/features/roster/workspace-position-roster'
 import { PositionLifecycleBadges } from '@/features/roster/PositionLifecycleBadges'
+import { assignExistingMembersEmptyMessage } from '@/features/roster/position-roster-messages'
 
 type PositionRosterDetailPanelProps = {
   entry: PositionRosterEntry
@@ -30,6 +31,8 @@ export function PositionRosterDetailPanel({
   onInviteToPosition,
   onUnassignMember,
 }: PositionRosterDetailPanelProps) {
+  const assignExistingEmptyMessage = assignExistingMembersEmptyMessage(entry, assignable.length)
+
   return (
     <div className="space-y-3">
       <div className="space-y-1.5">
@@ -40,6 +43,11 @@ export function PositionRosterDetailPanel({
             ? 'Manage assignees and permissions for this position.'
             : 'View assignees and permissions for this position.'}
         </p>
+        {entry.isPlanned ? (
+          <p className="text-[11px] text-muted-foreground">
+            This position activates on the next operational period. Assignments are saved now.
+          </p>
+        ) : null}
       </div>
 
       <div className="flex items-center justify-between gap-2 rounded-md border bg-muted/20 px-2.5 py-2">
@@ -100,7 +108,7 @@ export function PositionRosterDetailPanel({
             <p className="text-xs font-medium text-muted-foreground">Assign existing member</p>
             {assignable.length === 0 ? (
               <p className="px-2 py-1 text-[11px] text-muted-foreground">
-                All roster members are already assigned here.
+                {assignExistingEmptyMessage}
               </p>
             ) : (
               assignable.map((member) => (

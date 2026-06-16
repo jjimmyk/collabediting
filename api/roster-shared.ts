@@ -53,7 +53,7 @@ export async function fetchWorkspacePositionAllowlist(
     if (typeof row.name !== 'string' || row.name.trim().length === 0) {
       continue
     }
-    if (row.lifecycle_status === 'archived' || row.lifecycle_status === 'planned_create') {
+    if (row.lifecycle_status === 'archived') {
       continue
     }
     allowed.add(row.name.trim())

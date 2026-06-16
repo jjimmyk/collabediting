@@ -288,7 +288,8 @@ export function canAssignMembersToPosition(
   positionName: string
 ): boolean {
   const meta = catalog.positionMetaByName[positionName]
-  return Boolean(meta && meta.isOnOrgChart && !meta.isArchived)
+  if (!meta || meta.isArchived) return false
+  return meta.isOnOrgChart || meta.isPlanned
 }
 
 export function buildReportsToOptions(catalog: WorkspacePositionCatalog): string[] {
