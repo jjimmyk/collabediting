@@ -237,7 +237,7 @@ export function WorkspacePositionRosterTable({
             </TableHead>
             <TableHead className="w-[7rem] align-bottom">Edit ICS-201</TableHead>
             {showOpAdvanceLabels ? (
-              <TableHead className="min-w-[10rem] align-bottom">OP advance</TableHead>
+              <TableHead className="min-w-[10rem] align-bottom">Next OP period</TableHead>
             ) : null}
             {canManageRoster ? (
               <TableHead className="min-w-[10rem] align-bottom">Actions</TableHead>

@@ -13005,6 +13005,8 @@ function App() {
     isViewingHistoricalOperationalPeriod &&
     !rosterAlwaysShowWorking &&
     formsOperationalPeriodView !== 'working'
+  const showPositionOpAdvanceLabels =
+    (isInIncidentWorkspace || isInExerciseWorkspace) && !isViewingHistoricalRoster
   const historicalRosterPeriodNumber =
     formsOperationalPeriodView === 'working' ? null : formsOperationalPeriodView
   const {
@@ -26514,6 +26516,9 @@ function App() {
                       isAssigningPosition={rosterAssigningPosition}
                       workspaceLabel={activeWorkspaceRosterLabel}
                       layoutMode={rosterPanelLayoutMode}
+                      showOpAdvanceLabels={showPositionOpAdvanceLabels}
+                      positionMetaByName={workspacePositionCatalog.positionMetaByName}
+                      isUpdatingOpAdvanceLabel={updatingOpAdvanceLabelPosition}
                       onToggleEditIcs201={(position, enabled) => {
                         void toggleWorkspacePositionEditIcs201(position, enabled)
                       }}
@@ -26523,6 +26528,9 @@ function App() {
                       onInviteToPosition={openInviteToPosition}
                       onUnassignMember={(memberId, position) => {
                         void unassignMemberFromPosition(memberId, position)
+                      }}
+                      onOpAdvanceLabelChange={(position, label) => {
+                        void handleOpAdvanceLabelChange(position, label)
                       }}
                       onFocusAsset={(asset) => {
                         const mapKey = getAssetMapKey(asset.assetKey)
@@ -26542,7 +26550,7 @@ function App() {
                       isUpdatingPermission={rosterPermissionUpdatingPosition}
                       isAssigningPosition={rosterAssigningPosition}
                       isDeletingCustomPosition={deletingCustomPosition}
-                      showOpAdvanceLabels={operationalPeriodsEnabled && !isViewingHistoricalRoster}
+                      showOpAdvanceLabels={showPositionOpAdvanceLabels}
                       positionMetaByName={workspacePositionCatalog.positionMetaByName}
                       isUpdatingOpAdvanceLabel={updatingOpAdvanceLabelPosition}
                       onToggleEditIcs201={(position, enabled) => {

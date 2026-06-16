@@ -18,7 +18,7 @@ type PositionOpAdvanceLabelSelectProps = {
 
 const LABEL_OPTIONS: Array<{ value: PositionOpAdvanceLabel; label: string }> = [
   { value: null, label: 'None' },
-  { value: 'retire_on_op_advance', label: 'Retire on OP advance' },
+  { value: 'retire_on_op_advance', label: 'Retire next OP period' },
 ]
 
 export function PositionOpAdvanceLabelSelect({

@@ -18,8 +18,10 @@ import { Switch } from '@/components/ui/switch'
 import { cn } from '@/lib/utils'
 import type { WorkspaceRosterMember } from '@/lib/workspace-types'
 import type { PositionRosterEntry } from '@/features/roster/workspace-position-roster'
+import type { PositionOpAdvanceLabel } from '@/lib/operational-period-roster-types'
 import { PositionLifecycleBadges } from '@/features/roster/PositionLifecycleBadges'
 import { PositionRosterDetailPanel } from '@/features/roster/PositionRosterDetailPanel'
+import type { WorkspacePositionMeta } from '@/features/roster/workspace-positions'
 import {
   orgChartColorClasses,
   type OrgChartColor,
@@ -36,6 +38,10 @@ type PositionRosterCardProps = {
   variant?: 'grid' | 'org'
   color?: OrgChartColor
   layoutMode?: RosterPanelLayoutMode
+  showOpAdvanceLabels?: boolean
+  positionMeta?: WorkspacePositionMeta
+  isUpdatingOpAdvanceLabel?: boolean
+  onOpAdvanceLabelChange?: (label: PositionOpAdvanceLabel) => void
   onToggleEditIcs201: (position: string, enabled: boolean) => void
   onAssignExistingMember: (memberId: string, position: string) => void
   onInviteToPosition: (position: string) => void
@@ -52,6 +58,10 @@ export function PositionRosterCard({
   variant = 'grid',
   color,
   layoutMode = 'wide',
+  showOpAdvanceLabels = false,
+  positionMeta,
+  isUpdatingOpAdvanceLabel = false,
+  onOpAdvanceLabelChange,
   onToggleEditIcs201,
   onAssignExistingMember,
   onInviteToPosition,
@@ -112,6 +122,10 @@ export function PositionRosterCard({
             <DialogTitle className="sr-only">{entry.position}</DialogTitle>
             <PositionRosterDetailPanel
               {...panelProps}
+              showOpAdvanceLabels={showOpAdvanceLabels}
+              positionMeta={positionMeta}
+              isUpdatingOpAdvanceLabel={isUpdatingOpAdvanceLabel}
+              onOpAdvanceLabelChange={onOpAdvanceLabelChange}
               onInviteToPosition={(position) => {
                 setOrgModalOpen(false)
                 onInviteToPosition(position)

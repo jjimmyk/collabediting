@@ -4,9 +4,12 @@ import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import type { WorkspaceRosterMember } from '@/lib/workspace-types'
+import type { PositionOpAdvanceLabel } from '@/lib/operational-period-roster-types'
 import type { PositionRosterEntry } from '@/features/roster/workspace-position-roster'
 import { PositionLifecycleBadges } from '@/features/roster/PositionLifecycleBadges'
+import { PositionOpAdvanceLabelSelect } from '@/features/roster/PositionOpAdvanceLabelSelect'
 import { assignExistingMembersEmptyMessage } from '@/features/roster/position-roster-messages'
+import type { WorkspacePositionMeta } from '@/features/roster/workspace-positions'
 
 type PositionRosterDetailPanelProps = {
   entry: PositionRosterEntry
@@ -14,6 +17,10 @@ type PositionRosterDetailPanelProps = {
   canManageRoster: boolean
   isPermissionBusy: boolean
   isAssignBusy: boolean
+  showOpAdvanceLabels?: boolean
+  positionMeta?: WorkspacePositionMeta
+  isUpdatingOpAdvanceLabel?: boolean
+  onOpAdvanceLabelChange?: (label: PositionOpAdvanceLabel) => void
   onToggleEditIcs201: (position: string, enabled: boolean) => void
   onAssignExistingMember: (memberId: string, position: string) => void
   onInviteToPosition: (position: string) => void
@@ -26,6 +33,10 @@ export function PositionRosterDetailPanel({
   canManageRoster,
   isPermissionBusy,
   isAssignBusy,
+  showOpAdvanceLabels = false,
+  positionMeta,
+  isUpdatingOpAdvanceLabel = false,
+  onOpAdvanceLabelChange,
   onToggleEditIcs201,
   onAssignExistingMember,
   onInviteToPosition,
@@ -62,6 +73,21 @@ export function PositionRosterDetailPanel({
           onCheckedChange={(checked) => onToggleEditIcs201(entry.position, checked)}
         />
       </div>
+
+      {showOpAdvanceLabels && onOpAdvanceLabelChange ? (
+        <div className="space-y-1.5 rounded-md border bg-muted/20 px-2.5 py-2">
+          <Label htmlFor={`op-advance-label-panel-${entry.position}`} className="text-xs">
+            Next OP period
+          </Label>
+          <PositionOpAdvanceLabelSelect
+            positionName={entry.position}
+            meta={positionMeta}
+            value={entry.opAdvanceLabel ?? null}
+            disabled={!canManageRoster || isUpdatingOpAdvanceLabel}
+            onChange={onOpAdvanceLabelChange}
+          />
+        </div>
+      ) : null}
 
       <div className="space-y-1.5">
         <p className="text-xs font-medium text-muted-foreground">Assigned</p>

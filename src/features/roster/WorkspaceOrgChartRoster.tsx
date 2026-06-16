@@ -2,14 +2,16 @@ import { cn } from '@/lib/utils'
 import type { WorkspaceRosterMember } from '@/lib/workspace-types'
 import type { ResourceListItemData } from '@/features/resources/types'
 import type { PositionRosterEntry } from '@/features/roster/workspace-position-roster'
+import type { PositionOpAdvanceLabel } from '@/lib/operational-period-roster-types'
 import { PositionRosterCard } from '@/features/roster/PositionRosterCard'
 import { AssetOrgChartCard } from '@/features/roster/AssetOrgChartCard'
+import type { WorkspaceOrgChartLayout, WorkspacePositionMeta } from '@/features/roster/workspace-positions'
+
 import {
   orgChartColorClasses,
   type OrgChartColor,
   type OrgChartNode,
 } from '@/features/roster/ics-org-chart-structure'
-import type { WorkspaceOrgChartLayout } from '@/features/roster/workspace-positions'
 
 import {
   rosterOrgBranchClassName,
@@ -27,12 +29,16 @@ type WorkspaceOrgChartRosterProps = {
   glassItemBorderClasses: string
   isUpdatingPermission: string | null
   isAssigningPosition: string | null
+  isUpdatingOpAdvanceLabel?: string | null
   workspaceLabel: string
   layoutMode?: RosterPanelLayoutMode
+  showOpAdvanceLabels?: boolean
+  positionMetaByName?: Record<string, WorkspacePositionMeta>
   onToggleEditIcs201: (position: string, enabled: boolean) => void
   onAssignExistingMember: (memberId: string, position: string) => void
   onInviteToPosition: (position: string) => void
   onUnassignMember: (memberId: string, position: string) => void
+  onOpAdvanceLabelChange?: (position: string, label: PositionOpAdvanceLabel) => void
   onFocusAsset?: (asset: ResourceListItemData) => void
   onRemoveAssetFromOrgChart?: (assetKey: string) => void
 }
@@ -47,10 +53,14 @@ type OrgChartRenderProps = {
   glassItemBorderClasses: string
   isUpdatingPermission: string | null
   isAssigningPosition: string | null
+  isUpdatingOpAdvanceLabel: string | null
+  showOpAdvanceLabels: boolean
+  positionMetaByName: Record<string, WorkspacePositionMeta>
   onToggleEditIcs201: (position: string, enabled: boolean) => void
   onAssignExistingMember: (memberId: string, position: string) => void
   onInviteToPosition: (position: string) => void
   onUnassignMember: (memberId: string, position: string) => void
+  onOpAdvanceLabelChange?: (position: string, label: PositionOpAdvanceLabel) => void
   onFocusAsset?: (asset: ResourceListItemData) => void
   onRemoveAssetFromOrgChart?: (assetKey: string) => void
 }
@@ -157,10 +167,14 @@ function PositionNode({
   glassItemBorderClasses,
   isUpdatingPermission,
   isAssigningPosition,
+  isUpdatingOpAdvanceLabel,
+  showOpAdvanceLabels,
+  positionMetaByName,
   onToggleEditIcs201,
   onAssignExistingMember,
   onInviteToPosition,
   onUnassignMember,
+  onOpAdvanceLabelChange,
   onFocusAsset,
   onRemoveAssetFromOrgChart,
 }: {
@@ -182,10 +196,14 @@ function PositionNode({
     glassItemBorderClasses,
     isUpdatingPermission,
     isAssigningPosition,
+    isUpdatingOpAdvanceLabel,
+    showOpAdvanceLabels,
+    positionMetaByName,
     onToggleEditIcs201,
     onAssignExistingMember,
     onInviteToPosition,
     onUnassignMember,
+    onOpAdvanceLabelChange,
     onFocusAsset,
     onRemoveAssetFromOrgChart,
   }
@@ -202,6 +220,14 @@ function PositionNode({
         variant="org"
         color={color}
         layoutMode={layoutMode}
+        showOpAdvanceLabels={showOpAdvanceLabels}
+        positionMeta={positionMetaByName[position]}
+        isUpdatingOpAdvanceLabel={isUpdatingOpAdvanceLabel === position}
+        onOpAdvanceLabelChange={
+          onOpAdvanceLabelChange
+            ? (label) => onOpAdvanceLabelChange(position, label)
+            : undefined
+        }
         onToggleEditIcs201={onToggleEditIcs201}
         onAssignExistingMember={onAssignExistingMember}
         onInviteToPosition={onInviteToPosition}
@@ -330,12 +356,16 @@ export function WorkspaceOrgChartRoster({
   glassItemBorderClasses,
   isUpdatingPermission,
   isAssigningPosition,
+  isUpdatingOpAdvanceLabel = null,
   workspaceLabel,
   layoutMode = 'wide',
+  showOpAdvanceLabels = false,
+  positionMetaByName = {},
   onToggleEditIcs201,
   onAssignExistingMember,
   onInviteToPosition,
   onUnassignMember,
+  onOpAdvanceLabelChange,
   onFocusAsset,
   onRemoveAssetFromOrgChart,
 }: WorkspaceOrgChartRosterProps) {
@@ -362,10 +392,14 @@ export function WorkspaceOrgChartRoster({
     glassItemBorderClasses,
     isUpdatingPermission,
     isAssigningPosition,
+    isUpdatingOpAdvanceLabel,
+    showOpAdvanceLabels,
+    positionMetaByName,
     onToggleEditIcs201,
     onAssignExistingMember,
     onInviteToPosition,
     onUnassignMember,
+    onOpAdvanceLabelChange,
     onFocusAsset,
     onRemoveAssetFromOrgChart,
   }
