@@ -1,6 +1,10 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { createClient } from '@supabase/supabase-js'
-import { parseIcsPositionsInput, replaceWorkspaceMemberPositions } from './roster-shared.js'
+import {
+  fetchWorkspacePositionAllowlist,
+  parseIcsPositionsInput,
+  replaceWorkspaceMemberPositions,
+} from './roster-shared.js'
 
 const supabaseUrl =
   process.env.VITE_SUPABASE_URL ??
@@ -46,13 +50,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const body = parseBody(req)
     const memberId = body.memberId?.trim()
-    const allowed = await fetchWorkspacePositionAllowlist(admin, member.workspace_id)
-    const icsPositions = parseIcsPositionsInput(body, undefined, allowed)
 
-    if (!memberId || icsPositions.length === 0) {
-      return res.status(400).json({
-        error: 'memberId and at least one icsPosition are required.',
-      })
+    if (!memberId) {
+      return res.status(400).json({ error: 'memberId is required.' })
     }
 
     const admin = createClient(supabaseUrl, supabaseServiceRoleKey)
@@ -94,6 +94,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (!canManage) {
         return res.status(403).json({ error: 'You do not have permission to update roster members.' })
       }
+    }
+
+    const allowed = await fetchWorkspacePositionAllowlist(admin, member.workspace_id)
+    const icsPositions = parseIcsPositionsInput(body, undefined, allowed)
+
+    if (icsPositions.length === 0) {
+      return res.status(400).json({
+        error: 'At least one valid icsPosition is required.',
+      })
     }
 
     const assigned = await replaceWorkspaceMemberPositions(
