@@ -23236,11 +23236,12 @@ function App() {
                         Org Chart
                       </ToggleGroupItem>
                     </ToggleGroup>
-                    {effectiveCanManageRoster && (
-                      <Button type="button" size="sm" onClick={openAddRosterMemberDialog}>
-                        + Add Member
-                      </Button>
-                    )}
+                    <RosterAddMemberToolbar
+                      canManageRoster={effectiveCanManageRoster}
+                      onAddMember={openAddRosterMemberDialog}
+                      onAddPosition={() => setIsAddWorkspacePositionOpen(true)}
+                      onAddAssetToOrgChart={() => setIsAddAssetToOrgChartOpen(true)}
+                    />
                   </div>
                 )}
                 {activeTab === 'resources' && !isInWorkspaceContext && (
@@ -26500,17 +26501,6 @@ function App() {
                       </Item>
                     ) : (
                       <div className="min-w-0 w-full max-w-full space-y-2 overflow-hidden">
-                      <RosterAddMemberToolbar
-                        canManageRoster={effectiveCanManageRoster}
-                        isSupabaseEnabled={isSupabaseEnabled}
-                        onAddMember={openAddRosterMemberDialog}
-                        onAddPosition={() => setIsAddWorkspacePositionOpen(true)}
-                        onAddAssetToOrgChart={() => setIsAddAssetToOrgChartOpen(true)}
-                        showAddAssetToOrgChart={
-                          rosterViewMode === 'org-chart' && workspaceAssetsNotOnOrgChart.length > 0
-                        }
-                        layoutMode={rosterPanelLayoutMode}
-                      />
                       {rosterViewMode === 'org-chart' ? (
                         <WorkspaceOrgChartRoster
                       orgChartLayout={workspaceOrgChartLayout}
