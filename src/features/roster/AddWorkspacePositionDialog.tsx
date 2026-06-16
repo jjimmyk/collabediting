@@ -30,7 +30,8 @@ type AddWorkspacePositionDialogProps = {
   onOpenChange: (open: boolean) => void
   catalog: WorkspacePositionCatalog
   isSaving?: boolean
-  onSubmit: (name: string, reportsTo: string) => Promise<void>
+  showPlannedCreateOption?: boolean
+  onSubmit: (name: string, reportsTo: string, createOnOpAdvance: boolean) => Promise<void>
 }
 
 export function AddWorkspacePositionDialog({
@@ -38,10 +39,12 @@ export function AddWorkspacePositionDialog({
   onOpenChange,
   catalog,
   isSaving = false,
+  showPlannedCreateOption = false,
   onSubmit,
 }: AddWorkspacePositionDialogProps) {
   const [nameDraft, setNameDraft] = useState('')
   const [reportsToDraft, setReportsToDraft] = useState<string>(ICS_ORG_CHART_ROOT_POSITION)
+  const [createOnOpAdvance, setCreateOnOpAdvance] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const reportsToOptions = useMemo(() => buildReportsToOptions(catalog), [catalog])
@@ -49,6 +52,7 @@ export function AddWorkspacePositionDialog({
   const resetDraft = () => {
     setNameDraft('')
     setReportsToDraft(ICS_ORG_CHART_ROOT_POSITION)
+    setCreateOnOpAdvance(false)
     setError(null)
   }
 
@@ -66,7 +70,7 @@ export function AddWorkspacePositionDialog({
 
     setError(null)
     try {
-      await onSubmit(nameDraft, reportsToDraft)
+      await onSubmit(nameDraft, reportsToDraft, createOnOpAdvance)
       resetDraft()
       onOpenChange(false)
     } catch (submitError) {
@@ -127,6 +131,32 @@ export function AddWorkspacePositionDialog({
               </SelectContent>
             </Select>
           </div>
+          {showPlannedCreateOption ? (
+            <div className="grid gap-2">
+              <Label htmlFor="custom-position-create-timing">When to create</Label>
+              <Select
+                value={createOnOpAdvance ? 'op-advance' : 'now'}
+                onValueChange={(value) => {
+                  setCreateOnOpAdvance(value === 'op-advance')
+                  setError(null)
+                }}
+              >
+                <SelectTrigger id="custom-position-create-timing">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="now">Create now</SelectItem>
+                  <SelectItem value="op-advance">Create on OP advance</SelectItem>
+                </SelectContent>
+              </Select>
+              {createOnOpAdvance ? (
+                <p className="text-[11px] text-muted-foreground">
+                  This position will appear on the roster with a planned label and join the org chart
+                  when the next operational period starts.
+                </p>
+              ) : null}
+            </div>
+          ) : null}
           {error && <p className="text-xs text-destructive">{error}</p>}
         </div>
         <DialogFooter>

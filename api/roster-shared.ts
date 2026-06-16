@@ -42,7 +42,7 @@ export async function fetchWorkspacePositionAllowlist(
   const allowed = new Set<string>(ICS_POSITIONS)
   const { data, error } = await admin
     .from('workspace_custom_positions')
-    .select('name')
+    .select('name, lifecycle_status')
     .eq('workspace_id', workspaceId)
 
   if (error) {
@@ -50,8 +50,27 @@ export async function fetchWorkspacePositionAllowlist(
   }
 
   for (const row of data ?? []) {
-    if (typeof row.name === 'string' && row.name.trim().length > 0) {
-      allowed.add(row.name.trim())
+    if (typeof row.name !== 'string' || row.name.trim().length === 0) {
+      continue
+    }
+    if (row.lifecycle_status === 'archived' || row.lifecycle_status === 'planned_create') {
+      continue
+    }
+    allowed.add(row.name.trim())
+  }
+
+  const { data: standardLifecycle, error: lifecycleError } = await admin
+    .from('workspace_standard_position_lifecycle')
+    .select('position_name, archived_at')
+    .eq('workspace_id', workspaceId)
+
+  if (lifecycleError) {
+    throw lifecycleError
+  }
+
+  for (const row of standardLifecycle ?? []) {
+    if (row.archived_at && typeof row.position_name === 'string') {
+      allowed.delete(row.position_name)
     }
   }
 

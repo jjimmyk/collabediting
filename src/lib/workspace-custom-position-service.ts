@@ -15,6 +15,9 @@ type DbWorkspaceCustomPositionRow = {
   name: string
   reports_to: string
   sort_order: number
+  lifecycle_status?: string
+  archived_at?: string | null
+  activated_at?: string | null
 }
 
 function mapRow(row: DbWorkspaceCustomPositionRow): WorkspaceCustomPosition {
@@ -23,6 +26,10 @@ function mapRow(row: DbWorkspaceCustomPositionRow): WorkspaceCustomPosition {
     name: row.name,
     reportsTo: row.reports_to,
     sortOrder: row.sort_order,
+    lifecycleStatus:
+      (row.lifecycle_status as WorkspaceCustomPosition['lifecycleStatus']) ?? 'active',
+    archivedAt: row.archived_at ?? null,
+    activatedAt: row.activated_at ?? null,
   }
 }
 
@@ -57,7 +64,7 @@ export async function fetchWorkspaceCustomPositions(
 
   const { data, error } = await supabase
     .from('workspace_custom_positions')
-    .select('id, workspace_id, name, reports_to, sort_order')
+    .select('id, workspace_id, name, reports_to, sort_order, lifecycle_status, archived_at, activated_at')
     .eq('workspace_id', workspaceId)
     .order('sort_order', { ascending: true })
     .order('name', { ascending: true })
@@ -75,11 +82,13 @@ export async function createWorkspaceCustomPosition(params: {
   reportsTo: string
   createdByUserId: string | null
   existingCustomPositions?: WorkspaceCustomPosition[]
+  lifecycleStatus?: WorkspaceCustomPosition['lifecycleStatus']
 }): Promise<WorkspaceCustomPosition> {
   const existing = params.existingCustomPositions ?? (await fetchWorkspaceCustomPositions(params.workspaceId))
   const catalog = buildWorkspacePositionCatalog(existing)
   const normalizedName = normalizePositionName(params.name)
   const normalizedReportsTo = normalizePositionName(params.reportsTo)
+  const lifecycleStatus = params.lifecycleStatus ?? 'active'
 
   const nameError = validateCustomPositionName(normalizedName, catalog)
   if (nameError) {
@@ -96,6 +105,7 @@ export async function createWorkspaceCustomPosition(params: {
       name: normalizedName,
       reportsTo: normalizedReportsTo,
       sortOrder: existing.length,
+      lifecycleStatus,
     }
     const all = readLocalCustomPositions()
     all[params.workspaceId] = [...existing, next]
@@ -115,10 +125,11 @@ export async function createWorkspaceCustomPosition(params: {
       name: normalizedName,
       reports_to: normalizedReportsTo,
       sort_order: existing.length,
+      lifecycle_status: lifecycleStatus,
       created_by: params.createdByUserId,
       updated_at: new Date().toISOString(),
     })
-    .select('id, workspace_id, name, reports_to, sort_order')
+    .select('id, workspace_id, name, reports_to, sort_order, lifecycle_status, archived_at, activated_at')
     .single()
 
   if (error || !data) {
@@ -175,4 +186,40 @@ export async function deleteWorkspaceCustomPosition(params: {
   if (error) {
     throw error
   }
+}
+
+export async function updateWorkspaceCustomPositionLifecycleStatus(params: {
+  workspaceId: string
+  positionId: string
+  lifecycleStatus: WorkspaceCustomPosition['lifecycleStatus']
+}): Promise<WorkspaceCustomPosition> {
+  if (params.lifecycleStatus === 'archived') {
+    throw new Error('Use operational period advance to archive positions.')
+  }
+
+  if (!isSupabaseConfigured) {
+    throw new Error('Position lifecycle requires Supabase persistence.')
+  }
+
+  const supabase = getSupabaseClient()
+  if (!supabase) {
+    throw new Error('Supabase is not configured.')
+  }
+
+  const { data, error } = await supabase
+    .from('workspace_custom_positions')
+    .update({
+      lifecycle_status: params.lifecycleStatus,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', params.positionId)
+    .eq('workspace_id', params.workspaceId)
+    .select('id, workspace_id, name, reports_to, sort_order, lifecycle_status, archived_at, activated_at')
+    .single()
+
+  if (error || !data) {
+    throw error ?? new Error('Could not update custom position lifecycle.')
+  }
+
+  return mapRow(data as DbWorkspaceCustomPositionRow)
 }

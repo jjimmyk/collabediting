@@ -536,6 +536,7 @@ export async function fetchWorkspacePositionPermissions(
     name: row.name,
     reportsTo: '',
     sortOrder: 0,
+    lifecycleStatus: 'active' as const,
   }))
   const catalog = buildWorkspacePositionCatalog(customPositions)
 

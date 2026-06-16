@@ -15,6 +15,7 @@ import {
   formatOperationalPeriodStarterLabel,
   formatWorkingOperationalPeriodLabel,
 } from '@/lib/operational-period-utils'
+import type { OpAdvanceLifecycleSummary } from '@/lib/operational-period-roster-types'
 import type { WorkspaceOperationalPeriod } from '@/lib/operational-period-types'
 
 type OperationalPeriodSettingsSectionProps = {
@@ -26,6 +27,7 @@ type OperationalPeriodSettingsSectionProps = {
   isLoadingPeriods?: boolean
   isStarting?: boolean
   startError?: string | null
+  lifecycleSummary?: OpAdvanceLifecycleSummary | null
   onStartOperationalPeriod: () => Promise<{ ok: boolean; message?: string }>
 }
 
@@ -38,6 +40,7 @@ export function OperationalPeriodSettingsSection({
   isLoadingPeriods = false,
   isStarting = false,
   startError = null,
+  lifecycleSummary = null,
   onStartOperationalPeriod,
 }: OperationalPeriodSettingsSectionProps) {
   const [confirmOpen, setConfirmOpen] = useState(false)
@@ -138,12 +141,34 @@ export function OperationalPeriodSettingsSection({
             <DialogTitle>Start {formatOperationalPeriodLabel(nextPeriodNumber)}?</DialogTitle>
             <DialogDescription>
               This will snapshot all workspace forms for{' '}
-              {formatOperationalPeriodLabel(nextPeriodNumber)}, apply default 12-hour operational
-              period timestamps to eligible forms, and begin{' '}
+              {formatOperationalPeriodLabel(nextPeriodNumber)}, capture the current roster, apply any
+              retire/create position labels, apply default 12-hour operational period timestamps to
+              eligible forms, and begin{' '}
               {formatWorkingOperationalPeriodLabel(nextPeriodNumber + 1)} as the editable working
               set. Started periods cannot be edited.
             </DialogDescription>
           </DialogHeader>
+          {lifecycleSummary ? (
+            <div className="space-y-2 rounded-md border bg-muted/20 px-3 py-2 text-xs">
+              <p className="font-medium">Roster position changes</p>
+              {lifecycleSummary.retiring.length > 0 ? (
+                <p>
+                  <span className="font-medium">Retire:</span>{' '}
+                  {lifecycleSummary.retiring.join(', ')}
+                </p>
+              ) : null}
+              {lifecycleSummary.creating.length > 0 ? (
+                <p>
+                  <span className="font-medium">Create:</span>{' '}
+                  {lifecycleSummary.creating.join(', ')}
+                </p>
+              ) : null}
+              <p className="text-muted-foreground">
+                {lifecycleSummary.persistingCount} position
+                {lifecycleSummary.persistingCount === 1 ? '' : 's'} will persist unchanged.
+              </p>
+            </div>
+          ) : null}
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setConfirmOpen(false)}>
               Cancel

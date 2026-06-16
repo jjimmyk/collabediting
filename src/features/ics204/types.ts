@@ -1,4 +1,5 @@
 import type { Ics201VersionSignature } from '@/features/ics201/types'
+import type { Ics204aFormState } from '@/features/ics204a/types'
 import type { ResourceListItemData } from '@/features/resources/types'
 
 export type Ics204ResourceSnapshot = ResourceListItemData
@@ -11,6 +12,8 @@ export type Ics204ResourceAssignedRow = {
   reportingInfoNotes: string
   has204A: boolean
   resourceSnapshot: Ics204ResourceSnapshot | null
+  /** Optional ICS 204A-CG attachment when has204A is true. */
+  ics204a?: Ics204aFormState | null
 }
 
 export type Ics204ResourceRequirementRow = {

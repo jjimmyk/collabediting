@@ -1,4 +1,5 @@
 import { WORKSPACE_ROSTER_POSITIONS, WORKSPACE_PERMISSION_EDIT_ICS201 } from '@/lib/ics-positions'
+import type { PositionOpAdvanceLabel } from '@/lib/operational-period-roster-types'
 import type { WorkspaceRosterMember } from '@/lib/workspace-types'
 import {
   emptyWorkspacePositionCatalog,
@@ -13,6 +14,8 @@ export type PositionRosterEntry = {
   members: WorkspaceRosterMember[]
   editIcs201: boolean
   isCustom?: boolean
+  opAdvanceLabel?: PositionOpAdvanceLabel
+  isPlanned?: boolean
 }
 
 export type PositionRosterAssignmentFilter = {
@@ -80,15 +83,20 @@ export function buildPositionRosterEntries(
 ): PositionRosterEntry[] {
   const normalizedQuery = searchQuery.trim().toLowerCase()
 
-  return catalog.allPositionNames
-    .map((position) => ({
-      position,
-      members: roster.filter(
-        (member) => member.status !== 'removed' && member.icsPositions.includes(position)
-      ),
-      editIcs201: permissions[position]?.editIcs201 ?? !catalog.customPositionNames.has(position),
-      isCustom: isCustomWorkspacePosition(position, catalog),
-    }))
+  return catalog.rosterPositionNames
+    .map((position) => {
+      const meta = catalog.positionMetaByName[position]
+      return {
+        position,
+        members: roster.filter(
+          (member) => member.status !== 'removed' && member.icsPositions.includes(position)
+        ),
+        editIcs201: permissions[position]?.editIcs201 ?? !catalog.customPositionNames.has(position),
+        isCustom: isCustomWorkspacePosition(position, catalog),
+        opAdvanceLabel: meta?.opAdvanceLabel ?? null,
+        isPlanned: meta?.isPlanned ?? false,
+      }
+    })
     .filter((entry) => {
       if (!normalizedQuery) return true
       if (entry.position.toLowerCase().includes(normalizedQuery)) return true

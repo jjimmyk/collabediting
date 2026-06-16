@@ -5,10 +5,12 @@ import {
   type WorkspaceCustomPosition,
   type WorkspacePositionCatalog,
 } from '@/features/roster/workspace-positions'
+import type { StandardPositionLifecycleRow } from '@/lib/operational-period-roster-types'
 import {
   createWorkspaceCustomPosition,
   deleteWorkspaceCustomPosition,
   fetchWorkspaceCustomPositions,
+  updateWorkspaceCustomPositionLifecycleStatus,
 } from '@/lib/workspace-custom-position-service'
 
 type UseWorkspaceCustomPositionsOptions = {
@@ -16,6 +18,7 @@ type UseWorkspaceCustomPositionsOptions = {
   workspaceId: string | null
   localWorkspaceKey?: string | null
   userId: string | null
+  standardLifecycle?: StandardPositionLifecycleRow[]
 }
 
 export function useWorkspaceCustomPositions({
@@ -23,6 +26,7 @@ export function useWorkspaceCustomPositions({
   workspaceId,
   localWorkspaceKey,
   userId,
+  standardLifecycle = [],
 }: UseWorkspaceCustomPositionsOptions) {
   const [customPositions, setCustomPositions] = useState<WorkspaceCustomPosition[]>([])
   const [isLoading, setIsLoading] = useState(false)
@@ -69,12 +73,19 @@ export function useWorkspaceCustomPositions({
   }, [enabled, storageKey])
 
   const catalog = useMemo<WorkspacePositionCatalog>(
-    () => (enabled ? buildWorkspacePositionCatalog(customPositions) : emptyWorkspacePositionCatalog()),
-    [customPositions, enabled]
+    () =>
+      enabled
+        ? buildWorkspacePositionCatalog(customPositions, standardLifecycle)
+        : emptyWorkspacePositionCatalog(),
+    [customPositions, enabled, standardLifecycle]
   )
 
   const addCustomPosition = useCallback(
-    async (name: string, reportsTo: string) => {
+    async (
+      name: string,
+      reportsTo: string,
+      lifecycleStatus: WorkspaceCustomPosition['lifecycleStatus'] = 'active'
+    ) => {
       if (!storageKey) {
         throw new Error('Workspace is not available.')
       }
@@ -84,6 +95,7 @@ export function useWorkspaceCustomPositions({
         reportsTo,
         createdByUserId: userId,
         existingCustomPositions: customPositions,
+        lifecycleStatus,
       })
       setCustomPositions((previous) =>
         [...previous, created].sort((a, b) => {
@@ -94,6 +106,24 @@ export function useWorkspaceCustomPositions({
       return created
     },
     [customPositions, storageKey, userId]
+  )
+
+  const setCustomPositionLifecycleStatus = useCallback(
+    async (positionId: string, lifecycleStatus: WorkspaceCustomPosition['lifecycleStatus']) => {
+      if (!storageKey) {
+        throw new Error('Workspace is not available.')
+      }
+      const updated = await updateWorkspaceCustomPositionLifecycleStatus({
+        workspaceId: storageKey,
+        positionId,
+        lifecycleStatus,
+      })
+      setCustomPositions((previous) =>
+        previous.map((row) => (row.id === updated.id ? updated : row))
+      )
+      return updated
+    },
+    [storageKey]
   )
 
   const removeCustomPosition = useCallback(
@@ -119,6 +149,7 @@ export function useWorkspaceCustomPositions({
     isLoading,
     error,
     addCustomPosition,
+    setCustomPositionLifecycleStatus,
     removeCustomPosition,
     reload: async () => {
       if (!storageKey) return

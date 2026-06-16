@@ -1,4 +1,5 @@
 import type { OperationalPeriodFormKey } from '@/lib/operational-period-form-registry'
+import type { OperationalPeriodRosterSnapshot } from '@/lib/operational-period-roster-types'
 import type {
   OperationalPeriodFormSnapshot,
   OperationalPeriodSnapshotBundle,
@@ -167,6 +168,37 @@ export function bundleOperationalPeriodSnapshots(
   }
 
   return { periodNumber, byFormKey }
+}
+
+type DbRosterSnapshotRow = {
+  id: string
+  operational_period_id: string
+  workspace_id: string
+  period_number: number
+  snapshot: OperationalPeriodRosterSnapshot
+  created_at: string
+}
+
+export async function fetchOperationalPeriodRosterSnapshot(
+  workspaceId: string,
+  periodNumber: number
+): Promise<OperationalPeriodRosterSnapshot | null> {
+  const supabase = getSupabaseClient()
+  if (!supabase) return null
+
+  const { data, error } = await supabase
+    .from('workspace_operational_period_roster_snapshots')
+    .select('id, operational_period_id, workspace_id, period_number, snapshot, created_at')
+    .eq('workspace_id', workspaceId)
+    .eq('period_number', periodNumber)
+    .maybeSingle()
+
+  if (error) {
+    throw new Error(error.message)
+  }
+
+  if (!data) return null
+  return (data as DbRosterSnapshotRow).snapshot
 }
 
 export async function fetchOperationalPeriodSnapshotBundle(

@@ -1,4 +1,5 @@
 import { ics201AuthorColorFromId } from '@/features/ics201/utils'
+import type { Ics204aFormState } from '@/features/ics204a/types'
 import type { ResourceListItemData } from '@/features/resources/types'
 import type {
   Ics204AssignmentInfoDraft,
@@ -68,6 +69,13 @@ const EMPTY_RESOURCE_SNAPSHOT = (id: number, name: string): Ics204ResourceSnapsh
   orgChartSortOrder: 0,
   ics204DocumentId: null,
 })
+
+function cloneEmbeddedIcs204a(value: Ics204aFormState): Ics204aFormState {
+  return {
+    ...value,
+    otherAttachments: { ...value.otherAttachments },
+  }
+}
 
 export function snapshotFromResourceListItem(resource: ResourceListItemData): Ics204ResourceSnapshot {
   return { ...resource, mapLocation: [...resource.mapLocation] as [number, number] }
@@ -148,6 +156,8 @@ export function normalizeIcs204ResourceAssignedRow(
     reportingInfoNotes: String(row.reportingInfoNotes ?? row.location ?? ''),
     has204A: Boolean(row.has204A),
     resourceSnapshot,
+    ics204a:
+      row.has204A && row.ics204a != null ? cloneEmbeddedIcs204a(row.ics204a as Ics204aFormState) : null,
   }
 }
 
@@ -191,7 +201,10 @@ export function cloneIcs204FormState(form: Ics204FormState): Ics204FormState {
   const normalized = normalizeIcs204FormState(form)
   return {
     ...normalized,
-    resourcesAssigned: normalized.resourcesAssigned.map((row) => ({ ...row })),
+    resourcesAssigned: normalized.resourcesAssigned.map((row) => ({
+      ...row,
+      ics204a: row.ics204a ? cloneEmbeddedIcs204a(row.ics204a) : null,
+    })),
     workAssignments: normalized.workAssignments.map((row) => ({
       ...row,
       resourceRequirements: row.resourceRequirements.map((entry) => ({ ...entry })),
@@ -274,6 +287,10 @@ export function cloneIcs204ResourceAssignedRows(
       resourceSnapshot: normalized.resourceSnapshot
         ? snapshotFromResourceListItem(normalized.resourceSnapshot)
         : null,
+      ics204a:
+        normalized.has204A && normalized.ics204a
+          ? cloneEmbeddedIcs204a(normalized.ics204a)
+          : null,
     }
   })
 }

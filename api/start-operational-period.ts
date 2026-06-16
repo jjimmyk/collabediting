@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import { snapshotAndApplyRosterLifecycleOnOperationalPeriodAdvance } from './roster-operational-period-lifecycle'
 
 type OperationalPeriodFormKey =
   | 'ics201'
@@ -610,6 +611,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     try {
       const periodWindows = computeOperationalPeriodWindows(new Date(periodRow.started_at))
+      await snapshotAndApplyRosterLifecycleOnOperationalPeriodAdvance(
+        admin,
+        workspaceId,
+        periodRow.id,
+        periodNumber
+      )
       for (const entry of OPERATIONAL_PERIOD_FORM_REGISTRY) {
         await snapshotAndCloneFormEntry(
           admin,

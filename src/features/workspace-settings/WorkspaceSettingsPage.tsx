@@ -34,6 +34,7 @@ type WorkspaceSettingsPageProps = {
   isLoadingOperationalPeriods?: boolean
   isStartingOperationalPeriod?: boolean
   operationalPeriodStartError?: string | null
+  opAdvanceLifecycleSummary?: import('@/lib/operational-period-roster-types').OpAdvanceLifecycleSummary | null
   onStartOperationalPeriod?: () => Promise<{ ok: boolean; message?: string }>
 }
 
@@ -57,6 +58,7 @@ export function WorkspaceSettingsPage({
   isLoadingOperationalPeriods = false,
   isStartingOperationalPeriod = false,
   operationalPeriodStartError = null,
+  opAdvanceLifecycleSummary = null,
   onStartOperationalPeriod,
 }: WorkspaceSettingsPageProps) {
   return (
@@ -81,6 +83,7 @@ export function WorkspaceSettingsPage({
           isLoadingPeriods={isLoadingOperationalPeriods}
           isStarting={isStartingOperationalPeriod}
           startError={operationalPeriodStartError}
+          lifecycleSummary={opAdvanceLifecycleSummary}
           onStartOperationalPeriod={onStartOperationalPeriod}
         />
       ) : null}

@@ -32,6 +32,9 @@ import {
   filterPositionRosterMembers,
   formatPositionAssignmentCount,
 } from '@/features/roster/workspace-position-roster'
+import { PositionOpAdvanceLabelSelect } from '@/features/roster/PositionOpAdvanceLabelSelect'
+import type { PositionOpAdvanceLabel } from '@/lib/operational-period-roster-types'
+import type { WorkspacePositionMeta } from '@/features/roster/workspace-positions'
 import { cn } from '@/lib/utils'
 
 type WorkspacePositionRosterTableProps = {
@@ -42,11 +45,15 @@ type WorkspacePositionRosterTableProps = {
   isUpdatingPermission: string | null
   isAssigningPosition: string | null
   isDeletingCustomPosition?: string | null
+  showOpAdvanceLabels?: boolean
+  positionMetaByName?: Record<string, WorkspacePositionMeta>
+  isUpdatingOpAdvanceLabel?: string | null
   onToggleEditIcs201: (position: string, enabled: boolean) => void
   onAssignExistingMember: (memberId: string, position: string) => void
   onInviteToPosition: (position: string) => void
   onUnassignMember: (memberId: string, position: string) => void
   onDeleteCustomPosition?: (position: string) => void
+  onOpAdvanceLabelChange?: (position: string, label: PositionOpAdvanceLabel) => void
 }
 
 function AssignedMembersList({
@@ -126,11 +133,15 @@ export function WorkspacePositionRosterTable({
   isUpdatingPermission,
   isAssigningPosition,
   isDeletingCustomPosition = null,
+  showOpAdvanceLabels = false,
+  positionMetaByName = {},
+  isUpdatingOpAdvanceLabel = null,
   onToggleEditIcs201,
   onAssignExistingMember,
   onInviteToPosition,
   onUnassignMember,
   onDeleteCustomPosition,
+  onOpAdvanceLabelChange,
 }: WorkspacePositionRosterTableProps) {
   const [expandedPositions, setExpandedPositions] = useState<Set<string>>(() => new Set())
   const [assignedSearchQuery, setAssignedSearchQuery] = useState('')
@@ -225,6 +236,9 @@ export function WorkspacePositionRosterTable({
               </div>
             </TableHead>
             <TableHead className="w-[7rem] align-bottom">Edit ICS-201</TableHead>
+            {showOpAdvanceLabels ? (
+              <TableHead className="min-w-[10rem] align-bottom">OP advance</TableHead>
+            ) : null}
             {canManageRoster ? (
               <TableHead className="min-w-[10rem] align-bottom">Actions</TableHead>
             ) : null}
@@ -234,7 +248,7 @@ export function WorkspacePositionRosterTable({
           {filteredEntries.length === 0 ? (
             <TableRow>
               <TableCell
-                colSpan={canManageRoster ? 4 : 3}
+                colSpan={canManageRoster ? (showOpAdvanceLabels ? 5 : 4) : showOpAdvanceLabels ? 4 : 3}
                 className="py-8 text-center text-sm text-muted-foreground"
               >
                 No positions match the assigned filters.
@@ -254,6 +268,16 @@ export function WorkspacePositionRosterTable({
                       {entry.isCustom ? (
                         <Badge variant="outline" className="h-5 px-1.5 text-[10px]">
                           Custom
+                        </Badge>
+                      ) : null}
+                      {entry.isPlanned ? (
+                        <Badge variant="secondary" className="h-5 px-1.5 text-[10px]">
+                          Planned
+                        </Badge>
+                      ) : null}
+                      {entry.opAdvanceLabel === 'retire_on_op_advance' ? (
+                        <Badge variant="destructive" className="h-5 px-1.5 text-[10px]">
+                          Retiring
                         </Badge>
                       ) : null}
                     </div>
@@ -310,6 +334,21 @@ export function WorkspacePositionRosterTable({
                       </Label>
                     </div>
                   </TableCell>
+                  {showOpAdvanceLabels ? (
+                    <TableCell className="align-top">
+                      {onOpAdvanceLabelChange ? (
+                        <PositionOpAdvanceLabelSelect
+                          positionName={entry.position}
+                          meta={positionMetaByName[entry.position]}
+                          value={entry.opAdvanceLabel ?? null}
+                          disabled={
+                            !canManageRoster || isUpdatingOpAdvanceLabel === entry.position
+                          }
+                          onChange={(label) => onOpAdvanceLabelChange(entry.position, label)}
+                        />
+                      ) : null}
+                    </TableCell>
+                  ) : null}
                   {canManageRoster ? (
                     <TableCell className="align-top">
                       <div className="flex flex-wrap gap-1.5">

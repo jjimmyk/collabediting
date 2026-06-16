@@ -51,6 +51,7 @@ type Ics204FormSectionsProps = {
     value: Ics204FormSectionDrafts[S]
   ) => void
   onOpenResourcePicker: () => void
+  onOpenIcs204a?: (rowId: number) => void
   onFocusResourceMap?: (resourceId: number, mapLocation: [number, number]) => void
 }
 
@@ -79,6 +80,7 @@ export function Ics204FormSections({
   onGenerateSection,
   onPatchDraft,
   onOpenResourcePicker,
+  onOpenIcs204a,
   onFocusResourceMap,
 }: Ics204FormSectionsProps) {
   const sectionDisabled = formIsLocked || !canEdit
@@ -119,7 +121,14 @@ export function Ics204FormSections({
   ) => {
     onPatchDraft(
       'resources-assigned',
-      resourcesAssigned.map((row) => (row.id === rowId ? { ...row, [field]: value } : row))
+      resourcesAssigned.map((row) => {
+        if (row.id !== rowId) return row
+        const nextRow = { ...row, [field]: value }
+        if (field === 'has204A' && value === false) {
+          return { ...nextRow, ics204a: null }
+        }
+        return nextRow
+      })
     )
   }
 
@@ -401,22 +410,46 @@ export function Ics204FormSections({
                           <Ics204ReadOnlyTextBlock compact value={row.reportingInfoNotes} />
                         )}
                       </div>
-                      <div className="text-center">
+                      <div className="flex flex-col items-center gap-1 text-center">
                         {editingResources ? (
-                          <label className="inline-flex h-8 items-center justify-center gap-1 text-xs font-semibold">
-                            <input
-                              type="checkbox"
-                              checked={row.has204A}
-                              onChange={(event) =>
-                                patchResourceRow(row.id, 'has204A', event.target.checked)
-                              }
-                              className="h-3.5 w-3.5"
-                            />
+                          <>
+                            <label className="inline-flex h-8 items-center justify-center gap-1 text-xs font-semibold">
+                              <input
+                                type="checkbox"
+                                checked={row.has204A}
+                                onChange={(event) =>
+                                  patchResourceRow(row.id, 'has204A', event.target.checked)
+                                }
+                                className="h-3.5 w-3.5"
+                              />
+                              X
+                            </label>
+                            {row.has204A && onOpenIcs204a ? (
+                              <Button
+                                type="button"
+                                variant="link"
+                                size="sm"
+                                className="h-auto px-0 py-0 text-[10px] font-semibold"
+                                onClick={() => onOpenIcs204a(row.id)}
+                              >
+                                Open 204A
+                              </Button>
+                            ) : null}
+                          </>
+                        ) : row.has204A && onOpenIcs204a ? (
+                          <Button
+                            type="button"
+                            variant="link"
+                            size="sm"
+                            className="h-8 px-1 text-xs font-semibold"
+                            aria-label={`Open ICS-204A for ${resourceSnapshot.name}`}
+                            onClick={() => onOpenIcs204a(row.id)}
+                          >
                             X
-                          </label>
+                          </Button>
                         ) : (
                           <span className="inline-flex h-8 items-center justify-center text-xs font-semibold">
-                            {row.has204A ? 'X' : '—'}
+                            —
                           </span>
                         )}
                       </div>

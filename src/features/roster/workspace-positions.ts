@@ -1,4 +1,9 @@
 import { STANDARD_ICS_POSITIONS, WORKSPACE_ROSTER_POSITIONS } from '@/lib/ics-positions'
+import type {
+  PositionLifecycleStatus,
+  PositionOpAdvanceLabel,
+  StandardPositionLifecycleRow,
+} from '@/lib/operational-period-roster-types'
 import type { OrgChartNode } from '@/features/roster/ics-org-chart-structure'
 
 export type WorkspaceCustomPosition = {
@@ -6,31 +11,111 @@ export type WorkspaceCustomPosition = {
   name: string
   reportsTo: string
   sortOrder: number
+  lifecycleStatus: PositionLifecycleStatus
+  archivedAt?: string | null
+  activatedAt?: string | null
+}
+
+export type WorkspacePositionMeta = {
+  name: string
+  source: 'standard' | 'custom'
+  lifecycleStatus: PositionLifecycleStatus
+  opAdvanceLabel: PositionOpAdvanceLabel
+  isPlanned: boolean
+  isArchived: boolean
+  isOnOrgChart: boolean
+  customPositionId?: string
+  reportsTo?: string
 }
 
 export type WorkspacePositionCatalog = {
   standardPositions: readonly string[]
   customPositions: WorkspaceCustomPosition[]
+  /** Active roster positions (excludes archived; includes planned + retiring). */
+  rosterPositionNames: string[]
+  /** Positions eligible for org chart, assignments, and permissions. */
   allPositionNames: string[]
+  orgChartPositionNames: string[]
   customPositionNames: Set<string>
+  positionMetaByName: Record<string, WorkspacePositionMeta>
 }
 
 const MAX_POSITION_NAME_LENGTH = 80
 const MIN_POSITION_NAME_LENGTH = 2
 
+function opAdvanceLabelFromCustom(status: PositionLifecycleStatus): PositionOpAdvanceLabel {
+  if (status === 'planned_create') return 'create_on_op_advance'
+  if (status === 'retire_on_op_advance') return 'retire_on_op_advance'
+  return null
+}
+
+function isArchivedStandard(row: StandardPositionLifecycleRow | undefined): boolean {
+  return Boolean(row?.archivedAt)
+}
+
 export function buildWorkspacePositionCatalog(
-  customPositions: WorkspaceCustomPosition[]
+  customPositions: WorkspaceCustomPosition[],
+  standardLifecycle: StandardPositionLifecycleRow[] = []
 ): WorkspacePositionCatalog {
-  const customPositionNames = new Set(customPositions.map((row) => row.name))
-  const allPositionNames = [
-    ...WORKSPACE_ROSTER_POSITIONS,
-    ...customPositions.map((row) => row.name),
-  ]
+  const standardLifecycleByName = Object.fromEntries(
+    standardLifecycle.map((row) => [row.positionName, row])
+  )
+  const activeCustom = customPositions.filter((row) => row.lifecycleStatus !== 'archived')
+  const customPositionNames = new Set(
+    activeCustom.filter((row) => row.lifecycleStatus !== 'planned_create').map((row) => row.name)
+  )
+
+  const positionMetaByName: Record<string, WorkspacePositionMeta> = {}
+  const rosterPositionNames: string[] = []
+  const orgChartPositionNames: string[] = []
+
+  for (const position of WORKSPACE_ROSTER_POSITIONS) {
+    const lifecycleRow = standardLifecycleByName[position]
+    if (isArchivedStandard(lifecycleRow)) {
+      continue
+    }
+    const opAdvanceLabel: PositionOpAdvanceLabel = lifecycleRow?.opAdvanceLabel ?? null
+    positionMetaByName[position] = {
+      name: position,
+      source: 'standard',
+      lifecycleStatus: 'active',
+      opAdvanceLabel,
+      isPlanned: false,
+      isArchived: false,
+      isOnOrgChart: true,
+    }
+    rosterPositionNames.push(position)
+    orgChartPositionNames.push(position)
+  }
+
+  for (const custom of activeCustom) {
+    const opAdvanceLabel = opAdvanceLabelFromCustom(custom.lifecycleStatus)
+    const isPlanned = custom.lifecycleStatus === 'planned_create'
+    positionMetaByName[custom.name] = {
+      name: custom.name,
+      source: 'custom',
+      lifecycleStatus: custom.lifecycleStatus,
+      opAdvanceLabel,
+      isPlanned,
+      isArchived: false,
+      isOnOrgChart: !isPlanned,
+      customPositionId: custom.id,
+      reportsTo: custom.reportsTo,
+    }
+    rosterPositionNames.push(custom.name)
+    if (!isPlanned) {
+      orgChartPositionNames.push(custom.name)
+    }
+  }
+
   return {
     standardPositions: WORKSPACE_ROSTER_POSITIONS,
-    customPositions,
-    allPositionNames,
+    customPositions: activeCustom,
+    rosterPositionNames,
+    allPositionNames: orgChartPositionNames,
+    orgChartPositionNames,
     customPositionNames,
+    positionMetaByName,
   }
 }
 
@@ -176,8 +261,54 @@ export function sortCustomPositionsForInsert(
   })
 }
 
+export function buildOpAdvanceLifecycleSummary(
+  catalog: WorkspacePositionCatalog
+): import('@/lib/operational-period-roster-types').OpAdvanceLifecycleSummary {
+  const retiring: string[] = []
+  const creating: string[] = []
+  let persistingCount = 0
+
+  for (const name of catalog.rosterPositionNames) {
+    const meta = catalog.positionMetaByName[name]
+    if (!meta) continue
+    if (meta.opAdvanceLabel === 'retire_on_op_advance') {
+      retiring.push(name)
+    } else if (meta.opAdvanceLabel === 'create_on_op_advance') {
+      creating.push(name)
+    } else {
+      persistingCount += 1
+    }
+  }
+
+  return { retiring, creating, persistingCount }
+}
+
+export function canAssignMembersToPosition(
+  catalog: WorkspacePositionCatalog,
+  positionName: string
+): boolean {
+  const meta = catalog.positionMetaByName[positionName]
+  return Boolean(meta && meta.isOnOrgChart && !meta.isArchived)
+}
+
 export function buildReportsToOptions(catalog: WorkspacePositionCatalog): string[] {
-  return [...catalog.allPositionNames].sort((a, b) => a.localeCompare(b))
+  return [...catalog.orgChartPositionNames].sort((a, b) => a.localeCompare(b))
+}
+
+export function canSetOpAdvanceLabelForPosition(
+  catalog: WorkspacePositionCatalog,
+  positionName: string,
+  label: PositionOpAdvanceLabel
+): boolean {
+  const meta = catalog.positionMetaByName[positionName]
+  if (!meta || meta.isArchived) return false
+  if (label === 'create_on_op_advance') {
+    return meta.source === 'custom' && meta.isPlanned
+  }
+  if (label === 'retire_on_op_advance') {
+    return meta.isOnOrgChart
+  }
+  return true
 }
 
 export function isCustomWorkspacePosition(

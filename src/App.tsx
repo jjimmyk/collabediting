@@ -216,6 +216,18 @@ import type {
 import { ICS204_SECTION_LABELS, ICS204_SECTION_PROMPTS } from '@/features/ics204/constants'
 import { Ics204FormSections } from '@/features/ics204/Ics204FormSections'
 import { Ics204ExportPreviewDialog } from '@/features/ics204/Ics204ExportPreviewDialog'
+import { Ics204aDocumentDialog } from '@/features/ics204a/Ics204aDocumentDialog'
+import {
+  buildIcs204aDocxBlocks,
+  buildIcs204aExportOptions,
+  ics204aExportFilenameBase,
+  type Ics204aDocxBlock,
+} from '@/features/ics204a/export'
+import type { Ics204aBuildContext, Ics204aFormState } from '@/features/ics204a/types'
+import {
+  buildDefaultIcs204aFromResource,
+  cloneIcs204aFormState,
+} from '@/features/ics204a/utils'
 import { Ics204AssignedUnitField } from '@/features/ics204/Ics204SectionToolbar'
 import { ICS202_SECTION_PROMPTS } from '@/features/ics202/constants'
 import { Ics202WorkspacePanel } from '@/features/ics202/Ics202WorkspacePanel'
@@ -481,6 +493,7 @@ import {
   filterIcs204AttachableWorkspaceAssets,
   getIcs204ResourceAssetKeysForForm,
   getIcs204ResourceRowAssetKey,
+  resolveIcs204ResourceSnapshot,
 } from '@/features/ics204/utils'
 import { ResourceListItemCard } from '@/features/resources/ResourceListItemCard'
 import { AssetListHeaderRow } from '@/features/resources/AssetListHeaderRow'
@@ -505,12 +518,21 @@ import { AddAssetToOrgChartDialog } from '@/features/roster/AddAssetToOrgChartDi
 import { buildDynamicOrgChart } from '@/features/roster/build-dynamic-org-chart'
 import { countAssetsReportingToPosition } from '@/features/roster/workspace-asset-org-chart'
 import { useWorkspaceCustomPositions } from '@/hooks/useWorkspaceCustomPositions'
+import { useWorkspacePositionLifecycle } from '@/hooks/useWorkspacePositionLifecycle'
+import { useOperationalPeriodRosterSnapshot } from '@/hooks/useOperationalPeriodRosterSnapshot'
 import {
   buildDefaultPositionPermissionMap,
   buildPositionRosterEntries,
   rosterMembersAssignableToPosition,
   type PositionPermissionMap,
 } from '@/features/roster/workspace-position-roster'
+import { buildPositionRosterEntriesFromSnapshot } from '@/lib/operational-period-roster-snapshot'
+import {
+  buildOpAdvanceLifecycleSummary,
+  canAssignMembersToPosition,
+  canSetOpAdvanceLabelForPosition,
+} from '@/features/roster/workspace-positions'
+import { OperationalPeriodHistoricalRosterShell } from '@/features/operational-periods/OperationalPeriodHistoricalRosterShell'
 import { femaRegionGeometries } from '@/data/fema-regions'
 import { filterCoastGuardAreaAssets } from '@/data/uscg-coast-guard-area-assets'
 import { USCG_COAST_GUARD_AREA_SITREPS } from '@/data/uscg-coast-guard-area-sitreps'
@@ -7053,6 +7075,14 @@ function App() {
     resource: ResourceListItemData
     fromLabel: string
   } | null>(null)
+  const [ics204aDialog, setIcs204aDialog] = useState<{
+    formId: string
+    rowId: number
+    readOnly: boolean
+    resourceName: string
+    parentAssignedUnit: string
+  } | null>(null)
+  const [ics204aDialogForm, setIcs204aDialogForm] = useState<Ics204aFormState | null>(null)
   const [pratusAiSelectedContexts, setPratusAiSelectedContexts] = useState<
     Array<{ id: string; label: string }>
   >([])
@@ -8533,6 +8563,10 @@ function App() {
   const [isSavingAssetOrgChartPlacement, setIsSavingAssetOrgChartPlacement] = useState(false)
   const [isSavingCustomPosition, setIsSavingCustomPosition] = useState(false)
   const [deletingCustomPosition, setDeletingCustomPosition] = useState<string | null>(null)
+  const [updatingOpAdvanceLabelPosition, setUpdatingOpAdvanceLabelPosition] = useState<
+    string | null
+  >(null)
+  const [rosterAlwaysShowWorking, setRosterAlwaysShowWorking] = useState(false)
   const [rosterMemberEmailDraft, setRosterMemberEmailDraft] = useState('')
   const [rosterMemberPasswordDraft, setRosterMemberPasswordDraft] = useState('')
   const [rosterMemberPasswordVisible, setRosterMemberPasswordVisible] = useState(false)
@@ -11615,15 +11649,26 @@ function App() {
   const activeWorkspaceRosterLabel =
     activeIncidentWorkspace?.name ?? activeExerciseWorkspace?.name ?? 'Workspace'
   const {
+    standardLifecycle,
+    reload: reloadPositionLifecycle,
+    setStandardRetireLabel,
+  } = useWorkspacePositionLifecycle({
+    enabled: (isInIncidentWorkspace || isInExerciseWorkspace) && activeWorkspaceSupabaseId !== null,
+    workspaceId: activeWorkspaceSupabaseId,
+  })
+  const {
     catalog: workspacePositionCatalog,
     isLoading: isCustomPositionsLoading,
     addCustomPosition,
+    setCustomPositionLifecycleStatus,
     removeCustomPosition,
+    reload: reloadCustomPositions,
   } = useWorkspaceCustomPositions({
     enabled: isInIncidentWorkspace || isInExerciseWorkspace,
     workspaceId: activeWorkspaceSupabaseId,
     localWorkspaceKey: activeWorkspaceRosterKey,
     userId: user?.id ?? null,
+    standardLifecycle,
   })
   const workspaceOrgChartLayout = useMemo(
     () => buildDynamicOrgChart(workspacePositionCatalog, workspaceAssignedAssets),
@@ -12946,8 +12991,36 @@ function App() {
     },
     onFormsReload: () => {
       setWorkspaceFormsReloadKey((value) => value + 1)
+      void reloadCustomPositions()
+      void reloadPositionLifecycle()
+      if (activeWorkspaceSupabaseId) {
+        void fetchWorkspaceRoster(activeWorkspaceSupabaseId).then(setSupabaseWorkspaceRoster)
+        void fetchWorkspacePositionPermissions(activeWorkspaceSupabaseId).then(
+          setActiveWorkspacePositionPermissions
+        )
+      }
     },
   })
+  const isViewingHistoricalRoster =
+    isViewingHistoricalOperationalPeriod &&
+    !rosterAlwaysShowWorking &&
+    formsOperationalPeriodView !== 'working'
+  const historicalRosterPeriodNumber =
+    formsOperationalPeriodView === 'working' ? null : formsOperationalPeriodView
+  const {
+    snapshot: historicalRosterSnapshot,
+    isLoading: isLoadingHistoricalRoster,
+    error: historicalRosterError,
+    hasSnapshot: hasHistoricalRosterSnapshot,
+  } = useOperationalPeriodRosterSnapshot({
+    enabled: operationalPeriodsEnabled && isViewingHistoricalRoster,
+    workspaceId: activeWorkspaceSupabaseId,
+    periodNumber: historicalRosterPeriodNumber,
+  })
+  const opAdvanceLifecycleSummary = useMemo(
+    () => buildOpAdvanceLifecycleSummary(workspacePositionCatalog),
+    [workspacePositionCatalog]
+  )
   const effectiveCanEditWorkspaceForms =
     canEditIcs201Form && !isViewingHistoricalOperationalPeriod
   const effectiveCanEditWorkspaceFormsRef = useRef(effectiveCanEditWorkspaceForms)
@@ -13379,21 +13452,28 @@ function App() {
       ? (localPositionPermissionsByKey[activeWorkspaceRosterKey] ??
         buildDefaultPositionPermissionMap(workspacePositionCatalog))
       : buildDefaultPositionPermissionMap(workspacePositionCatalog)
-  const positionRosterEntries = useMemo(
-    () =>
-      buildPositionRosterEntries(
-        activeWorkspaceRoster,
-        activePositionPermissions,
-        activePanelSearchQuery,
-        workspacePositionCatalog
-      ),
-    [
+  const positionRosterEntries = useMemo(() => {
+    if (isViewingHistoricalRoster && historicalRosterSnapshot) {
+      return buildPositionRosterEntriesFromSnapshot(
+        historicalRosterSnapshot,
+        activePanelSearchQuery
+      )
+    }
+    return buildPositionRosterEntries(
       activeWorkspaceRoster,
       activePositionPermissions,
       activePanelSearchQuery,
-      workspacePositionCatalog,
-    ]
-  )
+      workspacePositionCatalog
+    )
+  }, [
+    activePanelSearchQuery,
+    activePositionPermissions,
+    activeWorkspaceRoster,
+    historicalRosterSnapshot,
+    isViewingHistoricalRoster,
+    workspacePositionCatalog,
+  ])
+  const effectiveCanManageRoster = canManageWorkspaceRoster && !isViewingHistoricalRoster
   const positionRosterEntriesByPosition = useMemo(
     () => Object.fromEntries(positionRosterEntries.map((entry) => [entry.position, entry])),
     [positionRosterEntries]
@@ -13404,7 +13484,11 @@ function App() {
   )
   const assignableByPosition = useMemo(() => {
     const map: Record<string, WorkspaceRosterMember[]> = {}
-    for (const position of workspacePositionCatalog.allPositionNames) {
+    for (const position of workspacePositionCatalog.rosterPositionNames) {
+      if (!canAssignMembersToPosition(workspacePositionCatalog, position)) {
+        map[position] = []
+        continue
+      }
       map[position] = rosterMembersAssignableToPosition(activeWorkspaceRoster, position)
     }
     return map
@@ -14235,10 +14319,18 @@ function App() {
     })
     setRosterPermissionUpdatingPosition(null)
   }
-  const handleCreateCustomPosition = async (name: string, reportsTo: string) => {
+  const handleCreateCustomPosition = async (
+    name: string,
+    reportsTo: string,
+    createOnOpAdvance = false
+  ) => {
     setIsSavingCustomPosition(true)
     try {
-      const created = await addCustomPosition(name, reportsTo)
+      const created = await addCustomPosition(
+        name,
+        reportsTo,
+        createOnOpAdvance ? 'planned_create' : 'active'
+      )
       if (isSupabaseEnabled && activeWorkspaceSupabaseId) {
         const permissions = await fetchWorkspacePositionPermissions(activeWorkspaceSupabaseId)
         setActiveWorkspacePositionPermissions(permissions)
@@ -14255,6 +14347,39 @@ function App() {
       toast.success(`Added position "${created.name}".`)
     } finally {
       setIsSavingCustomPosition(false)
+    }
+  }
+  const handleOpAdvanceLabelChange = async (
+    positionName: string,
+    label: import('@/lib/operational-period-roster-types').PositionOpAdvanceLabel
+  ) => {
+    if (!canManageWorkspaceRoster || isViewingHistoricalRoster) return
+    if (!canSetOpAdvanceLabelForPosition(workspacePositionCatalog, positionName, label)) {
+      toast.error('That operational period label is not allowed for this position.')
+      return
+    }
+
+    setUpdatingOpAdvanceLabelPosition(positionName)
+    try {
+      const meta = workspacePositionCatalog.positionMetaByName[positionName]
+      if (!meta) return
+
+      if (meta.source === 'standard') {
+        await setStandardRetireLabel(positionName, label === 'retire_on_op_advance')
+      } else if (meta.customPositionId) {
+        await setCustomPositionLifecycleStatus(
+          meta.customPositionId,
+          label === 'retire_on_op_advance' ? 'retire_on_op_advance' : 'active'
+        )
+      }
+    } catch (updateError) {
+      toast.error(
+        updateError instanceof Error
+          ? updateError.message
+          : 'Could not update operational period label.'
+      )
+    } finally {
+      setUpdatingOpAdvanceLabelPosition(null)
     }
   }
   const handleDeleteCustomPosition = async (positionName: string) => {
@@ -19519,6 +19644,133 @@ function App() {
   const getIcs204ExportContext = () => ({
     incidentName: activeIncidentWorkspace?.name ?? activeExerciseWorkspace?.name ?? '',
   })
+  const getIcs204aBuildContext = (): Ics204aBuildContext => {
+    const activePeriod = operationalPeriods[operationalPeriods.length - 1]
+    return {
+      incidentName: activeIncidentWorkspace?.name ?? activeExerciseWorkspace?.name ?? '',
+      incidentLocation: '',
+      operationalPeriodFrom: activePeriod?.startedAt ?? '',
+      operationalPeriodTo: '',
+      preparedByName: ics204AuthorName,
+    }
+  }
+  const resolveIcs204ResourceAssignedRow = (formId: string, rowId: number) => {
+    const form = ics204Forms.find((entry) => entry.id === formId)
+    if (!form) return null
+    const isEditingResources = !!ics204EditingSectionsByFormId[formId]?.['resources-assigned']
+    const draft = ics204SectionDraftsByFormId[formId]?.['resources-assigned']
+    const rows = isEditingResources && draft ? draft : form.resourcesAssigned
+    return rows.find((row) => row.id === rowId) ?? null
+  }
+  const openIcs204aDocument = (formId: string, rowId: number) => {
+    const form = ics204Forms.find((entry) => entry.id === formId)
+    const row = resolveIcs204ResourceAssignedRow(formId, rowId)
+    if (!form || !row?.has204A) return
+
+    const formVersions = ics204VersionsById[formId] ?? []
+    const latestFormVersion = formVersions[formVersions.length - 1]
+    const viewingPastFormVersion = viewingIcs204VersionByFormId[formId] ?? null
+    const isDraftingFormSigned = !!isCreatingSignedIcs204ByFormId[formId]
+    const isLatestFormSigned =
+      !!latestFormVersion && latestFormVersion.signatures.length > 0
+    const formIsLocked =
+      !!viewingPastFormVersion || (!isDraftingFormSigned && isLatestFormSigned)
+    const readOnly = !effectiveCanEditWorkspaceForms || formIsLocked
+    const resource = resolveIcs204ResourceSnapshot(row)
+    const initial = row.ics204a
+      ? cloneIcs204aFormState(row.ics204a)
+      : buildDefaultIcs204aFromResource(form, row, resource, getIcs204aBuildContext())
+
+    setIcs204aDialogForm(initial)
+    setIcs204aDialog({
+      formId,
+      rowId,
+      readOnly,
+      resourceName: resource.name,
+      parentAssignedUnit: form.assignedUnit,
+    })
+  }
+  const patchIcs204ResourceRowIcs204a = (
+    formId: string,
+    rowId: number,
+    ics204a: Ics204aFormState
+  ) => {
+    const nextIcs204a = cloneIcs204aFormState(ics204a)
+    if (ics204EditingSectionsByFormId[formId]?.['resources-assigned']) {
+      const currentDraft =
+        ics204SectionDraftsByFormId[formId]?.['resources-assigned'] ??
+        ics204Forms.find((entry) => entry.id === formId)?.resourcesAssigned ??
+        []
+      setIcs204SectionDraftsByFormId((previous) => ({
+        ...previous,
+        [formId]: {
+          ...previous[formId],
+          'resources-assigned': currentDraft.map((row) =>
+            row.id === rowId ? { ...row, has204A: true, ics204a: nextIcs204a } : row
+          ),
+        },
+      }))
+      return
+    }
+
+    let nextForm: Ics204FormState | null = null
+    setIcs204Forms((previous) =>
+      previous.map((form) => {
+        if (form.id !== formId) return form
+        nextForm = {
+          ...form,
+          resourcesAssigned: form.resourcesAssigned.map((row) =>
+            row.id === rowId ? { ...row, has204A: true, ics204a: nextIcs204a } : row
+          ),
+        }
+        return nextForm
+      })
+    )
+    const latestVersion = ics204VersionsById[formId]?.[ics204VersionsById[formId].length - 1]
+    if (nextForm && latestVersion && latestVersion.signatures.length === 0) {
+      handleIcs204SaveDraft(formId, nextForm, latestVersion)
+    }
+  }
+  const exportIcs204aWord = (
+    formId: string,
+    rowId: number,
+    ics204aForm: Ics204aFormState,
+    blocks?: Ics204aDocxBlock[]
+  ) => {
+    const parentForm = ics204Forms.find((entry) => entry.id === formId)
+    const row = resolveIcs204ResourceAssignedRow(formId, rowId)
+    if (!parentForm || !row) return
+    const context = {
+      incidentName: getIcs204ExportContext().incidentName,
+      parentAssignedUnit: parentForm.assignedUnit,
+    }
+    const stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-')
+    downloadDocx(
+      `${ics204aExportFilenameBase(row, parentForm.assignedUnit)}_${stamp}.docx`,
+      (blocks ?? buildIcs204aDocxBlocks(ics204aForm, context)) as DocxBlock[],
+      buildIcs204aExportOptions(ics204aForm, context) as DocxOptions
+    )
+  }
+  const exportIcs204aPdf = (
+    formId: string,
+    rowId: number,
+    ics204aForm: Ics204aFormState,
+    blocks?: Ics204aDocxBlock[]
+  ) => {
+    const parentForm = ics204Forms.find((entry) => entry.id === formId)
+    const row = resolveIcs204ResourceAssignedRow(formId, rowId)
+    if (!parentForm || !row) return
+    const context = {
+      incidentName: getIcs204ExportContext().incidentName,
+      parentAssignedUnit: parentForm.assignedUnit,
+    }
+    const stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-')
+    downloadPdf(
+      `${ics204aExportFilenameBase(row, parentForm.assignedUnit)}_${stamp}.pdf`,
+      (blocks ?? buildIcs204aDocxBlocks(ics204aForm, context)) as DocxBlock[],
+      buildIcs204aExportOptions(ics204aForm, context) as DocxOptions
+    )
+  }
   const openIcs204Preview = (formId: string) => {
     const exportForm = getIcs204FormForExport(
       formId,
@@ -22945,8 +23197,24 @@ function App() {
                     (read-only)
                   </Badge>
                 ) : null}
+                {isViewingHistoricalRoster && historicalRosterPeriodNumber !== null ? (
+                  <Badge variant="outline">
+                    Viewing {formatOperationalPeriodLabel(historicalRosterPeriodNumber)} roster
+                    (read-only)
+                  </Badge>
+                ) : null}
                 {activeTab === 'roster' && (isInIncidentWorkspace || isInExerciseWorkspace) && (
                   <div className="flex flex-wrap items-center justify-end gap-2">
+                    {isViewingHistoricalOperationalPeriod && operationalPeriodsEnabled ? (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant={rosterAlwaysShowWorking ? 'default' : 'outline'}
+                        onClick={() => setRosterAlwaysShowWorking((current) => !current)}
+                      >
+                        {rosterAlwaysShowWorking ? 'Showing working roster' : 'Show working roster'}
+                      </Button>
+                    ) : null}
                     <ToggleGroup
                       type="single"
                       value={rosterViewMode}
@@ -22968,7 +23236,7 @@ function App() {
                         Org Chart
                       </ToggleGroupItem>
                     </ToggleGroup>
-                    {canManageWorkspaceRoster && (
+                    {effectiveCanManageRoster && (
                       <Button type="button" size="sm" onClick={openAddRosterMemberDialog}>
                         + Add Member
                       </Button>
@@ -26208,24 +26476,32 @@ function App() {
                 )}
 
                 {activeTab === 'roster' && (isInIncidentWorkspace || isInExerciseWorkspace) && (
-                  isRosterLoading || isCustomPositionsLoading ? (
-                    <Item variant="outline" className={glassItemBorderClasses}>
-                      <ItemContent>
-                        <ItemTitle>Loading roster…</ItemTitle>
-                        <ItemDescription>Fetching workspace members from Supabase.</ItemDescription>
-                      </ItemContent>
-                    </Item>
-                  ) : positionRosterEntries.length === 0 ? (
-                    <Item variant="outline" className={glassItemBorderClasses}>
-                      <ItemContent>
-                        <ItemTitle>No matching positions</ItemTitle>
-                        <ItemDescription>Try a broader search term.</ItemDescription>
-                      </ItemContent>
-                    </Item>
-                  ) : (
-                    <div className="min-w-0 w-full max-w-full space-y-2 overflow-hidden">
+                  <OperationalPeriodHistoricalRosterShell
+                    isViewingHistorical={isViewingHistoricalRoster}
+                    isLoading={isLoadingHistoricalRoster}
+                    error={historicalRosterError}
+                    periodNumber={historicalRosterPeriodNumber ?? 0}
+                    hasSnapshot={hasHistoricalRosterSnapshot}
+                    glassItemBorderClasses={glassItemBorderClasses}
+                  >
+                    {isRosterLoading || isCustomPositionsLoading ? (
+                      <Item variant="outline" className={glassItemBorderClasses}>
+                        <ItemContent>
+                          <ItemTitle>Loading roster…</ItemTitle>
+                          <ItemDescription>Fetching workspace members from Supabase.</ItemDescription>
+                        </ItemContent>
+                      </Item>
+                    ) : positionRosterEntries.length === 0 ? (
+                      <Item variant="outline" className={glassItemBorderClasses}>
+                        <ItemContent>
+                          <ItemTitle>No matching positions</ItemTitle>
+                          <ItemDescription>Try a broader search term.</ItemDescription>
+                        </ItemContent>
+                      </Item>
+                    ) : (
+                      <div className="min-w-0 w-full max-w-full space-y-2 overflow-hidden">
                       <RosterAddMemberToolbar
-                        canManageRoster={canManageWorkspaceRoster}
+                        canManageRoster={effectiveCanManageRoster}
                         isSupabaseEnabled={isSupabaseEnabled}
                         onAddMember={openAddRosterMemberDialog}
                         onAddPosition={() => setIsAddWorkspacePositionOpen(true)}
@@ -26242,7 +26518,7 @@ function App() {
                       assetsByKey={workspaceAssetsByKey}
                       visiblePositions={visibleRosterPositions}
                       assignableByPosition={assignableByPosition}
-                      canManageRoster={canManageWorkspaceRoster}
+                      canManageRoster={effectiveCanManageRoster}
                       glassItemBorderClasses={glassItemBorderClasses}
                       isUpdatingPermission={rosterPermissionUpdatingPosition}
                       isAssigningPosition={rosterAssigningPosition}
@@ -26271,11 +26547,14 @@ function App() {
                         <WorkspacePositionRosterTable
                       entries={positionRosterEntries}
                       assignableByPosition={assignableByPosition}
-                      canManageRoster={canManageWorkspaceRoster}
+                      canManageRoster={effectiveCanManageRoster}
                       glassItemBorderClasses={glassItemBorderClasses}
                       isUpdatingPermission={rosterPermissionUpdatingPosition}
                       isAssigningPosition={rosterAssigningPosition}
                       isDeletingCustomPosition={deletingCustomPosition}
+                      showOpAdvanceLabels={operationalPeriodsEnabled && !isViewingHistoricalRoster}
+                      positionMetaByName={workspacePositionCatalog.positionMetaByName}
+                      isUpdatingOpAdvanceLabel={updatingOpAdvanceLabelPosition}
                       onToggleEditIcs201={(position, enabled) => {
                         void toggleWorkspacePositionEditIcs201(position, enabled)
                       }}
@@ -26289,10 +26568,14 @@ function App() {
                       onDeleteCustomPosition={(position) => {
                         void handleDeleteCustomPosition(position)
                       }}
+                      onOpAdvanceLabelChange={(position, label) => {
+                        void handleOpAdvanceLabelChange(position, label)
+                      }}
                     />
                       )}
-                    </div>
-                  )
+                      </div>
+                    )}
+                  </OperationalPeriodHistoricalRosterShell>
                 )}
 
                 {activeTab === 'incident-list' && !isInIncidentWorkspace && !isInExerciseWorkspace && (
@@ -32256,6 +32539,7 @@ function App() {
                                         patchIcs204SectionDraft(form.id, section, value)
                                       }
                                       onOpenResourcePicker={() => setIcs204ResourcePickerFormId(form.id)}
+                                      onOpenIcs204a={(rowId) => openIcs204aDocument(form.id, rowId)}
                                       onFocusResourceMap={(resourceId, mapLocation) => {
                                         void focusMapItem(`resource-${resourceId}`, mapLocation, 30000)
                                       }}
@@ -32971,6 +33255,7 @@ function App() {
                     isLoadingOperationalPeriods={isLoadingOperationalPeriods}
                     isStartingOperationalPeriod={isStartingOperationalPeriod}
                     operationalPeriodStartError={operationalPeriodStartError}
+                    opAdvanceLifecycleSummary={opAdvanceLifecycleSummary}
                     onStartOperationalPeriod={handleStartOperationalPeriod}
                   />
                 )}
@@ -35035,6 +35320,40 @@ function App() {
           exportIcs204Pdf(ics204PreviewFormId, ics204PreviewBlocks)
         }}
       />
+      <Ics204aDocumentDialog
+        open={ics204aDialog !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setIcs204aDialog(null)
+            setIcs204aDialogForm(null)
+          }
+        }}
+        title={
+          ics204aDialog
+            ? `ICS-204A — ${ics204aDialog.resourceName}${ics204aDialog.parentAssignedUnit.trim() ? ` (${ics204aDialog.parentAssignedUnit})` : ''}`
+            : 'ICS-204A'
+        }
+        resourceName={ics204aDialog?.resourceName ?? 'Resource'}
+        form={ics204aDialogForm}
+        readOnly={ics204aDialog?.readOnly ?? true}
+        exportContext={{
+          incidentName: getIcs204ExportContext().incidentName,
+          parentAssignedUnit: ics204aDialog?.parentAssignedUnit,
+        }}
+        onSave={(nextForm) => {
+          if (!ics204aDialog) return
+          patchIcs204ResourceRowIcs204a(ics204aDialog.formId, ics204aDialog.rowId, nextForm)
+          setIcs204aDialogForm(nextForm)
+        }}
+        onExportWord={(nextForm, blocks) => {
+          if (!ics204aDialog) return
+          exportIcs204aWord(ics204aDialog.formId, ics204aDialog.rowId, nextForm, blocks)
+        }}
+        onExportPdf={(nextForm, blocks) => {
+          if (!ics204aDialog) return
+          exportIcs204aPdf(ics204aDialog.formId, ics204aDialog.rowId, nextForm, blocks)
+        }}
+      />
       <Dialog open={isIcs201PreviewOpen} onOpenChange={setIsIcs201PreviewOpen}>
         <DialogContent className="!w-[70vw] !max-w-[70vw] sm:!max-w-[70vw]">
           <DialogHeader>
@@ -35634,6 +35953,7 @@ function App() {
         onOpenChange={setIsAddWorkspacePositionOpen}
         catalog={workspacePositionCatalog}
         isSaving={isSavingCustomPosition}
+        showPlannedCreateOption={operationalPeriodsEnabled}
         onSubmit={handleCreateCustomPosition}
       />
       <AddAssetToOrgChartDialog
