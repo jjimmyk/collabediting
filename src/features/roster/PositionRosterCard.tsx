@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Plus, Trash2, UserPlus } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -12,6 +13,8 @@ import { Switch } from '@/components/ui/switch'
 import { cn } from '@/lib/utils'
 import type { WorkspaceRosterMember } from '@/lib/workspace-types'
 import type { PositionRosterEntry } from '@/features/roster/workspace-position-roster'
+import { PositionLifecycleBadges } from '@/features/roster/PositionLifecycleBadges'
+import { PositionRosterDetailPanel } from '@/features/roster/PositionRosterDetailPanel'
 import {
   orgChartColorClasses,
   type OrgChartColor,
@@ -49,81 +52,130 @@ export function PositionRosterCard({
   onInviteToPosition,
   onUnassignMember,
 }: PositionRosterCardProps) {
+  const [orgPanelOpen, setOrgPanelOpen] = useState(false)
   const leaderEmail = entry.members[0]?.email ?? null
   const isOrg = variant === 'org'
 
+  const panelProps = {
+    entry,
+    assignable,
+    canManageRoster,
+    isPermissionBusy,
+    isAssignBusy,
+    onToggleEditIcs201,
+    onAssignExistingMember,
+    onInviteToPosition,
+    onUnassignMember,
+  }
+
+  if (isOrg) {
+    return (
+      <Popover open={orgPanelOpen} onOpenChange={setOrgPanelOpen}>
+        <PopoverTrigger asChild>
+          <button
+            type="button"
+            aria-label={`Manage ${entry.position}`}
+            className={cn(
+              'flex min-w-0 flex-col items-stretch rounded-lg border p-0 text-left shadow-sm outline-none transition',
+              'hover:ring-2 hover:ring-ring/40 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50',
+              'w-full max-w-full min-w-0 overflow-hidden',
+              layoutMode === 'wide' ? 'min-w-[10rem] max-w-[12rem]' : 'min-w-0',
+              orgChartColorClasses(color)
+            )}
+          >
+            <div className="space-y-2 overflow-hidden px-2 py-2">
+              <div className="space-y-1">
+                <ItemTitle className="text-xs leading-snug">{entry.position}</ItemTitle>
+                <PositionLifecycleBadges entry={entry} size="org" />
+                <ItemDescription className="text-[10px]">
+                  {entry.members.length === 0
+                    ? '0 assigned'
+                    : `${entry.members.length} assigned`}
+                </ItemDescription>
+                {leaderEmail ? (
+                  <p className="truncate text-[10px] text-muted-foreground">
+                    Leader: {leaderEmail}
+                  </p>
+                ) : null}
+              </div>
+            </div>
+          </button>
+        </PopoverTrigger>
+        <PopoverContent
+          align="center"
+          side="bottom"
+          collisionPadding={12}
+          className="w-72 max-w-[calc(100vw-2rem)] p-3"
+        >
+          <PositionRosterDetailPanel {...panelProps} />
+        </PopoverContent>
+      </Popover>
+    )
+  }
+
   const cardBody = (
-    <div className={cn('space-y-2 overflow-hidden', isOrg ? 'px-2 py-2' : 'space-y-3 px-3 py-3')}>
+    <div className="space-y-3 px-3 py-3">
       <div className="space-y-1">
-        <ItemTitle className={cn('leading-snug', isOrg ? 'text-xs' : 'text-sm')}>
-          {entry.position}
-        </ItemTitle>
-        <ItemDescription className={isOrg ? 'text-[10px]' : undefined}>
+        <ItemTitle className="text-sm leading-snug">{entry.position}</ItemTitle>
+        <ItemDescription>
           {entry.members.length === 0
             ? '0 assigned'
             : `${entry.members.length} assigned`}
         </ItemDescription>
-        {isOrg && leaderEmail && (
-          <p className="truncate text-[10px] text-muted-foreground">Leader: {leaderEmail}</p>
-        )}
       </div>
 
-      {!isOrg && (
-        <div className="flex items-center justify-between gap-2 rounded-md border bg-muted/20 px-2.5 py-2">
-          <Label htmlFor={`edit-ics201-${entry.position}`} className="text-xs font-medium">
-            Edit ICS-201
-          </Label>
-          <Switch
-            id={`edit-ics201-${entry.position}`}
-            size="sm"
-            checked={entry.editIcs201}
-            disabled={!canManageRoster || isPermissionBusy}
-            onCheckedChange={(checked) => onToggleEditIcs201(entry.position, checked)}
-          />
-        </div>
-      )}
+      <div className="flex items-center justify-between gap-2 rounded-md border bg-muted/20 px-2.5 py-2">
+        <Label htmlFor={`edit-ics201-${entry.position}`} className="text-xs font-medium">
+          Edit ICS-201
+        </Label>
+        <Switch
+          id={`edit-ics201-${entry.position}`}
+          size="sm"
+          checked={entry.editIcs201}
+          disabled={!canManageRoster || isPermissionBusy}
+          onCheckedChange={(checked) => onToggleEditIcs201(entry.position, checked)}
+        />
+      </div>
 
-      {!isOrg && (
-        <div className="space-y-1.5">
-          {entry.members.length === 0 ? (
-            <p className="rounded-md border border-dashed px-2 py-3 text-center text-[11px] text-muted-foreground">
-              Assign a roster member to this position.
-            </p>
-          ) : (
-            entry.members.map((member) => (
-              <div
-                key={`${entry.position}-${member.id}`}
-                className="flex items-center justify-between gap-2 rounded-md border bg-background/70 px-2 py-1.5"
-              >
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-xs font-medium">{member.email}</p>
-                  <div className="mt-0.5 flex items-center gap-1">
-                    <Badge
-                      variant={member.status === 'active' ? 'default' : 'outline'}
-                      className="h-4 px-1.5 text-[9px]"
-                    >
-                      {member.status === 'active' ? 'Active' : 'Invited'}
-                    </Badge>
-                  </div>
-                </div>
-                {canManageRoster && (
-                  <Button
-                    type="button"
-                    size="icon"
-                    variant="ghost"
-                    className="h-7 w-7 shrink-0 text-muted-foreground hover:text-destructive"
-                    aria-label={`Remove ${member.email} from ${entry.position}`}
-                    disabled={isAssignBusy}
-                    onClick={() => onUnassignMember(member.id, entry.position)}
+      <div className="space-y-1.5">
+        {entry.members.length === 0 ? (
+          <p className="rounded-md border border-dashed px-2 py-3 text-center text-[11px] text-muted-foreground">
+            Assign a roster member to this position.
+          </p>
+        ) : (
+          entry.members.map((member) => (
+            <div
+              key={`${entry.position}-${member.id}`}
+              className="flex items-center justify-between gap-2 rounded-md border bg-background/70 px-2 py-1.5"
+            >
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-xs font-medium">{member.email}</p>
+                <div className="mt-0.5 flex items-center gap-1">
+                  <Badge
+                    variant={member.status === 'active' ? 'default' : 'outline'}
+                    className="h-4 px-1.5 text-[9px]"
                   >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </Button>
-                )}
+                    {member.status === 'active' ? 'Active' : 'Invited'}
+                  </Badge>
+                </div>
               </div>
-            ))
-          )}
-        </div>
-      )}
+              {canManageRoster && (
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="ghost"
+                  className="h-7 w-7 shrink-0 text-muted-foreground hover:text-destructive"
+                  aria-label={`Remove ${member.email} from ${entry.position}`}
+                  disabled={isAssignBusy}
+                  onClick={() => onUnassignMember(member.id, entry.position)}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+              )}
+            </div>
+          ))
+        )}
+      </div>
 
       {canManageRoster && (
         <div className="space-y-1">
@@ -131,15 +183,12 @@ export function PositionRosterCard({
             type="button"
             size="sm"
             variant="default"
-            className={cn(
-              'w-full min-w-0 gap-1 px-1.5 text-[10px] leading-tight',
-              isOrg ? 'h-6' : 'h-7 text-xs'
-            )}
+            className="h-7 w-full min-w-0 gap-1 px-1.5 text-xs leading-tight"
             disabled={isAssignBusy}
             onClick={() => onInviteToPosition(entry.position)}
           >
-            <Plus className={cn('shrink-0', isOrg ? 'h-3 w-3' : 'h-3.5 w-3.5')} />
-            <span className="truncate">{isOrg ? 'Add user' : 'Add new user'}</span>
+            <Plus className="h-3.5 w-3.5 shrink-0" />
+            <span className="truncate">Add new user</span>
           </Button>
 
           <Popover>
@@ -148,14 +197,11 @@ export function PositionRosterCard({
                 type="button"
                 size="sm"
                 variant="outline"
-                className={cn(
-                  'w-full min-w-0 gap-1 px-1.5 text-[10px] leading-tight',
-                  isOrg ? 'h-6' : 'h-7 text-xs'
-                )}
+                className="h-7 w-full min-w-0 gap-1 px-1.5 text-xs leading-tight"
                 disabled={isAssignBusy || assignable.length === 0}
               >
-                <UserPlus className={cn('shrink-0', isOrg ? 'h-3 w-3' : 'h-3.5 w-3.5')} />
-                <span className="truncate">{isOrg ? 'Assign' : 'Assign existing user'}</span>
+                <UserPlus className="h-3.5 w-3.5 shrink-0" />
+                <span className="truncate">Assign existing user</span>
               </Button>
             </PopoverTrigger>
             <PopoverContent
@@ -164,126 +210,7 @@ export function PositionRosterCard({
               collisionPadding={12}
               className="w-72 max-w-[calc(100vw-2rem)] p-3"
             >
-              <div className="space-y-3">
-                <div className="space-y-1">
-                  <p className="text-sm font-medium">{entry.position}</p>
-                  <p className="text-xs text-muted-foreground">
-                    Assign an existing roster member to this position.
-                  </p>
-                </div>
-
-                {(isOrg || variant === 'grid') && (
-                  <div className="flex items-center justify-between gap-2 rounded-md border bg-muted/20 px-2.5 py-2">
-                    <Label htmlFor={`edit-ics201-popover-${entry.position}`} className="text-xs">
-                      Edit ICS-201
-                    </Label>
-                    <Switch
-                      id={`edit-ics201-popover-${entry.position}`}
-                      size="sm"
-                      checked={entry.editIcs201}
-                      disabled={!canManageRoster || isPermissionBusy}
-                      onCheckedChange={(checked) => onToggleEditIcs201(entry.position, checked)}
-                    />
-                  </div>
-                )}
-
-                {isOrg && (
-                  <div className="space-y-1.5">
-                    {entry.members.length === 0 ? (
-                      <p className="rounded-md border border-dashed px-2 py-2 text-center text-[11px] text-muted-foreground">
-                        No members assigned yet.
-                      </p>
-                    ) : (
-                      entry.members.map((member) => (
-                        <div
-                          key={`popover-org-${entry.position}-${member.id}`}
-                          className="flex items-center justify-between gap-2 rounded-md border px-2 py-1.5"
-                        >
-                          <div className="min-w-0">
-                            <p className="truncate text-xs font-medium">{member.email}</p>
-                            <Badge
-                              variant={member.status === 'active' ? 'default' : 'outline'}
-                              className="mt-0.5 h-4 px-1.5 text-[9px]"
-                            >
-                              {member.status === 'active' ? 'Active' : 'Invited'}
-                            </Badge>
-                          </div>
-                          <Button
-                            type="button"
-                            size="icon"
-                            variant="ghost"
-                            className="h-7 w-7 shrink-0 text-muted-foreground hover:text-destructive"
-                            aria-label={`Remove ${member.email} from ${entry.position}`}
-                            disabled={isAssignBusy}
-                            onClick={() => onUnassignMember(member.id, entry.position)}
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                )}
-
-                {!isOrg && (
-                  <div className="space-y-1.5">
-                    {entry.members.length === 0 ? (
-                      <p className="rounded-md border border-dashed px-2 py-2 text-center text-[11px] text-muted-foreground">
-                        No members assigned yet.
-                      </p>
-                    ) : (
-                      entry.members.map((member) => (
-                        <div
-                          key={`popover-${entry.position}-${member.id}`}
-                          className="flex items-center justify-between gap-2 rounded-md border px-2 py-1.5"
-                        >
-                          <div className="min-w-0">
-                            <p className="truncate text-xs font-medium">{member.email}</p>
-                            <Badge
-                              variant={member.status === 'active' ? 'default' : 'outline'}
-                              className="mt-0.5 h-4 px-1.5 text-[9px]"
-                            >
-                              {member.status === 'active' ? 'Active' : 'Invited'}
-                            </Badge>
-                          </div>
-                          <Button
-                            type="button"
-                            size="icon"
-                            variant="ghost"
-                            className="h-7 w-7 shrink-0 text-muted-foreground hover:text-destructive"
-                            aria-label={`Remove ${member.email} from ${entry.position}`}
-                            disabled={isAssignBusy}
-                            onClick={() => onUnassignMember(member.id, entry.position)}
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                )}
-
-                <div className="space-y-1 border-t pt-2">
-                  {assignable.length === 0 ? (
-                    <p className="px-2 py-1 text-[11px] text-muted-foreground">
-                      All roster members are already assigned here.
-                    </p>
-                  ) : (
-                    assignable.map((member) => (
-                      <Button
-                        key={member.id}
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="h-8 w-full justify-start truncate text-xs"
-                        onClick={() => onAssignExistingMember(member.id, entry.position)}
-                      >
-                        {member.email}
-                      </Button>
-                    ))
-                  )}
-                </div>
-              </div>
+              <PositionRosterDetailPanel {...panelProps} />
             </PopoverContent>
           </Popover>
         </div>
@@ -292,19 +219,7 @@ export function PositionRosterCard({
   )
 
   return (
-    <Item
-      variant="outline"
-      className={cn(
-        'flex min-w-0 flex-col items-stretch p-0',
-        isOrg
-          ? cn(
-              'w-full max-w-full min-w-0 overflow-hidden shadow-sm',
-              layoutMode === 'wide' ? 'min-w-[10rem] max-w-[12rem]' : 'min-w-0',
-              orgChartColorClasses(color)
-            )
-          : glassItemBorderClasses
-      )}
-    >
+    <Item variant="outline" className={cn('flex min-w-0 flex-col items-stretch p-0', glassItemBorderClasses)}>
       {cardBody}
     </Item>
   )
