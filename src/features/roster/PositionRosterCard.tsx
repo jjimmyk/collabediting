@@ -5,6 +5,11 @@ import { Button } from '@/components/ui/button'
 import { Item, ItemDescription, ItemTitle } from '@/components/ui/item'
 import { Label } from '@/components/ui/label'
 import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import {
   Popover,
   PopoverContent,
   PopoverTrigger,
@@ -52,7 +57,7 @@ export function PositionRosterCard({
   onInviteToPosition,
   onUnassignMember,
 }: PositionRosterCardProps) {
-  const [orgPanelOpen, setOrgPanelOpen] = useState(false)
+  const [orgModalOpen, setOrgModalOpen] = useState(false)
   const leaderEmail = entry.members[0]?.email ?? null
   const isOrg = variant === 'org'
 
@@ -70,46 +75,51 @@ export function PositionRosterCard({
 
   if (isOrg) {
     return (
-      <Popover open={orgPanelOpen} onOpenChange={setOrgPanelOpen}>
-        <PopoverTrigger asChild>
-          <button
-            type="button"
-            aria-label={`Manage ${entry.position}`}
-            className={cn(
-              'flex min-w-0 flex-col items-stretch rounded-lg border p-0 text-left shadow-sm outline-none transition',
-              'hover:ring-2 hover:ring-ring/40 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50',
-              'w-full max-w-full min-w-0 overflow-hidden',
-              layoutMode === 'wide' ? 'min-w-[10rem] max-w-[12rem]' : 'min-w-0',
-              orgChartColorClasses(color)
-            )}
-          >
-            <div className="space-y-2 overflow-hidden px-2 py-2">
-              <div className="space-y-1">
-                <ItemTitle className="text-xs leading-snug">{entry.position}</ItemTitle>
-                <PositionLifecycleBadges entry={entry} size="org" />
-                <ItemDescription className="text-[10px]">
-                  {entry.members.length === 0
-                    ? '0 assigned'
-                    : `${entry.members.length} assigned`}
-                </ItemDescription>
-                {leaderEmail ? (
-                  <p className="truncate text-[10px] text-muted-foreground">
-                    Leader: {leaderEmail}
-                  </p>
-                ) : null}
-              </div>
-            </div>
-          </button>
-        </PopoverTrigger>
-        <PopoverContent
-          align="center"
-          side="bottom"
-          collisionPadding={12}
-          className="w-72 max-w-[calc(100vw-2rem)] p-3"
+      <>
+        <button
+          type="button"
+          aria-label={`Manage ${entry.position}`}
+          aria-haspopup="dialog"
+          aria-expanded={orgModalOpen}
+          onClick={() => setOrgModalOpen(true)}
+          className={cn(
+            'flex min-w-0 flex-col items-stretch rounded-lg border p-0 text-left shadow-sm outline-none transition',
+            'hover:ring-2 hover:ring-ring/40 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50',
+            'w-full max-w-full min-w-0 overflow-hidden',
+            layoutMode === 'wide' ? 'min-w-[10rem] max-w-[12rem]' : 'min-w-0',
+            orgChartColorClasses(color)
+          )}
         >
-          <PositionRosterDetailPanel {...panelProps} />
-        </PopoverContent>
-      </Popover>
+          <div className="space-y-2 overflow-hidden px-2 py-2">
+            <div className="space-y-1">
+              <ItemTitle className="text-xs leading-snug">{entry.position}</ItemTitle>
+              <PositionLifecycleBadges entry={entry} size="org" />
+              <ItemDescription className="text-[10px]">
+                {entry.members.length === 0
+                  ? '0 assigned'
+                  : `${entry.members.length} assigned`}
+              </ItemDescription>
+              {leaderEmail ? (
+                <p className="truncate text-[10px] text-muted-foreground">
+                  Leader: {leaderEmail}
+                </p>
+              ) : null}
+            </div>
+          </div>
+        </button>
+        <Dialog open={orgModalOpen} onOpenChange={setOrgModalOpen}>
+          <DialogContent className="sm:max-w-md">
+            <DialogTitle className="sr-only">{entry.position}</DialogTitle>
+            <PositionRosterDetailPanel
+              {...panelProps}
+              onInviteToPosition={(position) => {
+                setOrgModalOpen(false)
+                onInviteToPosition(position)
+              }}
+            />
+          </DialogContent>
+        </Dialog>
+      </>
     )
   }
 
