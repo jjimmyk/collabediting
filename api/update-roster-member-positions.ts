@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { createClient } from '@supabase/supabase-js'
+import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import {
   fetchWorkspacePositionAllowlist,
   parseIcsPositionsInput,
@@ -13,9 +13,57 @@ const supabaseUrl =
 const supabaseServiceRoleKey =
   process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.SUPABASE_SECRET_KEY
 
+const ROSTER_MANAGER_POSITIONS = new Set([
+  'Incident Commander',
+  'Planning Section Chief',
+  'Operations Section Chief',
+])
+
 type UpdateRosterMemberBody = {
   memberId?: string
   icsPositions?: string[]
+}
+
+function formatHandlerError(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message
+  }
+  if (error && typeof error === 'object' && 'message' in error) {
+    const message = (error as { message?: unknown }).message
+    if (typeof message === 'string' && message.length > 0) {
+      return message
+    }
+  }
+  return 'Update roster member failed.'
+}
+
+async function userCanManageWorkspaceRoster(
+  admin: SupabaseClient,
+  userId: string,
+  workspaceId: string,
+  isOrgAdmin: boolean
+): Promise<boolean> {
+  if (isOrgAdmin) {
+    return true
+  }
+
+  const { data: membership, error: membershipError } = await admin
+    .from('workspace_members')
+    .select('id, workspace_member_positions (ics_position)')
+    .eq('workspace_id', workspaceId)
+    .eq('user_id', userId)
+    .eq('status', 'active')
+    .maybeSingle()
+
+  if (membershipError || !membership) {
+    return false
+  }
+
+  const positions = (membership.workspace_member_positions ?? [])
+    .map((row) => row.ics_position)
+    .filter((position): position is string => typeof position === 'string')
+
+  return positions.some((position) => ROSTER_MANAGER_POSITIONS.has(position))
 }
 
 function parseBody(req: VercelRequest): UpdateRosterMemberBody {
@@ -86,14 +134,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .eq('id', user.id)
       .maybeSingle()
 
-    if (!profile?.is_org_admin) {
-      const { data: canManage } = await admin.rpc('current_user_is_roster_manager', {
-        p_workspace_id: member.workspace_id,
-      })
+    const canManage = await userCanManageWorkspaceRoster(
+      admin,
+      user.id,
+      member.workspace_id,
+      profile?.is_org_admin === true
+    )
 
-      if (!canManage) {
-        return res.status(403).json({ error: 'You do not have permission to update roster members.' })
-      }
+    if (!canManage) {
+      return res.status(403).json({ error: 'You do not have permission to update roster members.' })
     }
 
     const allowed = await fetchWorkspacePositionAllowlist(admin, member.workspace_id)
@@ -118,7 +167,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       icsPositions: assigned,
     })
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Update roster member failed.'
-    return res.status(500).json({ error: message })
+    return res.status(500).json({ error: formatHandlerError(error) })
   }
 }

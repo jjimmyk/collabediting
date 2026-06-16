@@ -93,24 +93,43 @@ export async function replaceWorkspaceMemberPositions(
     throw new Error('At least one ICS position is required.')
   }
 
-  const { error: deleteError } = await admin
+  const { data: existingRows, error: existingError } = await admin
     .from('workspace_member_positions')
-    .delete()
+    .select('ics_position')
     .eq('member_id', memberId)
 
-  if (deleteError) {
-    throw deleteError
+  if (existingError) {
+    throw existingError
   }
 
-  const { error: insertError } = await admin.from('workspace_member_positions').insert(
-    normalized.map((icsPosition) => ({
-      member_id: memberId,
-      ics_position: icsPosition,
-    }))
-  )
+  const current = (existingRows ?? []).map((row) => row.ics_position)
+  const nextSet = new Set(normalized)
+  const toAdd = normalized.filter((position) => !current.includes(position))
+  const toRemove = current.filter((position) => !nextSet.has(position))
 
-  if (insertError) {
-    throw insertError
+  if (toAdd.length > 0) {
+    const { error: insertError } = await admin.from('workspace_member_positions').insert(
+      toAdd.map((icsPosition) => ({
+        member_id: memberId,
+        ics_position: icsPosition,
+      }))
+    )
+
+    if (insertError) {
+      throw insertError
+    }
+  }
+
+  for (const position of toRemove) {
+    const { error: deleteError } = await admin
+      .from('workspace_member_positions')
+      .delete()
+      .eq('member_id', memberId)
+      .eq('ics_position', position)
+
+    if (deleteError) {
+      throw deleteError
+    }
   }
 
   const primary = primaryIcsPosition(normalized)
