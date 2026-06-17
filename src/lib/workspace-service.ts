@@ -423,8 +423,9 @@ export async function inviteWorkspaceMember(params: {
   icsPositions: string[]
   password?: string
   confirmPasswordOverwrite?: boolean
+  scheduleOnOpAdvance?: boolean
 }): Promise<
-  | { ok: true; warning?: string; method?: string; action?: 'created' | 'updated' }
+  | { ok: true; warning?: string; method?: string; action?: 'created' | 'updated'; scheduleOnOpAdvance?: boolean }
   | { ok: false; message: string; code?: 'user_exists' | 'password_too_short' }
 > {
   if (!isSupabaseConfigured) {
@@ -444,6 +445,7 @@ export async function inviteWorkspaceMember(params: {
       redirectTo: getAcceptInviteUrl(params.workspaceId),
       ...(params.password ? { password: params.password } : {}),
       ...(params.confirmPasswordOverwrite ? { confirmPasswordOverwrite: true } : {}),
+      ...(params.scheduleOnOpAdvance ? { scheduleOnOpAdvance: true } : {}),
     }),
   })
 
@@ -454,6 +456,7 @@ export async function inviteWorkspaceMember(params: {
     code?: 'user_exists' | 'password_too_short'
     method?: string
     action?: 'created' | 'updated'
+    scheduleOnOpAdvance?: boolean
   }
 
   if (!response.ok) {

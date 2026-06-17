@@ -169,6 +169,37 @@ export async function replacePositionMemberSchedules(
   return { assignMemberIds, unassignMemberIds }
 }
 
+export async function addMemberScheduleAssignOnOpAdvance(
+  admin: SupabaseClient,
+  params: {
+    workspaceId: string
+    positionName: string
+    memberId: string
+    createdBy: string | null
+  }
+): Promise<void> {
+  const schedules = await fetchWorkspaceMemberSchedules(admin, params.workspaceId)
+  const forPosition = schedules.filter((row) => row.position_name === params.positionName)
+  const assignMemberIds = forPosition
+    .filter((row) => row.schedule_action === 'assign_on_op_advance')
+    .map((row) => row.member_id)
+  const unassignMemberIds = forPosition
+    .filter((row) => row.schedule_action === 'unassign_on_op_advance')
+    .map((row) => row.member_id)
+
+  if (!assignMemberIds.includes(params.memberId)) {
+    assignMemberIds.push(params.memberId)
+  }
+
+  await replacePositionMemberSchedules(admin, {
+    workspaceId: params.workspaceId,
+    positionName: params.positionName,
+    assignMemberIds,
+    unassignMemberIds,
+    createdBy: params.createdBy,
+  })
+}
+
 export async function applyMemberSchedulesOnOperationalPeriodAdvance(
   admin: SupabaseClient,
   workspaceId: string

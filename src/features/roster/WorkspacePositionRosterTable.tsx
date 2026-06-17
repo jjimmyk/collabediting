@@ -26,6 +26,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import type { WorkspaceRosterMember } from '@/lib/workspace-types'
+import type { RosterInviteAssignmentMode } from '@/features/roster/position-roster-messages'
 import type { PositionRosterEntry } from '@/features/roster/workspace-position-roster'
 import {
   filterPositionRosterEntriesByAssignment,
@@ -57,7 +58,7 @@ type WorkspacePositionRosterTableProps = {
   onScheduleUnassignMember: (memberId: string, position: string) => void
   onRemoveScheduledAssign: (memberId: string, position: string) => void
   onRemoveScheduledUnassign: (memberId: string, position: string) => void
-  onInviteToPosition: (position: string) => void
+  onInviteToPosition: (position: string, mode: RosterInviteAssignmentMode) => void
   onUnassignMember: (memberId: string, position: string) => void
   onDeleteCustomPosition?: (position: string) => void
   onOpAdvanceLabelChange?: (position: string, label: PositionOpAdvanceLabel) => void
@@ -380,7 +381,7 @@ export function WorkspacePositionRosterTable({
                             variant="default"
                             className="h-7 gap-1 px-2 text-[11px]"
                             disabled={isAssigningPosition === entry.position}
-                            onClick={() => onInviteToPosition(entry.position)}
+                            onClick={() => onInviteToPosition(entry.position, 'assign_now')}
                           >
                             <Plus className="h-3.5 w-3.5" />
                             Add user

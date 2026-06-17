@@ -1,10 +1,16 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import { addMemberScheduleAssignOnOpAdvance } from './roster-member-schedules-shared.js'
+import {
+  getPositionMemberSchedulePolicy,
+  loadWorkspacePositionLifecycleContext,
+} from './roster-member-schedule-policy.js'
 import {
   MIN_AUTH_PASSWORD_LENGTH,
   provisionWorkspaceRosterMember,
   fetchWorkspacePositionAllowlist,
   parseIcsPositionsInput,
+  resolveInvitePlaceholderPosition,
   upsertWorkspaceMemberWithPositions,
 } from './roster-shared.js'
 
@@ -29,6 +35,7 @@ type InviteBody = {
   redirectTo?: string
   password?: string
   confirmPasswordOverwrite?: boolean
+  scheduleOnOpAdvance?: boolean
 }
 
 function getAppUrl(): string {
@@ -157,6 +164,73 @@ async function sendInviteEmail(params: {
   }
 }
 
+async function resolveInviteActivePositions(
+  admin: SupabaseClient,
+  workspaceId: string,
+  icsPositions: string[],
+  scheduleOnOpAdvance: boolean
+): Promise<{ activePositions: string[]; scheduleTargetPosition: string | null }> {
+  if (!scheduleOnOpAdvance) {
+    return { activePositions: icsPositions, scheduleTargetPosition: null }
+  }
+
+  if (icsPositions.length !== 1) {
+    throw new Error('Schedule invite requires exactly one target position.')
+  }
+
+  const targetPosition = icsPositions[0]
+  const lifecycle = await loadWorkspacePositionLifecycleContext(admin, workspaceId)
+  const policy = getPositionMemberSchedulePolicy(targetPosition, lifecycle)
+  if (!policy.allowScheduleAssign) {
+    throw new Error('Member assign schedules are not allowed for this position.')
+  }
+
+  const placeholder = await resolveInvitePlaceholderPosition(admin, workspaceId, targetPosition)
+  return { activePositions: [placeholder], scheduleTargetPosition: targetPosition }
+}
+
+async function upsertInvitedMemberWithOptionalSchedule(
+  admin: SupabaseClient,
+  params: {
+    workspaceId: string
+    email: string
+    icsPositions: string[]
+    scheduleOnOpAdvance: boolean
+    invitedBy: string
+    status: 'invited' | 'active'
+    userId?: string | null
+    joinedAt?: string | null
+  }
+): Promise<{ memberId: string; scheduleTargetPosition: string | null }> {
+  const { activePositions, scheduleTargetPosition } = await resolveInviteActivePositions(
+    admin,
+    params.workspaceId,
+    params.icsPositions,
+    params.scheduleOnOpAdvance
+  )
+
+  const member = await upsertWorkspaceMemberWithPositions(admin, {
+    workspaceId: params.workspaceId,
+    email: params.email,
+    icsPositions: activePositions,
+    status: params.status,
+    userId: params.userId ?? null,
+    invitedBy: params.invitedBy,
+    joinedAt: params.joinedAt ?? null,
+  })
+
+  if (scheduleTargetPosition) {
+    await addMemberScheduleAssignOnOpAdvance(admin, {
+      workspaceId: params.workspaceId,
+      positionName: scheduleTargetPosition,
+      memberId: member.memberId,
+      createdBy: params.invitedBy,
+    })
+  }
+
+  return { memberId: member.memberId, scheduleTargetPosition }
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     if (req.method !== 'POST') {
@@ -183,6 +257,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const password = typeof body.password === 'string' ? body.password : ''
     const confirmPasswordOverwrite = body.confirmPasswordOverwrite === true
     const hasPassword = password.length > 0
+    const scheduleOnOpAdvance = body.scheduleOnOpAdvance === true
 
     if (!workspaceId || !email) {
       return res.status(400).json({
@@ -248,10 +323,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .maybeSingle()
 
     if (hasPassword) {
+      const { activePositions } = await resolveInviteActivePositions(
+        admin,
+        workspaceId,
+        icsPositions,
+        scheduleOnOpAdvance
+      )
+
       const provisioned = await provisionWorkspaceRosterMember(admin, {
         workspaceId,
         email,
-        icsPositions,
+        icsPositions: activePositions,
         password,
         invitedBy: user.id,
         confirmPasswordOverwrite,
@@ -271,19 +353,31 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         })
       }
 
+      if (scheduleOnOpAdvance) {
+        const targetPosition = icsPositions[0]
+        await addMemberScheduleAssignOnOpAdvance(admin, {
+          workspaceId,
+          positionName: targetPosition,
+          memberId: provisioned.memberId,
+          createdBy: user.id,
+        })
+      }
+
       return res.status(200).json({
         ok: true,
         method: 'direct_provision',
         action: provisioned.action,
+        scheduleOnOpAdvance,
       })
     }
 
-    await upsertWorkspaceMemberWithPositions(admin, {
+    await upsertInvitedMemberWithOptionalSchedule(admin, {
       workspaceId,
       email,
       icsPositions,
-      status: 'invited',
+      scheduleOnOpAdvance,
       invitedBy: user.id,
+      status: 'invited',
     })
 
     const inviteRedirect = getAppCallbackUrl(workspaceId)
@@ -297,15 +391,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       })
 
       if (delivery.warning) {
-        return res.status(200).json({ ok: true, method: delivery.method, emailWarning: delivery.warning })
+        return res.status(200).json({
+          ok: true,
+          method: delivery.method,
+          emailWarning: delivery.warning,
+          scheduleOnOpAdvance,
+        })
       }
 
-      return res.status(200).json({ ok: true, method: delivery.method })
+      return res.status(200).json({
+        ok: true,
+        method: delivery.method,
+        scheduleOnOpAdvance,
+      })
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Invitation email failed.'
       return res.status(200).json({
         ok: true,
         emailWarning: `Roster updated, but the invitation email could not be sent: ${message}`,
+        scheduleOnOpAdvance,
       })
     }
   } catch (error) {

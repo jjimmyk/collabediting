@@ -18,6 +18,7 @@ import { Switch } from '@/components/ui/switch'
 import { cn } from '@/lib/utils'
 import type { WorkspaceRosterMember } from '@/lib/workspace-types'
 import type { PositionRosterEntry } from '@/features/roster/workspace-position-roster'
+import type { RosterInviteAssignmentMode } from '@/features/roster/position-roster-messages'
 import type { PositionOpAdvanceLabel } from '@/lib/operational-period-roster-types'
 import { PositionLifecycleBadges } from '@/features/roster/PositionLifecycleBadges'
 import { PositionRosterDetailPanel } from '@/features/roster/PositionRosterDetailPanel'
@@ -50,7 +51,7 @@ type PositionRosterCardProps = {
   onScheduleUnassignMember: (memberId: string, position: string) => void
   onRemoveScheduledAssign: (memberId: string, position: string) => void
   onRemoveScheduledUnassign: (memberId: string, position: string) => void
-  onInviteToPosition: (position: string) => void
+  onInviteToPosition: (position: string, mode: RosterInviteAssignmentMode) => void
   onUnassignMember: (memberId: string, position: string) => void
 }
 
@@ -144,9 +145,9 @@ export function PositionRosterCard({
               positionMeta={positionMeta}
               isUpdatingOpAdvanceLabel={isUpdatingOpAdvanceLabel}
               onOpAdvanceLabelChange={onOpAdvanceLabelChange}
-              onInviteToPosition={(position) => {
+              onInviteToPosition={(position, mode) => {
                 setOrgModalOpen(false)
-                onInviteToPosition(position)
+                onInviteToPosition(position, mode)
               }}
             />
           </DialogContent>
@@ -228,7 +229,7 @@ export function PositionRosterCard({
               variant="default"
               className="h-7 w-full min-w-0 gap-1 px-1.5 text-xs leading-tight"
               disabled={isAssignBusy}
-              onClick={() => onInviteToPosition(entry.position)}
+              onClick={() => onInviteToPosition(entry.position, 'assign_now')}
             >
               <Plus className="h-3.5 w-3.5 shrink-0" />
               <span className="truncate">Add new user</span>

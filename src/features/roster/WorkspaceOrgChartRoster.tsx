@@ -3,6 +3,7 @@ import type { WorkspaceRosterMember } from '@/lib/workspace-types'
 import type { ResourceListItemData } from '@/features/resources/types'
 import type { PositionRosterEntry } from '@/features/roster/workspace-position-roster'
 import type { PositionOpAdvanceLabel } from '@/lib/operational-period-roster-types'
+import type { RosterInviteAssignmentMode } from '@/features/roster/position-roster-messages'
 import { PositionRosterCard } from '@/features/roster/PositionRosterCard'
 import { AssetOrgChartCard } from '@/features/roster/AssetOrgChartCard'
 import type { WorkspaceOrgChartLayout, WorkspacePositionMeta } from '@/features/roster/workspace-positions'
@@ -42,7 +43,7 @@ type WorkspaceOrgChartRosterProps = {
   onScheduleUnassignMember: (memberId: string, position: string) => void
   onRemoveScheduledAssign: (memberId: string, position: string) => void
   onRemoveScheduledUnassign: (memberId: string, position: string) => void
-  onInviteToPosition: (position: string) => void
+  onInviteToPosition: (position: string, mode: RosterInviteAssignmentMode) => void
   onUnassignMember: (memberId: string, position: string) => void
   onOpAdvanceLabelChange?: (position: string, label: PositionOpAdvanceLabel) => void
   onFocusAsset?: (asset: ResourceListItemData) => void
@@ -70,7 +71,7 @@ type OrgChartRenderProps = {
   onScheduleUnassignMember: (memberId: string, position: string) => void
   onRemoveScheduledAssign: (memberId: string, position: string) => void
   onRemoveScheduledUnassign: (memberId: string, position: string) => void
-  onInviteToPosition: (position: string) => void
+  onInviteToPosition: (position: string, mode: RosterInviteAssignmentMode) => void
   onUnassignMember: (memberId: string, position: string) => void
   onOpAdvanceLabelChange?: (position: string, label: PositionOpAdvanceLabel) => void
   onFocusAsset?: (asset: ResourceListItemData) => void

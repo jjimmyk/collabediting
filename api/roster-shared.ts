@@ -1,5 +1,9 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { assertPositionsAllowActiveAssignment } from './roster-member-schedule-policy.js'
+import {
+  assertPositionsAllowActiveAssignment,
+  getPositionMemberSchedulePolicy,
+  loadWorkspacePositionLifecycleContext,
+} from './roster-member-schedule-policy.js'
 
 export const ICS_POSITIONS = [
   'Incident Commander',
@@ -319,7 +323,7 @@ export async function provisionWorkspaceRosterMember(
     confirmPasswordOverwrite: boolean
   }
 ): Promise<
-  | { ok: true; action: 'created' | 'updated' }
+  | { ok: true; action: 'created' | 'updated'; memberId: string }
   | { ok: false; code: 'password_too_short' | 'user_exists' }
 > {
   if (params.password.length < MIN_AUTH_PASSWORD_LENGTH) {
@@ -336,7 +340,7 @@ export async function provisionWorkspaceRosterMember(
 
   await upsertMemberProfile(admin, authResult.userId, params.email)
 
-  await upsertWorkspaceMemberWithPositions(admin, {
+  const member = await upsertWorkspaceMemberWithPositions(admin, {
     workspaceId: params.workspaceId,
     email: params.email,
     icsPositions: params.icsPositions,
@@ -346,7 +350,7 @@ export async function provisionWorkspaceRosterMember(
     joinedAt: new Date().toISOString(),
   })
 
-  return { ok: true, action: authResult.action }
+  return { ok: true, action: authResult.action, memberId: member.memberId }
 }
 
 export async function syncDefaultRosterAcrossWorkspaces(
@@ -379,4 +383,25 @@ export async function syncDefaultRosterAcrossWorkspaces(
   }
 
   return { rosterRows }
+}
+
+export async function resolveInvitePlaceholderPosition(
+  admin: SupabaseClient,
+  workspaceId: string,
+  targetPosition: string
+): Promise<string> {
+  const allowed = await fetchWorkspacePositionAllowlist(admin, workspaceId)
+  const lifecycle = await loadWorkspacePositionLifecycleContext(admin, workspaceId)
+
+  const candidates = [...ICS_POSITIONS, ...[...allowed].filter((name) => !ICS_POSITIONS.includes(name as (typeof ICS_POSITIONS)[number]))]
+
+  for (const position of candidates) {
+    if (position === targetPosition || !allowed.has(position)) continue
+    const policy = getPositionMemberSchedulePolicy(position, lifecycle)
+    if (policy.allowActiveAssignment) {
+      return position
+    }
+  }
+
+  throw new Error('No placeholder position is available for a scheduled invite.')
 }

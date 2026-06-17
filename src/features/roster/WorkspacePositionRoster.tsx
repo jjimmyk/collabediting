@@ -1,4 +1,5 @@
 import type { WorkspaceRosterMember } from '@/lib/workspace-types'
+import type { RosterInviteAssignmentMode } from '@/features/roster/position-roster-messages'
 import type { PositionRosterEntry } from '@/features/roster/workspace-position-roster'
 import { PositionRosterCard } from '@/features/roster/PositionRosterCard'
 import {
@@ -22,7 +23,7 @@ type WorkspacePositionRosterProps = {
   onScheduleUnassignMember: (memberId: string, position: string) => void
   onRemoveScheduledAssign: (memberId: string, position: string) => void
   onRemoveScheduledUnassign: (memberId: string, position: string) => void
-  onInviteToPosition: (position: string) => void
+  onInviteToPosition: (position: string, mode: RosterInviteAssignmentMode) => void
   onUnassignMember: (memberId: string, position: string) => void
 }
 

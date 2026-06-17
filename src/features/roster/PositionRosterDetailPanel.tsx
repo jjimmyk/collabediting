@@ -18,6 +18,7 @@ import {
   assignExistingMembersEmptyMessage,
   scheduleAssignMembersEmptyMessage,
   scheduleUnassignMembersEmptyMessage,
+  type RosterInviteAssignmentMode,
 } from '@/features/roster/position-roster-messages'
 import type { WorkspacePositionMeta } from '@/features/roster/workspace-positions'
 
@@ -39,7 +40,7 @@ type PositionRosterDetailPanelProps = {
   onScheduleUnassignMember: (memberId: string, position: string) => void
   onRemoveScheduledAssign: (memberId: string, position: string) => void
   onRemoveScheduledUnassign: (memberId: string, position: string) => void
-  onInviteToPosition: (position: string) => void
+  onInviteToPosition: (position: string, mode: RosterInviteAssignmentMode) => void
   onUnassignMember: (memberId: string, position: string) => void
 }
 
@@ -139,6 +140,30 @@ function MemberPickerPopover({
         <p className="px-1 text-[11px] text-muted-foreground">{emptyMessage}</p>
       ) : null}
     </div>
+  )
+}
+
+function SectionInviteButton({
+  label,
+  disabled,
+  onClick,
+}: {
+  label: string
+  disabled: boolean
+  onClick: () => void
+}) {
+  return (
+    <Button
+      type="button"
+      size="sm"
+      variant="default"
+      className="mt-1 h-7 w-full gap-1 text-xs"
+      disabled={disabled}
+      onClick={onClick}
+    >
+      <Plus className="h-3.5 w-3.5 shrink-0" />
+      {label}
+    </Button>
   )
 }
 
@@ -245,13 +270,20 @@ export function PositionRosterDetailPanel({
           ))
         )}
         {canManageRoster && canAssignNow ? (
-          <MemberPickerPopover
-            label="Assign existing member"
-            members={assignable}
-            disabled={isAssignBusy}
-            emptyMessage={assignExistingEmptyMessage}
-            onSelect={(memberId) => onAssignExistingMember(memberId, entry.position)}
-          />
+          <>
+            <MemberPickerPopover
+              label="Assign existing member"
+              members={assignable}
+              disabled={isAssignBusy}
+              emptyMessage={assignExistingEmptyMessage}
+              onSelect={(memberId) => onAssignExistingMember(memberId, entry.position)}
+            />
+            <SectionInviteButton
+              label="Assign new user"
+              disabled={isAssignBusy}
+              onClick={() => onInviteToPosition(entry.position, 'assign_now')}
+            />
+          </>
         ) : null}
       </div>
 
@@ -279,13 +311,20 @@ export function PositionRosterDetailPanel({
             ))
           )}
           {canManageRoster && canScheduleAssign ? (
-            <MemberPickerPopover
-              label="Schedule assign for next OP"
-              members={scheduleAssignable}
-              disabled={isAssignBusy}
-              emptyMessage={scheduleAssignEmptyMessage}
-              onSelect={(memberId) => onScheduleAssignMember(memberId, entry.position)}
-            />
+            <>
+              <MemberPickerPopover
+                label="Schedule assign for next OP"
+                members={scheduleAssignable}
+                disabled={isAssignBusy}
+                emptyMessage={scheduleAssignEmptyMessage}
+                onSelect={(memberId) => onScheduleAssignMember(memberId, entry.position)}
+              />
+              <SectionInviteButton
+                label="Assign new user"
+                disabled={isAssignBusy}
+                onClick={() => onInviteToPosition(entry.position, 'schedule_on_op_advance')}
+              />
+            </>
           ) : null}
         </div>
       ) : null}
@@ -323,28 +362,6 @@ export function PositionRosterDetailPanel({
             />
           ) : null}
         </div>
-      ) : null}
-
-      {canManageRoster ? (
-        <>
-          {canAssignNow ? (
-            <Button
-              type="button"
-              size="sm"
-              variant="default"
-              className="h-7 w-full gap-1 text-xs"
-              disabled={isAssignBusy}
-              onClick={() => onInviteToPosition(entry.position)}
-            >
-              <Plus className="h-3.5 w-3.5" />
-              Add new user
-            </Button>
-          ) : canScheduleAssign ? (
-            <p className="text-[11px] text-muted-foreground">
-              Add new users to another position first, then schedule them here for next OP.
-            </p>
-          ) : null}
-        </>
       ) : null}
     </div>
   )

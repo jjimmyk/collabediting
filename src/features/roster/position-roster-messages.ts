@@ -1,5 +1,7 @@
 import type { PositionRosterEntry } from '@/features/roster/workspace-position-roster'
 
+export type RosterInviteAssignmentMode = 'assign_now' | 'schedule_on_op_advance'
+
 export function assignExistingMembersEmptyMessage(
   entry: PositionRosterEntry,
   assignableCount: number

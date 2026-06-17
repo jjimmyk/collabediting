@@ -536,6 +536,7 @@ import {
   type WorkspaceMemberScheduleRow,
 } from '@/lib/workspace-member-schedule-service'
 import { getPositionMemberSchedulePolicy } from '@/lib/roster-member-schedule-policy'
+import type { RosterInviteAssignmentMode } from '@/features/roster/position-roster-messages'
 import {
   buildOpAdvanceLifecycleSummary,
   canAssignMembersToPositionNow,
@@ -8589,6 +8590,8 @@ function App() {
     'Incident Commander',
   ])
   const [rosterInvitePositionPreset, setRosterInvitePositionPreset] = useState<string | null>(null)
+  const [rosterInviteAssignmentMode, setRosterInviteAssignmentMode] =
+    useState<RosterInviteAssignmentMode>('assign_now')
   const [activeWorkspacePositionPermissions, setActiveWorkspacePositionPermissions] =
     useState<PositionPermissionMap>(() => buildDefaultPositionPermissionMap())
   const [localPositionPermissionsByKey, setLocalPositionPermissionsByKey] = useState<
@@ -11860,6 +11863,7 @@ function App() {
     setRosterMemberPositionsDraft(['Incident Commander'])
     setRosterMemberPositionDraft(ICS_POSITIONS[0])
     setRosterInvitePositionPreset(null)
+    setRosterInviteAssignmentMode('assign_now')
   }
   useEffect(() => {
     if (!isSupabaseEnabled || accessibleWorkspaces.length === 0) {
@@ -14178,6 +14182,16 @@ function App() {
       return
     }
 
+    const scheduleOnOpAdvance =
+      rosterInviteAssignmentMode === 'schedule_on_op_advance' &&
+      rosterInvitePositionPreset !== null &&
+      icsPositions.length === 1
+
+    if (scheduleOnOpAdvance && !isSupabaseEnabled) {
+      toast.error('Schedule invites require Supabase persistence.')
+      return
+    }
+
     if (isSupabaseEnabled) {
       if (!activeWorkspaceSupabaseId) {
         toast.error('This workspace is not synced to Supabase yet.')
@@ -14197,6 +14211,7 @@ function App() {
         icsPositions,
         ...(password.length > 0 ? { password } : {}),
         ...(confirmPasswordOverwrite ? { confirmPasswordOverwrite: true } : {}),
+        ...(scheduleOnOpAdvance ? { scheduleOnOpAdvance: true } : {}),
       })
       setIsInvitingRosterMember(false)
       if (!result.ok) {
@@ -14207,8 +14222,12 @@ function App() {
         toast.error(result.message)
         return
       }
-      const roster = await fetchWorkspaceRoster(activeWorkspaceSupabaseId)
+      const [roster, schedules] = await Promise.all([
+        fetchWorkspaceRoster(activeWorkspaceSupabaseId),
+        fetchWorkspaceMemberSchedules(activeWorkspaceSupabaseId),
+      ])
       setSupabaseWorkspaceRoster(roster)
+      setWorkspaceMemberSchedules(schedules)
       resetAddRosterMemberDraft()
       setIsAddRosterMemberOpen(false)
       if (result.warning) {
@@ -14218,13 +14237,19 @@ function App() {
       const positionLabel = icsPositions.join(', ')
       if (result.method === 'direct_provision') {
         toast.success(
-          result.action === 'updated'
-            ? `${email} was added to the roster. Their password was updated — they can sign in immediately.`
-            : `${email} was added to the roster. They can sign in immediately with the password you set.`
+          scheduleOnOpAdvance
+            ? `${email} was added to the roster and scheduled for ${positionLabel} on the next operational period.`
+            : result.action === 'updated'
+              ? `${email} was added to the roster. Their password was updated — they can sign in immediately.`
+              : `${email} was added to the roster. They can sign in immediately with the password you set.`
         )
         return
       }
-      toast.success(`Invitation sent to ${email} as ${positionLabel}.`)
+      toast.success(
+        scheduleOnOpAdvance
+          ? `Invitation sent to ${email}. They will be scheduled for ${positionLabel} on the next operational period.`
+          : `Invitation sent to ${email} as ${positionLabel}.`
+      )
       return
     }
 
@@ -14263,7 +14288,10 @@ function App() {
       return [...previous, position].sort((a, b) => a.localeCompare(b))
     })
   }
-  const openInviteToPosition = (position: string) => {
+  const openInviteToPosition = (
+    position: string,
+    mode: RosterInviteAssignmentMode = 'assign_now'
+  ) => {
     setRosterMemberEmailDraft('')
     setRosterMemberPasswordDraft('')
     setRosterMemberPasswordVisible(false)
@@ -14271,6 +14299,7 @@ function App() {
     setRosterMemberPositionsDraft([position])
     setRosterMemberPositionDraft(position)
     setRosterInvitePositionPreset(position)
+    setRosterInviteAssignmentMode(mode)
     setIsAddRosterMemberOpen(true)
   }
   const openAddRosterMemberDialog = () => {
@@ -36024,12 +36053,16 @@ function App() {
           <DialogHeader>
             <DialogTitle>
               {rosterInvitePositionPreset
-                ? `Invite user to ${rosterInvitePositionPreset}`
+                ? rosterInviteAssignmentMode === 'schedule_on_op_advance'
+                  ? `Invite user for ${rosterInvitePositionPreset} (next OP)`
+                  : `Invite user to ${rosterInvitePositionPreset}`
                 : 'Add roster member'}
             </DialogTitle>
             <DialogDescription>
               {rosterInvitePositionPreset
-                ? `Add a team member to ${rosterInvitePositionPreset} on ${activeWorkspaceRosterLabel}.`
+                ? rosterInviteAssignmentMode === 'schedule_on_op_advance'
+                  ? `Send a workspace invitation. ${rosterInvitePositionPreset} will be scheduled on the next operational period after they join.`
+                  : `Add a team member to ${rosterInvitePositionPreset} on ${activeWorkspaceRosterLabel}.`
                 : isSupabaseEnabled
                   ? `Add a team member to ${activeWorkspaceRosterLabel}. Leave password blank to email an invitation, or set a password so they can sign in immediately.`
                   : `Invite a team member by email and assign their ICS position for ${activeWorkspaceRosterLabel}.`}
@@ -36095,36 +36128,47 @@ function App() {
             )}
             <div className="grid gap-2">
               <Label>ICS Positions (select at least one)</Label>
-              <div className="max-h-48 space-y-2 overflow-y-auto rounded-md border p-3">
-                {WORKSPACE_ROSTER_POSITIONS.map((position) => (
-                  <label
-                    key={position}
-                    htmlFor={`roster-add-position-${position}`}
-                    className="flex cursor-pointer items-center gap-2 text-sm"
-                  >
-                    <Checkbox
-                      id={`roster-add-position-${position}`}
-                      checked={rosterMemberPositionsDraft.includes(position)}
-                      onCheckedChange={() => toggleRosterMemberPositionsDraft(position)}
-                    />
-                    <span>{position}</span>
-                  </label>
-                ))}
-                {workspacePositionCatalog.customPositions.map((position) => (
-                  <label
-                    key={position.id}
-                    htmlFor={`roster-add-position-${position.id}`}
-                    className="flex cursor-pointer items-center gap-2 text-sm"
-                  >
-                    <Checkbox
-                      id={`roster-add-position-${position.id}`}
-                      checked={rosterMemberPositionsDraft.includes(position.name)}
-                      onCheckedChange={() => toggleRosterMemberPositionsDraft(position.name)}
-                    />
-                    <span>{position.name}</span>
-                  </label>
-                ))}
-              </div>
+              {rosterInvitePositionPreset ? (
+                <div className="rounded-md border px-3 py-2 text-sm">
+                  {rosterInvitePositionPreset}
+                  {rosterInviteAssignmentMode === 'schedule_on_op_advance' ? (
+                    <p className="mt-1 text-[11px] text-muted-foreground">
+                      Scheduled for this position on the next operational period.
+                    </p>
+                  ) : null}
+                </div>
+              ) : (
+                <div className="max-h-48 space-y-2 overflow-y-auto rounded-md border p-3">
+                  {WORKSPACE_ROSTER_POSITIONS.map((position) => (
+                    <label
+                      key={position}
+                      htmlFor={`roster-add-position-${position}`}
+                      className="flex cursor-pointer items-center gap-2 text-sm"
+                    >
+                      <Checkbox
+                        id={`roster-add-position-${position}`}
+                        checked={rosterMemberPositionsDraft.includes(position)}
+                        onCheckedChange={() => toggleRosterMemberPositionsDraft(position)}
+                      />
+                      <span>{position}</span>
+                    </label>
+                  ))}
+                  {workspacePositionCatalog.customPositions.map((position) => (
+                    <label
+                      key={position.id}
+                      htmlFor={`roster-add-position-${position.id}`}
+                      className="flex cursor-pointer items-center gap-2 text-sm"
+                    >
+                      <Checkbox
+                        id={`roster-add-position-${position.id}`}
+                        checked={rosterMemberPositionsDraft.includes(position.name)}
+                        onCheckedChange={() => toggleRosterMemberPositionsDraft(position.name)}
+                      />
+                      <span>{position.name}</span>
+                    </label>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
           <DialogFooter>
