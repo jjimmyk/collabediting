@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { applyMemberSchedulesOnOperationalPeriodAdvance } from './roster-member-schedules-shared.js'
-import { ICS_POSITIONS } from './roster-shared'
+import { ICS_POSITIONS } from './roster-shared.js'
 
 type DbCustomPositionRow = {
   id: string
