@@ -16,7 +16,7 @@ import {
 } from '@/components/ui/popover'
 import { Switch } from '@/components/ui/switch'
 import { cn } from '@/lib/utils'
-import type { WorkspaceRosterMember } from '@/lib/workspace-types'
+import type { WorkspaceMemberCheckInStatus, WorkspaceRosterMember } from '@/lib/workspace-types'
 import type { PositionRosterEntry } from '@/features/roster/workspace-position-roster'
 import type {
   PositionRosterInlineInviteProps,
@@ -57,6 +57,10 @@ type PositionRosterCardProps = {
   onInviteToPosition: (position: string, mode: RosterInviteAssignmentMode) => void
   onUnassignMember: (memberId: string, position: string) => void
   inlinePositionInvite?: PositionRosterInlineInviteProps
+  showCheckInStatus?: boolean
+  canEditCheckInStatus?: boolean
+  updatingCheckInMemberId?: string | null
+  onCheckInStatusChange?: (memberId: string, status: WorkspaceMemberCheckInStatus) => void
 }
 
 export function PositionRosterCard({
@@ -84,6 +88,10 @@ export function PositionRosterCard({
   onInviteToPosition,
   onUnassignMember,
   inlinePositionInvite,
+  showCheckInStatus = false,
+  canEditCheckInStatus = false,
+  updatingCheckInMemberId = null,
+  onCheckInStatusChange,
 }: PositionRosterCardProps) {
   const [orgModalOpen, setOrgModalOpen] = useState(false)
   const leaderEmail = entry.members[0]?.email ?? null
@@ -106,6 +114,10 @@ export function PositionRosterCard({
     onInviteToPosition,
     onUnassignMember,
     inlinePositionInvite,
+    showCheckInStatus,
+    canEditCheckInStatus,
+    updatingCheckInMemberId,
+    onCheckInStatusChange,
   }
 
   if (isOrg) {

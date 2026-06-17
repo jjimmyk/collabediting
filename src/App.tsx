@@ -188,7 +188,7 @@ import {
   type HubUserNotificationRow,
 } from '@/lib/hub-notification-service'
 import type { HubNotificationRecipient } from '@/data/hub-notification-recipients'
-import type { WorkspaceRosterMember } from '@/lib/workspace-types'
+import type { WorkspaceMemberCheckInStatus, WorkspaceRosterMember } from '@/lib/workspace-types'
 import { buildDefaultLocalWorkspaceRosters } from '@/lib/default-roster'
 import {
   createWorkspace,
@@ -201,6 +201,7 @@ import {
   resolveWorkspaceId,
   setWorkspaceArchived,
   setWorkspacePositionEditIcs201,
+  updateRosterMemberCheckInStatus,
   updateRosterMemberPositions,
   updateWorkspace,
 } from '@/lib/workspace-service'
@@ -8611,6 +8612,7 @@ function App() {
     string | null
   >(null)
   const [rosterAssigningPosition, setRosterAssigningPosition] = useState<string | null>(null)
+  const [updatingCheckInMemberId, setUpdatingCheckInMemberId] = useState<string | null>(null)
   const [rosterViewMode, setRosterViewMode] = useState<'table' | 'org-chart'>('table')
   const [rosterMemberPositionDraft, setRosterMemberPositionDraft] = useState<string>(
     ICS_POSITIONS[0]
@@ -13041,6 +13043,8 @@ function App() {
     formsOperationalPeriodView !== 'working'
   const showPositionOpAdvanceLabels =
     (isInIncidentWorkspace || isInExerciseWorkspace) && !isViewingHistoricalRoster
+  const showMemberCheckInStatus = isInIncidentWorkspace || isInExerciseWorkspace
+  const canEditMemberCheckInStatus = showMemberCheckInStatus && !isViewingHistoricalRoster
   const historicalRosterPeriodNumber =
     formsOperationalPeriodView === 'working' ? null : formsOperationalPeriodView
   const {
@@ -14278,6 +14282,7 @@ function App() {
       icsPosition: icsPositions[0],
       icsPositions,
       status: 'active',
+      checkInStatus: 'not_arrived',
       userId: null,
       addedAt: new Date().toLocaleString([], {
         year: 'numeric',
@@ -14447,6 +14452,48 @@ function App() {
       successMessage: `Removed ${member.email} from ${position}.`,
     })
     setRosterAssigningPosition(null)
+  }
+  const updateMemberCheckInStatus = async (
+    memberId: string,
+    checkInStatus: WorkspaceMemberCheckInStatus
+  ) => {
+    setUpdatingCheckInMemberId(memberId)
+    try {
+      if (isSupabaseEnabled) {
+        if (!activeWorkspaceSupabaseId) {
+          toast.error('This workspace is not synced to Supabase yet.')
+          return
+        }
+        const accessToken = await getAccessToken()
+        if (!accessToken) {
+          toast.error('Sign in again to update check-in status.')
+          return
+        }
+        const result = await updateRosterMemberCheckInStatus({
+          accessToken,
+          workspaceId: activeWorkspaceSupabaseId,
+          memberId,
+          checkInStatus,
+        })
+        if (!result.ok) {
+          toast.error(result.message)
+          return
+        }
+        const roster = await fetchWorkspaceRoster(activeWorkspaceSupabaseId)
+        setSupabaseWorkspaceRoster(roster)
+        return
+      }
+
+      if (activeWorkspaceRosterKey === null) return
+      setLocalWorkspaceRostersByKey((previous) => ({
+        ...previous,
+        [activeWorkspaceRosterKey]: (previous[activeWorkspaceRosterKey] ?? []).map((member) =>
+          member.id === memberId ? { ...member, checkInStatus } : member
+        ),
+      }))
+    } finally {
+      setUpdatingCheckInMemberId(null)
+    }
   }
   const reloadWorkspaceMemberSchedules = async () => {
     if (!isSupabaseEnabled || !activeWorkspaceSupabaseId) return
@@ -26826,6 +26873,12 @@ function App() {
                       onOpAdvanceLabelChange={(position, label) => {
                         void handleOpAdvanceLabelChange(position, label)
                       }}
+                      showCheckInStatus={showMemberCheckInStatus}
+                      canEditCheckInStatus={canEditMemberCheckInStatus}
+                      updatingCheckInMemberId={updatingCheckInMemberId}
+                      onCheckInStatusChange={(memberId, status) => {
+                        void updateMemberCheckInStatus(memberId, status)
+                      }}
                       onFocusAsset={(asset) => {
                         const mapKey = getAssetMapKey(asset.assetKey)
                         setSelectedPanelItemId(mapKey)
@@ -26876,6 +26929,12 @@ function App() {
                       }}
                       onOpAdvanceLabelChange={(position, label) => {
                         void handleOpAdvanceLabelChange(position, label)
+                      }}
+                      showCheckInStatus={showMemberCheckInStatus}
+                      canEditCheckInStatus={canEditMemberCheckInStatus}
+                      updatingCheckInMemberId={updatingCheckInMemberId}
+                      onCheckInStatusChange={(memberId, status) => {
+                        void updateMemberCheckInStatus(memberId, status)
                       }}
                     />
                       )}

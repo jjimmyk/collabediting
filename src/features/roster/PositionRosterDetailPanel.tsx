@@ -9,11 +9,12 @@ import {
   PopoverTrigger,
 } from '@/components/ui/popover'
 import { Switch } from '@/components/ui/switch'
-import type { WorkspaceRosterMember } from '@/lib/workspace-types'
+import type { WorkspaceMemberCheckInStatus, WorkspaceRosterMember } from '@/lib/workspace-types'
 import type { PositionOpAdvanceLabel } from '@/lib/operational-period-roster-types'
 import type { PositionRosterEntry } from '@/features/roster/workspace-position-roster'
 import { PositionLifecycleBadges } from '@/features/roster/PositionLifecycleBadges'
 import { PositionOpAdvanceLabelSelect } from '@/features/roster/PositionOpAdvanceLabelSelect'
+import { RosterMemberCheckInStatusSelect } from '@/features/roster/RosterMemberCheckInStatusSelect'
 import {
   assignExistingMembersEmptyMessage,
   scheduleAssignMembersEmptyMessage,
@@ -45,6 +46,10 @@ type PositionRosterDetailPanelProps = {
   onInviteToPosition: (position: string, mode: RosterInviteAssignmentMode) => void
   onUnassignMember: (memberId: string, position: string) => void
   inlinePositionInvite?: PositionRosterInlineInviteProps
+  showCheckInStatus?: boolean
+  canEditCheckInStatus?: boolean
+  updatingCheckInMemberId?: string | null
+  onCheckInStatusChange?: (memberId: string, status: WorkspaceMemberCheckInStatus) => void
 }
 
 function MemberRow({
@@ -54,6 +59,10 @@ function MemberRow({
   isBusy,
   removeLabel,
   onRemove,
+  showCheckInStatus = false,
+  canEditCheckInStatus = false,
+  updatingCheckInMemberId = null,
+  onCheckInStatusChange,
 }: {
   member: WorkspaceRosterMember
   badgeLabel: string
@@ -61,14 +70,30 @@ function MemberRow({
   isBusy: boolean
   removeLabel: string
   onRemove: () => void
+  showCheckInStatus?: boolean
+  canEditCheckInStatus?: boolean
+  updatingCheckInMemberId?: string | null
+  onCheckInStatusChange?: (memberId: string, status: WorkspaceMemberCheckInStatus) => void
 }) {
   return (
     <div className="flex items-center justify-between gap-2 rounded-md border px-2 py-1.5">
-      <div className="min-w-0">
+      <div className="min-w-0 flex-1">
         <p className="truncate text-xs font-medium">{member.email}</p>
-        <Badge variant="outline" className="mt-0.5 h-4 px-1.5 text-[9px]">
-          {badgeLabel}
-        </Badge>
+        <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
+          <Badge variant="outline" className="h-4 px-1.5 text-[9px]">
+            {badgeLabel}
+          </Badge>
+          {showCheckInStatus && onCheckInStatusChange ? (
+            <RosterMemberCheckInStatusSelect
+              memberId={member.id}
+              value={member.checkInStatus}
+              canEdit={canEditCheckInStatus}
+              isUpdating={updatingCheckInMemberId === member.id}
+              compact
+              onChange={onCheckInStatusChange}
+            />
+          ) : null}
+        </div>
       </div>
       {canManage ? (
         <Button
@@ -236,6 +261,10 @@ export function PositionRosterDetailPanel({
   onInviteToPosition,
   onUnassignMember,
   inlinePositionInvite,
+  showCheckInStatus = false,
+  canEditCheckInStatus = false,
+  updatingCheckInMemberId = null,
+  onCheckInStatusChange,
 }: PositionRosterDetailPanelProps) {
   const [expandedInviteMode, setExpandedInviteMode] = useState<RosterInviteAssignmentMode | null>(
     null
@@ -253,6 +282,13 @@ export function PositionRosterDetailPanel({
 
   const toggleInlineInvite = (mode: RosterInviteAssignmentMode) => {
     setExpandedInviteMode((previous) => (previous === mode ? null : mode))
+  }
+
+  const memberRowCheckInProps = {
+    showCheckInStatus,
+    canEditCheckInStatus,
+    updatingCheckInMemberId,
+    onCheckInStatusChange,
   }
 
   return (
@@ -322,6 +358,7 @@ export function PositionRosterDetailPanel({
               isBusy={isAssignBusy}
               removeLabel={`Remove ${member.email} from ${entry.position}`}
               onRemove={() => onUnassignMember(member.id, entry.position)}
+              {...memberRowCheckInProps}
             />
           ))
         )}
@@ -375,6 +412,7 @@ export function PositionRosterDetailPanel({
                 isBusy={isAssignBusy}
                 removeLabel={`Remove ${member.email} from next OP assign schedule`}
                 onRemove={() => onRemoveScheduledAssign(member.id, entry.position)}
+                {...memberRowCheckInProps}
               />
             ))
           )}
@@ -429,6 +467,7 @@ export function PositionRosterDetailPanel({
                 isBusy={isAssignBusy}
                 removeLabel={`Remove ${member.email} from next OP unassign schedule`}
                 onRemove={() => onRemoveScheduledUnassign(member.id, entry.position)}
+                {...memberRowCheckInProps}
               />
             ))
           )}

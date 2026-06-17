@@ -2,6 +2,13 @@ export type WorkspaceKind = 'incident' | 'exercise'
 
 export type WorkspaceMemberStatus = 'invited' | 'active' | 'removed'
 
+export type WorkspaceMemberCheckInStatus =
+  | 'not_arrived'
+  | 'checked_in'
+  | 'checked_out'
+  | 'demobilizing'
+  | 'demobilized'
+
 export type WorkspaceRosterMember = {
   id: string
   email: string
@@ -9,6 +16,7 @@ export type WorkspaceRosterMember = {
   icsPosition: string
   icsPositions: string[]
   status: WorkspaceMemberStatus
+  checkInStatus: WorkspaceMemberCheckInStatus
   addedAt: string
   userId: string | null
 }
@@ -82,5 +90,6 @@ export type DbWorkspaceMember = {
   status: WorkspaceMemberStatus
   invited_at: string
   joined_at: string | null
+  check_in_status?: WorkspaceMemberCheckInStatus | null
   workspace_member_positions?: Array<{ ics_position: string }> | null
 }

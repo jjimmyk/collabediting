@@ -20,6 +20,7 @@ export function buildPositionRosterEntriesFromSnapshot(
           status: member.status as WorkspaceRosterMember['status'],
           icsPosition: member.icsPositions[0] ?? position.name,
           icsPositions: member.icsPositions,
+          checkInStatus: member.checkInStatus ?? 'not_arrived',
           addedAt: snapshot.capturedAt,
         })
       ),
@@ -44,7 +45,10 @@ export function buildPositionRosterEntriesFromSnapshot(
       if (!normalizedQuery) return true
       if (entry.position.toLowerCase().includes(normalizedQuery)) return true
       return entry.members.some((member) =>
-        [member.email, member.status, member.addedAt].join(' ').toLowerCase().includes(normalizedQuery)
+        [member.email, member.status, member.checkInStatus, member.addedAt]
+          .join(' ')
+          .toLowerCase()
+          .includes(normalizedQuery)
       )
     })
 }

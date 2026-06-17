@@ -41,6 +41,7 @@ export function createDefaultRosterMember(email: string): WorkspaceRosterMember 
     icsPosition: DEFAULT_WORKSPACE_ROSTER_POSITION,
     icsPositions: [DEFAULT_WORKSPACE_ROSTER_POSITION],
     status: 'active',
+    checkInStatus: 'not_arrived',
     addedAt: formatNow(),
     userId: null,
   }

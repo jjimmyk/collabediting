@@ -1,5 +1,5 @@
 import { cn } from '@/lib/utils'
-import type { WorkspaceRosterMember } from '@/lib/workspace-types'
+import type { WorkspaceMemberCheckInStatus, WorkspaceRosterMember } from '@/lib/workspace-types'
 import type { ResourceListItemData } from '@/features/resources/types'
 import type { PositionRosterEntry } from '@/features/roster/workspace-position-roster'
 import type { PositionOpAdvanceLabel } from '@/lib/operational-period-roster-types'
@@ -52,6 +52,10 @@ type WorkspaceOrgChartRosterProps = {
   onOpAdvanceLabelChange?: (position: string, label: PositionOpAdvanceLabel) => void
   onFocusAsset?: (asset: ResourceListItemData) => void
   onRemoveAssetFromOrgChart?: (assetKey: string) => void
+  showCheckInStatus?: boolean
+  canEditCheckInStatus?: boolean
+  updatingCheckInMemberId?: string | null
+  onCheckInStatusChange?: (memberId: string, status: WorkspaceMemberCheckInStatus) => void
 }
 
 type OrgChartRenderProps = {
@@ -81,6 +85,10 @@ type OrgChartRenderProps = {
   onOpAdvanceLabelChange?: (position: string, label: PositionOpAdvanceLabel) => void
   onFocusAsset?: (asset: ResourceListItemData) => void
   onRemoveAssetFromOrgChart?: (assetKey: string) => void
+  showCheckInStatus: boolean
+  canEditCheckInStatus: boolean
+  updatingCheckInMemberId: string | null
+  onCheckInStatusChange?: (memberId: string, status: WorkspaceMemberCheckInStatus) => void
 }
 
 function filterVisibleOrgChartChildren(
@@ -202,6 +210,10 @@ function PositionNode({
   onOpAdvanceLabelChange,
   onFocusAsset,
   onRemoveAssetFromOrgChart,
+  showCheckInStatus,
+  canEditCheckInStatus,
+  updatingCheckInMemberId,
+  onCheckInStatusChange,
 }: {
   position: string
   color?: OrgChartColor
@@ -238,6 +250,10 @@ function PositionNode({
     onOpAdvanceLabelChange,
     onFocusAsset,
     onRemoveAssetFromOrgChart,
+    showCheckInStatus,
+    canEditCheckInStatus,
+    updatingCheckInMemberId,
+    onCheckInStatusChange,
   }
 
   return (
@@ -271,6 +287,10 @@ function PositionNode({
         onInviteToPosition={onInviteToPosition}
         onUnassignMember={onUnassignMember}
         inlinePositionInvite={inlinePositionInvite}
+        showCheckInStatus={showCheckInStatus}
+        canEditCheckInStatus={canEditCheckInStatus}
+        updatingCheckInMemberId={updatingCheckInMemberId}
+        onCheckInStatusChange={onCheckInStatusChange}
       />
       <OrgChartChildren children={children} parentColor={color} renderProps={renderProps} />
     </div>
@@ -414,6 +434,10 @@ export function WorkspaceOrgChartRoster({
   onOpAdvanceLabelChange,
   onFocusAsset,
   onRemoveAssetFromOrgChart,
+  showCheckInStatus = false,
+  canEditCheckInStatus = false,
+  updatingCheckInMemberId = null,
+  onCheckInStatusChange,
 }: WorkspaceOrgChartRosterProps) {
   const visibleSectionBranches = orgChartLayout.sectionBranches.filter((branch) =>
     branch.children.some(
@@ -455,6 +479,10 @@ export function WorkspaceOrgChartRoster({
     onOpAdvanceLabelChange,
     onFocusAsset,
     onRemoveAssetFromOrgChart,
+    showCheckInStatus,
+    canEditCheckInStatus,
+    updatingCheckInMemberId,
+    onCheckInStatusChange,
   }
 
   return (

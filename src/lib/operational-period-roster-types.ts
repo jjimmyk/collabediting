@@ -1,3 +1,5 @@
+import type { WorkspaceMemberCheckInStatus } from '@/lib/workspace-types'
+
 export type PositionLifecycleStatus =
   | 'active'
   | 'planned_create'
@@ -10,6 +12,7 @@ export type OperationalPeriodRosterSnapshotMember = {
   email: string
   status: string
   icsPositions: string[]
+  checkInStatus?: WorkspaceMemberCheckInStatus
 }
 
 export type OperationalPeriodRosterSnapshotPosition = {

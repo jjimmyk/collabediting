@@ -25,7 +25,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import type { WorkspaceRosterMember } from '@/lib/workspace-types'
+import type { WorkspaceMemberCheckInStatus, WorkspaceRosterMember } from '@/lib/workspace-types'
 import type { RosterInviteAssignmentMode } from '@/features/roster/position-roster-messages'
 import type { PositionRosterEntry } from '@/features/roster/workspace-position-roster'
 import {
@@ -35,6 +35,7 @@ import {
 } from '@/features/roster/workspace-position-roster'
 import { PositionOpAdvanceLabelSelect } from '@/features/roster/PositionOpAdvanceLabelSelect'
 import { PositionRosterDetailPanel } from '@/features/roster/PositionRosterDetailPanel'
+import { RosterMemberCheckInStatusSelect } from '@/features/roster/RosterMemberCheckInStatusSelect'
 import type { PositionOpAdvanceLabel } from '@/lib/operational-period-roster-types'
 import type { WorkspacePositionMeta } from '@/features/roster/workspace-positions'
 import { cn } from '@/lib/utils'
@@ -62,6 +63,10 @@ type WorkspacePositionRosterTableProps = {
   onUnassignMember: (memberId: string, position: string) => void
   onDeleteCustomPosition?: (position: string) => void
   onOpAdvanceLabelChange?: (position: string, label: PositionOpAdvanceLabel) => void
+  showCheckInStatus?: boolean
+  canEditCheckInStatus?: boolean
+  updatingCheckInMemberId?: string | null
+  onCheckInStatusChange?: (memberId: string, status: WorkspaceMemberCheckInStatus) => void
 }
 
 function AssignedMembersList({
@@ -70,12 +75,20 @@ function AssignedMembersList({
   canManageRoster,
   isAssigningPosition,
   onUnassignMember,
+  showCheckInStatus = false,
+  canEditCheckInStatus = false,
+  updatingCheckInMemberId = null,
+  onCheckInStatusChange,
 }: {
   entry: PositionRosterEntry
   assignedSearchQuery: string
   canManageRoster: boolean
   isAssigningPosition: string | null
   onUnassignMember: (memberId: string, position: string) => void
+  showCheckInStatus?: boolean
+  canEditCheckInStatus?: boolean
+  updatingCheckInMemberId?: string | null
+  onCheckInStatusChange?: (memberId: string, status: WorkspaceMemberCheckInStatus) => void
 }) {
   const canUnassignNow = entry.memberSchedulePolicy.allowActiveAssignment
   const visibleMembers = useMemo(
@@ -106,14 +119,26 @@ function AssignedMembersList({
           key={`${entry.position}-${member.id}`}
           className="flex items-center justify-between gap-2 rounded-md border bg-background/70 px-2 py-1"
         >
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <p className="truncate text-xs">{member.email}</p>
-            <Badge
-              variant={member.status === 'active' ? 'default' : 'outline'}
-              className="mt-0.5 h-4 px-1.5 text-[9px]"
-            >
-              {member.status === 'active' ? 'Active' : 'Invited'}
-            </Badge>
+            <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
+              <Badge
+                variant={member.status === 'active' ? 'default' : 'outline'}
+                className="h-4 px-1.5 text-[9px]"
+              >
+                {member.status === 'active' ? 'Active' : 'Invited'}
+              </Badge>
+              {showCheckInStatus && onCheckInStatusChange ? (
+                <RosterMemberCheckInStatusSelect
+                  memberId={member.id}
+                  value={member.checkInStatus}
+                  canEdit={canEditCheckInStatus}
+                  isUpdating={updatingCheckInMemberId === member.id}
+                  compact
+                  onChange={onCheckInStatusChange}
+                />
+              ) : null}
+            </div>
           </div>
           {canManageRoster && canUnassignNow && (
             <Button
@@ -157,6 +182,10 @@ export function WorkspacePositionRosterTable({
   onUnassignMember,
   onDeleteCustomPosition,
   onOpAdvanceLabelChange,
+  showCheckInStatus = false,
+  canEditCheckInStatus = false,
+  updatingCheckInMemberId = null,
+  onCheckInStatusChange,
 }: WorkspacePositionRosterTableProps) {
   const [expandedPositions, setExpandedPositions] = useState<Set<string>>(() => new Set())
   const [assignedSearchQuery, setAssignedSearchQuery] = useState('')
@@ -335,6 +364,10 @@ export function WorkspacePositionRosterTable({
                           canManageRoster={canManageRoster}
                           isAssigningPosition={isAssigningPosition}
                           onUnassignMember={onUnassignMember}
+                          showCheckInStatus={showCheckInStatus}
+                          canEditCheckInStatus={canEditCheckInStatus}
+                          updatingCheckInMemberId={updatingCheckInMemberId}
+                          onCheckInStatusChange={onCheckInStatusChange}
                         />
                       ) : null}
                     </div>
@@ -425,6 +458,10 @@ export function WorkspacePositionRosterTable({
                               onRemoveScheduledUnassign={onRemoveScheduledUnassign}
                               onInviteToPosition={onInviteToPosition}
                               onUnassignMember={onUnassignMember}
+                              showCheckInStatus={showCheckInStatus}
+                              canEditCheckInStatus={canEditCheckInStatus}
+                              updatingCheckInMemberId={updatingCheckInMemberId}
+                              onCheckInStatusChange={onCheckInStatusChange}
                             />
                           </PopoverContent>
                         </Popover>

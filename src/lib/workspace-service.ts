@@ -11,12 +11,14 @@ import {
   isDefaultLegacyWorkspace,
 } from '@/lib/default-roster'
 import { getSeededWorkspaceId } from '@/lib/workspace-ids'
+import { parseWorkspaceMemberCheckInStatus } from '@/lib/roster-check-in-status'
 import { getSupabaseClient, isSupabaseConfigured } from '@/lib/supabase'
 import type {
   AccessibleWorkspace,
   DbWorkspaceMember,
   UserProfile,
   WorkspaceKind,
+  WorkspaceMemberCheckInStatus,
   WorkspaceMetadataRecord,
   WorkspacePermissions,
   WorkspaceRosterMember,
@@ -53,6 +55,7 @@ function mapDbMember(row: DbWorkspaceMember): WorkspaceRosterMember {
     icsPosition: primaryIcsPosition(icsPositions),
     icsPositions,
     status: row.status,
+    checkInStatus: parseWorkspaceMemberCheckInStatus(row.check_in_status),
     addedAt: formatMemberDate(row.joined_at ?? row.invited_at),
     userId: row.user_id,
   }
@@ -390,6 +393,7 @@ export async function fetchWorkspaceRoster(workspaceId: string): Promise<Workspa
       status,
       invited_at,
       joined_at,
+      check_in_status,
       workspace_member_positions (ics_position)
     `
     )
@@ -511,6 +515,44 @@ export async function updateRosterMemberPositions(params: {
   return {
     ok: true,
     icsPositions: Array.isArray(payload.icsPositions) ? payload.icsPositions : params.icsPositions,
+  }
+}
+
+export async function updateRosterMemberCheckInStatus(params: {
+  accessToken: string
+  workspaceId: string
+  memberId: string
+  checkInStatus: WorkspaceMemberCheckInStatus
+}): Promise<{ ok: true; checkInStatus: WorkspaceMemberCheckInStatus } | { ok: false; message: string }> {
+  if (!isSupabaseConfigured) {
+    return { ok: false, message: 'Supabase is not configured.' }
+  }
+
+  const response = await fetch('/api/update-roster-member-check-in-status', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${params.accessToken}`,
+    },
+    body: JSON.stringify({
+      workspaceId: params.workspaceId,
+      memberId: params.memberId,
+      checkInStatus: params.checkInStatus,
+    }),
+  })
+
+  const payload = (await response.json().catch(() => ({}))) as {
+    error?: string
+    checkInStatus?: WorkspaceMemberCheckInStatus
+  }
+
+  if (!response.ok) {
+    return { ok: false, message: payload.error ?? 'Could not update check-in status.' }
+  }
+
+  return {
+    ok: true,
+    checkInStatus: payload.checkInStatus ?? params.checkInStatus,
   }
 }
 

@@ -20,6 +20,7 @@ type DbMemberRow = {
   id: string
   email: string
   status: string
+  check_in_status: string
 }
 
 type DbMemberPositionRow = {
@@ -47,7 +48,7 @@ export type OperationalPeriodRosterSnapshotPayload = {
     opAdvanceLabel: 'retire_on_op_advance' | 'create_on_op_advance' | null
     reportsTo?: string | null
     editIcs201: boolean
-    members: Array<{ email: string; status: string; icsPositions: string[] }>
+    members: Array<{ email: string; status: string; icsPositions: string[]; checkInStatus: string }>
   }>
   orgChartAssetPlacements: Array<{ assetKey: string; reportsTo: string | null }>
 }
@@ -79,7 +80,7 @@ async function loadRosterLifecycleContext(admin: SupabaseClient, workspaceId: st
       .eq('workspace_id', workspaceId),
     admin
       .from('workspace_members')
-      .select('id, email, status')
+      .select('id, email, status, check_in_status')
       .eq('workspace_id', workspaceId)
       .neq('status', 'removed'),
     admin.from('workspace_member_positions').select('member_id, ics_position'),
@@ -174,6 +175,7 @@ function buildOperationalPeriodRosterSnapshot(
           email: entry.member.email,
           status: entry.member.status,
           icsPositions: entry.icsPositions,
+          checkInStatus: entry.member.check_in_status ?? 'not_arrived',
         })),
     })
   }
@@ -202,6 +204,7 @@ function buildOperationalPeriodRosterSnapshot(
           email: entry.member.email,
           status: entry.member.status,
           icsPositions: entry.icsPositions,
+          checkInStatus: entry.member.check_in_status ?? 'not_arrived',
         })),
     })
   }
