@@ -142,6 +142,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(500).json({ error: permissionsError.message })
     }
 
+    const { error: settingsError } = await admin.rpc('seed_workspace_position_settings', {
+      p_workspace_id: workspace.id,
+    })
+
+    if (settingsError) {
+      return res.status(500).json({ error: settingsError.message })
+    }
+
     const { error: memberError } = await admin.from('workspace_members').upsert(
       {
         workspace_id: workspace.id,

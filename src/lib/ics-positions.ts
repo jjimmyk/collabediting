@@ -23,11 +23,8 @@ export const STANDARD_ICS_POSITIONS: readonly IcsPosition[] = ICS_POSITIONS
 export const WORKSPACE_ROSTER_POSITIONS: readonly IcsPosition[] = ICS_POSITIONS
 
 export const WORKSPACE_PERMISSION_EDIT_ICS201 = 'edit_ics201' as const
-export const WORKSPACE_PERMISSION_ALLOW_WORK_ASSIGNMENT = 'allow_work_assignment' as const
 
-export type WorkspacePermission =
-  | typeof WORKSPACE_PERMISSION_EDIT_ICS201
-  | typeof WORKSPACE_PERMISSION_ALLOW_WORK_ASSIGNMENT
+export type WorkspacePermission = typeof WORKSPACE_PERMISSION_EDIT_ICS201
 
 export const ROSTER_MANAGER_POSITIONS: readonly IcsPosition[] = [
   'Incident Commander',

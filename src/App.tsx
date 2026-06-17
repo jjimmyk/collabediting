@@ -194,6 +194,7 @@ import {
   createWorkspace,
   fetchCanManageWorkspaceRoster,
   fetchWorkspacePositionPermissions,
+  fetchWorkspacePositionSettings,
   fetchWorkspaceRoster,
   findAccessibleWorkspaceUuid,
   inviteWorkspaceMember,
@@ -530,6 +531,7 @@ import {
   type PositionPermissionMap,
 } from '@/features/roster/workspace-position-roster'
 import { buildPositionRosterEntriesFromSnapshot } from '@/lib/operational-period-roster-snapshot'
+import type { WorkspacePositionSettingsMap } from '@/lib/workspace-position-settings'
 import {
   buildMemberScheduleSummaryFromRows,
   fetchWorkspaceMemberSchedules,
@@ -8608,6 +8610,11 @@ function App() {
   const [localPositionPermissionsByKey, setLocalPositionPermissionsByKey] = useState<
     Record<string, PositionPermissionMap>
   >({})
+  const [activeWorkspacePositionSettings, setActiveWorkspacePositionSettings] =
+    useState<WorkspacePositionSettingsMap>({})
+  const [localPositionSettingsByKey, setLocalPositionSettingsByKey] = useState<
+    Record<string, WorkspacePositionSettingsMap>
+  >({})
   const [canManageWorkspaceRoster, setCanManageWorkspaceRoster] = useState(true)
   const [rosterPermissionUpdatingPosition, setRosterPermissionUpdatingPosition] = useState<
     string | null
@@ -11958,17 +11965,17 @@ function App() {
         return
       }
 
-      const [roster, schedules] = await Promise.all([
+      const [roster, schedules, permissions, settings] = await Promise.all([
         fetchWorkspaceRoster(workspaceId),
         fetchWorkspaceMemberSchedules(workspaceId),
+        fetchWorkspacePositionPermissions(workspaceId),
+        fetchWorkspacePositionSettings(workspaceId),
       ])
       if (cancelled) return
       setSupabaseWorkspaceRoster(roster)
       setWorkspaceMemberSchedules(schedules)
-
-      const permissions = await fetchWorkspacePositionPermissions(workspaceId)
-      if (cancelled) return
       setActiveWorkspacePositionPermissions(permissions)
+      setActiveWorkspacePositionSettings(settings)
 
       setIsRosterLoading(false)
     }
@@ -13035,6 +13042,9 @@ function App() {
         void fetchWorkspacePositionPermissions(activeWorkspaceSupabaseId).then(
           setActiveWorkspacePositionPermissions
         )
+        void fetchWorkspacePositionSettings(activeWorkspaceSupabaseId).then(
+          setActiveWorkspacePositionSettings
+        )
       }
     },
   })
@@ -13508,6 +13518,11 @@ function App() {
       ? (localPositionPermissionsByKey[activeWorkspaceRosterKey] ??
         buildDefaultPositionPermissionMap(workspacePositionCatalog))
       : buildDefaultPositionPermissionMap(workspacePositionCatalog)
+  const activePositionSettings = isSupabaseEnabled
+    ? activeWorkspacePositionSettings
+    : activeWorkspaceRosterKey !== null
+      ? (localPositionSettingsByKey[activeWorkspaceRosterKey] ?? {})
+      : {}
   const positionRosterEntries = useMemo(() => {
     if (isViewingHistoricalRoster && historicalRosterSnapshot) {
       return buildPositionRosterEntriesFromSnapshot(
@@ -13518,6 +13533,7 @@ function App() {
     return buildPositionRosterEntries(
       activeWorkspaceRoster,
       activePositionPermissions,
+      activePositionSettings,
       activePanelSearchQuery,
       workspacePositionCatalog,
       memberSchedulesByPosition
@@ -13525,6 +13541,7 @@ function App() {
   }, [
     activePanelSearchQuery,
     activePositionPermissions,
+    activePositionSettings,
     activeWorkspaceRoster,
     historicalRosterSnapshot,
     isViewingHistoricalRoster,
@@ -14643,7 +14660,6 @@ function App() {
             ...(current[position] ??
               buildDefaultPositionPermissionMap(workspacePositionCatalog)[position] ?? {
                 editIcs201: false,
-                allowWorkAssignment: false,
               }),
             editIcs201: enabled,
           },
@@ -14668,8 +14684,8 @@ function App() {
         toast.error(result.message)
         return
       }
-      const permissions = await fetchWorkspacePositionPermissions(activeWorkspaceSupabaseId)
-      setActiveWorkspacePositionPermissions(permissions)
+      const settings = await fetchWorkspacePositionSettings(activeWorkspaceSupabaseId)
+      setActiveWorkspacePositionSettings(settings)
       setRosterPermissionUpdatingPosition(null)
       return
     }
@@ -14679,25 +14695,13 @@ function App() {
       return
     }
 
-    setLocalPositionPermissionsByKey((previous) => {
-      const current =
-        previous[activeWorkspaceRosterKey] ??
-        buildDefaultPositionPermissionMap(workspacePositionCatalog)
-      return {
-        ...previous,
-        [activeWorkspaceRosterKey]: {
-          ...current,
-          [position]: {
-            ...(current[position] ??
-              buildDefaultPositionPermissionMap(workspacePositionCatalog)[position] ?? {
-                editIcs201: false,
-                allowWorkAssignment: false,
-              }),
-            allowWorkAssignment: enabled,
-          },
-        },
-      }
-    })
+    setLocalPositionSettingsByKey((previous) => ({
+      ...previous,
+      [activeWorkspaceRosterKey]: {
+        ...(previous[activeWorkspaceRosterKey] ?? {}),
+        [position]: { allowWorkAssignment: enabled },
+      },
+    }))
     setRosterPermissionUpdatingPosition(null)
   }
   const handleCreateCustomPosition = async (
@@ -14721,7 +14725,14 @@ function App() {
           [activeWorkspaceRosterKey]: {
             ...(previous[activeWorkspaceRosterKey] ??
               buildDefaultPositionPermissionMap(workspacePositionCatalog)),
-            [created.name]: { editIcs201: false, allowWorkAssignment: false },
+            [created.name]: { editIcs201: false },
+          },
+        }))
+        setLocalPositionSettingsByKey((previous) => ({
+          ...previous,
+          [activeWorkspaceRosterKey]: {
+            ...(previous[activeWorkspaceRosterKey] ?? {}),
+            [created.name]: { allowWorkAssignment: false },
           },
         }))
       }

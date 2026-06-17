@@ -1,4 +1,4 @@
-import { primaryIcsPosition, WORKSPACE_PERMISSION_EDIT_ICS201, WORKSPACE_PERMISSION_ALLOW_WORK_ASSIGNMENT } from '@/lib/ics-positions'
+import { primaryIcsPosition, WORKSPACE_PERMISSION_EDIT_ICS201 } from '@/lib/ics-positions'
 import {
   buildDefaultPositionPermissionMap,
   permissionsFromRows,
@@ -10,8 +10,12 @@ import {
   hasDefaultFullWorkspaceAccess,
   isDefaultLegacyWorkspace,
 } from '@/lib/default-roster'
-import { getSeededWorkspaceId } from '@/lib/workspace-ids'
+import {
+  settingsFromRows,
+  type WorkspacePositionSettingsMap,
+} from '@/lib/workspace-position-settings'
 import { parseWorkspaceMemberCheckInStatus } from '@/lib/roster-check-in-status'
+import { getSeededWorkspaceId } from '@/lib/workspace-ids'
 import { getSupabaseClient, isSupabaseConfigured } from '@/lib/supabase'
 import type {
   AccessibleWorkspace,
@@ -591,6 +595,28 @@ export async function fetchWorkspacePositionPermissions(
   )
 }
 
+export async function fetchWorkspacePositionSettings(
+  workspaceId: string
+): Promise<WorkspacePositionSettingsMap> {
+  const supabase = getSupabaseClient()
+  if (!supabase) {
+    return {}
+  }
+
+  const { data, error } = await supabase
+    .from('workspace_position_settings')
+    .select('position_name, allow_work_assignment')
+    .eq('workspace_id', workspaceId)
+
+  if (error || !data) {
+    return {}
+  }
+
+  return settingsFromRows(
+    data as Array<{ position_name: string; allow_work_assignment: boolean }>
+  )
+}
+
 export async function setWorkspacePositionEditIcs201(
   workspaceId: string,
   icsPosition: string,
@@ -639,27 +665,15 @@ export async function setWorkspacePositionAllowWorkAssignment(
     return { ok: false, message: 'Supabase is not configured.' }
   }
 
-  if (enabled) {
-    const { error } = await supabase.from('workspace_position_permissions').upsert(
-      {
-        workspace_id: workspaceId,
-        ics_position: icsPosition,
-        permission: WORKSPACE_PERMISSION_ALLOW_WORK_ASSIGNMENT,
-      },
-      { onConflict: 'workspace_id,ics_position,permission' }
-    )
-    if (error) {
-      return { ok: false, message: error.message }
-    }
-    return { ok: true }
-  }
-
-  const { error } = await supabase
-    .from('workspace_position_permissions')
-    .delete()
-    .eq('workspace_id', workspaceId)
-    .eq('ics_position', icsPosition)
-    .eq('permission', WORKSPACE_PERMISSION_ALLOW_WORK_ASSIGNMENT)
+  const { error } = await supabase.from('workspace_position_settings').upsert(
+    {
+      workspace_id: workspaceId,
+      position_name: icsPosition,
+      allow_work_assignment: enabled,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: 'workspace_id,position_name' }
+  )
 
   if (error) {
     return { ok: false, message: error.message }

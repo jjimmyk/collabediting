@@ -69,6 +69,7 @@ async function loadRosterLifecycleContext(admin: SupabaseClient, workspaceId: st
     { data: memberRows, error: memberError },
     { data: memberPositionRows, error: memberPositionError },
     { data: permissionRows, error: permissionError },
+    { data: settingsRows, error: settingsError },
     { data: assetRows, error: assetError },
   ] = await Promise.all([
     admin
@@ -90,6 +91,10 @@ async function loadRosterLifecycleContext(admin: SupabaseClient, workspaceId: st
       .select('ics_position, permission')
       .eq('workspace_id', workspaceId),
     admin
+      .from('workspace_position_settings')
+      .select('position_name, allow_work_assignment')
+      .eq('workspace_id', workspaceId),
+    admin
       .from('workspace_asset_assignments')
       .select('asset_key, org_chart_reports_to')
       .eq('workspace_id', workspaceId),
@@ -100,6 +105,7 @@ async function loadRosterLifecycleContext(admin: SupabaseClient, workspaceId: st
   if (memberError) throw new Error(memberError.message)
   if (memberPositionError) throw new Error(memberPositionError.message)
   if (permissionError) throw new Error(permissionError.message)
+  if (settingsError) throw new Error(settingsError.message)
   if (assetError) throw new Error(assetError.message)
 
   const customPositions = (customRows ?? []) as DbCustomPositionRow[]
@@ -107,6 +113,10 @@ async function loadRosterLifecycleContext(admin: SupabaseClient, workspaceId: st
   const members = (memberRows ?? []) as DbMemberRow[]
   const memberPositions = (memberPositionRows ?? []) as DbMemberPositionRow[]
   const permissions = (permissionRows ?? []) as DbPermissionRow[]
+  const settings = (settingsRows ?? []) as Array<{
+    position_name: string
+    allow_work_assignment: boolean
+  }>
   const assets = (assetRows ?? []) as DbAssetRow[]
 
   const memberIds = new Set(members.map((row) => row.id))
@@ -124,9 +134,9 @@ async function loadRosterLifecycleContext(admin: SupabaseClient, workspaceId: st
     if (row.permission === 'edit_ics201') {
       editIcs201ByPosition.set(row.ics_position, true)
     }
-    if (row.permission === 'allow_work_assignment') {
-      allowWorkAssignmentByPosition.set(row.ics_position, true)
-    }
+  }
+  for (const row of settings) {
+    allowWorkAssignmentByPosition.set(row.position_name, row.allow_work_assignment)
   }
 
   const standardLifecycleByName = Object.fromEntries(
