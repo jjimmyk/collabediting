@@ -536,7 +536,10 @@ import {
   type WorkspaceMemberScheduleRow,
 } from '@/lib/workspace-member-schedule-service'
 import { getPositionMemberSchedulePolicy } from '@/lib/roster-member-schedule-policy'
-import type { RosterInviteAssignmentMode } from '@/features/roster/position-roster-messages'
+import type {
+  PositionRosterInviteSubmitResult,
+  RosterInviteAssignmentMode,
+} from '@/features/roster/position-roster-messages'
 import {
   buildOpAdvanceLifecycleSummary,
   canAssignMembersToPositionNow,
@@ -8592,6 +8595,12 @@ function App() {
   const [rosterInvitePositionPreset, setRosterInvitePositionPreset] = useState<string | null>(null)
   const [rosterInviteAssignmentMode, setRosterInviteAssignmentMode] =
     useState<RosterInviteAssignmentMode>('assign_now')
+  const [pendingInlinePositionInvite, setPendingInlinePositionInvite] = useState<{
+    email: string
+    password: string
+    position: string
+    mode: RosterInviteAssignmentMode
+  } | null>(null)
   const [activeWorkspacePositionPermissions, setActiveWorkspacePositionPermissions] =
     useState<PositionPermissionMap>(() => buildDefaultPositionPermissionMap())
   const [localPositionPermissionsByKey, setLocalPositionPermissionsByKey] = useState<
@@ -14159,50 +14168,58 @@ function App() {
     isInIncidentWorkspace,
     isSupabaseEnabled,
   ])
-  const addWorkspaceRosterMember = async (confirmPasswordOverwrite = false) => {
-    if (activeWorkspaceRosterKey === null) return
-    const email = rosterMemberEmailDraft.trim().toLowerCase()
+  const inviteRosterMemberCore = async (input: {
+    email: string
+    password: string
+    icsPositions: string[]
+    mode: RosterInviteAssignmentMode
+    positionPreset: string | null
+    confirmPasswordOverwrite?: boolean
+    closeDialogOnSuccess?: boolean
+  }): Promise<PositionRosterInviteSubmitResult> => {
+    if (activeWorkspaceRosterKey === null) return 'error'
+    const email = input.email.trim().toLowerCase()
     if (!isValidRosterEmail(email)) {
       toast.error('Enter a valid email address.')
-      return
+      return 'error'
     }
-    const icsPositions = [...rosterMemberPositionsDraft]
+    const icsPositions = [...input.icsPositions]
     if (icsPositions.length === 0) {
       toast.error('Select at least one ICS position.')
-      return
+      return 'error'
     }
-    const password = rosterMemberPasswordDraft
+    const password = input.password
     if (password.length > 0 && password.length < 8) {
       toast.error('Password must be at least 8 characters.')
-      return
+      return 'error'
     }
     const existingMembers = activeWorkspaceRoster
     if (existingMembers.some((member) => member.email === email)) {
       toast.error('That email is already on the roster.')
-      return
+      return 'error'
     }
 
     const scheduleOnOpAdvance =
-      rosterInviteAssignmentMode === 'schedule_on_op_advance' &&
-      rosterInvitePositionPreset !== null &&
+      input.mode === 'schedule_on_op_advance' &&
+      input.positionPreset !== null &&
       icsPositions.length === 1
 
     if (scheduleOnOpAdvance && !isSupabaseEnabled) {
       toast.error('Schedule invites require Supabase persistence.')
-      return
+      return 'error'
     }
 
     if (isSupabaseEnabled) {
       if (!activeWorkspaceSupabaseId) {
         toast.error('This workspace is not synced to Supabase yet.')
-        return
+        return 'error'
       }
       setIsInvitingRosterMember(true)
       const accessToken = await getAccessToken()
       if (!accessToken) {
         setIsInvitingRosterMember(false)
         toast.error('Sign in again to invite roster members.')
-        return
+        return 'error'
       }
       const result = await inviteWorkspaceMember({
         accessToken,
@@ -14210,17 +14227,16 @@ function App() {
         email,
         icsPositions,
         ...(password.length > 0 ? { password } : {}),
-        ...(confirmPasswordOverwrite ? { confirmPasswordOverwrite: true } : {}),
+        ...(input.confirmPasswordOverwrite ? { confirmPasswordOverwrite: true } : {}),
         ...(scheduleOnOpAdvance ? { scheduleOnOpAdvance: true } : {}),
       })
       setIsInvitingRosterMember(false)
       if (!result.ok) {
         if (result.code === 'user_exists') {
-          setIsRosterPasswordOverwriteConfirmOpen(true)
-          return
+          return 'password_overwrite_required'
         }
         toast.error(result.message)
-        return
+        return 'error'
       }
       const [roster, schedules] = await Promise.all([
         fetchWorkspaceRoster(activeWorkspaceSupabaseId),
@@ -14228,11 +14244,13 @@ function App() {
       ])
       setSupabaseWorkspaceRoster(roster)
       setWorkspaceMemberSchedules(schedules)
-      resetAddRosterMemberDraft()
-      setIsAddRosterMemberOpen(false)
+      if (input.closeDialogOnSuccess) {
+        resetAddRosterMemberDraft()
+        setIsAddRosterMemberOpen(false)
+      }
       if (result.warning) {
         toast.warning(result.warning)
-        return
+        return 'success'
       }
       const positionLabel = icsPositions.join(', ')
       if (result.method === 'direct_provision') {
@@ -14243,14 +14261,14 @@ function App() {
               ? `${email} was added to the roster. Their password was updated — they can sign in immediately.`
               : `${email} was added to the roster. They can sign in immediately with the password you set.`
         )
-        return
+        return 'success'
       }
       toast.success(
         scheduleOnOpAdvance
           ? `Invitation sent to ${email}. They will be scheduled for ${positionLabel} on the next operational period.`
           : `Invitation sent to ${email} as ${positionLabel}.`
       )
-      return
+      return 'success'
     }
 
     const localMembers = localWorkspaceRostersByKey[activeWorkspaceRosterKey] ?? []
@@ -14273,9 +14291,51 @@ function App() {
       ...previous,
       [activeWorkspaceRosterKey]: [...localMembers, nextMember],
     }))
-    resetAddRosterMemberDraft()
-    setIsAddRosterMemberOpen(false)
+    if (input.closeDialogOnSuccess) {
+      resetAddRosterMemberDraft()
+      setIsAddRosterMemberOpen(false)
+    }
     toast.success(`Added ${email} as ${icsPositions.join(', ')}.`)
+    return 'success'
+  }
+  const addWorkspaceRosterMember = async (confirmPasswordOverwrite = false) => {
+    const result = await inviteRosterMemberCore({
+      email: rosterMemberEmailDraft,
+      password: rosterMemberPasswordDraft,
+      icsPositions: rosterMemberPositionsDraft,
+      mode: rosterInviteAssignmentMode,
+      positionPreset: rosterInvitePositionPreset,
+      confirmPasswordOverwrite,
+      closeDialogOnSuccess: true,
+    })
+    if (result === 'password_overwrite_required') {
+      setIsRosterPasswordOverwriteConfirmOpen(true)
+    }
+  }
+  const submitInlinePositionInvite = async (
+    params: {
+      email: string
+      password: string
+      position: string
+      mode: RosterInviteAssignmentMode
+    },
+    confirmPasswordOverwrite = false
+  ): Promise<PositionRosterInviteSubmitResult> => {
+    const result = await inviteRosterMemberCore({
+      email: params.email,
+      password: params.password,
+      icsPositions: [params.position],
+      mode: params.mode,
+      positionPreset: params.position,
+      confirmPasswordOverwrite,
+      closeDialogOnSuccess: false,
+    })
+    if (result === 'password_overwrite_required') {
+      setPendingInlinePositionInvite(params)
+      setRosterMemberEmailDraft(params.email.trim().toLowerCase())
+      setIsRosterPasswordOverwriteConfirmOpen(true)
+    }
+    return result
   }
   const toggleRosterMemberPositionsDraft = (position: string) => {
     setRosterMemberPositionsDraft((previous) => {
@@ -26755,6 +26815,11 @@ function App() {
                         void removeScheduledUnassignFromPosition(memberId, position)
                       }}
                       onInviteToPosition={openInviteToPosition}
+                      inlinePositionInvite={{
+                        isSupabaseEnabled,
+                        isSubmitting: isInvitingRosterMember,
+                        onSubmit: submitInlinePositionInvite,
+                      }}
                       onUnassignMember={(memberId, position) => {
                         void unassignMemberFromPosition(memberId, position)
                       }}
@@ -36222,7 +36287,12 @@ function App() {
       />
       <Dialog
         open={isRosterPasswordOverwriteConfirmOpen}
-        onOpenChange={setIsRosterPasswordOverwriteConfirmOpen}
+        onOpenChange={(open) => {
+          setIsRosterPasswordOverwriteConfirmOpen(open)
+          if (!open) {
+            setPendingInlinePositionInvite(null)
+          }
+        }}
       >
         <DialogContent className="!w-[26rem] !max-w-[26rem] sm:!max-w-[26rem]">
           <DialogHeader>
@@ -36246,6 +36316,17 @@ function App() {
               disabled={isInvitingRosterMember}
               className="bg-amber-600 text-white hover:bg-amber-700"
               onClick={() => {
+                if (pendingInlinePositionInvite) {
+                  void submitInlinePositionInvite(pendingInlinePositionInvite, true).then(
+                    (result) => {
+                      if (result !== 'password_overwrite_required') {
+                        setPendingInlinePositionInvite(null)
+                        setIsRosterPasswordOverwriteConfirmOpen(false)
+                      }
+                    }
+                  )
+                  return
+                }
                 void addWorkspaceRosterMember(true)
               }}
             >

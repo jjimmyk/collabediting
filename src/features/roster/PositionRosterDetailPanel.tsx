@@ -18,8 +18,10 @@ import {
   assignExistingMembersEmptyMessage,
   scheduleAssignMembersEmptyMessage,
   scheduleUnassignMembersEmptyMessage,
+  type PositionRosterInlineInviteProps,
   type RosterInviteAssignmentMode,
 } from '@/features/roster/position-roster-messages'
+import { PositionRosterInviteForm } from '@/features/roster/PositionRosterInviteForm'
 import type { WorkspacePositionMeta } from '@/features/roster/workspace-positions'
 
 type PositionRosterDetailPanelProps = {
@@ -42,6 +44,7 @@ type PositionRosterDetailPanelProps = {
   onRemoveScheduledUnassign: (memberId: string, position: string) => void
   onInviteToPosition: (position: string, mode: RosterInviteAssignmentMode) => void
   onUnassignMember: (memberId: string, position: string) => void
+  inlinePositionInvite?: PositionRosterInlineInviteProps
 }
 
 function MemberRow({
@@ -146,24 +149,69 @@ function MemberPickerPopover({
 function SectionInviteButton({
   label,
   disabled,
+  expanded,
   onClick,
 }: {
   label: string
   disabled: boolean
+  expanded: boolean
   onClick: () => void
 }) {
   return (
     <Button
       type="button"
       size="sm"
-      variant="default"
+      variant={expanded ? 'secondary' : 'default'}
       className="mt-1 h-7 w-full gap-1 text-xs"
       disabled={disabled}
       onClick={onClick}
     >
       <Plus className="h-3.5 w-3.5 shrink-0" />
-      {label}
+      {expanded ? 'Cancel' : label}
     </Button>
+  )
+}
+
+function SectionInlineInvite({
+  position,
+  mode,
+  expanded,
+  disabled,
+  inlinePositionInvite,
+  onToggle,
+}: {
+  position: string
+  mode: RosterInviteAssignmentMode
+  expanded: boolean
+  disabled: boolean
+  inlinePositionInvite: PositionRosterInlineInviteProps
+  onToggle: () => void
+}) {
+  return (
+    <>
+      <SectionInviteButton
+        label="Assign new user"
+        disabled={disabled}
+        expanded={expanded}
+        onClick={onToggle}
+      />
+      {expanded ? (
+        <PositionRosterInviteForm
+          position={position}
+          mode={mode}
+          isSupabaseEnabled={inlinePositionInvite.isSupabaseEnabled}
+          isSubmitting={inlinePositionInvite.isSubmitting}
+          onCancel={onToggle}
+          onSubmit={async (params) => {
+            const result = await inlinePositionInvite.onSubmit(params)
+            if (result === 'success') {
+              onToggle()
+            }
+            return result
+          }}
+        />
+      ) : null}
+    </>
   )
 }
 
@@ -187,7 +235,11 @@ export function PositionRosterDetailPanel({
   onRemoveScheduledUnassign,
   onInviteToPosition,
   onUnassignMember,
+  inlinePositionInvite,
 }: PositionRosterDetailPanelProps) {
+  const [expandedInviteMode, setExpandedInviteMode] = useState<RosterInviteAssignmentMode | null>(
+    null
+  )
   const policy = entry.memberSchedulePolicy
   const assignExistingEmptyMessage = assignExistingMembersEmptyMessage(entry, assignable.length)
   const scheduleAssignEmptyMessage = scheduleAssignMembersEmptyMessage(scheduleAssignable.length)
@@ -198,6 +250,10 @@ export function PositionRosterDetailPanel({
   const canAssignNow = policy.allowActiveAssignment
   const canScheduleAssign = policy.allowScheduleAssign
   const canScheduleUnassign = policy.allowScheduleUnassign
+
+  const toggleInlineInvite = (mode: RosterInviteAssignmentMode) => {
+    setExpandedInviteMode((previous) => (previous === mode ? null : mode))
+  }
 
   return (
     <div className="space-y-3">
@@ -278,11 +334,23 @@ export function PositionRosterDetailPanel({
               emptyMessage={assignExistingEmptyMessage}
               onSelect={(memberId) => onAssignExistingMember(memberId, entry.position)}
             />
-            <SectionInviteButton
-              label="Assign new user"
-              disabled={isAssignBusy}
-              onClick={() => onInviteToPosition(entry.position, 'assign_now')}
-            />
+            {inlinePositionInvite ? (
+              <SectionInlineInvite
+                position={entry.position}
+                mode="assign_now"
+                expanded={expandedInviteMode === 'assign_now'}
+                disabled={isAssignBusy}
+                inlinePositionInvite={inlinePositionInvite}
+                onToggle={() => toggleInlineInvite('assign_now')}
+              />
+            ) : (
+              <SectionInviteButton
+                label="Assign new user"
+                disabled={isAssignBusy}
+                expanded={false}
+                onClick={() => onInviteToPosition(entry.position, 'assign_now')}
+              />
+            )}
           </>
         ) : null}
       </div>
@@ -319,11 +387,23 @@ export function PositionRosterDetailPanel({
                 emptyMessage={scheduleAssignEmptyMessage}
                 onSelect={(memberId) => onScheduleAssignMember(memberId, entry.position)}
               />
-              <SectionInviteButton
-                label="Assign new user"
-                disabled={isAssignBusy}
-                onClick={() => onInviteToPosition(entry.position, 'schedule_on_op_advance')}
-              />
+              {inlinePositionInvite ? (
+                <SectionInlineInvite
+                  position={entry.position}
+                  mode="schedule_on_op_advance"
+                  expanded={expandedInviteMode === 'schedule_on_op_advance'}
+                  disabled={isAssignBusy}
+                  inlinePositionInvite={inlinePositionInvite}
+                  onToggle={() => toggleInlineInvite('schedule_on_op_advance')}
+                />
+              ) : (
+                <SectionInviteButton
+                  label="Assign new user"
+                  disabled={isAssignBusy}
+                  expanded={false}
+                  onClick={() => onInviteToPosition(entry.position, 'schedule_on_op_advance')}
+                />
+              )}
             </>
           ) : null}
         </div>

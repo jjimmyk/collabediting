@@ -3,7 +3,10 @@ import type { WorkspaceRosterMember } from '@/lib/workspace-types'
 import type { ResourceListItemData } from '@/features/resources/types'
 import type { PositionRosterEntry } from '@/features/roster/workspace-position-roster'
 import type { PositionOpAdvanceLabel } from '@/lib/operational-period-roster-types'
-import type { RosterInviteAssignmentMode } from '@/features/roster/position-roster-messages'
+import type {
+  PositionRosterInlineInviteProps,
+  RosterInviteAssignmentMode,
+} from '@/features/roster/position-roster-messages'
 import { PositionRosterCard } from '@/features/roster/PositionRosterCard'
 import { AssetOrgChartCard } from '@/features/roster/AssetOrgChartCard'
 import type { WorkspaceOrgChartLayout, WorkspacePositionMeta } from '@/features/roster/workspace-positions'
@@ -45,6 +48,7 @@ type WorkspaceOrgChartRosterProps = {
   onRemoveScheduledUnassign: (memberId: string, position: string) => void
   onInviteToPosition: (position: string, mode: RosterInviteAssignmentMode) => void
   onUnassignMember: (memberId: string, position: string) => void
+  inlinePositionInvite?: PositionRosterInlineInviteProps
   onOpAdvanceLabelChange?: (position: string, label: PositionOpAdvanceLabel) => void
   onFocusAsset?: (asset: ResourceListItemData) => void
   onRemoveAssetFromOrgChart?: (assetKey: string) => void
@@ -73,6 +77,7 @@ type OrgChartRenderProps = {
   onRemoveScheduledUnassign: (memberId: string, position: string) => void
   onInviteToPosition: (position: string, mode: RosterInviteAssignmentMode) => void
   onUnassignMember: (memberId: string, position: string) => void
+  inlinePositionInvite?: PositionRosterInlineInviteProps
   onOpAdvanceLabelChange?: (position: string, label: PositionOpAdvanceLabel) => void
   onFocusAsset?: (asset: ResourceListItemData) => void
   onRemoveAssetFromOrgChart?: (assetKey: string) => void
@@ -193,6 +198,7 @@ function PositionNode({
   onRemoveScheduledUnassign,
   onInviteToPosition,
   onUnassignMember,
+  inlinePositionInvite,
   onOpAdvanceLabelChange,
   onFocusAsset,
   onRemoveAssetFromOrgChart,
@@ -228,6 +234,7 @@ function PositionNode({
     onRemoveScheduledUnassign,
     onInviteToPosition,
     onUnassignMember,
+    inlinePositionInvite,
     onOpAdvanceLabelChange,
     onFocusAsset,
     onRemoveAssetFromOrgChart,
@@ -263,6 +270,7 @@ function PositionNode({
         onRemoveScheduledUnassign={onRemoveScheduledUnassign}
         onInviteToPosition={onInviteToPosition}
         onUnassignMember={onUnassignMember}
+        inlinePositionInvite={inlinePositionInvite}
       />
       <OrgChartChildren children={children} parentColor={color} renderProps={renderProps} />
     </div>
@@ -402,6 +410,7 @@ export function WorkspaceOrgChartRoster({
   onRemoveScheduledUnassign,
   onInviteToPosition,
   onUnassignMember,
+  inlinePositionInvite,
   onOpAdvanceLabelChange,
   onFocusAsset,
   onRemoveAssetFromOrgChart,
@@ -442,6 +451,7 @@ export function WorkspaceOrgChartRoster({
     onRemoveScheduledUnassign,
     onInviteToPosition,
     onUnassignMember,
+    inlinePositionInvite,
     onOpAdvanceLabelChange,
     onFocusAsset,
     onRemoveAssetFromOrgChart,

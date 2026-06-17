@@ -18,7 +18,10 @@ import { Switch } from '@/components/ui/switch'
 import { cn } from '@/lib/utils'
 import type { WorkspaceRosterMember } from '@/lib/workspace-types'
 import type { PositionRosterEntry } from '@/features/roster/workspace-position-roster'
-import type { RosterInviteAssignmentMode } from '@/features/roster/position-roster-messages'
+import type {
+  PositionRosterInlineInviteProps,
+  RosterInviteAssignmentMode,
+} from '@/features/roster/position-roster-messages'
 import type { PositionOpAdvanceLabel } from '@/lib/operational-period-roster-types'
 import { PositionLifecycleBadges } from '@/features/roster/PositionLifecycleBadges'
 import { PositionRosterDetailPanel } from '@/features/roster/PositionRosterDetailPanel'
@@ -53,6 +56,7 @@ type PositionRosterCardProps = {
   onRemoveScheduledUnassign: (memberId: string, position: string) => void
   onInviteToPosition: (position: string, mode: RosterInviteAssignmentMode) => void
   onUnassignMember: (memberId: string, position: string) => void
+  inlinePositionInvite?: PositionRosterInlineInviteProps
 }
 
 export function PositionRosterCard({
@@ -79,6 +83,7 @@ export function PositionRosterCard({
   onRemoveScheduledUnassign,
   onInviteToPosition,
   onUnassignMember,
+  inlinePositionInvite,
 }: PositionRosterCardProps) {
   const [orgModalOpen, setOrgModalOpen] = useState(false)
   const leaderEmail = entry.members[0]?.email ?? null
@@ -100,6 +105,7 @@ export function PositionRosterCard({
     onRemoveScheduledUnassign,
     onInviteToPosition,
     onUnassignMember,
+    inlinePositionInvite,
   }
 
   if (isOrg) {
@@ -145,10 +151,6 @@ export function PositionRosterCard({
               positionMeta={positionMeta}
               isUpdatingOpAdvanceLabel={isUpdatingOpAdvanceLabel}
               onOpAdvanceLabelChange={onOpAdvanceLabelChange}
-              onInviteToPosition={(position, mode) => {
-                setOrgModalOpen(false)
-                onInviteToPosition(position, mode)
-              }}
             />
           </DialogContent>
         </Dialog>

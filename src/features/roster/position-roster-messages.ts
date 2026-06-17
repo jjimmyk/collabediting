@@ -2,6 +2,22 @@ import type { PositionRosterEntry } from '@/features/roster/workspace-position-r
 
 export type RosterInviteAssignmentMode = 'assign_now' | 'schedule_on_op_advance'
 
+export type PositionRosterInviteSubmitResult = 'success' | 'password_overwrite_required' | 'error'
+
+export type PositionRosterInlineInviteProps = {
+  isSupabaseEnabled: boolean
+  isSubmitting: boolean
+  onSubmit: (
+    params: {
+      email: string
+      password: string
+      position: string
+      mode: RosterInviteAssignmentMode
+    },
+    confirmPasswordOverwrite?: boolean
+  ) => Promise<PositionRosterInviteSubmitResult>
+}
+
 export function assignExistingMembersEmptyMessage(
   entry: PositionRosterEntry,
   assignableCount: number
