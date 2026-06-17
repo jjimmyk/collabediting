@@ -136,7 +136,7 @@ export function PositionRosterCard({
           </div>
         </button>
         <Dialog open={orgModalOpen} onOpenChange={setOrgModalOpen}>
-          <DialogContent className="sm:max-w-md">
+          <DialogContent className="!w-[56rem] !max-w-[min(56rem,calc(100%-2rem))] sm:!max-w-[56rem] max-h-[90vh] overflow-y-auto">
             <DialogTitle className="sr-only">{entry.position}</DialogTitle>
             <PositionRosterDetailPanel
               {...panelProps}
