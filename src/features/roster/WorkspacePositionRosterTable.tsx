@@ -33,6 +33,7 @@ import {
   formatPositionAssignmentCount,
 } from '@/features/roster/workspace-position-roster'
 import { PositionOpAdvanceLabelSelect } from '@/features/roster/PositionOpAdvanceLabelSelect'
+import { PositionRosterDetailPanel } from '@/features/roster/PositionRosterDetailPanel'
 import type { PositionOpAdvanceLabel } from '@/lib/operational-period-roster-types'
 import type { WorkspacePositionMeta } from '@/features/roster/workspace-positions'
 import { cn } from '@/lib/utils'
@@ -40,6 +41,8 @@ import { cn } from '@/lib/utils'
 type WorkspacePositionRosterTableProps = {
   entries: PositionRosterEntry[]
   assignableByPosition: Record<string, WorkspaceRosterMember[]>
+  scheduleAssignableByPosition: Record<string, WorkspaceRosterMember[]>
+  scheduleUnassignableByPosition: Record<string, WorkspaceRosterMember[]>
   canManageRoster: boolean
   glassItemBorderClasses: string
   isUpdatingPermission: string | null
@@ -50,6 +53,10 @@ type WorkspacePositionRosterTableProps = {
   isUpdatingOpAdvanceLabel?: string | null
   onToggleEditIcs201: (position: string, enabled: boolean) => void
   onAssignExistingMember: (memberId: string, position: string) => void
+  onScheduleAssignMember: (memberId: string, position: string) => void
+  onScheduleUnassignMember: (memberId: string, position: string) => void
+  onRemoveScheduledAssign: (memberId: string, position: string) => void
+  onRemoveScheduledUnassign: (memberId: string, position: string) => void
   onInviteToPosition: (position: string) => void
   onUnassignMember: (memberId: string, position: string) => void
   onDeleteCustomPosition?: (position: string) => void
@@ -69,6 +76,7 @@ function AssignedMembersList({
   isAssigningPosition: string | null
   onUnassignMember: (memberId: string, position: string) => void
 }) {
+  const canUnassignNow = entry.memberSchedulePolicy.allowActiveAssignment
   const visibleMembers = useMemo(
     () => filterPositionRosterMembers(entry.members, assignedSearchQuery),
     [assignedSearchQuery, entry.members]
@@ -106,7 +114,7 @@ function AssignedMembersList({
               {member.status === 'active' ? 'Active' : 'Invited'}
             </Badge>
           </div>
-          {canManageRoster && (
+          {canManageRoster && canUnassignNow && (
             <Button
               type="button"
               size="icon"
@@ -128,6 +136,8 @@ function AssignedMembersList({
 export function WorkspacePositionRosterTable({
   entries,
   assignableByPosition,
+  scheduleAssignableByPosition,
+  scheduleUnassignableByPosition,
   canManageRoster,
   glassItemBorderClasses,
   isUpdatingPermission,
@@ -138,6 +148,10 @@ export function WorkspacePositionRosterTable({
   isUpdatingOpAdvanceLabel = null,
   onToggleEditIcs201,
   onAssignExistingMember,
+  onScheduleAssignMember,
+  onScheduleUnassignMember,
+  onRemoveScheduledAssign,
+  onRemoveScheduledUnassign,
   onInviteToPosition,
   onUnassignMember,
   onDeleteCustomPosition,
@@ -257,8 +271,15 @@ export function WorkspacePositionRosterTable({
           ) : (
             filteredEntries.map((entry) => {
               const assignable = assignableByPosition[entry.position] ?? []
+              const scheduleAssignable = scheduleAssignableByPosition[entry.position] ?? []
+              const scheduleUnassignable = scheduleUnassignableByPosition[entry.position] ?? []
               const isExpanded = expandedPositions.has(entry.position)
-              const assignmentSummary = formatPositionAssignmentCount(entry.members.length)
+              const scheduledCount =
+                entry.scheduledAssignees.length + entry.scheduledUnassignees.length
+              const assignmentSummary =
+                scheduledCount > 0
+                  ? `${formatPositionAssignmentCount(entry.members.length).replace('Unassigned', '0 assigned')} · ${scheduledCount} scheduled next OP`
+                  : formatPositionAssignmentCount(entry.members.length)
 
               return (
                 <TableRow key={entry.position}>
@@ -352,17 +373,19 @@ export function WorkspacePositionRosterTable({
                   {canManageRoster ? (
                     <TableCell className="align-top">
                       <div className="flex flex-wrap gap-1.5">
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="default"
-                          className="h-7 gap-1 px-2 text-[11px]"
-                          disabled={isAssigningPosition === entry.position}
-                          onClick={() => onInviteToPosition(entry.position)}
-                        >
-                          <Plus className="h-3.5 w-3.5" />
-                          Add user
-                        </Button>
+                        {entry.memberSchedulePolicy.allowActiveAssignment ? (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="default"
+                            className="h-7 gap-1 px-2 text-[11px]"
+                            disabled={isAssigningPosition === entry.position}
+                            onClick={() => onInviteToPosition(entry.position)}
+                          >
+                            <Plus className="h-3.5 w-3.5" />
+                            Add user
+                          </Button>
+                        ) : null}
                         <Popover>
                           <PopoverTrigger asChild>
                             <Button
@@ -370,38 +393,38 @@ export function WorkspacePositionRosterTable({
                               size="sm"
                               variant="outline"
                               className="h-7 gap-1 px-2 text-[11px]"
-                              disabled={
-                                isAssigningPosition === entry.position || assignable.length === 0
-                              }
+                              disabled={isAssigningPosition === entry.position}
                             >
                               <UserPlus className="h-3.5 w-3.5" />
-                              Assign
+                              Manage
                             </Button>
                           </PopoverTrigger>
                           <PopoverContent align="start" className="w-72 p-3">
-                            <div className="space-y-2">
-                              <p className="text-sm font-medium">{entry.position}</p>
-                              {assignable.length === 0 ? (
-                                <p className="text-xs text-muted-foreground">
-                                  All roster members are already assigned here.
-                                </p>
-                              ) : (
-                                assignable.map((member) => (
-                                  <Button
-                                    key={member.id}
-                                    type="button"
-                                    variant="ghost"
-                                    size="sm"
-                                    className="h-8 w-full justify-start truncate text-xs"
-                                    onClick={() =>
-                                      onAssignExistingMember(member.id, entry.position)
-                                    }
-                                  >
-                                    {member.email}
-                                  </Button>
-                                ))
-                              )}
-                            </div>
+                            <PositionRosterDetailPanel
+                              entry={entry}
+                              assignable={assignable}
+                              scheduleAssignable={scheduleAssignable}
+                              scheduleUnassignable={scheduleUnassignable}
+                              canManageRoster={canManageRoster}
+                              isPermissionBusy={isUpdatingPermission === entry.position}
+                              isAssignBusy={isAssigningPosition === entry.position}
+                              showOpAdvanceLabels={showOpAdvanceLabels}
+                              positionMeta={positionMetaByName[entry.position]}
+                              isUpdatingOpAdvanceLabel={isUpdatingOpAdvanceLabel === entry.position}
+                              onOpAdvanceLabelChange={
+                                onOpAdvanceLabelChange
+                                  ? (label) => onOpAdvanceLabelChange(entry.position, label)
+                                  : undefined
+                              }
+                              onToggleEditIcs201={onToggleEditIcs201}
+                              onAssignExistingMember={onAssignExistingMember}
+                              onScheduleAssignMember={onScheduleAssignMember}
+                              onScheduleUnassignMember={onScheduleUnassignMember}
+                              onRemoveScheduledAssign={onRemoveScheduledAssign}
+                              onRemoveScheduledUnassign={onRemoveScheduledUnassign}
+                              onInviteToPosition={onInviteToPosition}
+                              onUnassignMember={onUnassignMember}
+                            />
                           </PopoverContent>
                         </Popover>
                         {entry.isCustom && onDeleteCustomPosition ? (

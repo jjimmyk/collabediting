@@ -39,4 +39,8 @@ export type OpAdvanceLifecycleSummary = {
   retiring: string[]
   creating: string[]
   persistingCount: number
+  memberSchedules?: {
+    assign: Array<{ positionName: string; emails: string[] }>
+    unassign: Array<{ positionName: string; emails: string[] }>
+  }
 }

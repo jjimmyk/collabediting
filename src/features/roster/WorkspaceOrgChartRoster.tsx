@@ -25,6 +25,8 @@ type WorkspaceOrgChartRosterProps = {
   assetsByKey: Record<string, ResourceListItemData>
   visiblePositions: Set<string>
   assignableByPosition: Record<string, WorkspaceRosterMember[]>
+  scheduleAssignableByPosition: Record<string, WorkspaceRosterMember[]>
+  scheduleUnassignableByPosition: Record<string, WorkspaceRosterMember[]>
   canManageRoster: boolean
   glassItemBorderClasses: string
   isUpdatingPermission: string | null
@@ -36,6 +38,10 @@ type WorkspaceOrgChartRosterProps = {
   positionMetaByName?: Record<string, WorkspacePositionMeta>
   onToggleEditIcs201: (position: string, enabled: boolean) => void
   onAssignExistingMember: (memberId: string, position: string) => void
+  onScheduleAssignMember: (memberId: string, position: string) => void
+  onScheduleUnassignMember: (memberId: string, position: string) => void
+  onRemoveScheduledAssign: (memberId: string, position: string) => void
+  onRemoveScheduledUnassign: (memberId: string, position: string) => void
   onInviteToPosition: (position: string) => void
   onUnassignMember: (memberId: string, position: string) => void
   onOpAdvanceLabelChange?: (position: string, label: PositionOpAdvanceLabel) => void
@@ -49,6 +55,8 @@ type OrgChartRenderProps = {
   assetsByKey: Record<string, ResourceListItemData>
   visiblePositions: Set<string>
   assignableByPosition: Record<string, WorkspaceRosterMember[]>
+  scheduleAssignableByPosition: Record<string, WorkspaceRosterMember[]>
+  scheduleUnassignableByPosition: Record<string, WorkspaceRosterMember[]>
   canManageRoster: boolean
   glassItemBorderClasses: string
   isUpdatingPermission: string | null
@@ -58,6 +66,10 @@ type OrgChartRenderProps = {
   positionMetaByName: Record<string, WorkspacePositionMeta>
   onToggleEditIcs201: (position: string, enabled: boolean) => void
   onAssignExistingMember: (memberId: string, position: string) => void
+  onScheduleAssignMember: (memberId: string, position: string) => void
+  onScheduleUnassignMember: (memberId: string, position: string) => void
+  onRemoveScheduledAssign: (memberId: string, position: string) => void
+  onRemoveScheduledUnassign: (memberId: string, position: string) => void
   onInviteToPosition: (position: string) => void
   onUnassignMember: (memberId: string, position: string) => void
   onOpAdvanceLabelChange?: (position: string, label: PositionOpAdvanceLabel) => void
@@ -163,6 +175,8 @@ function PositionNode({
   assetsByKey,
   visiblePositions,
   assignableByPosition,
+  scheduleAssignableByPosition,
+  scheduleUnassignableByPosition,
   canManageRoster,
   glassItemBorderClasses,
   isUpdatingPermission,
@@ -172,6 +186,10 @@ function PositionNode({
   positionMetaByName,
   onToggleEditIcs201,
   onAssignExistingMember,
+  onScheduleAssignMember,
+  onScheduleUnassignMember,
+  onRemoveScheduledAssign,
+  onRemoveScheduledUnassign,
   onInviteToPosition,
   onUnassignMember,
   onOpAdvanceLabelChange,
@@ -192,6 +210,8 @@ function PositionNode({
     assetsByKey,
     visiblePositions,
     assignableByPosition,
+    scheduleAssignableByPosition,
+    scheduleUnassignableByPosition,
     canManageRoster,
     glassItemBorderClasses,
     isUpdatingPermission,
@@ -201,6 +221,10 @@ function PositionNode({
     positionMetaByName,
     onToggleEditIcs201,
     onAssignExistingMember,
+    onScheduleAssignMember,
+    onScheduleUnassignMember,
+    onRemoveScheduledAssign,
+    onRemoveScheduledUnassign,
     onInviteToPosition,
     onUnassignMember,
     onOpAdvanceLabelChange,
@@ -213,6 +237,8 @@ function PositionNode({
       <PositionRosterCard
         entry={entry}
         assignable={assignableByPosition[position] ?? []}
+        scheduleAssignable={scheduleAssignableByPosition[position] ?? []}
+        scheduleUnassignable={scheduleUnassignableByPosition[position] ?? []}
         canManageRoster={canManageRoster}
         glassItemBorderClasses={glassItemBorderClasses}
         isPermissionBusy={isUpdatingPermission === position}
@@ -230,6 +256,10 @@ function PositionNode({
         }
         onToggleEditIcs201={onToggleEditIcs201}
         onAssignExistingMember={onAssignExistingMember}
+        onScheduleAssignMember={onScheduleAssignMember}
+        onScheduleUnassignMember={onScheduleUnassignMember}
+        onRemoveScheduledAssign={onRemoveScheduledAssign}
+        onRemoveScheduledUnassign={onRemoveScheduledUnassign}
         onInviteToPosition={onInviteToPosition}
         onUnassignMember={onUnassignMember}
       />
@@ -352,6 +382,8 @@ export function WorkspaceOrgChartRoster({
   assetsByKey,
   visiblePositions,
   assignableByPosition,
+  scheduleAssignableByPosition,
+  scheduleUnassignableByPosition,
   canManageRoster,
   glassItemBorderClasses,
   isUpdatingPermission,
@@ -363,6 +395,10 @@ export function WorkspaceOrgChartRoster({
   positionMetaByName = {},
   onToggleEditIcs201,
   onAssignExistingMember,
+  onScheduleAssignMember,
+  onScheduleUnassignMember,
+  onRemoveScheduledAssign,
+  onRemoveScheduledUnassign,
   onInviteToPosition,
   onUnassignMember,
   onOpAdvanceLabelChange,
@@ -388,6 +424,8 @@ export function WorkspaceOrgChartRoster({
     assetsByKey,
     visiblePositions,
     assignableByPosition,
+    scheduleAssignableByPosition,
+    scheduleUnassignableByPosition,
     canManageRoster,
     glassItemBorderClasses,
     isUpdatingPermission,
@@ -397,6 +435,10 @@ export function WorkspaceOrgChartRoster({
     positionMetaByName,
     onToggleEditIcs201,
     onAssignExistingMember,
+    onScheduleAssignMember,
+    onScheduleUnassignMember,
+    onRemoveScheduledAssign,
+    onRemoveScheduledUnassign,
     onInviteToPosition,
     onUnassignMember,
     onOpAdvanceLabelChange,

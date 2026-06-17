@@ -1,6 +1,7 @@
 import type { OperationalPeriodRosterSnapshot } from '@/lib/operational-period-roster-types'
 import type { PositionRosterEntry } from '@/features/roster/workspace-position-roster'
 import type { WorkspaceRosterMember } from '@/lib/workspace-types'
+import { getPositionMemberSchedulePolicy } from '@/lib/roster-member-schedule-policy'
 
 export function buildPositionRosterEntriesFromSnapshot(
   snapshot: OperationalPeriodRosterSnapshot,
@@ -22,6 +23,18 @@ export function buildPositionRosterEntriesFromSnapshot(
           addedAt: snapshot.capturedAt,
         })
       ),
+      scheduledAssignees: [],
+      scheduledUnassignees: [],
+      memberSchedulePolicy: getPositionMemberSchedulePolicy({
+        name: position.name,
+        source: position.source,
+        lifecycleStatus: position.lifecycleStatus,
+        opAdvanceLabel: position.opAdvanceLabel,
+        isPlanned: position.lifecycleStatus === 'planned_create',
+        isArchived: position.lifecycleStatus === 'archived',
+        isOnOrgChart:
+          position.lifecycleStatus !== 'planned_create' && position.lifecycleStatus !== 'archived',
+      }),
       editIcs201: position.editIcs201,
       isCustom: position.source === 'custom',
       opAdvanceLabel: position.opAdvanceLabel,

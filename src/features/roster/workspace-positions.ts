@@ -1,4 +1,5 @@
 import { STANDARD_ICS_POSITIONS, WORKSPACE_ROSTER_POSITIONS } from '@/lib/ics-positions'
+import { getPositionMemberSchedulePolicy } from '@/lib/roster-member-schedule-policy'
 import type {
   PositionLifecycleStatus,
   PositionOpAdvanceLabel,
@@ -283,13 +284,31 @@ export function buildOpAdvanceLifecycleSummary(
   return { retiring, creating, persistingCount }
 }
 
-export function canAssignMembersToPosition(
+export function canAssignMembersToPositionNow(
   catalog: WorkspacePositionCatalog,
   positionName: string
 ): boolean {
   const meta = catalog.positionMetaByName[positionName]
   if (!meta || meta.isArchived) return false
-  return meta.isOnOrgChart || meta.isPlanned
+  if (!meta.isOnOrgChart && !meta.isPlanned) return false
+  return getPositionMemberSchedulePolicy(meta).allowActiveAssignment
+}
+
+export function canScheduleMembersForPosition(
+  catalog: WorkspacePositionCatalog,
+  positionName: string
+): boolean {
+  const meta = catalog.positionMetaByName[positionName]
+  if (!meta || meta.isArchived) return false
+  const policy = getPositionMemberSchedulePolicy(meta)
+  return policy.allowScheduleAssign || policy.allowScheduleUnassign
+}
+
+export function canAssignMembersToPosition(
+  catalog: WorkspacePositionCatalog,
+  positionName: string
+): boolean {
+  return canAssignMembersToPositionNow(catalog, positionName)
 }
 
 export function buildReportsToOptions(catalog: WorkspacePositionCatalog): string[] {

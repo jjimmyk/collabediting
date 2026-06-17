@@ -31,6 +31,8 @@ import type { RosterPanelLayoutMode } from '@/features/roster/roster-layout'
 type PositionRosterCardProps = {
   entry: PositionRosterEntry
   assignable: WorkspaceRosterMember[]
+  scheduleAssignable: WorkspaceRosterMember[]
+  scheduleUnassignable: WorkspaceRosterMember[]
   canManageRoster: boolean
   glassItemBorderClasses: string
   isPermissionBusy: boolean
@@ -44,6 +46,10 @@ type PositionRosterCardProps = {
   onOpAdvanceLabelChange?: (label: PositionOpAdvanceLabel) => void
   onToggleEditIcs201: (position: string, enabled: boolean) => void
   onAssignExistingMember: (memberId: string, position: string) => void
+  onScheduleAssignMember: (memberId: string, position: string) => void
+  onScheduleUnassignMember: (memberId: string, position: string) => void
+  onRemoveScheduledAssign: (memberId: string, position: string) => void
+  onRemoveScheduledUnassign: (memberId: string, position: string) => void
   onInviteToPosition: (position: string) => void
   onUnassignMember: (memberId: string, position: string) => void
 }
@@ -51,6 +57,8 @@ type PositionRosterCardProps = {
 export function PositionRosterCard({
   entry,
   assignable,
+  scheduleAssignable,
+  scheduleUnassignable,
   canManageRoster,
   glassItemBorderClasses,
   isPermissionBusy,
@@ -64,6 +72,10 @@ export function PositionRosterCard({
   onOpAdvanceLabelChange,
   onToggleEditIcs201,
   onAssignExistingMember,
+  onScheduleAssignMember,
+  onScheduleUnassignMember,
+  onRemoveScheduledAssign,
+  onRemoveScheduledUnassign,
   onInviteToPosition,
   onUnassignMember,
 }: PositionRosterCardProps) {
@@ -74,11 +86,17 @@ export function PositionRosterCard({
   const panelProps = {
     entry,
     assignable,
+    scheduleAssignable,
+    scheduleUnassignable,
     canManageRoster,
     isPermissionBusy,
     isAssignBusy,
     onToggleEditIcs201,
     onAssignExistingMember,
+    onScheduleAssignMember,
+    onScheduleUnassignMember,
+    onRemoveScheduledAssign,
+    onRemoveScheduledUnassign,
     onInviteToPosition,
     onUnassignMember,
   }
@@ -183,7 +201,7 @@ export function PositionRosterCard({
                   </Badge>
                 </div>
               </div>
-              {canManageRoster && (
+              {canManageRoster && entry.memberSchedulePolicy.allowActiveAssignment && (
                 <Button
                   type="button"
                   size="icon"
@@ -203,17 +221,19 @@ export function PositionRosterCard({
 
       {canManageRoster && (
         <div className="space-y-1">
-          <Button
-            type="button"
-            size="sm"
-            variant="default"
-            className="h-7 w-full min-w-0 gap-1 px-1.5 text-xs leading-tight"
-            disabled={isAssignBusy}
-            onClick={() => onInviteToPosition(entry.position)}
-          >
-            <Plus className="h-3.5 w-3.5 shrink-0" />
-            <span className="truncate">Add new user</span>
-          </Button>
+          {entry.memberSchedulePolicy.allowActiveAssignment ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="default"
+              className="h-7 w-full min-w-0 gap-1 px-1.5 text-xs leading-tight"
+              disabled={isAssignBusy}
+              onClick={() => onInviteToPosition(entry.position)}
+            >
+              <Plus className="h-3.5 w-3.5 shrink-0" />
+              <span className="truncate">Add new user</span>
+            </Button>
+          ) : null}
 
           <Popover>
             <PopoverTrigger asChild>
@@ -222,10 +242,17 @@ export function PositionRosterCard({
                 size="sm"
                 variant="outline"
                 className="h-7 w-full min-w-0 gap-1 px-1.5 text-xs leading-tight"
-                disabled={isAssignBusy || assignable.length === 0}
+                disabled={
+                  isAssignBusy ||
+                  (assignable.length === 0 &&
+                    scheduleAssignable.length === 0 &&
+                    scheduleUnassignable.length === 0 &&
+                    !entry.memberSchedulePolicy.allowScheduleAssign &&
+                    !entry.memberSchedulePolicy.allowScheduleUnassign)
+                }
               >
                 <UserPlus className="h-3.5 w-3.5 shrink-0" />
-                <span className="truncate">Assign existing user</span>
+                <span className="truncate">Manage members</span>
               </Button>
             </PopoverTrigger>
             <PopoverContent

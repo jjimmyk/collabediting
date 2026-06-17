@@ -163,6 +163,26 @@ export function OperationalPeriodSettingsSection({
                   {lifecycleSummary.creating.join(', ')}
                 </p>
               ) : null}
+              {lifecycleSummary.memberSchedules?.assign.length ? (
+                <div className="space-y-1">
+                  <p className="font-medium">Member assign schedules</p>
+                  {lifecycleSummary.memberSchedules.assign.map((row) => (
+                    <p key={`assign-${row.positionName}`}>
+                      <span className="font-medium">{row.positionName}:</span> {row.emails.join(', ')}
+                    </p>
+                  ))}
+                </div>
+              ) : null}
+              {lifecycleSummary.memberSchedules?.unassign.length ? (
+                <div className="space-y-1">
+                  <p className="font-medium">Member unassign schedules</p>
+                  {lifecycleSummary.memberSchedules.unassign.map((row) => (
+                    <p key={`unassign-${row.positionName}`}>
+                      <span className="font-medium">{row.positionName}:</span> {row.emails.join(', ')}
+                    </p>
+                  ))}
+                </div>
+              ) : null}
               <p className="text-muted-foreground">
                 {lifecycleSummary.persistingCount} position
                 {lifecycleSummary.persistingCount === 1 ? '' : 's'} will persist unchanged.

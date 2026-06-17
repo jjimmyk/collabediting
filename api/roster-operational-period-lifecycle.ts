@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { applyMemberSchedulesOnOperationalPeriodAdvance } from './roster-member-schedules-shared.js'
 import { ICS_POSITIONS } from './roster-shared'
 
 type DbCustomPositionRow = {
@@ -412,4 +413,5 @@ export async function snapshotAndApplyRosterLifecycleOnOperationalPeriodAdvance(
   }
 
   await applyRosterLifecycleOnOperationalPeriodAdvance(admin, workspaceId)
+  await applyMemberSchedulesOnOperationalPeriodAdvance(admin, workspaceId)
 }

@@ -9,6 +9,8 @@ import {
 type WorkspacePositionRosterProps = {
   entries: PositionRosterEntry[]
   assignableByPosition: Record<string, WorkspaceRosterMember[]>
+  scheduleAssignableByPosition: Record<string, WorkspaceRosterMember[]>
+  scheduleUnassignableByPosition: Record<string, WorkspaceRosterMember[]>
   canManageRoster: boolean
   glassItemBorderClasses: string
   isUpdatingPermission: string | null
@@ -16,6 +18,10 @@ type WorkspacePositionRosterProps = {
   layoutMode?: RosterPanelLayoutMode
   onToggleEditIcs201: (position: string, enabled: boolean) => void
   onAssignExistingMember: (memberId: string, position: string) => void
+  onScheduleAssignMember: (memberId: string, position: string) => void
+  onScheduleUnassignMember: (memberId: string, position: string) => void
+  onRemoveScheduledAssign: (memberId: string, position: string) => void
+  onRemoveScheduledUnassign: (memberId: string, position: string) => void
   onInviteToPosition: (position: string) => void
   onUnassignMember: (memberId: string, position: string) => void
 }
@@ -23,6 +29,8 @@ type WorkspacePositionRosterProps = {
 export function WorkspacePositionRoster({
   entries,
   assignableByPosition,
+  scheduleAssignableByPosition,
+  scheduleUnassignableByPosition,
   canManageRoster,
   glassItemBorderClasses,
   isUpdatingPermission,
@@ -30,6 +38,10 @@ export function WorkspacePositionRoster({
   layoutMode = 'wide',
   onToggleEditIcs201,
   onAssignExistingMember,
+  onScheduleAssignMember,
+  onScheduleUnassignMember,
+  onRemoveScheduledAssign,
+  onRemoveScheduledUnassign,
   onInviteToPosition,
   onUnassignMember,
 }: WorkspacePositionRosterProps) {
@@ -40,6 +52,8 @@ export function WorkspacePositionRoster({
           key={entry.position}
           entry={entry}
           assignable={assignableByPosition[entry.position] ?? []}
+          scheduleAssignable={scheduleAssignableByPosition[entry.position] ?? []}
+          scheduleUnassignable={scheduleUnassignableByPosition[entry.position] ?? []}
           canManageRoster={canManageRoster}
           glassItemBorderClasses={glassItemBorderClasses}
           isPermissionBusy={isUpdatingPermission === entry.position}
@@ -48,6 +62,10 @@ export function WorkspacePositionRoster({
           layoutMode={layoutMode}
           onToggleEditIcs201={onToggleEditIcs201}
           onAssignExistingMember={onAssignExistingMember}
+          onScheduleAssignMember={onScheduleAssignMember}
+          onScheduleUnassignMember={onScheduleUnassignMember}
+          onRemoveScheduledAssign={onRemoveScheduledAssign}
+          onRemoveScheduledUnassign={onRemoveScheduledUnassign}
           onInviteToPosition={onInviteToPosition}
           onUnassignMember={onUnassignMember}
         />

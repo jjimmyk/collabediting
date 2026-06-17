@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { assertPositionsAllowActiveAssignment } from './roster-member-schedule-policy.js'
 
 export const ICS_POSITIONS = [
   'Incident Commander',
@@ -162,6 +163,8 @@ export async function upsertWorkspaceMemberWithPositions(
   if (normalized.length === 0) {
     throw new Error('At least one ICS position is required.')
   }
+
+  await assertPositionsAllowActiveAssignment(admin, params.workspaceId, normalized)
 
   const primary = primaryIcsPosition(normalized)
 

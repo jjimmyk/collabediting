@@ -1,11 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
-import { assertPositionsAllowActiveAssignment } from './roster-member-schedule-policy.js'
-import {
-  fetchWorkspacePositionAllowlist,
-  parseIcsPositionsInput,
-  replaceWorkspaceMemberPositions,
-} from './roster-shared.js'
+import { replacePositionMemberSchedules } from './roster-member-schedules-shared.js'
 
 const supabaseUrl =
   process.env.VITE_SUPABASE_URL ??
@@ -20,22 +15,18 @@ const ROSTER_MANAGER_POSITIONS = new Set([
   'Operations Section Chief',
 ])
 
-type UpdateRosterMemberBody = {
-  memberId?: string
-  icsPositions?: string[]
+type UpdateSchedulesBody = {
+  workspaceId?: string
+  positionName?: string
+  assignMemberIds?: string[]
+  unassignMemberIds?: string[]
 }
 
 function formatHandlerError(error: unknown): string {
   if (error instanceof Error) {
     return error.message
   }
-  if (error && typeof error === 'object' && 'message' in error) {
-    const message = (error as { message?: unknown }).message
-    if (typeof message === 'string' && message.length > 0) {
-      return message
-    }
-  }
-  return 'Update roster member failed.'
+  return 'Update position member schedules failed.'
 }
 
 async function userCanManageWorkspaceRoster(
@@ -67,15 +58,15 @@ async function userCanManageWorkspaceRoster(
   return positions.some((position) => ROSTER_MANAGER_POSITIONS.has(position))
 }
 
-function parseBody(req: VercelRequest): UpdateRosterMemberBody {
+function parseBody(req: VercelRequest): UpdateSchedulesBody {
   if (typeof req.body === 'string') {
     try {
-      return JSON.parse(req.body) as UpdateRosterMemberBody
+      return JSON.parse(req.body) as UpdateSchedulesBody
     } catch {
       return {}
     }
   }
-  return (req.body ?? {}) as UpdateRosterMemberBody
+  return (req.body ?? {}) as UpdateSchedulesBody
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -98,14 +89,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const body = parseBody(req)
-    const memberId = body.memberId?.trim()
+    const workspaceId = body.workspaceId?.trim()
+    const positionName = body.positionName?.trim()
 
-    if (!memberId) {
-      return res.status(400).json({ error: 'memberId is required.' })
+    if (!workspaceId || !positionName) {
+      return res.status(400).json({ error: 'workspaceId and positionName are required.' })
     }
 
-    const admin = createClient(supabaseUrl, supabaseServiceRoleKey)
+    const assignMemberIds = Array.isArray(body.assignMemberIds)
+      ? body.assignMemberIds.filter((entry): entry is string => typeof entry === 'string')
+      : []
+    const unassignMemberIds = Array.isArray(body.unassignMemberIds)
+      ? body.unassignMemberIds.filter((entry): entry is string => typeof entry === 'string')
+      : []
 
+    const admin = createClient(supabaseUrl, supabaseServiceRoleKey)
     const {
       data: { user },
       error: userError,
@@ -113,20 +111,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (userError || !user) {
       return res.status(401).json({ error: 'Invalid or expired session.' })
-    }
-
-    const { data: member, error: memberError } = await admin
-      .from('workspace_members')
-      .select('id, workspace_id, status')
-      .eq('id', memberId)
-      .maybeSingle()
-
-    if (memberError || !member) {
-      return res.status(404).json({ error: 'Roster member not found.' })
-    }
-
-    if (member.status === 'removed') {
-      return res.status(400).json({ error: 'Cannot update a removed roster member.' })
     }
 
     const { data: profile } = await admin
@@ -138,37 +122,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const canManage = await userCanManageWorkspaceRoster(
       admin,
       user.id,
-      member.workspace_id,
+      workspaceId,
       profile?.is_org_admin === true
     )
 
     if (!canManage) {
-      return res.status(403).json({ error: 'You do not have permission to update roster members.' })
+      return res.status(403).json({ error: 'You do not have permission to update roster schedules.' })
     }
 
-    const allowed = await fetchWorkspacePositionAllowlist(admin, member.workspace_id)
-    const icsPositions = parseIcsPositionsInput(body, undefined, allowed)
-
-    if (icsPositions.length === 0) {
-      return res.status(400).json({
-        error: 'At least one valid icsPosition is required.',
-      })
-    }
-
-    await assertPositionsAllowActiveAssignment(admin, member.workspace_id, icsPositions)
-
-    const assigned = await replaceWorkspaceMemberPositions(
-      admin,
-      memberId,
-      icsPositions,
-      allowed
-    )
-
-    return res.status(200).json({
-      ok: true,
-      memberId,
-      icsPositions: assigned,
+    const result = await replacePositionMemberSchedules(admin, {
+      workspaceId,
+      positionName,
+      assignMemberIds,
+      unassignMemberIds,
+      createdBy: user.id,
     })
+
+    return res.status(200).json({ ok: true, ...result })
   } catch (error) {
     return res.status(500).json({ error: formatHandlerError(error) })
   }

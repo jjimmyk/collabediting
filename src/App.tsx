@@ -524,12 +524,22 @@ import {
   buildDefaultPositionPermissionMap,
   buildPositionRosterEntries,
   rosterMembersAssignableToPosition,
+  rosterMembersScheduleUnassignableFromPosition,
   type PositionPermissionMap,
 } from '@/features/roster/workspace-position-roster'
 import { buildPositionRosterEntriesFromSnapshot } from '@/lib/operational-period-roster-snapshot'
 import {
+  buildMemberScheduleSummaryFromRows,
+  fetchWorkspaceMemberSchedules,
+  groupMemberSchedulesByPosition,
+  updatePositionMemberSchedules,
+  type WorkspaceMemberScheduleRow,
+} from '@/lib/workspace-member-schedule-service'
+import { getPositionMemberSchedulePolicy } from '@/lib/roster-member-schedule-policy'
+import {
   buildOpAdvanceLifecycleSummary,
-  canAssignMembersToPosition,
+  canAssignMembersToPositionNow,
+  canScheduleMembersForPosition,
   canSetOpAdvanceLabelForPosition,
 } from '@/features/roster/workspace-positions'
 import { OperationalPeriodHistoricalRosterShell } from '@/features/operational-periods/OperationalPeriodHistoricalRosterShell'
@@ -8507,6 +8517,9 @@ function App() {
   const [supabaseWorkspaceRoster, setSupabaseWorkspaceRoster] = useState<WorkspaceRosterMember[]>(
     []
   )
+  const [workspaceMemberSchedules, setWorkspaceMemberSchedules] = useState<
+    WorkspaceMemberScheduleRow[]
+  >([])
   const [activeWorkspaceSupabaseId, setActiveWorkspaceSupabaseId] = useState<string | null>(null)
   const {
     hubAssets,
@@ -11892,6 +11905,7 @@ function App() {
       if (!isSupabaseEnabled) {
         setActiveWorkspaceSupabaseId(null)
         setSupabaseWorkspaceRoster([])
+        setWorkspaceMemberSchedules([])
         return
       }
 
@@ -11911,6 +11925,7 @@ function App() {
       if (!kind || legacyId === null) {
         setActiveWorkspaceSupabaseId(null)
         setSupabaseWorkspaceRoster([])
+        setWorkspaceMemberSchedules([])
         return
       }
 
@@ -11922,13 +11937,18 @@ function App() {
       setActiveWorkspaceSupabaseId(workspaceId)
       if (!workspaceId) {
         setSupabaseWorkspaceRoster([])
+        setWorkspaceMemberSchedules([])
         setIsRosterLoading(false)
         return
       }
 
-      const roster = await fetchWorkspaceRoster(workspaceId)
+      const [roster, schedules] = await Promise.all([
+        fetchWorkspaceRoster(workspaceId),
+        fetchWorkspaceMemberSchedules(workspaceId),
+      ])
       if (cancelled) return
       setSupabaseWorkspaceRoster(roster)
+      setWorkspaceMemberSchedules(schedules)
 
       const permissions = await fetchWorkspacePositionPermissions(workspaceId)
       if (cancelled) return
@@ -12995,6 +13015,7 @@ function App() {
       void reloadPositionLifecycle()
       if (activeWorkspaceSupabaseId) {
         void fetchWorkspaceRoster(activeWorkspaceSupabaseId).then(setSupabaseWorkspaceRoster)
+        void fetchWorkspaceMemberSchedules(activeWorkspaceSupabaseId).then(setWorkspaceMemberSchedules)
         void fetchWorkspacePositionPermissions(activeWorkspaceSupabaseId).then(
           setActiveWorkspacePositionPermissions
         )
@@ -13019,10 +13040,24 @@ function App() {
     workspaceId: activeWorkspaceSupabaseId,
     periodNumber: historicalRosterPeriodNumber,
   })
-  const opAdvanceLifecycleSummary = useMemo(
-    () => buildOpAdvanceLifecycleSummary(workspacePositionCatalog),
-    [workspacePositionCatalog]
+  const memberSchedulesByPosition = useMemo(
+    () => groupMemberSchedulesByPosition(workspaceMemberSchedules),
+    [workspaceMemberSchedules]
   )
+  const opAdvanceLifecycleSummary = useMemo(() => {
+    const summary = buildOpAdvanceLifecycleSummary(workspacePositionCatalog)
+    if (workspaceMemberSchedules.length === 0) {
+      return summary
+    }
+    const memberEmailById = new Map(activeWorkspaceRoster.map((member) => [member.id, member.email]))
+    return {
+      ...summary,
+      memberSchedules: buildMemberScheduleSummaryFromRows(
+        workspaceMemberSchedules,
+        memberEmailById
+      ),
+    }
+  }, [activeWorkspaceRoster, workspaceMemberSchedules, workspacePositionCatalog])
   const effectiveCanEditWorkspaceForms =
     canEditIcs201Form && !isViewingHistoricalOperationalPeriod
   const effectiveCanEditWorkspaceFormsRef = useRef(effectiveCanEditWorkspaceForms)
@@ -13465,7 +13500,8 @@ function App() {
       activeWorkspaceRoster,
       activePositionPermissions,
       activePanelSearchQuery,
-      workspacePositionCatalog
+      workspacePositionCatalog,
+      memberSchedulesByPosition
     )
   }, [
     activePanelSearchQuery,
@@ -13473,6 +13509,7 @@ function App() {
     activeWorkspaceRoster,
     historicalRosterSnapshot,
     isViewingHistoricalRoster,
+    memberSchedulesByPosition,
     workspacePositionCatalog,
   ])
   const effectiveCanManageRoster = canManageWorkspaceRoster && !isViewingHistoricalRoster
@@ -13487,14 +13524,57 @@ function App() {
   const assignableByPosition = useMemo(() => {
     const map: Record<string, WorkspaceRosterMember[]> = {}
     for (const position of workspacePositionCatalog.rosterPositionNames) {
-      if (!canAssignMembersToPosition(workspacePositionCatalog, position)) {
+      if (!canAssignMembersToPositionNow(workspacePositionCatalog, position)) {
         map[position] = []
         continue
       }
-      map[position] = rosterMembersAssignableToPosition(activeWorkspaceRoster, position)
+      const schedule = memberSchedulesByPosition[position]
+      map[position] = rosterMembersAssignableToPosition(
+        activeWorkspaceRoster,
+        position,
+        schedule?.assignMemberIds ?? []
+      )
     }
     return map
-  }, [activeWorkspaceRoster, workspacePositionCatalog])
+  }, [activeWorkspaceRoster, memberSchedulesByPosition, workspacePositionCatalog])
+  const scheduleAssignableByPosition = useMemo(() => {
+    const map: Record<string, WorkspaceRosterMember[]> = {}
+    for (const position of workspacePositionCatalog.rosterPositionNames) {
+      if (!canScheduleMembersForPosition(workspacePositionCatalog, position)) {
+        map[position] = []
+        continue
+      }
+      const meta = workspacePositionCatalog.positionMetaByName[position]
+      if (!meta || !getPositionMemberSchedulePolicy(meta).allowScheduleAssign) {
+        map[position] = []
+        continue
+      }
+      const schedule = memberSchedulesByPosition[position]
+      map[position] = rosterMembersAssignableToPosition(
+        activeWorkspaceRoster,
+        position,
+        schedule?.assignMemberIds ?? []
+      )
+    }
+    return map
+  }, [activeWorkspaceRoster, memberSchedulesByPosition, workspacePositionCatalog])
+  const scheduleUnassignableByPosition = useMemo(() => {
+    const map: Record<string, WorkspaceRosterMember[]> = {}
+    for (const position of workspacePositionCatalog.rosterPositionNames) {
+      const meta = workspacePositionCatalog.positionMetaByName[position]
+      if (!meta || !getPositionMemberSchedulePolicy(meta).allowScheduleUnassign) {
+        map[position] = []
+        continue
+      }
+      const schedule = memberSchedulesByPosition[position]
+      map[position] = rosterMembersScheduleUnassignableFromPosition(
+        activeWorkspaceRoster,
+        position,
+        schedule?.unassignMemberIds ?? []
+      )
+    }
+    return map
+  }, [activeWorkspaceRoster, memberSchedulesByPosition, workspacePositionCatalog])
   useEffect(() => {
     if (canEditIcs201Form) {
       return
@@ -14278,6 +14358,112 @@ function App() {
       successMessage: `Removed ${member.email} from ${position}.`,
     })
     setRosterAssigningPosition(null)
+  }
+  const reloadWorkspaceMemberSchedules = async () => {
+    if (!isSupabaseEnabled || !activeWorkspaceSupabaseId) return
+    const schedules = await fetchWorkspaceMemberSchedules(activeWorkspaceSupabaseId)
+    setWorkspaceMemberSchedules(schedules)
+  }
+  const updatePositionScheduleLists = async (
+    position: string,
+    assignMemberIds: string[],
+    unassignMemberIds: string[],
+    successMessage: string
+  ): Promise<boolean> => {
+    if (!isSupabaseEnabled || !activeWorkspaceSupabaseId) {
+      toast.error('This workspace is not synced to Supabase yet.')
+      return false
+    }
+    const accessToken = await getAccessToken()
+    if (!accessToken) {
+      toast.error('Sign in again to update member schedules.')
+      return false
+    }
+
+    setRosterAssigningPosition(position)
+    const result = await updatePositionMemberSchedules({
+      accessToken,
+      workspaceId: activeWorkspaceSupabaseId,
+      positionName: position,
+      assignMemberIds,
+      unassignMemberIds,
+    })
+    setRosterAssigningPosition(null)
+
+    if (!result.ok) {
+      toast.error(result.message)
+      return false
+    }
+
+    await reloadWorkspaceMemberSchedules()
+    toast.success(successMessage)
+    return true
+  }
+  const scheduleAssignMemberToPosition = async (memberId: string, position: string) => {
+    const member = activeWorkspaceRoster.find((entry) => entry.id === memberId)
+    if (!member) return
+
+    const current = memberSchedulesByPosition[position] ?? {
+      assignMemberIds: [],
+      unassignMemberIds: [],
+    }
+    if (current.assignMemberIds.includes(memberId)) return
+
+    await updatePositionScheduleLists(
+      position,
+      [...current.assignMemberIds, memberId],
+      current.unassignMemberIds,
+      `Scheduled ${member.email} to assign to ${position} on next OP.`
+    )
+  }
+  const scheduleUnassignMemberFromPosition = async (memberId: string, position: string) => {
+    const member = activeWorkspaceRoster.find((entry) => entry.id === memberId)
+    if (!member) return
+
+    const current = memberSchedulesByPosition[position] ?? {
+      assignMemberIds: [],
+      unassignMemberIds: [],
+    }
+    if (current.unassignMemberIds.includes(memberId)) return
+
+    await updatePositionScheduleLists(
+      position,
+      current.assignMemberIds,
+      [...current.unassignMemberIds, memberId],
+      `Scheduled ${member.email} to unassign from ${position} on next OP.`
+    )
+  }
+  const removeScheduledAssignFromPosition = async (memberId: string, position: string) => {
+    const member = activeWorkspaceRoster.find((entry) => entry.id === memberId)
+    const current = memberSchedulesByPosition[position] ?? {
+      assignMemberIds: [],
+      unassignMemberIds: [],
+    }
+
+    await updatePositionScheduleLists(
+      position,
+      current.assignMemberIds.filter((entry) => entry !== memberId),
+      current.unassignMemberIds,
+      member
+        ? `Removed ${member.email} from next OP assign schedule for ${position}.`
+        : `Removed member from next OP assign schedule for ${position}.`
+    )
+  }
+  const removeScheduledUnassignFromPosition = async (memberId: string, position: string) => {
+    const member = activeWorkspaceRoster.find((entry) => entry.id === memberId)
+    const current = memberSchedulesByPosition[position] ?? {
+      assignMemberIds: [],
+      unassignMemberIds: [],
+    }
+
+    await updatePositionScheduleLists(
+      position,
+      current.assignMemberIds,
+      current.unassignMemberIds.filter((entry) => entry !== memberId),
+      member
+        ? `Removed ${member.email} from next OP unassign schedule for ${position}.`
+        : `Removed member from next OP unassign schedule for ${position}.`
+    )
   }
   const toggleWorkspacePositionEditIcs201 = async (position: string, enabled: boolean) => {
     if (!canManageWorkspaceRoster) return
@@ -26510,6 +26696,8 @@ function App() {
                       assetsByKey={workspaceAssetsByKey}
                       visiblePositions={visibleRosterPositions}
                       assignableByPosition={assignableByPosition}
+                      scheduleAssignableByPosition={scheduleAssignableByPosition}
+                      scheduleUnassignableByPosition={scheduleUnassignableByPosition}
                       canManageRoster={effectiveCanManageRoster}
                       glassItemBorderClasses={glassItemBorderClasses}
                       isUpdatingPermission={rosterPermissionUpdatingPosition}
@@ -26524,6 +26712,18 @@ function App() {
                       }}
                       onAssignExistingMember={(memberId, position) => {
                         void assignExistingMemberToPosition(memberId, position)
+                      }}
+                      onScheduleAssignMember={(memberId, position) => {
+                        void scheduleAssignMemberToPosition(memberId, position)
+                      }}
+                      onScheduleUnassignMember={(memberId, position) => {
+                        void scheduleUnassignMemberFromPosition(memberId, position)
+                      }}
+                      onRemoveScheduledAssign={(memberId, position) => {
+                        void removeScheduledAssignFromPosition(memberId, position)
+                      }}
+                      onRemoveScheduledUnassign={(memberId, position) => {
+                        void removeScheduledUnassignFromPosition(memberId, position)
                       }}
                       onInviteToPosition={openInviteToPosition}
                       onUnassignMember={(memberId, position) => {
@@ -26545,6 +26745,8 @@ function App() {
                         <WorkspacePositionRosterTable
                       entries={positionRosterEntries}
                       assignableByPosition={assignableByPosition}
+                      scheduleAssignableByPosition={scheduleAssignableByPosition}
+                      scheduleUnassignableByPosition={scheduleUnassignableByPosition}
                       canManageRoster={effectiveCanManageRoster}
                       glassItemBorderClasses={glassItemBorderClasses}
                       isUpdatingPermission={rosterPermissionUpdatingPosition}
@@ -26558,6 +26760,18 @@ function App() {
                       }}
                       onAssignExistingMember={(memberId, position) => {
                         void assignExistingMemberToPosition(memberId, position)
+                      }}
+                      onScheduleAssignMember={(memberId, position) => {
+                        void scheduleAssignMemberToPosition(memberId, position)
+                      }}
+                      onScheduleUnassignMember={(memberId, position) => {
+                        void scheduleUnassignMemberFromPosition(memberId, position)
+                      }}
+                      onRemoveScheduledAssign={(memberId, position) => {
+                        void removeScheduledAssignFromPosition(memberId, position)
+                      }}
+                      onRemoveScheduledUnassign={(memberId, position) => {
+                        void removeScheduledUnassignFromPosition(memberId, position)
                       }}
                       onInviteToPosition={openInviteToPosition}
                       onUnassignMember={(memberId, position) => {

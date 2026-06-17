@@ -1,6 +1,8 @@
 import { WORKSPACE_ROSTER_POSITIONS, WORKSPACE_PERMISSION_EDIT_ICS201 } from '@/lib/ics-positions'
 import type { PositionOpAdvanceLabel } from '@/lib/operational-period-roster-types'
 import type { WorkspaceRosterMember } from '@/lib/workspace-types'
+import { getPositionMemberSchedulePolicy } from '@/lib/roster-member-schedule-policy'
+import type { PositionMemberSchedulePolicy } from '@/lib/roster-member-schedule-policy'
 import {
   emptyWorkspacePositionCatalog,
   isCustomWorkspacePosition,
@@ -12,6 +14,9 @@ export type PositionPermissionMap = Record<string, { editIcs201: boolean }>
 export type PositionRosterEntry = {
   position: string
   members: WorkspaceRosterMember[]
+  scheduledAssignees: WorkspaceRosterMember[]
+  scheduledUnassignees: WorkspaceRosterMember[]
+  memberSchedulePolicy: PositionMemberSchedulePolicy
   editIcs201: boolean
   isCustom?: boolean
   opAdvanceLabel?: PositionOpAdvanceLabel
@@ -79,18 +84,34 @@ export function buildPositionRosterEntries(
   roster: WorkspaceRosterMember[],
   permissions: PositionPermissionMap,
   searchQuery: string,
-  catalog: WorkspacePositionCatalog = emptyWorkspacePositionCatalog()
+  catalog: WorkspacePositionCatalog = emptyWorkspacePositionCatalog(),
+  schedulesByPosition: Record<string, { assignMemberIds: string[]; unassignMemberIds: string[] }> = {}
 ): PositionRosterEntry[] {
   const normalizedQuery = searchQuery.trim().toLowerCase()
+  const memberById = new Map(roster.map((member) => [member.id, member]))
 
   return catalog.rosterPositionNames
     .map((position) => {
       const meta = catalog.positionMetaByName[position]
+      const schedule = schedulesByPosition[position] ?? {
+        assignMemberIds: [],
+        unassignMemberIds: [],
+      }
+      const scheduledAssignees = schedule.assignMemberIds
+        .map((memberId) => memberById.get(memberId))
+        .filter((member): member is WorkspaceRosterMember => Boolean(member))
+      const scheduledUnassignees = schedule.unassignMemberIds
+        .map((memberId) => memberById.get(memberId))
+        .filter((member): member is WorkspaceRosterMember => Boolean(member))
+
       return {
         position,
         members: roster.filter(
           (member) => member.status !== 'removed' && member.icsPositions.includes(position)
         ),
+        scheduledAssignees,
+        scheduledUnassignees,
+        memberSchedulePolicy: getPositionMemberSchedulePolicy(meta),
         editIcs201: permissions[position]?.editIcs201 ?? !catalog.customPositionNames.has(position),
         isCustom: isCustomWorkspacePosition(position, catalog),
         opAdvanceLabel: meta?.opAdvanceLabel ?? null,
@@ -100,7 +121,12 @@ export function buildPositionRosterEntries(
     .filter((entry) => {
       if (!normalizedQuery) return true
       if (entry.position.toLowerCase().includes(normalizedQuery)) return true
-      return entry.members.some((member) =>
+      const searchableMembers = [
+        ...entry.members,
+        ...entry.scheduledAssignees,
+        ...entry.scheduledUnassignees,
+      ]
+      return searchableMembers.some((member) =>
         [member.email, member.status, member.addedAt].join(' ').toLowerCase().includes(normalizedQuery)
       )
     })
@@ -108,10 +134,30 @@ export function buildPositionRosterEntries(
 
 export function rosterMembersAssignableToPosition(
   roster: WorkspaceRosterMember[],
-  position: string
+  position: string,
+  scheduledAssignMemberIds: string[] = []
 ): WorkspaceRosterMember[] {
+  const scheduled = new Set(scheduledAssignMemberIds)
   return roster.filter(
-    (member) => member.status !== 'removed' && !member.icsPositions.includes(position)
+    (member) =>
+      member.status !== 'removed' &&
+      !member.icsPositions.includes(position) &&
+      !scheduled.has(member.id)
+  )
+}
+
+export function rosterMembersScheduleUnassignableFromPosition(
+  roster: WorkspaceRosterMember[],
+  position: string,
+  scheduledUnassignMemberIds: string[] = []
+): WorkspaceRosterMember[] {
+  const scheduled = new Set(scheduledUnassignMemberIds)
+  return roster.filter(
+    (member) =>
+      member.status !== 'removed' &&
+      member.icsPositions.includes(position) &&
+      member.icsPositions.length > 1 &&
+      !scheduled.has(member.id)
   )
 }
 
