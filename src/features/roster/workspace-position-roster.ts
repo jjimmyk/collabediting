@@ -156,7 +156,6 @@ export function rosterMembersScheduleUnassignableFromPosition(
     (member) =>
       member.status !== 'removed' &&
       member.icsPositions.includes(position) &&
-      member.icsPositions.length > 1 &&
       !scheduled.has(member.id)
   )
 }

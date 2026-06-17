@@ -123,11 +123,6 @@ export async function replacePositionMemberSchedules(
     if (!positions.includes(positionName)) {
       throw new Error('Member is not currently assigned to this position.')
     }
-    if (positions.length === 1) {
-      throw new Error(
-        'Cannot schedule unassign for a member whose only position is this role. Assign another position first.'
-      )
-    }
   }
 
   const { error: deleteError } = await admin
@@ -259,9 +254,14 @@ export async function applyMemberSchedulesOnOperationalPeriodAdvance(
 
     const nextPositions = current.filter((entry) => entry !== schedule.position_name)
     if (nextPositions.length === 0) {
-      throw new Error(
-        `Cannot unassign ${schedule.position_name}: member would have no remaining positions.`
-      )
+      const { error } = await admin
+        .from('workspace_members')
+        .update({ status: 'removed' })
+        .eq('id', schedule.member_id)
+        .eq('workspace_id', workspaceId)
+      if (error) throw new Error(error.message)
+      positionsByMemberId.delete(schedule.member_id)
+      continue
     }
 
     await replaceWorkspaceMemberPositions(admin, schedule.member_id, nextPositions, allowed)
