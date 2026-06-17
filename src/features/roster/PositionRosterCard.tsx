@@ -3,7 +3,6 @@ import { Plus, Trash2, UserPlus } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Item, ItemDescription, ItemTitle } from '@/components/ui/item'
-import { Label } from '@/components/ui/label'
 import {
   Dialog,
   DialogContent,
@@ -14,7 +13,6 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover'
-import { Switch } from '@/components/ui/switch'
 import { cn } from '@/lib/utils'
 import type { WorkspaceMemberCheckInStatus, WorkspaceRosterMember } from '@/lib/workspace-types'
 import type { PositionRosterEntry } from '@/features/roster/workspace-position-roster'
@@ -25,6 +23,10 @@ import type {
 import type { PositionOpAdvanceLabel } from '@/lib/operational-period-roster-types'
 import { PositionLifecycleBadges } from '@/features/roster/PositionLifecycleBadges'
 import { PositionRosterDetailPanel } from '@/features/roster/PositionRosterDetailPanel'
+import {
+  PositionPermissionsSection,
+  PositionPropertiesSection,
+} from '@/features/roster/PositionRosterPropertySections'
 import type { WorkspacePositionMeta } from '@/features/roster/workspace-positions'
 import {
   orgChartColorClasses,
@@ -187,33 +189,20 @@ export function PositionRosterCard({
         </ItemDescription>
       </div>
 
-      <div className="flex items-center justify-between gap-2 rounded-md border bg-muted/20 px-2.5 py-2">
-        <Label htmlFor={`edit-ics201-${entry.position}`} className="text-xs font-medium">
-          Edit ICS-201
-        </Label>
-        <Switch
-          id={`edit-ics201-${entry.position}`}
-          size="sm"
-          checked={entry.editIcs201}
-          disabled={!canManageRoster || isPermissionBusy}
-          onCheckedChange={(checked) => onToggleEditIcs201(entry.position, checked)}
-        />
-      </div>
+      <PositionPermissionsSection
+        entry={entry}
+        canManageRoster={canManageRoster}
+        isBusy={isPermissionBusy}
+        onToggleEditIcs201={onToggleEditIcs201}
+      />
 
-      {showAllowWorkAssignment && onToggleAllowWorkAssignment ? (
-        <div className="flex items-center justify-between gap-2 rounded-md border bg-muted/20 px-2.5 py-2">
-          <Label htmlFor={`allow-work-assignment-${entry.position}`} className="text-xs font-medium">
-            Allow Work Assignment
-          </Label>
-          <Switch
-            id={`allow-work-assignment-${entry.position}`}
-            size="sm"
-            checked={entry.allowWorkAssignment}
-            disabled={!canManageRoster || isPermissionBusy}
-            onCheckedChange={(checked) => onToggleAllowWorkAssignment(entry.position, checked)}
-          />
-        </div>
-      ) : null}
+      <PositionPropertiesSection
+        entry={entry}
+        canManageRoster={canManageRoster}
+        isBusy={isPermissionBusy}
+        showAllowWorkAssignment={showAllowWorkAssignment}
+        onToggleAllowWorkAssignment={onToggleAllowWorkAssignment}
+      />
 
       <div className="space-y-1.5">
         {entry.members.length === 0 ? (

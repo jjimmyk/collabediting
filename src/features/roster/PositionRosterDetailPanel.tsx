@@ -8,7 +8,6 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover'
-import { Switch } from '@/components/ui/switch'
 import type { WorkspaceMemberCheckInStatus, WorkspaceRosterMember } from '@/lib/workspace-types'
 import type { PositionOpAdvanceLabel } from '@/lib/operational-period-roster-types'
 import type { PositionRosterEntry } from '@/features/roster/workspace-position-roster'
@@ -23,6 +22,10 @@ import {
   type RosterInviteAssignmentMode,
 } from '@/features/roster/position-roster-messages'
 import { PositionRosterInviteForm } from '@/features/roster/PositionRosterInviteForm'
+import {
+  PositionPermissionsSection,
+  PositionPropertiesSection,
+} from '@/features/roster/PositionRosterPropertySections'
 import type { WorkspacePositionMeta } from '@/features/roster/workspace-positions'
 
 type PositionRosterDetailPanelProps = {
@@ -318,33 +321,20 @@ export function PositionRosterDetailPanel({
         ) : null}
       </div>
 
-      <div className="flex items-center justify-between gap-2 rounded-md border bg-muted/20 px-2.5 py-2">
-        <Label htmlFor={`edit-ics201-panel-${entry.position}`} className="text-xs">
-          Edit ICS-201
-        </Label>
-        <Switch
-          id={`edit-ics201-panel-${entry.position}`}
-          size="sm"
-          checked={entry.editIcs201}
-          disabled={!canManageRoster || isPermissionBusy}
-          onCheckedChange={(checked) => onToggleEditIcs201(entry.position, checked)}
-        />
-      </div>
+      <PositionPermissionsSection
+        entry={entry}
+        canManageRoster={canManageRoster}
+        isBusy={isPermissionBusy}
+        onToggleEditIcs201={onToggleEditIcs201}
+      />
 
-      {showAllowWorkAssignment && onToggleAllowWorkAssignment ? (
-        <div className="flex items-center justify-between gap-2 rounded-md border bg-muted/20 px-2.5 py-2">
-          <Label htmlFor={`allow-work-assignment-panel-${entry.position}`} className="text-xs">
-            Allow Work Assignment
-          </Label>
-          <Switch
-            id={`allow-work-assignment-panel-${entry.position}`}
-            size="sm"
-            checked={entry.allowWorkAssignment}
-            disabled={!canManageRoster || isPermissionBusy}
-            onCheckedChange={(checked) => onToggleAllowWorkAssignment(entry.position, checked)}
-          />
-        </div>
-      ) : null}
+      <PositionPropertiesSection
+        entry={entry}
+        canManageRoster={canManageRoster}
+        isBusy={isPermissionBusy}
+        showAllowWorkAssignment={showAllowWorkAssignment}
+        onToggleAllowWorkAssignment={onToggleAllowWorkAssignment}
+      />
 
       {showOpAdvanceLabels && onOpAdvanceLabelChange ? (
         <div className="space-y-1.5 rounded-md border bg-muted/20 px-2.5 py-2">

@@ -16,7 +16,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Switch } from '@/components/ui/switch'
 import {
   Table,
   TableBody,
@@ -35,6 +34,10 @@ import {
 } from '@/features/roster/workspace-position-roster'
 import { PositionOpAdvanceLabelSelect } from '@/features/roster/PositionOpAdvanceLabelSelect'
 import { PositionRosterDetailPanel } from '@/features/roster/PositionRosterDetailPanel'
+import {
+  PositionPermissionsSection,
+  PositionPropertiesSection,
+} from '@/features/roster/PositionRosterPropertySections'
 import { RosterMemberCheckInStatusSelect } from '@/features/roster/RosterMemberCheckInStatusSelect'
 import type { PositionOpAdvanceLabel } from '@/lib/operational-period-roster-types'
 import type { WorkspacePositionMeta } from '@/features/roster/workspace-positions'
@@ -288,9 +291,9 @@ export function WorkspacePositionRosterTable({
                 ) : null}
               </div>
             </TableHead>
-            <TableHead className="w-[7rem] align-bottom">Edit ICS-201</TableHead>
+            <TableHead className="min-w-[9rem] align-bottom">Permissions</TableHead>
             {showAllowWorkAssignment ? (
-              <TableHead className="min-w-[9rem] align-bottom">Allow Work Assignment</TableHead>
+              <TableHead className="min-w-[11rem] align-bottom">Position Properties</TableHead>
             ) : null}
             {showOpAdvanceLabels ? (
               <TableHead className="min-w-[10rem] align-bottom">Next OP period</TableHead>
@@ -385,41 +388,24 @@ export function WorkspacePositionRosterTable({
                     </div>
                   </TableCell>
                   <TableCell className="align-top">
-                    <div className="flex items-center gap-2">
-                      <Switch
-                        id={`edit-ics201-table-${entry.position}`}
-                        size="sm"
-                        checked={entry.editIcs201}
-                        disabled={!canManageRoster || isUpdatingPermission === entry.position}
-                        onCheckedChange={(checked) => onToggleEditIcs201(entry.position, checked)}
-                      />
-                      <Label
-                        htmlFor={`edit-ics201-table-${entry.position}`}
-                        className="sr-only"
-                      >
-                        Edit ICS-201 for {entry.position}
-                      </Label>
-                    </div>
+                    <PositionPermissionsSection
+                      entry={entry}
+                      canManageRoster={canManageRoster}
+                      isBusy={isUpdatingPermission === entry.position}
+                      onToggleEditIcs201={onToggleEditIcs201}
+                      variant="table"
+                    />
                   </TableCell>
                   {showAllowWorkAssignment && onToggleAllowWorkAssignment ? (
                     <TableCell className="align-top">
-                      <div className="flex items-center gap-2">
-                        <Switch
-                          id={`allow-work-assignment-table-${entry.position}`}
-                          size="sm"
-                          checked={entry.allowWorkAssignment}
-                          disabled={!canManageRoster || isUpdatingPermission === entry.position}
-                          onCheckedChange={(checked) =>
-                            onToggleAllowWorkAssignment(entry.position, checked)
-                          }
-                        />
-                        <Label
-                          htmlFor={`allow-work-assignment-table-${entry.position}`}
-                          className="sr-only"
-                        >
-                          Allow Work Assignment for {entry.position}
-                        </Label>
-                      </div>
+                      <PositionPropertiesSection
+                        entry={entry}
+                        canManageRoster={canManageRoster}
+                        isBusy={isUpdatingPermission === entry.position}
+                        showAllowWorkAssignment={showAllowWorkAssignment}
+                        onToggleAllowWorkAssignment={onToggleAllowWorkAssignment}
+                        variant="table"
+                      />
                     </TableCell>
                   ) : null}
                   {showOpAdvanceLabels ? (
