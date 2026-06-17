@@ -41,6 +41,8 @@ type WorkspaceOrgChartRosterProps = {
   showOpAdvanceLabels?: boolean
   positionMetaByName?: Record<string, WorkspacePositionMeta>
   onToggleEditIcs201: (position: string, enabled: boolean) => void
+  showAllowWorkAssignment?: boolean
+  onToggleAllowWorkAssignment?: (position: string, enabled: boolean) => void
   onAssignExistingMember: (memberId: string, position: string) => void
   onScheduleAssignMember: (memberId: string, position: string) => void
   onScheduleUnassignMember: (memberId: string, position: string) => void
@@ -89,6 +91,8 @@ type OrgChartRenderProps = {
   canEditCheckInStatus: boolean
   updatingCheckInMemberId: string | null
   onCheckInStatusChange?: (memberId: string, status: WorkspaceMemberCheckInStatus) => void
+  showAllowWorkAssignment: boolean
+  onToggleAllowWorkAssignment?: (position: string, enabled: boolean) => void
 }
 
 function filterVisibleOrgChartChildren(
@@ -214,6 +218,8 @@ function PositionNode({
   canEditCheckInStatus,
   updatingCheckInMemberId,
   onCheckInStatusChange,
+  showAllowWorkAssignment,
+  onToggleAllowWorkAssignment,
 }: {
   position: string
   color?: OrgChartColor
@@ -254,6 +260,8 @@ function PositionNode({
     canEditCheckInStatus,
     updatingCheckInMemberId,
     onCheckInStatusChange,
+    showAllowWorkAssignment,
+    onToggleAllowWorkAssignment,
   }
 
   return (
@@ -291,6 +299,8 @@ function PositionNode({
         canEditCheckInStatus={canEditCheckInStatus}
         updatingCheckInMemberId={updatingCheckInMemberId}
         onCheckInStatusChange={onCheckInStatusChange}
+        showAllowWorkAssignment={showAllowWorkAssignment}
+        onToggleAllowWorkAssignment={onToggleAllowWorkAssignment}
       />
       <OrgChartChildren children={children} parentColor={color} renderProps={renderProps} />
     </div>
@@ -438,6 +448,8 @@ export function WorkspaceOrgChartRoster({
   canEditCheckInStatus = false,
   updatingCheckInMemberId = null,
   onCheckInStatusChange,
+  showAllowWorkAssignment = false,
+  onToggleAllowWorkAssignment,
 }: WorkspaceOrgChartRosterProps) {
   const visibleSectionBranches = orgChartLayout.sectionBranches.filter((branch) =>
     branch.children.some(
@@ -483,6 +495,8 @@ export function WorkspaceOrgChartRoster({
     canEditCheckInStatus,
     updatingCheckInMemberId,
     onCheckInStatusChange,
+    showAllowWorkAssignment,
+    onToggleAllowWorkAssignment,
   }
 
   return (

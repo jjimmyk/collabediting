@@ -48,6 +48,7 @@ export type OperationalPeriodRosterSnapshotPayload = {
     opAdvanceLabel: 'retire_on_op_advance' | 'create_on_op_advance' | null
     reportsTo?: string | null
     editIcs201: boolean
+    allowWorkAssignment: boolean
     members: Array<{ email: string; status: string; icsPositions: string[]; checkInStatus: string }>
   }>
   orgChartAssetPlacements: Array<{ assetKey: string; reportsTo: string | null }>
@@ -118,9 +119,13 @@ async function loadRosterLifecycleContext(admin: SupabaseClient, workspaceId: st
   }
 
   const editIcs201ByPosition = new Map<string, boolean>()
+  const allowWorkAssignmentByPosition = new Map<string, boolean>()
   for (const row of permissions) {
     if (row.permission === 'edit_ics201') {
       editIcs201ByPosition.set(row.ics_position, true)
+    }
+    if (row.permission === 'allow_work_assignment') {
+      allowWorkAssignmentByPosition.set(row.ics_position, true)
     }
   }
 
@@ -135,6 +140,7 @@ async function loadRosterLifecycleContext(admin: SupabaseClient, workspaceId: st
     members,
     positionsByMemberId,
     editIcs201ByPosition,
+    allowWorkAssignmentByPosition,
     assets,
   }
 }
@@ -163,6 +169,7 @@ function buildOperationalPeriodRosterSnapshot(
       opAdvanceLabel,
       reportsTo: null,
       editIcs201: context.editIcs201ByPosition.get(positionName) ?? true,
+      allowWorkAssignment: context.allowWorkAssignmentByPosition.get(positionName) ?? true,
       members: context.members
         .map((member) => ({
           member,
@@ -192,6 +199,7 @@ function buildOperationalPeriodRosterSnapshot(
       opAdvanceLabel: opAdvanceLabelFromCustomStatus(custom.lifecycle_status),
       reportsTo: custom.reports_to,
       editIcs201: context.editIcs201ByPosition.get(custom.name) ?? false,
+      allowWorkAssignment: context.allowWorkAssignmentByPosition.get(custom.name) ?? false,
       members: context.members
         .map((member) => ({
           member,

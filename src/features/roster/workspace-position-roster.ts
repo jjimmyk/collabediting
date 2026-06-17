@@ -1,4 +1,7 @@
-import { WORKSPACE_ROSTER_POSITIONS, WORKSPACE_PERMISSION_EDIT_ICS201 } from '@/lib/ics-positions'
+import {
+  WORKSPACE_PERMISSION_ALLOW_WORK_ASSIGNMENT,
+  WORKSPACE_PERMISSION_EDIT_ICS201,
+} from '@/lib/ics-positions'
 import type { PositionOpAdvanceLabel } from '@/lib/operational-period-roster-types'
 import type { WorkspaceRosterMember } from '@/lib/workspace-types'
 import { getPositionMemberSchedulePolicy } from '@/lib/roster-member-schedule-policy'
@@ -9,7 +12,10 @@ import {
   type WorkspacePositionCatalog,
 } from '@/features/roster/workspace-positions'
 
-export type PositionPermissionMap = Record<string, { editIcs201: boolean }>
+export type PositionPermissionMap = Record<
+  string,
+  { editIcs201: boolean; allowWorkAssignment: boolean }
+>
 
 export type PositionRosterEntry = {
   position: string
@@ -18,6 +24,7 @@ export type PositionRosterEntry = {
   scheduledUnassignees: WorkspaceRosterMember[]
   memberSchedulePolicy: PositionMemberSchedulePolicy
   editIcs201: boolean
+  allowWorkAssignment: boolean
   isCustom?: boolean
   opAdvanceLabel?: PositionOpAdvanceLabel
   isPlanned?: boolean
@@ -73,8 +80,10 @@ export function buildDefaultPositionPermissionMap(
 ): PositionPermissionMap {
   const map: PositionPermissionMap = {}
   for (const position of catalog.allPositionNames) {
+    const isCustom = catalog.customPositionNames.has(position)
     map[position] = {
-      editIcs201: !catalog.customPositionNames.has(position),
+      editIcs201: !isCustom,
+      allowWorkAssignment: !isCustom,
     }
   }
   return map
@@ -113,6 +122,8 @@ export function buildPositionRosterEntries(
         scheduledUnassignees,
         memberSchedulePolicy: getPositionMemberSchedulePolicy(meta),
         editIcs201: permissions[position]?.editIcs201 ?? !catalog.customPositionNames.has(position),
+        allowWorkAssignment:
+          permissions[position]?.allowWorkAssignment ?? !catalog.customPositionNames.has(position),
         isCustom: isCustomWorkspacePosition(position, catalog),
         opAdvanceLabel: meta?.opAdvanceLabel ?? null,
         isPlanned: meta?.isPlanned ?? false,
@@ -166,11 +177,15 @@ export function permissionsFromRows(
 ): PositionPermissionMap {
   const map = buildDefaultPositionPermissionMap(catalog)
   for (const position of catalog.allPositionNames) {
-    map[position] = { editIcs201: false }
+    map[position] = { editIcs201: false, allowWorkAssignment: false }
   }
   for (const row of rows) {
-    if (row.permission === WORKSPACE_PERMISSION_EDIT_ICS201 && map[row.ics_position]) {
-      map[row.ics_position] = { editIcs201: true }
+    if (!map[row.ics_position]) continue
+    if (row.permission === WORKSPACE_PERMISSION_EDIT_ICS201) {
+      map[row.ics_position].editIcs201 = true
+    }
+    if (row.permission === WORKSPACE_PERMISSION_ALLOW_WORK_ASSIGNMENT) {
+      map[row.ics_position].allowWorkAssignment = true
     }
   }
   return map

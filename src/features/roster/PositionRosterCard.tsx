@@ -49,6 +49,8 @@ type PositionRosterCardProps = {
   isUpdatingOpAdvanceLabel?: boolean
   onOpAdvanceLabelChange?: (label: PositionOpAdvanceLabel) => void
   onToggleEditIcs201: (position: string, enabled: boolean) => void
+  showAllowWorkAssignment?: boolean
+  onToggleAllowWorkAssignment?: (position: string, enabled: boolean) => void
   onAssignExistingMember: (memberId: string, position: string) => void
   onScheduleAssignMember: (memberId: string, position: string) => void
   onScheduleUnassignMember: (memberId: string, position: string) => void
@@ -80,6 +82,8 @@ export function PositionRosterCard({
   isUpdatingOpAdvanceLabel = false,
   onOpAdvanceLabelChange,
   onToggleEditIcs201,
+  showAllowWorkAssignment = false,
+  onToggleAllowWorkAssignment,
   onAssignExistingMember,
   onScheduleAssignMember,
   onScheduleUnassignMember,
@@ -106,6 +110,8 @@ export function PositionRosterCard({
     isPermissionBusy,
     isAssignBusy,
     onToggleEditIcs201,
+    showAllowWorkAssignment,
+    onToggleAllowWorkAssignment,
     onAssignExistingMember,
     onScheduleAssignMember,
     onScheduleUnassignMember,
@@ -193,6 +199,21 @@ export function PositionRosterCard({
           onCheckedChange={(checked) => onToggleEditIcs201(entry.position, checked)}
         />
       </div>
+
+      {showAllowWorkAssignment && onToggleAllowWorkAssignment ? (
+        <div className="flex items-center justify-between gap-2 rounded-md border bg-muted/20 px-2.5 py-2">
+          <Label htmlFor={`allow-work-assignment-${entry.position}`} className="text-xs font-medium">
+            Allow Work Assignment
+          </Label>
+          <Switch
+            id={`allow-work-assignment-${entry.position}`}
+            size="sm"
+            checked={entry.allowWorkAssignment}
+            disabled={!canManageRoster || isPermissionBusy}
+            onCheckedChange={(checked) => onToggleAllowWorkAssignment(entry.position, checked)}
+          />
+        </div>
+      ) : null}
 
       <div className="space-y-1.5">
         {entry.members.length === 0 ? (

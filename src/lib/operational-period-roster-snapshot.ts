@@ -37,6 +37,7 @@ export function buildPositionRosterEntriesFromSnapshot(
           position.lifecycleStatus !== 'planned_create' && position.lifecycleStatus !== 'archived',
       }),
       editIcs201: position.editIcs201,
+      allowWorkAssignment: position.allowWorkAssignment ?? position.source !== 'custom',
       isCustom: position.source === 'custom',
       opAdvanceLabel: position.opAdvanceLabel,
       isPlanned: position.lifecycleStatus === 'planned_create',

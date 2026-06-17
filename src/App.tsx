@@ -200,6 +200,7 @@ import {
   removeWorkspaceRosterMember as removeWorkspaceRosterMemberFromDb,
   resolveWorkspaceId,
   setWorkspaceArchived,
+  setWorkspacePositionAllowWorkAssignment,
   setWorkspacePositionEditIcs201,
   updateRosterMemberCheckInStatus,
   updateRosterMemberPositions,
@@ -13045,6 +13046,7 @@ function App() {
     (isInIncidentWorkspace || isInExerciseWorkspace) && !isViewingHistoricalRoster
   const showMemberCheckInStatus = isInIncidentWorkspace || isInExerciseWorkspace
   const canEditMemberCheckInStatus = showMemberCheckInStatus && !isViewingHistoricalRoster
+  const showAllowWorkAssignment = isInIncidentWorkspace || isInExerciseWorkspace
   const historicalRosterPeriodNumber =
     formsOperationalPeriodView === 'working' ? null : formsOperationalPeriodView
   const {
@@ -14602,7 +14604,7 @@ function App() {
     )
   }
   const toggleWorkspacePositionEditIcs201 = async (position: string, enabled: boolean) => {
-    if (!canManageWorkspaceRoster) return
+    if (!canManageWorkspaceRoster || isViewingHistoricalRoster) return
 
     setRosterPermissionUpdatingPosition(position)
 
@@ -14637,7 +14639,62 @@ function App() {
         ...previous,
         [activeWorkspaceRosterKey]: {
           ...current,
-          [position]: { editIcs201: enabled },
+          [position]: {
+            ...(current[position] ??
+              buildDefaultPositionPermissionMap(workspacePositionCatalog)[position] ?? {
+                editIcs201: false,
+                allowWorkAssignment: false,
+              }),
+            editIcs201: enabled,
+          },
+        },
+      }
+    })
+    setRosterPermissionUpdatingPosition(null)
+  }
+  const toggleWorkspacePositionAllowWorkAssignment = async (position: string, enabled: boolean) => {
+    if (!canManageWorkspaceRoster || isViewingHistoricalRoster) return
+
+    setRosterPermissionUpdatingPosition(position)
+
+    if (isSupabaseEnabled && activeWorkspaceSupabaseId) {
+      const result = await setWorkspacePositionAllowWorkAssignment(
+        activeWorkspaceSupabaseId,
+        position,
+        enabled
+      )
+      if (!result.ok) {
+        setRosterPermissionUpdatingPosition(null)
+        toast.error(result.message)
+        return
+      }
+      const permissions = await fetchWorkspacePositionPermissions(activeWorkspaceSupabaseId)
+      setActiveWorkspacePositionPermissions(permissions)
+      setRosterPermissionUpdatingPosition(null)
+      return
+    }
+
+    if (activeWorkspaceRosterKey === null) {
+      setRosterPermissionUpdatingPosition(null)
+      return
+    }
+
+    setLocalPositionPermissionsByKey((previous) => {
+      const current =
+        previous[activeWorkspaceRosterKey] ??
+        buildDefaultPositionPermissionMap(workspacePositionCatalog)
+      return {
+        ...previous,
+        [activeWorkspaceRosterKey]: {
+          ...current,
+          [position]: {
+            ...(current[position] ??
+              buildDefaultPositionPermissionMap(workspacePositionCatalog)[position] ?? {
+                editIcs201: false,
+                allowWorkAssignment: false,
+              }),
+            allowWorkAssignment: enabled,
+          },
         },
       }
     })
@@ -14664,7 +14721,7 @@ function App() {
           [activeWorkspaceRosterKey]: {
             ...(previous[activeWorkspaceRosterKey] ??
               buildDefaultPositionPermissionMap(workspacePositionCatalog)),
-            [created.name]: { editIcs201: false },
+            [created.name]: { editIcs201: false, allowWorkAssignment: false },
           },
         }))
       }
@@ -26846,6 +26903,10 @@ function App() {
                       onToggleEditIcs201={(position, enabled) => {
                         void toggleWorkspacePositionEditIcs201(position, enabled)
                       }}
+                      showAllowWorkAssignment={showAllowWorkAssignment}
+                      onToggleAllowWorkAssignment={(position, enabled) => {
+                        void toggleWorkspacePositionAllowWorkAssignment(position, enabled)
+                      }}
                       onAssignExistingMember={(memberId, position) => {
                         void assignExistingMemberToPosition(memberId, position)
                       }}
@@ -26904,6 +26965,10 @@ function App() {
                       isUpdatingOpAdvanceLabel={updatingOpAdvanceLabelPosition}
                       onToggleEditIcs201={(position, enabled) => {
                         void toggleWorkspacePositionEditIcs201(position, enabled)
+                      }}
+                      showAllowWorkAssignment={showAllowWorkAssignment}
+                      onToggleAllowWorkAssignment={(position, enabled) => {
+                        void toggleWorkspacePositionAllowWorkAssignment(position, enabled)
                       }}
                       onAssignExistingMember={(memberId, position) => {
                         void assignExistingMemberToPosition(memberId, position)

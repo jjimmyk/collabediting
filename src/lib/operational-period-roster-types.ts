@@ -22,6 +22,7 @@ export type OperationalPeriodRosterSnapshotPosition = {
   opAdvanceLabel: PositionOpAdvanceLabel
   reportsTo?: string | null
   editIcs201: boolean
+  allowWorkAssignment: boolean
   members: OperationalPeriodRosterSnapshotMember[]
 }
 

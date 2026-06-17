@@ -54,6 +54,8 @@ type WorkspacePositionRosterTableProps = {
   positionMetaByName?: Record<string, WorkspacePositionMeta>
   isUpdatingOpAdvanceLabel?: string | null
   onToggleEditIcs201: (position: string, enabled: boolean) => void
+  showAllowWorkAssignment?: boolean
+  onToggleAllowWorkAssignment?: (position: string, enabled: boolean) => void
   onAssignExistingMember: (memberId: string, position: string) => void
   onScheduleAssignMember: (memberId: string, position: string) => void
   onScheduleUnassignMember: (memberId: string, position: string) => void
@@ -186,7 +188,14 @@ export function WorkspacePositionRosterTable({
   canEditCheckInStatus = false,
   updatingCheckInMemberId = null,
   onCheckInStatusChange,
+  showAllowWorkAssignment = false,
+  onToggleAllowWorkAssignment,
 }: WorkspacePositionRosterTableProps) {
+  const tableColumnCount =
+    3 +
+    (showAllowWorkAssignment ? 1 : 0) +
+    (showOpAdvanceLabels ? 1 : 0) +
+    (canManageRoster ? 1 : 0)
   const [expandedPositions, setExpandedPositions] = useState<Set<string>>(() => new Set())
   const [assignedSearchQuery, setAssignedSearchQuery] = useState('')
   const [assignedStatusFilter, setAssignedStatusFilter] = useState<'all' | 'assigned' | 'unassigned'>(
@@ -280,6 +289,9 @@ export function WorkspacePositionRosterTable({
               </div>
             </TableHead>
             <TableHead className="w-[7rem] align-bottom">Edit ICS-201</TableHead>
+            {showAllowWorkAssignment ? (
+              <TableHead className="min-w-[9rem] align-bottom">Allow Work Assignment</TableHead>
+            ) : null}
             {showOpAdvanceLabels ? (
               <TableHead className="min-w-[10rem] align-bottom">Next OP period</TableHead>
             ) : null}
@@ -292,7 +304,7 @@ export function WorkspacePositionRosterTable({
           {filteredEntries.length === 0 ? (
             <TableRow>
               <TableCell
-                colSpan={canManageRoster ? (showOpAdvanceLabels ? 5 : 4) : showOpAdvanceLabels ? 4 : 3}
+                colSpan={tableColumnCount}
                 className="py-8 text-center text-sm text-muted-foreground"
               >
                 No positions match the assigned filters.
@@ -389,6 +401,27 @@ export function WorkspacePositionRosterTable({
                       </Label>
                     </div>
                   </TableCell>
+                  {showAllowWorkAssignment && onToggleAllowWorkAssignment ? (
+                    <TableCell className="align-top">
+                      <div className="flex items-center gap-2">
+                        <Switch
+                          id={`allow-work-assignment-table-${entry.position}`}
+                          size="sm"
+                          checked={entry.allowWorkAssignment}
+                          disabled={!canManageRoster || isUpdatingPermission === entry.position}
+                          onCheckedChange={(checked) =>
+                            onToggleAllowWorkAssignment(entry.position, checked)
+                          }
+                        />
+                        <Label
+                          htmlFor={`allow-work-assignment-table-${entry.position}`}
+                          className="sr-only"
+                        >
+                          Allow Work Assignment for {entry.position}
+                        </Label>
+                      </div>
+                    </TableCell>
+                  ) : null}
                   {showOpAdvanceLabels ? (
                     <TableCell className="align-top">
                       {onOpAdvanceLabelChange ? (
@@ -451,6 +484,8 @@ export function WorkspacePositionRosterTable({
                                   : undefined
                               }
                               onToggleEditIcs201={onToggleEditIcs201}
+                              showAllowWorkAssignment={showAllowWorkAssignment}
+                              onToggleAllowWorkAssignment={onToggleAllowWorkAssignment}
                               onAssignExistingMember={onAssignExistingMember}
                               onScheduleAssignMember={onScheduleAssignMember}
                               onScheduleUnassignMember={onScheduleUnassignMember}

@@ -1,4 +1,4 @@
-import { primaryIcsPosition, WORKSPACE_PERMISSION_EDIT_ICS201 } from '@/lib/ics-positions'
+import { primaryIcsPosition, WORKSPACE_PERMISSION_EDIT_ICS201, WORKSPACE_PERMISSION_ALLOW_WORK_ASSIGNMENT } from '@/lib/ics-positions'
 import {
   buildDefaultPositionPermissionMap,
   permissionsFromRows,
@@ -622,6 +622,44 @@ export async function setWorkspacePositionEditIcs201(
     .eq('workspace_id', workspaceId)
     .eq('ics_position', icsPosition)
     .eq('permission', WORKSPACE_PERMISSION_EDIT_ICS201)
+
+  if (error) {
+    return { ok: false, message: error.message }
+  }
+  return { ok: true }
+}
+
+export async function setWorkspacePositionAllowWorkAssignment(
+  workspaceId: string,
+  icsPosition: string,
+  enabled: boolean
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  const supabase = getSupabaseClient()
+  if (!supabase) {
+    return { ok: false, message: 'Supabase is not configured.' }
+  }
+
+  if (enabled) {
+    const { error } = await supabase.from('workspace_position_permissions').upsert(
+      {
+        workspace_id: workspaceId,
+        ics_position: icsPosition,
+        permission: WORKSPACE_PERMISSION_ALLOW_WORK_ASSIGNMENT,
+      },
+      { onConflict: 'workspace_id,ics_position,permission' }
+    )
+    if (error) {
+      return { ok: false, message: error.message }
+    }
+    return { ok: true }
+  }
+
+  const { error } = await supabase
+    .from('workspace_position_permissions')
+    .delete()
+    .eq('workspace_id', workspaceId)
+    .eq('ics_position', icsPosition)
+    .eq('permission', WORKSPACE_PERMISSION_ALLOW_WORK_ASSIGNMENT)
 
   if (error) {
     return { ok: false, message: error.message }

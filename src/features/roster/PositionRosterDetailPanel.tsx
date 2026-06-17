@@ -38,6 +38,8 @@ type PositionRosterDetailPanelProps = {
   isUpdatingOpAdvanceLabel?: boolean
   onOpAdvanceLabelChange?: (label: PositionOpAdvanceLabel) => void
   onToggleEditIcs201: (position: string, enabled: boolean) => void
+  showAllowWorkAssignment?: boolean
+  onToggleAllowWorkAssignment?: (position: string, enabled: boolean) => void
   onAssignExistingMember: (memberId: string, position: string) => void
   onScheduleAssignMember: (memberId: string, position: string) => void
   onScheduleUnassignMember: (memberId: string, position: string) => void
@@ -253,6 +255,8 @@ export function PositionRosterDetailPanel({
   isUpdatingOpAdvanceLabel = false,
   onOpAdvanceLabelChange,
   onToggleEditIcs201,
+  showAllowWorkAssignment = false,
+  onToggleAllowWorkAssignment,
   onAssignExistingMember,
   onScheduleAssignMember,
   onScheduleUnassignMember,
@@ -326,6 +330,21 @@ export function PositionRosterDetailPanel({
           onCheckedChange={(checked) => onToggleEditIcs201(entry.position, checked)}
         />
       </div>
+
+      {showAllowWorkAssignment && onToggleAllowWorkAssignment ? (
+        <div className="flex items-center justify-between gap-2 rounded-md border bg-muted/20 px-2.5 py-2">
+          <Label htmlFor={`allow-work-assignment-panel-${entry.position}`} className="text-xs">
+            Allow Work Assignment
+          </Label>
+          <Switch
+            id={`allow-work-assignment-panel-${entry.position}`}
+            size="sm"
+            checked={entry.allowWorkAssignment}
+            disabled={!canManageRoster || isPermissionBusy}
+            onCheckedChange={(checked) => onToggleAllowWorkAssignment(entry.position, checked)}
+          />
+        </div>
+      ) : null}
 
       {showOpAdvanceLabels && onOpAdvanceLabelChange ? (
         <div className="space-y-1.5 rounded-md border bg-muted/20 px-2.5 py-2">
