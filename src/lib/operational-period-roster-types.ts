@@ -24,6 +24,7 @@ export type OperationalPeriodRosterSnapshotPosition = {
   editIcs201: boolean
   allowWorkAssignment: boolean
   members: OperationalPeriodRosterSnapshotMember[]
+  assets?: Array<{ assetKey: string; pointOfContactEmail: string | null }>
 }
 
 export type OperationalPeriodRosterSnapshot = {

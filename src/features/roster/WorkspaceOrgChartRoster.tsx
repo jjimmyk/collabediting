@@ -8,6 +8,9 @@ import type {
   RosterInviteAssignmentMode,
 } from '@/features/roster/position-roster-messages'
 import { PositionRosterCard } from '@/features/roster/PositionRosterCard'
+import {
+  type PositionRosterAssetHandlers,
+} from '@/features/roster/PositionRosterAssetSections'
 import { AssetOrgChartCard } from '@/features/roster/AssetOrgChartCard'
 import type { WorkspaceOrgChartLayout, WorkspacePositionMeta } from '@/features/roster/workspace-positions'
 
@@ -58,7 +61,12 @@ type WorkspaceOrgChartRosterProps = {
   canEditCheckInStatus?: boolean
   updatingCheckInMemberId?: string | null
   onCheckInStatusChange?: (memberId: string, status: WorkspaceMemberCheckInStatus) => void
-}
+  showPositionAssets?: boolean
+  assignableAssetsByPosition?: Record<string, ResourceListItemData[]>
+  scheduleAssignableAssetsByPosition?: Record<string, ResourceListItemData[]>
+  scheduleUnassignableAssetsByPosition?: Record<string, ResourceListItemData[]>
+  pocMembers?: WorkspaceRosterMember[]
+} & Partial<PositionRosterAssetHandlers>
 
 type OrgChartRenderProps = {
   layoutMode: RosterPanelLayoutMode
@@ -93,6 +101,18 @@ type OrgChartRenderProps = {
   onCheckInStatusChange?: (memberId: string, status: WorkspaceMemberCheckInStatus) => void
   showAllowWorkAssignment: boolean
   onToggleAllowWorkAssignment?: (position: string, enabled: boolean) => void
+  showPositionAssets: boolean
+  assignableAssetsByPosition: Record<string, ResourceListItemData[]>
+  scheduleAssignableAssetsByPosition: Record<string, ResourceListItemData[]>
+  scheduleUnassignableAssetsByPosition: Record<string, ResourceListItemData[]>
+  pocMembers: WorkspaceRosterMember[]
+  onAssignAsset?: (assetKey: string, position: string, pointOfContactMemberId?: string) => void
+  onUnassignAsset?: (assetKey: string, position: string) => void
+  onScheduleAssignAsset?: (assetKey: string, position: string) => void
+  onScheduleUnassignAsset?: (assetKey: string, position: string) => void
+  onRemoveScheduledAssignAsset?: (assetKey: string, position: string) => void
+  onRemoveScheduledUnassignAsset?: (assetKey: string, position: string) => void
+  onUpdateAssetPointOfContact?: (assetKey: string, memberId: string | null) => void
 }
 
 function filterVisibleOrgChartChildren(
@@ -220,6 +240,18 @@ function PositionNode({
   onCheckInStatusChange,
   showAllowWorkAssignment,
   onToggleAllowWorkAssignment,
+  showPositionAssets,
+  assignableAssetsByPosition,
+  scheduleAssignableAssetsByPosition,
+  scheduleUnassignableAssetsByPosition,
+  pocMembers,
+  onAssignAsset,
+  onUnassignAsset,
+  onScheduleAssignAsset,
+  onScheduleUnassignAsset,
+  onRemoveScheduledAssignAsset,
+  onRemoveScheduledUnassignAsset,
+  onUpdateAssetPointOfContact,
 }: {
   position: string
   color?: OrgChartColor
@@ -262,6 +294,18 @@ function PositionNode({
     onCheckInStatusChange,
     showAllowWorkAssignment,
     onToggleAllowWorkAssignment,
+    showPositionAssets,
+    assignableAssetsByPosition,
+    scheduleAssignableAssetsByPosition,
+    scheduleUnassignableAssetsByPosition,
+    pocMembers,
+    onAssignAsset,
+    onUnassignAsset,
+    onScheduleAssignAsset,
+    onScheduleUnassignAsset,
+    onRemoveScheduledAssignAsset,
+    onRemoveScheduledUnassignAsset,
+    onUpdateAssetPointOfContact,
   }
 
   return (
@@ -301,6 +345,18 @@ function PositionNode({
         onCheckInStatusChange={onCheckInStatusChange}
         showAllowWorkAssignment={showAllowWorkAssignment}
         onToggleAllowWorkAssignment={onToggleAllowWorkAssignment}
+        showPositionAssets={showPositionAssets}
+        assignableAssets={assignableAssetsByPosition[position] ?? []}
+        scheduleAssignableAssets={scheduleAssignableAssetsByPosition[position] ?? []}
+        scheduleUnassignableAssets={scheduleUnassignableAssetsByPosition[position] ?? []}
+        pocMembers={pocMembers}
+        onAssignAsset={onAssignAsset}
+        onUnassignAsset={onUnassignAsset}
+        onScheduleAssignAsset={onScheduleAssignAsset}
+        onScheduleUnassignAsset={onScheduleUnassignAsset}
+        onRemoveScheduledAssignAsset={onRemoveScheduledAssignAsset}
+        onRemoveScheduledUnassignAsset={onRemoveScheduledUnassignAsset}
+        onUpdateAssetPointOfContact={onUpdateAssetPointOfContact}
       />
       <OrgChartChildren children={children} parentColor={color} renderProps={renderProps} />
     </div>
@@ -450,6 +506,18 @@ export function WorkspaceOrgChartRoster({
   onCheckInStatusChange,
   showAllowWorkAssignment = false,
   onToggleAllowWorkAssignment,
+  showPositionAssets = false,
+  assignableAssetsByPosition = {},
+  scheduleAssignableAssetsByPosition = {},
+  scheduleUnassignableAssetsByPosition = {},
+  pocMembers = [],
+  onAssignAsset,
+  onUnassignAsset,
+  onScheduleAssignAsset,
+  onScheduleUnassignAsset,
+  onRemoveScheduledAssignAsset,
+  onRemoveScheduledUnassignAsset,
+  onUpdateAssetPointOfContact,
 }: WorkspaceOrgChartRosterProps) {
   const visibleSectionBranches = orgChartLayout.sectionBranches.filter((branch) =>
     branch.children.some(
@@ -497,6 +565,18 @@ export function WorkspaceOrgChartRoster({
     onCheckInStatusChange,
     showAllowWorkAssignment,
     onToggleAllowWorkAssignment,
+    showPositionAssets,
+    assignableAssetsByPosition,
+    scheduleAssignableAssetsByPosition,
+    scheduleUnassignableAssetsByPosition,
+    pocMembers,
+    onAssignAsset,
+    onUnassignAsset,
+    onScheduleAssignAsset,
+    onScheduleUnassignAsset,
+    onRemoveScheduledAssignAsset,
+    onRemoveScheduledUnassignAsset,
+    onUpdateAssetPointOfContact,
   }
 
   return (

@@ -1,7 +1,24 @@
-import type { OperationalPeriodRosterSnapshot } from '@/lib/operational-period-roster-types'
+import { getAssetByKey } from '@/data/hub-asset-catalog'
 import type { PositionRosterEntry } from '@/features/roster/workspace-position-roster'
-import type { WorkspaceRosterMember } from '@/lib/workspace-types'
 import { getPositionMemberSchedulePolicy } from '@/lib/roster-member-schedule-policy'
+import type { OperationalPeriodRosterSnapshot } from '@/lib/operational-period-roster-types'
+import type { PositionAssetRosterEntry } from '@/lib/workspace-position-asset-types'
+import type { WorkspaceRosterMember } from '@/lib/workspace-types'
+
+function snapshotAssetsToRosterEntries(
+  assets: OperationalPeriodRosterSnapshot['positions'][number]['assets']
+): PositionAssetRosterEntry[] {
+  return (assets ?? []).map((asset) => {
+    const catalog = getAssetByKey(asset.assetKey)
+    return {
+      assetKey: asset.assetKey,
+      name: catalog?.name ?? asset.assetKey,
+      type: catalog?.type ?? '',
+      pointOfContactMemberId: null,
+      pointOfContactEmail: asset.pointOfContactEmail ?? null,
+    }
+  })
+}
 
 export function buildPositionRosterEntriesFromSnapshot(
   snapshot: OperationalPeriodRosterSnapshot,
@@ -26,6 +43,9 @@ export function buildPositionRosterEntriesFromSnapshot(
       ),
       scheduledAssignees: [],
       scheduledUnassignees: [],
+      assets: snapshotAssetsToRosterEntries(position.assets),
+      scheduledAssignAssets: [],
+      scheduledUnassignAssets: [],
       memberSchedulePolicy: getPositionMemberSchedulePolicy({
         name: position.name,
         source: position.source,
@@ -45,6 +65,18 @@ export function buildPositionRosterEntriesFromSnapshot(
     .filter((entry) => {
       if (!normalizedQuery) return true
       if (entry.position.toLowerCase().includes(normalizedQuery)) return true
+      const searchableAssets = [
+        ...entry.assets,
+        ...entry.scheduledAssignAssets,
+        ...entry.scheduledUnassignAssets,
+      ]
+      if (
+        searchableAssets.some((asset) =>
+          [asset.name, asset.type, asset.pointOfContactEmail ?? ''].join(' ').toLowerCase().includes(normalizedQuery)
+        )
+      ) {
+        return true
+      }
       return entry.members.some((member) =>
         [member.email, member.status, member.checkInStatus, member.addedAt]
           .join(' ')

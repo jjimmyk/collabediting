@@ -1,5 +1,10 @@
 import { WORKSPACE_PERMISSION_EDIT_ICS201 } from '@/lib/ics-positions'
+import type { ResourceListItemData } from '@/features/resources/types'
 import type { PositionOpAdvanceLabel } from '@/lib/operational-period-roster-types'
+import type {
+  PositionAssetRosterEntry,
+  PositionAssetWorkspaceMeta,
+} from '@/lib/workspace-position-asset-types'
 import type { WorkspaceRosterMember } from '@/lib/workspace-types'
 import { getPositionMemberSchedulePolicy } from '@/lib/roster-member-schedule-policy'
 import type { PositionMemberSchedulePolicy } from '@/lib/roster-member-schedule-policy'
@@ -12,6 +17,7 @@ import {
   resolveAllowWorkAssignment,
   type WorkspacePositionSettingsMap,
 } from '@/lib/workspace-position-settings'
+import { resolveScheduledPositionAssets } from '@/lib/workspace-position-asset-roster'
 
 export type PositionPermissionMap = Record<string, { editIcs201: boolean }>
 
@@ -20,6 +26,9 @@ export type PositionRosterEntry = {
   members: WorkspaceRosterMember[]
   scheduledAssignees: WorkspaceRosterMember[]
   scheduledUnassignees: WorkspaceRosterMember[]
+  assets: PositionAssetRosterEntry[]
+  scheduledAssignAssets: PositionAssetRosterEntry[]
+  scheduledUnassignAssets: PositionAssetRosterEntry[]
   memberSchedulePolicy: PositionMemberSchedulePolicy
   editIcs201: boolean
   allowWorkAssignment: boolean
@@ -91,7 +100,14 @@ export function buildPositionRosterEntries(
   settings: WorkspacePositionSettingsMap,
   searchQuery: string,
   catalog: WorkspacePositionCatalog = emptyWorkspacePositionCatalog(),
-  schedulesByPosition: Record<string, { assignMemberIds: string[]; unassignMemberIds: string[] }> = {}
+  schedulesByPosition: Record<string, { assignMemberIds: string[]; unassignMemberIds: string[] }> = {},
+  assetsByPosition: Record<string, PositionAssetRosterEntry[]> = {},
+  assetSchedulesByPosition: Record<
+    string,
+    { assignAssetKeys: string[]; unassignAssetKeys: string[] }
+  > = {},
+  assetsByKey: Record<string, ResourceListItemData> = {},
+  workspaceMetaByAssetKey: Record<string, PositionAssetWorkspaceMeta> = {}
 ): PositionRosterEntry[] {
   const normalizedQuery = searchQuery.trim().toLowerCase()
   const memberById = new Map(roster.map((member) => [member.id, member]))
@@ -109,6 +125,21 @@ export function buildPositionRosterEntries(
       const scheduledUnassignees = schedule.unassignMemberIds
         .map((memberId) => memberById.get(memberId))
         .filter((member): member is WorkspaceRosterMember => Boolean(member))
+      const assetSchedule = assetSchedulesByPosition[position] ?? {
+        assignAssetKeys: [],
+        unassignAssetKeys: [],
+      }
+      const assets = assetsByPosition[position] ?? []
+      const scheduledAssignAssets = resolveScheduledPositionAssets(
+        assetSchedule.assignAssetKeys,
+        assetsByKey,
+        workspaceMetaByAssetKey
+      )
+      const scheduledUnassignAssets = resolveScheduledPositionAssets(
+        assetSchedule.unassignAssetKeys,
+        assetsByKey,
+        workspaceMetaByAssetKey
+      )
 
       return {
         position,
@@ -117,6 +148,9 @@ export function buildPositionRosterEntries(
         ),
         scheduledAssignees,
         scheduledUnassignees,
+        assets,
+        scheduledAssignAssets,
+        scheduledUnassignAssets,
         memberSchedulePolicy: getPositionMemberSchedulePolicy(meta),
         editIcs201: permissions[position]?.editIcs201 ?? !catalog.customPositionNames.has(position),
         allowWorkAssignment: resolveAllowWorkAssignment(position, settings, catalog),
@@ -133,6 +167,21 @@ export function buildPositionRosterEntries(
         ...entry.scheduledAssignees,
         ...entry.scheduledUnassignees,
       ]
+      const searchableAssets = [
+        ...entry.assets,
+        ...entry.scheduledAssignAssets,
+        ...entry.scheduledUnassignAssets,
+      ]
+      if (
+        searchableAssets.some((asset) =>
+          [asset.name, asset.type, asset.pointOfContactEmail ?? '']
+            .join(' ')
+            .toLowerCase()
+            .includes(normalizedQuery)
+        )
+      ) {
+        return true
+      }
       return searchableMembers.some((member) =>
         [member.email, member.status, member.addedAt].join(' ').toLowerCase().includes(normalizedQuery)
       )

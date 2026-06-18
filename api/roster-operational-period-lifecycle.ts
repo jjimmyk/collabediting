@@ -1,4 +1,8 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import {
+  applyAssetSchedulesOnOperationalPeriodAdvance,
+  clearPositionAssetDependencies,
+} from './roster-asset-assignments-shared.js'
 import { applyMemberSchedulesOnOperationalPeriodAdvance } from './roster-member-schedules-shared.js'
 import { ICS_POSITIONS } from './roster-shared.js'
 
@@ -36,6 +40,12 @@ type DbPermissionRow = {
 type DbAssetRow = {
   asset_key: string
   org_chart_reports_to: string | null
+  point_of_contact_member_id: string | null
+}
+
+type DbPositionAssetAssignmentRow = {
+  position_name: string
+  asset_key: string
 }
 
 export type OperationalPeriodRosterSnapshotPayload = {
@@ -50,6 +60,7 @@ export type OperationalPeriodRosterSnapshotPayload = {
     editIcs201: boolean
     allowWorkAssignment: boolean
     members: Array<{ email: string; status: string; icsPositions: string[]; checkInStatus: string }>
+    assets: Array<{ assetKey: string; pointOfContactEmail: string | null }>
   }>
   orgChartAssetPlacements: Array<{ assetKey: string; reportsTo: string | null }>
 }
@@ -71,6 +82,7 @@ async function loadRosterLifecycleContext(admin: SupabaseClient, workspaceId: st
     { data: permissionRows, error: permissionError },
     { data: settingsRows, error: settingsError },
     { data: assetRows, error: assetError },
+    { data: positionAssetRows, error: positionAssetError },
   ] = await Promise.all([
     admin
       .from('workspace_custom_positions')
@@ -96,7 +108,11 @@ async function loadRosterLifecycleContext(admin: SupabaseClient, workspaceId: st
       .eq('workspace_id', workspaceId),
     admin
       .from('workspace_asset_assignments')
-      .select('asset_key, org_chart_reports_to')
+      .select('asset_key, org_chart_reports_to, point_of_contact_member_id')
+      .eq('workspace_id', workspaceId),
+    admin
+      .from('workspace_position_asset_assignments')
+      .select('position_name, asset_key')
       .eq('workspace_id', workspaceId),
   ])
 
@@ -107,6 +123,7 @@ async function loadRosterLifecycleContext(admin: SupabaseClient, workspaceId: st
   if (permissionError) throw new Error(permissionError.message)
   if (settingsError) throw new Error(settingsError.message)
   if (assetError) throw new Error(assetError.message)
+  if (positionAssetError) throw new Error(positionAssetError.message)
 
   const customPositions = (customRows ?? []) as DbCustomPositionRow[]
   const standardLifecycle = (standardRows ?? []) as DbStandardLifecycleRow[]
@@ -118,8 +135,10 @@ async function loadRosterLifecycleContext(admin: SupabaseClient, workspaceId: st
     allow_work_assignment: boolean
   }>
   const assets = (assetRows ?? []) as DbAssetRow[]
+  const positionAssetAssignments = (positionAssetRows ?? []) as DbPositionAssetAssignmentRow[]
 
   const memberIds = new Set(members.map((row) => row.id))
+  const memberEmailById = new Map(members.map((row) => [row.id, row.email]))
   const positionsByMemberId = new Map<string, string[]>()
   for (const row of memberPositions) {
     if (!memberIds.has(row.member_id)) continue
@@ -143,6 +162,22 @@ async function loadRosterLifecycleContext(admin: SupabaseClient, workspaceId: st
     standardLifecycle.map((row) => [row.position_name, row])
   )
 
+  const pocEmailByAssetKey = new Map<string, string | null>()
+  for (const asset of assets) {
+    const memberId = asset.point_of_contact_member_id
+    pocEmailByAssetKey.set(
+      asset.asset_key,
+      memberId ? (memberEmailById.get(memberId) ?? null) : null
+    )
+  }
+
+  const assetsByPosition = new Map<string, string[]>()
+  for (const row of positionAssetAssignments) {
+    const current = assetsByPosition.get(row.position_name) ?? []
+    current.push(row.asset_key)
+    assetsByPosition.set(row.position_name, current)
+  }
+
   return {
     customPositions,
     standardLifecycle,
@@ -152,7 +187,22 @@ async function loadRosterLifecycleContext(admin: SupabaseClient, workspaceId: st
     editIcs201ByPosition,
     allowWorkAssignmentByPosition,
     assets,
+    assetsByPosition,
+    pocEmailByAssetKey,
   }
+}
+
+function snapshotAssetsForPosition(
+  context: Awaited<ReturnType<typeof loadRosterLifecycleContext>>,
+  positionName: string
+): OperationalPeriodRosterSnapshotPayload['positions'][number]['assets'] {
+  const assetKeys = context.assetsByPosition.get(positionName) ?? []
+  return assetKeys
+    .map((assetKey) => ({
+      assetKey,
+      pointOfContactEmail: context.pocEmailByAssetKey.get(assetKey) ?? null,
+    }))
+    .sort((a, b) => a.assetKey.localeCompare(b.assetKey))
 }
 
 function buildOperationalPeriodRosterSnapshot(
@@ -194,6 +244,7 @@ function buildOperationalPeriodRosterSnapshot(
           icsPositions: entry.icsPositions,
           checkInStatus: entry.member.check_in_status ?? 'not_arrived',
         })),
+      assets: snapshotAssetsForPosition(context, positionName),
     })
   }
 
@@ -224,6 +275,7 @@ function buildOperationalPeriodRosterSnapshot(
           icsPositions: entry.icsPositions,
           checkInStatus: entry.member.check_in_status ?? 'not_arrived',
         })),
+      assets: snapshotAssetsForPosition(context, custom.name),
     })
   }
 
@@ -285,6 +337,13 @@ async function validateRetiringPositions(
     if (!asset.org_chart_reports_to) continue
     if (retiringSet.has(asset.org_chart_reports_to)) {
       blockers.push(`Asset ${asset.asset_key} reports to ${asset.org_chart_reports_to}`)
+    }
+  }
+
+  for (const positionName of retiringNames) {
+    const assignedAssets = context.assetsByPosition.get(positionName) ?? []
+    if (assignedAssets.length > 0) {
+      blockers.push(`${assignedAssets.length} asset(s) assigned to ${positionName}`)
     }
   }
 
@@ -366,6 +425,7 @@ async function applyRosterLifecycleOnOperationalPeriodAdvance(
   for (const positionName of retiringNames) {
     await removeMembersFromPosition(admin, workspaceId, positionName, context)
     await clearPositionDependencies(admin, workspaceId, positionName)
+    await clearPositionAssetDependencies(admin, workspaceId, positionName)
   }
 
   for (const custom of context.customPositions) {
@@ -435,4 +495,5 @@ export async function snapshotAndApplyRosterLifecycleOnOperationalPeriodAdvance(
 
   await applyRosterLifecycleOnOperationalPeriodAdvance(admin, workspaceId)
   await applyMemberSchedulesOnOperationalPeriodAdvance(admin, workspaceId)
+  await applyAssetSchedulesOnOperationalPeriodAdvance(admin, workspaceId)
 }

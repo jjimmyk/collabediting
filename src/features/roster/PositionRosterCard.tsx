@@ -27,6 +27,8 @@ import {
   PositionPermissionsSection,
   PositionPropertiesSection,
 } from '@/features/roster/PositionRosterPropertySections'
+import type { ResourceListItemData } from '@/features/resources/types'
+import type { PositionRosterAssetHandlers } from '@/features/roster/PositionRosterAssetSections'
 import type { WorkspacePositionMeta } from '@/features/roster/workspace-positions'
 import {
   orgChartColorClasses,
@@ -65,7 +67,12 @@ type PositionRosterCardProps = {
   canEditCheckInStatus?: boolean
   updatingCheckInMemberId?: string | null
   onCheckInStatusChange?: (memberId: string, status: WorkspaceMemberCheckInStatus) => void
-}
+  showPositionAssets?: boolean
+  assignableAssets?: ResourceListItemData[]
+  scheduleAssignableAssets?: ResourceListItemData[]
+  scheduleUnassignableAssets?: ResourceListItemData[]
+  pocMembers?: WorkspaceRosterMember[]
+} & Partial<PositionRosterAssetHandlers>
 
 export function PositionRosterCard({
   entry,
@@ -98,6 +105,18 @@ export function PositionRosterCard({
   canEditCheckInStatus = false,
   updatingCheckInMemberId = null,
   onCheckInStatusChange,
+  showPositionAssets = false,
+  assignableAssets = [],
+  scheduleAssignableAssets = [],
+  scheduleUnassignableAssets = [],
+  pocMembers = [],
+  onAssignAsset,
+  onUnassignAsset,
+  onScheduleAssignAsset,
+  onScheduleUnassignAsset,
+  onRemoveScheduledAssignAsset,
+  onRemoveScheduledUnassignAsset,
+  onUpdateAssetPointOfContact,
 }: PositionRosterCardProps) {
   const [orgModalOpen, setOrgModalOpen] = useState(false)
   const leaderEmail = entry.members[0]?.email ?? null
@@ -126,6 +145,18 @@ export function PositionRosterCard({
     canEditCheckInStatus,
     updatingCheckInMemberId,
     onCheckInStatusChange,
+    showPositionAssets,
+    assignableAssets,
+    scheduleAssignableAssets,
+    scheduleUnassignableAssets,
+    pocMembers,
+    onAssignAsset,
+    onUnassignAsset,
+    onScheduleAssignAsset,
+    onScheduleUnassignAsset,
+    onRemoveScheduledAssignAsset,
+    onRemoveScheduledUnassignAsset,
+    onUpdateAssetPointOfContact,
   }
 
   if (isOrg) {

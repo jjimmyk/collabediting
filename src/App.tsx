@@ -539,6 +539,24 @@ import {
   updatePositionMemberSchedules,
   type WorkspaceMemberScheduleRow,
 } from '@/lib/workspace-member-schedule-service'
+import {
+  fetchWorkspaceAssetSchedules,
+  fetchWorkspacePositionAssetAssignments,
+  groupAssetSchedulesByPosition,
+  updatePositionAssetAssignment,
+  updatePositionAssetSchedules,
+  updateWorkspaceAssetPointOfContact,
+} from '@/lib/workspace-position-asset-service'
+import type {
+  WorkspacePositionAssetAssignmentRow,
+  WorkspacePositionAssetScheduleRow,
+} from '@/lib/workspace-position-asset-types'
+import {
+  assetsAssignableToPosition,
+  assetsScheduleUnassignableFromPosition,
+  buildPositionAssetWorkspaceMetaByKey,
+  groupPositionAssetAssignmentsByPosition,
+} from '@/lib/workspace-position-asset-roster'
 import { getPositionMemberSchedulePolicy } from '@/lib/roster-member-schedule-policy'
 import type {
   PositionRosterInviteSubmitResult,
@@ -8528,6 +8546,12 @@ function App() {
   const [workspaceMemberSchedules, setWorkspaceMemberSchedules] = useState<
     WorkspaceMemberScheduleRow[]
   >([])
+  const [workspacePositionAssetAssignments, setWorkspacePositionAssetAssignments] = useState<
+    WorkspacePositionAssetAssignmentRow[]
+  >([])
+  const [workspaceAssetSchedules, setWorkspaceAssetSchedules] = useState<
+    WorkspacePositionAssetScheduleRow[]
+  >([])
   const [activeWorkspaceSupabaseId, setActiveWorkspaceSupabaseId] = useState<string | null>(null)
   const {
     hubAssets,
@@ -8538,6 +8562,7 @@ function App() {
     syncIcs204AttachmentsForDocument,
     getAssetsForWorkspace,
     getAssetsForWorkspaceNotOnOrgChart,
+    refreshAssignments,
   } = useWorkspaceAssetAssignments({
     enabled: true,
     accessibleWorkspaces,
@@ -11929,6 +11954,8 @@ function App() {
         setActiveWorkspaceSupabaseId(null)
         setSupabaseWorkspaceRoster([])
         setWorkspaceMemberSchedules([])
+        setWorkspacePositionAssetAssignments([])
+        setWorkspaceAssetSchedules([])
         return
       }
 
@@ -11949,6 +11976,8 @@ function App() {
         setActiveWorkspaceSupabaseId(null)
         setSupabaseWorkspaceRoster([])
         setWorkspaceMemberSchedules([])
+        setWorkspacePositionAssetAssignments([])
+        setWorkspaceAssetSchedules([])
         return
       }
 
@@ -11961,21 +11990,28 @@ function App() {
       if (!workspaceId) {
         setSupabaseWorkspaceRoster([])
         setWorkspaceMemberSchedules([])
+        setWorkspacePositionAssetAssignments([])
+        setWorkspaceAssetSchedules([])
         setIsRosterLoading(false)
         return
       }
 
-      const [roster, schedules, permissions, settings] = await Promise.all([
+      const [roster, schedules, permissions, settings, positionAssets, assetSchedules] =
+        await Promise.all([
         fetchWorkspaceRoster(workspaceId),
         fetchWorkspaceMemberSchedules(workspaceId),
         fetchWorkspacePositionPermissions(workspaceId),
         fetchWorkspacePositionSettings(workspaceId),
+        fetchWorkspacePositionAssetAssignments(workspaceId),
+        fetchWorkspaceAssetSchedules(workspaceId),
       ])
       if (cancelled) return
       setSupabaseWorkspaceRoster(roster)
       setWorkspaceMemberSchedules(schedules)
       setActiveWorkspacePositionPermissions(permissions)
       setActiveWorkspacePositionSettings(settings)
+      setWorkspacePositionAssetAssignments(positionAssets)
+      setWorkspaceAssetSchedules(assetSchedules)
 
       setIsRosterLoading(false)
     }
@@ -13057,6 +13093,7 @@ function App() {
   const showMemberCheckInStatus = isInIncidentWorkspace || isInExerciseWorkspace
   const canEditMemberCheckInStatus = showMemberCheckInStatus && !isViewingHistoricalRoster
   const showAllowWorkAssignment = isInIncidentWorkspace || isInExerciseWorkspace
+  const showPositionAssets = showAllowWorkAssignment
   const historicalRosterPeriodNumber =
     formsOperationalPeriodView === 'working' ? null : formsOperationalPeriodView
   const {
@@ -13072,6 +13109,27 @@ function App() {
   const memberSchedulesByPosition = useMemo(
     () => groupMemberSchedulesByPosition(workspaceMemberSchedules),
     [workspaceMemberSchedules]
+  )
+  const assetSchedulesByPosition = useMemo(
+    () => groupAssetSchedulesByPosition(workspaceAssetSchedules),
+    [workspaceAssetSchedules]
+  )
+  const positionAssetWorkspaceMetaByKey = useMemo(
+    () => buildPositionAssetWorkspaceMetaByKey(workspaceAssignedAssets, activeWorkspaceRoster),
+    [workspaceAssignedAssets, activeWorkspaceRoster]
+  )
+  const positionAssetsByPosition = useMemo(
+    () =>
+      groupPositionAssetAssignmentsByPosition(
+        workspacePositionAssetAssignments,
+        workspaceAssetsByKey,
+        positionAssetWorkspaceMetaByKey
+      ),
+    [workspacePositionAssetAssignments, workspaceAssetsByKey, positionAssetWorkspaceMetaByKey]
+  )
+  const rosterPocMembers = useMemo(
+    () => activeWorkspaceRoster.filter((member) => member.status !== 'removed'),
+    [activeWorkspaceRoster]
   )
   const opAdvanceLifecycleSummary = useMemo(() => {
     const summary = buildOpAdvanceLifecycleSummary(workspacePositionCatalog)
@@ -13536,16 +13594,24 @@ function App() {
       activePositionSettings,
       activePanelSearchQuery,
       workspacePositionCatalog,
-      memberSchedulesByPosition
+      memberSchedulesByPosition,
+      positionAssetsByPosition,
+      assetSchedulesByPosition,
+      workspaceAssetsByKey,
+      positionAssetWorkspaceMetaByKey
     )
   }, [
     activePanelSearchQuery,
     activePositionPermissions,
     activePositionSettings,
     activeWorkspaceRoster,
+    assetSchedulesByPosition,
     historicalRosterSnapshot,
     isViewingHistoricalRoster,
     memberSchedulesByPosition,
+    positionAssetWorkspaceMetaByKey,
+    positionAssetsByPosition,
+    workspaceAssetsByKey,
     workspacePositionCatalog,
   ])
   const effectiveCanManageRoster = canManageWorkspaceRoster && !isViewingHistoricalRoster
@@ -13611,6 +13677,77 @@ function App() {
     }
     return map
   }, [activeWorkspaceRoster, memberSchedulesByPosition, workspacePositionCatalog])
+  const assignableAssetsByPosition = useMemo(() => {
+    const map: Record<string, typeof workspaceAssignedAssets> = {}
+    for (const position of workspacePositionCatalog.rosterPositionNames) {
+      const meta = workspacePositionCatalog.positionMetaByName[position]
+      if (!meta || !getPositionMemberSchedulePolicy(meta).allowActiveAssignment) {
+        map[position] = []
+        continue
+      }
+      const schedule = assetSchedulesByPosition[position]
+      const activeAssetKeys = (positionAssetsByPosition[position] ?? []).map((asset) => asset.assetKey)
+      map[position] = assetsAssignableToPosition(
+        workspaceAssignedAssets,
+        position,
+        activeAssetKeys,
+        schedule?.assignAssetKeys ?? []
+      )
+    }
+    return map
+  }, [
+    assetSchedulesByPosition,
+    positionAssetsByPosition,
+    workspaceAssignedAssets,
+    workspacePositionCatalog,
+  ])
+  const scheduleAssignableAssetsByPosition = useMemo(() => {
+    const map: Record<string, typeof workspaceAssignedAssets> = {}
+    for (const position of workspacePositionCatalog.rosterPositionNames) {
+      const meta = workspacePositionCatalog.positionMetaByName[position]
+      if (!meta || !getPositionMemberSchedulePolicy(meta).allowScheduleAssign) {
+        map[position] = []
+        continue
+      }
+      const schedule = assetSchedulesByPosition[position]
+      const activeAssetKeys = (positionAssetsByPosition[position] ?? []).map((asset) => asset.assetKey)
+      map[position] = assetsAssignableToPosition(
+        workspaceAssignedAssets,
+        position,
+        activeAssetKeys,
+        schedule?.assignAssetKeys ?? []
+      )
+    }
+    return map
+  }, [
+    assetSchedulesByPosition,
+    positionAssetsByPosition,
+    workspaceAssignedAssets,
+    workspacePositionCatalog,
+  ])
+  const scheduleUnassignableAssetsByPosition = useMemo(() => {
+    const map: Record<string, typeof workspaceAssignedAssets> = {}
+    for (const position of workspacePositionCatalog.rosterPositionNames) {
+      const meta = workspacePositionCatalog.positionMetaByName[position]
+      if (!meta || !getPositionMemberSchedulePolicy(meta).allowScheduleUnassign) {
+        map[position] = []
+        continue
+      }
+      const schedule = assetSchedulesByPosition[position]
+      const activeAssetKeys = (positionAssetsByPosition[position] ?? []).map((asset) => asset.assetKey)
+      map[position] = assetsScheduleUnassignableFromPosition(
+        activeAssetKeys,
+        schedule?.unassignAssetKeys ?? [],
+        workspaceAssetsByKey
+      )
+    }
+    return map
+  }, [
+    assetSchedulesByPosition,
+    positionAssetsByPosition,
+    workspaceAssetsByKey,
+    workspacePositionCatalog,
+  ])
   useEffect(() => {
     if (canEditIcs201Form) {
       return
@@ -14519,6 +14656,16 @@ function App() {
     const schedules = await fetchWorkspaceMemberSchedules(activeWorkspaceSupabaseId)
     setWorkspaceMemberSchedules(schedules)
   }
+  const reloadWorkspacePositionAssets = async () => {
+    if (!isSupabaseEnabled || !activeWorkspaceSupabaseId) return
+    const [positionAssets, assetSchedules] = await Promise.all([
+      fetchWorkspacePositionAssetAssignments(activeWorkspaceSupabaseId),
+      fetchWorkspaceAssetSchedules(activeWorkspaceSupabaseId),
+    ])
+    setWorkspacePositionAssetAssignments(positionAssets)
+    setWorkspaceAssetSchedules(assetSchedules)
+    await refreshAssignments()
+  }
   const updatePositionScheduleLists = async (
     position: string,
     assignMemberIds: string[],
@@ -14619,6 +14766,195 @@ function App() {
         ? `Removed ${member.email} from next OP unassign schedule for ${position}.`
         : `Removed member from next OP unassign schedule for ${position}.`
     )
+  }
+  const updatePositionAssetScheduleLists = async (
+    position: string,
+    assignAssetKeys: string[],
+    unassignAssetKeys: string[],
+    successMessage: string
+  ): Promise<boolean> => {
+    if (!isSupabaseEnabled || !activeWorkspaceSupabaseId) {
+      toast.error('This workspace is not synced to Supabase yet.')
+      return false
+    }
+    const accessToken = await getAccessToken()
+    if (!accessToken) {
+      toast.error('Sign in again to update asset schedules.')
+      return false
+    }
+
+    setRosterAssigningPosition(position)
+    const result = await updatePositionAssetSchedules({
+      accessToken,
+      workspaceId: activeWorkspaceSupabaseId,
+      positionName: position,
+      assignAssetKeys,
+      unassignAssetKeys,
+    })
+    setRosterAssigningPosition(null)
+
+    if (!result.ok) {
+      toast.error(result.message)
+      return false
+    }
+
+    await reloadWorkspacePositionAssets()
+    toast.success(successMessage)
+    return true
+  }
+  const assignAssetToPosition = async (
+    assetKey: string,
+    position: string,
+    pointOfContactMemberId?: string
+  ) => {
+    const asset = workspaceAssetsByKey[assetKey]
+    if (!asset || !isSupabaseEnabled || !activeWorkspaceSupabaseId) return
+
+    const accessToken = await getAccessToken()
+    if (!accessToken) {
+      toast.error('Sign in again to assign assets.')
+      return
+    }
+
+    setRosterAssigningPosition(position)
+    const result = await updatePositionAssetAssignment({
+      accessToken,
+      workspaceId: activeWorkspaceSupabaseId,
+      positionName: position,
+      assetKey,
+      action: 'assign',
+      pointOfContactMemberId: pointOfContactMemberId ?? null,
+    })
+    setRosterAssigningPosition(null)
+
+    if (!result.ok) {
+      toast.error(result.message)
+      return
+    }
+
+    await reloadWorkspacePositionAssets()
+    toast.success(`Assigned ${asset.name} to ${position}.`)
+  }
+  const unassignAssetFromPosition = async (assetKey: string, position: string) => {
+    const asset = workspaceAssetsByKey[assetKey]
+    if (!isSupabaseEnabled || !activeWorkspaceSupabaseId) return
+
+    const accessToken = await getAccessToken()
+    if (!accessToken) {
+      toast.error('Sign in again to unassign assets.')
+      return
+    }
+
+    setRosterAssigningPosition(position)
+    const result = await updatePositionAssetAssignment({
+      accessToken,
+      workspaceId: activeWorkspaceSupabaseId,
+      positionName: position,
+      assetKey,
+      action: 'unassign',
+    })
+    setRosterAssigningPosition(null)
+
+    if (!result.ok) {
+      toast.error(result.message)
+      return
+    }
+
+    await reloadWorkspacePositionAssets()
+    toast.success(
+      asset ? `Removed ${asset.name} from ${position}.` : `Removed asset from ${position}.`
+    )
+  }
+  const scheduleAssignAssetToPosition = async (assetKey: string, position: string) => {
+    const asset = workspaceAssetsByKey[assetKey]
+    const current = assetSchedulesByPosition[position] ?? {
+      assignAssetKeys: [],
+      unassignAssetKeys: [],
+    }
+    if (current.assignAssetKeys.includes(assetKey)) return
+
+    await updatePositionAssetScheduleLists(
+      position,
+      [...current.assignAssetKeys, assetKey],
+      current.unassignAssetKeys,
+      asset
+        ? `Scheduled ${asset.name} to assign to ${position} on next OP.`
+        : `Scheduled asset to assign to ${position} on next OP.`
+    )
+  }
+  const scheduleUnassignAssetFromPosition = async (assetKey: string, position: string) => {
+    const asset = workspaceAssetsByKey[assetKey]
+    const current = assetSchedulesByPosition[position] ?? {
+      assignAssetKeys: [],
+      unassignAssetKeys: [],
+    }
+    if (current.unassignAssetKeys.includes(assetKey)) return
+
+    await updatePositionAssetScheduleLists(
+      position,
+      current.assignAssetKeys,
+      [...current.unassignAssetKeys, assetKey],
+      asset
+        ? `Scheduled ${asset.name} to unassign from ${position} on next OP.`
+        : `Scheduled asset to unassign from ${position} on next OP.`
+    )
+  }
+  const removeScheduledAssignAssetFromPosition = async (assetKey: string, position: string) => {
+    const asset = workspaceAssetsByKey[assetKey]
+    const current = assetSchedulesByPosition[position] ?? {
+      assignAssetKeys: [],
+      unassignAssetKeys: [],
+    }
+
+    await updatePositionAssetScheduleLists(
+      position,
+      current.assignAssetKeys.filter((entry) => entry !== assetKey),
+      current.unassignAssetKeys,
+      asset
+        ? `Removed ${asset.name} from next OP assign schedule for ${position}.`
+        : `Removed asset from next OP assign schedule for ${position}.`
+    )
+  }
+  const removeScheduledUnassignAssetFromPosition = async (assetKey: string, position: string) => {
+    const asset = workspaceAssetsByKey[assetKey]
+    const current = assetSchedulesByPosition[position] ?? {
+      assignAssetKeys: [],
+      unassignAssetKeys: [],
+    }
+
+    await updatePositionAssetScheduleLists(
+      position,
+      current.assignAssetKeys,
+      current.unassignAssetKeys.filter((entry) => entry !== assetKey),
+      asset
+        ? `Removed ${asset.name} from next OP unassign schedule for ${position}.`
+        : `Removed asset from next OP unassign schedule for ${position}.`
+    )
+  }
+  const updateAssetPointOfContact = async (assetKey: string, memberId: string | null) => {
+    if (!isSupabaseEnabled || !activeWorkspaceSupabaseId) {
+      toast.error('This workspace is not synced to Supabase yet.')
+      return
+    }
+    const accessToken = await getAccessToken()
+    if (!accessToken) {
+      toast.error('Sign in again to update Point of Contact.')
+      return
+    }
+
+    const result = await updateWorkspaceAssetPointOfContact({
+      accessToken,
+      workspaceId: activeWorkspaceSupabaseId,
+      assetKey,
+      pointOfContactMemberId: memberId,
+    })
+
+    if (!result.ok) {
+      toast.error(result.message)
+      return
+    }
+
+    await reloadWorkspacePositionAssets()
   }
   const toggleWorkspacePositionEditIcs201 = async (position: string, enabled: boolean) => {
     if (!canManageWorkspaceRoster || isViewingHistoricalRoster) return
@@ -26951,6 +27287,32 @@ function App() {
                       onCheckInStatusChange={(memberId, status) => {
                         void updateMemberCheckInStatus(memberId, status)
                       }}
+                      showPositionAssets={showPositionAssets}
+                      assignableAssetsByPosition={assignableAssetsByPosition}
+                      scheduleAssignableAssetsByPosition={scheduleAssignableAssetsByPosition}
+                      scheduleUnassignableAssetsByPosition={scheduleUnassignableAssetsByPosition}
+                      pocMembers={rosterPocMembers}
+                      onAssignAsset={(assetKey, position, pointOfContactMemberId) => {
+                        void assignAssetToPosition(assetKey, position, pointOfContactMemberId)
+                      }}
+                      onUnassignAsset={(assetKey, position) => {
+                        void unassignAssetFromPosition(assetKey, position)
+                      }}
+                      onScheduleAssignAsset={(assetKey, position) => {
+                        void scheduleAssignAssetToPosition(assetKey, position)
+                      }}
+                      onScheduleUnassignAsset={(assetKey, position) => {
+                        void scheduleUnassignAssetFromPosition(assetKey, position)
+                      }}
+                      onRemoveScheduledAssignAsset={(assetKey, position) => {
+                        void removeScheduledAssignAssetFromPosition(assetKey, position)
+                      }}
+                      onRemoveScheduledUnassignAsset={(assetKey, position) => {
+                        void removeScheduledUnassignAssetFromPosition(assetKey, position)
+                      }}
+                      onUpdateAssetPointOfContact={(assetKey, memberId) => {
+                        void updateAssetPointOfContact(assetKey, memberId)
+                      }}
                       onFocusAsset={(asset) => {
                         const mapKey = getAssetMapKey(asset.assetKey)
                         setSelectedPanelItemId(mapKey)
@@ -27011,6 +27373,32 @@ function App() {
                       updatingCheckInMemberId={updatingCheckInMemberId}
                       onCheckInStatusChange={(memberId, status) => {
                         void updateMemberCheckInStatus(memberId, status)
+                      }}
+                      showPositionAssets={showPositionAssets}
+                      assignableAssetsByPosition={assignableAssetsByPosition}
+                      scheduleAssignableAssetsByPosition={scheduleAssignableAssetsByPosition}
+                      scheduleUnassignableAssetsByPosition={scheduleUnassignableAssetsByPosition}
+                      pocMembers={rosterPocMembers}
+                      onAssignAsset={(assetKey, position, pointOfContactMemberId) => {
+                        void assignAssetToPosition(assetKey, position, pointOfContactMemberId)
+                      }}
+                      onUnassignAsset={(assetKey, position) => {
+                        void unassignAssetFromPosition(assetKey, position)
+                      }}
+                      onScheduleAssignAsset={(assetKey, position) => {
+                        void scheduleAssignAssetToPosition(assetKey, position)
+                      }}
+                      onScheduleUnassignAsset={(assetKey, position) => {
+                        void scheduleUnassignAssetFromPosition(assetKey, position)
+                      }}
+                      onRemoveScheduledAssignAsset={(assetKey, position) => {
+                        void removeScheduledAssignAssetFromPosition(assetKey, position)
+                      }}
+                      onRemoveScheduledUnassignAsset={(assetKey, position) => {
+                        void removeScheduledUnassignAssetFromPosition(assetKey, position)
+                      }}
+                      onUpdateAssetPointOfContact={(assetKey, memberId) => {
+                        void updateAssetPointOfContact(assetKey, memberId)
                       }}
                     />
                       )}

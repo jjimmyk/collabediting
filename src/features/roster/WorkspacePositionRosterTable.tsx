@@ -32,6 +32,12 @@ import {
   filterPositionRosterMembers,
   formatPositionAssignmentCount,
 } from '@/features/roster/workspace-position-roster'
+import {
+  PositionRosterAssetSections,
+  type PositionRosterAssetHandlers,
+} from '@/features/roster/PositionRosterAssetSections'
+import type { ResourceListItemData } from '@/features/resources/types'
+import { formatPositionAssetAssignmentCount } from '@/lib/workspace-position-asset-roster'
 import { PositionOpAdvanceLabelSelect } from '@/features/roster/PositionOpAdvanceLabelSelect'
 import { PositionRosterDetailPanel } from '@/features/roster/PositionRosterDetailPanel'
 import {
@@ -72,7 +78,12 @@ type WorkspacePositionRosterTableProps = {
   canEditCheckInStatus?: boolean
   updatingCheckInMemberId?: string | null
   onCheckInStatusChange?: (memberId: string, status: WorkspaceMemberCheckInStatus) => void
-}
+  showPositionAssets?: boolean
+  assignableAssetsByPosition?: Record<string, ResourceListItemData[]>
+  scheduleAssignableAssetsByPosition?: Record<string, ResourceListItemData[]>
+  scheduleUnassignableAssetsByPosition?: Record<string, ResourceListItemData[]>
+  pocMembers?: WorkspaceRosterMember[]
+} & Partial<PositionRosterAssetHandlers>
 
 function AssignedMembersList({
   entry,
@@ -193,9 +204,22 @@ export function WorkspacePositionRosterTable({
   onCheckInStatusChange,
   showAllowWorkAssignment = false,
   onToggleAllowWorkAssignment,
+  showPositionAssets = false,
+  assignableAssetsByPosition = {},
+  scheduleAssignableAssetsByPosition = {},
+  scheduleUnassignableAssetsByPosition = {},
+  pocMembers = [],
+  onAssignAsset,
+  onUnassignAsset,
+  onScheduleAssignAsset,
+  onScheduleUnassignAsset,
+  onRemoveScheduledAssignAsset,
+  onRemoveScheduledUnassignAsset,
+  onUpdateAssetPointOfContact,
 }: WorkspacePositionRosterTableProps) {
   const tableColumnCount =
     3 +
+    (showPositionAssets ? 1 : 0) +
     (showAllowWorkAssignment ? 1 : 0) +
     (showOpAdvanceLabels ? 1 : 0) +
     (canManageRoster ? 1 : 0)
@@ -292,6 +316,9 @@ export function WorkspacePositionRosterTable({
               </div>
             </TableHead>
             <TableHead className="min-w-[9rem] align-bottom">Permissions</TableHead>
+            {showPositionAssets ? (
+              <TableHead className="min-w-[8rem] align-bottom">Assets</TableHead>
+            ) : null}
             {showAllowWorkAssignment ? (
               <TableHead className="min-w-[11rem] align-bottom">Position Properties</TableHead>
             ) : null}
@@ -318,7 +345,17 @@ export function WorkspacePositionRosterTable({
               const assignable = assignableByPosition[entry.position] ?? []
               const scheduleAssignable = scheduleAssignableByPosition[entry.position] ?? []
               const scheduleUnassignable = scheduleUnassignableByPosition[entry.position] ?? []
+              const assignableAssets = assignableAssetsByPosition[entry.position] ?? []
+              const scheduleAssignableAssets =
+                scheduleAssignableAssetsByPosition[entry.position] ?? []
+              const scheduleUnassignableAssets =
+                scheduleUnassignableAssetsByPosition[entry.position] ?? []
               const isExpanded = expandedPositions.has(entry.position)
+              const assetCount =
+                entry.assets.length +
+                entry.scheduledAssignAssets.length +
+                entry.scheduledUnassignAssets.length
+              const assetSummary = formatPositionAssetAssignmentCount(entry.assets.length)
               const scheduledCount =
                 entry.scheduledAssignees.length + entry.scheduledUnassignees.length
               const assignmentSummary =
@@ -396,6 +433,57 @@ export function WorkspacePositionRosterTable({
                       variant="table"
                     />
                   </TableCell>
+                  {showPositionAssets ? (
+                    <TableCell className="align-top">
+                      <div className="space-y-1.5">
+                        <p className="text-xs text-muted-foreground">{assetSummary}</p>
+                        {onAssignAsset &&
+                        onUnassignAsset &&
+                        onScheduleAssignAsset &&
+                        onScheduleUnassignAsset &&
+                        onRemoveScheduledAssignAsset &&
+                        onRemoveScheduledUnassignAsset &&
+                        onUpdateAssetPointOfContact ? (
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                className="h-7 gap-1 px-2 text-[11px]"
+                                disabled={isAssigningPosition === entry.position}
+                              >
+                                Manage
+                              </Button>
+                            </PopoverTrigger>
+                            <PopoverContent align="start" className="w-80 max-h-[70vh] overflow-y-auto p-3">
+                              <PositionRosterAssetSections
+                                entry={entry}
+                                assignableAssets={assignableAssets}
+                                scheduleAssignableAssets={scheduleAssignableAssets}
+                                scheduleUnassignableAssets={scheduleUnassignableAssets}
+                                pocMembers={pocMembers}
+                                canManageRoster={canManageRoster}
+                                isBusy={isAssigningPosition === entry.position}
+                                onAssignAsset={onAssignAsset}
+                                onUnassignAsset={onUnassignAsset}
+                                onScheduleAssignAsset={onScheduleAssignAsset}
+                                onScheduleUnassignAsset={onScheduleUnassignAsset}
+                                onRemoveScheduledAssignAsset={onRemoveScheduledAssignAsset}
+                                onRemoveScheduledUnassignAsset={onRemoveScheduledUnassignAsset}
+                                onUpdateAssetPointOfContact={onUpdateAssetPointOfContact}
+                              />
+                            </PopoverContent>
+                          </Popover>
+                        ) : null}
+                        {assetCount > entry.assets.length ? (
+                          <p className="text-[10px] text-muted-foreground">
+                            {assetCount - entry.assets.length} scheduled next OP
+                          </p>
+                        ) : null}
+                      </div>
+                    </TableCell>
+                  ) : null}
                   {showAllowWorkAssignment && onToggleAllowWorkAssignment ? (
                     <TableCell className="align-top">
                       <PositionPropertiesSection
@@ -483,6 +571,18 @@ export function WorkspacePositionRosterTable({
                               canEditCheckInStatus={canEditCheckInStatus}
                               updatingCheckInMemberId={updatingCheckInMemberId}
                               onCheckInStatusChange={onCheckInStatusChange}
+                              showPositionAssets={showPositionAssets}
+                              assignableAssets={assignableAssets}
+                              scheduleAssignableAssets={scheduleAssignableAssets}
+                              scheduleUnassignableAssets={scheduleUnassignableAssets}
+                              pocMembers={pocMembers}
+                              onAssignAsset={onAssignAsset}
+                              onUnassignAsset={onUnassignAsset}
+                              onScheduleAssignAsset={onScheduleAssignAsset}
+                              onScheduleUnassignAsset={onScheduleUnassignAsset}
+                              onRemoveScheduledAssignAsset={onRemoveScheduledAssignAsset}
+                              onRemoveScheduledUnassignAsset={onRemoveScheduledUnassignAsset}
+                              onUpdateAssetPointOfContact={onUpdateAssetPointOfContact}
                             />
                           </PopoverContent>
                         </Popover>

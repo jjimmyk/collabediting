@@ -68,6 +68,7 @@ const EMPTY_RESOURCE_SNAPSHOT = (id: number, name: string): Ics204ResourceSnapsh
   orgChartReportsTo: null,
   orgChartSortOrder: 0,
   ics204DocumentId: null,
+  pointOfContactMemberId: null,
 })
 
 function cloneEmbeddedIcs204a(value: Ics204aFormState): Ics204aFormState {

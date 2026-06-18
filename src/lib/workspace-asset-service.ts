@@ -14,6 +14,7 @@ type DbWorkspaceAssetAssignmentRow = {
   org_chart_reports_to: string | null
   org_chart_sort_order: number | null
   ics204_document_id: string | null
+  point_of_contact_member_id: string | null
 }
 
 function mapAssignmentRow(row: DbWorkspaceAssetAssignmentRow): WorkspaceAssetAssignment {
@@ -23,6 +24,7 @@ function mapAssignmentRow(row: DbWorkspaceAssetAssignmentRow): WorkspaceAssetAss
     orgChartReportsTo: row.org_chart_reports_to,
     orgChartSortOrder: row.org_chart_sort_order ?? 0,
     ics204DocumentId: row.ics204_document_id,
+    pointOfContactMemberId: row.point_of_contact_member_id,
   }
 }
 
@@ -96,7 +98,7 @@ export async function fetchAllAssetAssignments(): Promise<WorkspaceAssetAssignme
 
   const { data, error } = await supabase
     .from('workspace_asset_assignments')
-    .select('asset_key, workspace_id, org_chart_reports_to, org_chart_sort_order, ics204_document_id')
+    .select('asset_key, workspace_id, org_chart_reports_to, org_chart_sort_order, ics204_document_id, point_of_contact_member_id')
 
   if (error) {
     throw error

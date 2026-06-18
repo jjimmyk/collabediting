@@ -26,6 +26,11 @@ import {
   PositionPermissionsSection,
   PositionPropertiesSection,
 } from '@/features/roster/PositionRosterPropertySections'
+import {
+  PositionRosterAssetSections,
+  type PositionRosterAssetHandlers,
+} from '@/features/roster/PositionRosterAssetSections'
+import type { ResourceListItemData } from '@/features/resources/types'
 import type { WorkspacePositionMeta } from '@/features/roster/workspace-positions'
 
 type PositionRosterDetailPanelProps = {
@@ -55,7 +60,12 @@ type PositionRosterDetailPanelProps = {
   canEditCheckInStatus?: boolean
   updatingCheckInMemberId?: string | null
   onCheckInStatusChange?: (memberId: string, status: WorkspaceMemberCheckInStatus) => void
-}
+  showPositionAssets?: boolean
+  assignableAssets?: ResourceListItemData[]
+  scheduleAssignableAssets?: ResourceListItemData[]
+  scheduleUnassignableAssets?: ResourceListItemData[]
+  pocMembers?: WorkspaceRosterMember[]
+} & Partial<PositionRosterAssetHandlers>
 
 function MemberRow({
   member,
@@ -272,6 +282,18 @@ export function PositionRosterDetailPanel({
   canEditCheckInStatus = false,
   updatingCheckInMemberId = null,
   onCheckInStatusChange,
+  showPositionAssets = false,
+  assignableAssets = [],
+  scheduleAssignableAssets = [],
+  scheduleUnassignableAssets = [],
+  pocMembers = [],
+  onAssignAsset,
+  onUnassignAsset,
+  onScheduleAssignAsset,
+  onScheduleUnassignAsset,
+  onRemoveScheduledAssignAsset,
+  onRemoveScheduledUnassignAsset,
+  onUpdateAssetPointOfContact,
 }: PositionRosterDetailPanelProps) {
   const [expandedInviteMode, setExpandedInviteMode] = useState<RosterInviteAssignmentMode | null>(
     null
@@ -490,6 +512,32 @@ export function PositionRosterDetailPanel({
             />
           ) : null}
         </div>
+      ) : null}
+
+      {showPositionAssets &&
+      onAssignAsset &&
+      onUnassignAsset &&
+      onScheduleAssignAsset &&
+      onScheduleUnassignAsset &&
+      onRemoveScheduledAssignAsset &&
+      onRemoveScheduledUnassignAsset &&
+      onUpdateAssetPointOfContact ? (
+        <PositionRosterAssetSections
+          entry={entry}
+          assignableAssets={assignableAssets}
+          scheduleAssignableAssets={scheduleAssignableAssets}
+          scheduleUnassignableAssets={scheduleUnassignableAssets}
+          pocMembers={pocMembers}
+          canManageRoster={canManageRoster}
+          isBusy={isAssignBusy}
+          onAssignAsset={onAssignAsset}
+          onUnassignAsset={onUnassignAsset}
+          onScheduleAssignAsset={onScheduleAssignAsset}
+          onScheduleUnassignAsset={onScheduleUnassignAsset}
+          onRemoveScheduledAssignAsset={onRemoveScheduledAssignAsset}
+          onRemoveScheduledUnassignAsset={onRemoveScheduledUnassignAsset}
+          onUpdateAssetPointOfContact={onUpdateAssetPointOfContact}
+        />
       ) : null}
     </div>
   )
