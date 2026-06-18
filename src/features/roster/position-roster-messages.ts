@@ -51,8 +51,53 @@ export function scheduleUnassignMembersEmptyMessage(
   if (unassignableCount > 0) {
     return ''
   }
-  if (entry.members.length === 0) {
-    return 'No members are assigned to this position yet.'
+  if (entry.members.length === 0 && entry.assets.length === 0) {
+    return 'No users or assets are assigned to this position yet.'
   }
-  return 'No assigned members can be scheduled to unassign.'
+  return 'No assigned users or assets can be scheduled to unassign.'
+}
+
+export function assignNowCombinedEmptyMessage(
+  entry: PositionRosterEntry,
+  showAssets: boolean
+): string {
+  if (entry.members.length > 0 || entry.assets.length > 0) {
+    return ''
+  }
+  return showAssets
+    ? 'No users or assets assigned yet.'
+    : 'No users assigned yet.'
+}
+
+export function scheduleAssignCombinedEmptyMessage(
+  entry: PositionRosterEntry,
+  showAssets: boolean
+): string {
+  if (entry.scheduledAssignees.length > 0 || entry.scheduledAssignAssets.length > 0) {
+    return ''
+  }
+  return showAssets
+    ? 'No users or assets scheduled to assign.'
+    : 'No users scheduled to assign.'
+}
+
+export function scheduleUnassignCombinedEmptyMessage(
+  entry: PositionRosterEntry,
+  showAssets: boolean
+): string {
+  if (entry.scheduledUnassignees.length > 0 || entry.scheduledUnassignAssets.length > 0) {
+    return ''
+  }
+  return showAssets
+    ? 'No users or assets scheduled to unassign.'
+    : 'No users scheduled to unassign.'
+}
+
+export function assignableAssetsEmptyMessage(showAssets: boolean): string {
+  if (!showAssets) return ''
+  return 'No workspace assets are available for this action.'
+}
+
+export function scheduleUnassignAssetsEmptyMessage(): string {
+  return 'No assigned assets can be scheduled to unassign.'
 }

@@ -33,7 +33,6 @@ import {
   formatPositionAssignmentCount,
 } from '@/features/roster/workspace-position-roster'
 import {
-  PositionRosterAssetSections,
   type PositionRosterAssetHandlers,
 } from '@/features/roster/PositionRosterAssetSections'
 import type { ResourceListItemData } from '@/features/resources/types'
@@ -435,51 +434,15 @@ export function WorkspacePositionRosterTable({
                   </TableCell>
                   {showPositionAssets ? (
                     <TableCell className="align-top">
-                      <div className="space-y-1.5">
+                      <div className="space-y-1">
                         <p className="text-xs text-muted-foreground">{assetSummary}</p>
-                        {onAssignAsset &&
-                        onUnassignAsset &&
-                        onScheduleAssignAsset &&
-                        onScheduleUnassignAsset &&
-                        onRemoveScheduledAssignAsset &&
-                        onRemoveScheduledUnassignAsset &&
-                        onUpdateAssetPointOfContact ? (
-                          <Popover>
-                            <PopoverTrigger asChild>
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="outline"
-                                className="h-7 gap-1 px-2 text-[11px]"
-                                disabled={isAssigningPosition === entry.position}
-                              >
-                                Manage
-                              </Button>
-                            </PopoverTrigger>
-                            <PopoverContent align="start" className="w-80 max-h-[70vh] overflow-y-auto p-3">
-                              <PositionRosterAssetSections
-                                entry={entry}
-                                assignableAssets={assignableAssets}
-                                scheduleAssignableAssets={scheduleAssignableAssets}
-                                scheduleUnassignableAssets={scheduleUnassignableAssets}
-                                pocMembers={pocMembers}
-                                canManageRoster={canManageRoster}
-                                isBusy={isAssigningPosition === entry.position}
-                                onAssignAsset={onAssignAsset}
-                                onUnassignAsset={onUnassignAsset}
-                                onScheduleAssignAsset={onScheduleAssignAsset}
-                                onScheduleUnassignAsset={onScheduleUnassignAsset}
-                                onRemoveScheduledAssignAsset={onRemoveScheduledAssignAsset}
-                                onRemoveScheduledUnassignAsset={onRemoveScheduledUnassignAsset}
-                                onUpdateAssetPointOfContact={onUpdateAssetPointOfContact}
-                              />
-                            </PopoverContent>
-                          </Popover>
-                        ) : null}
                         {assetCount > entry.assets.length ? (
                           <p className="text-[10px] text-muted-foreground">
                             {assetCount - entry.assets.length} scheduled next OP
                           </p>
+                        ) : null}
+                        {canManageRoster ? (
+                          <p className="text-[10px] text-muted-foreground">Use Manage for assets.</p>
                         ) : null}
                       </div>
                     </TableCell>
@@ -540,7 +503,10 @@ export function WorkspacePositionRosterTable({
                               Manage
                             </Button>
                           </PopoverTrigger>
-                          <PopoverContent align="start" className="w-72 p-3">
+                          <PopoverContent
+                            align="start"
+                            className="w-[min(32rem,calc(100vw-2rem))] max-h-[70vh] overflow-y-auto p-3"
+                          >
                             <PositionRosterDetailPanel
                               entry={entry}
                               assignable={assignable}

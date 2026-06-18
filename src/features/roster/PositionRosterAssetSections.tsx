@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { CalendarClock, Package, Trash2, Truck } from 'lucide-react'
+import { Trash2, Truck } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
@@ -16,7 +16,6 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import type { ResourceListItemData } from '@/features/resources/types'
-import type { PositionRosterEntry } from '@/features/roster/workspace-position-roster'
 import type { PositionAssetRosterEntry } from '@/lib/workspace-position-asset-types'
 import type { WorkspaceRosterMember } from '@/lib/workspace-types'
 
@@ -28,16 +27,6 @@ export type PositionRosterAssetHandlers = {
   onRemoveScheduledAssignAsset: (assetKey: string, position: string) => void
   onRemoveScheduledUnassignAsset: (assetKey: string, position: string) => void
   onUpdateAssetPointOfContact: (assetKey: string, memberId: string | null) => void
-}
-
-export type PositionRosterAssetSectionsProps = PositionRosterAssetHandlers & {
-  entry: PositionRosterEntry
-  assignableAssets: ResourceListItemData[]
-  scheduleAssignableAssets: ResourceListItemData[]
-  scheduleUnassignableAssets: ResourceListItemData[]
-  pocMembers: WorkspaceRosterMember[]
-  canManageRoster: boolean
-  isBusy: boolean
 }
 
 export function AssetPointOfContactSelect({
@@ -86,7 +75,7 @@ export function AssetPointOfContactSelect({
   )
 }
 
-function PositionAssetRow({
+export function PositionAssetRow({
   asset,
   badgeLabel,
   pocMembers,
@@ -113,6 +102,9 @@ function PositionAssetRow({
         <div className="min-w-0 flex-1">
           <p className="truncate text-xs font-medium">{asset.name}</p>
           <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
+            <Badge variant="secondary" className="h-4 px-1.5 text-[9px]">
+              Asset
+            </Badge>
             <Badge variant="outline" className="h-4 px-1.5 text-[9px]">
               {badgeLabel}
             </Badge>
@@ -152,13 +144,14 @@ function PositionAssetRow({
   )
 }
 
-function PositionAssetPickerPopover({
+export function PositionAssetPickerPopover({
   label,
   assets,
   pocMembers,
   requirePoc,
   disabled,
   emptyMessage,
+  compact = false,
   onSelect,
 }: {
   label: string
@@ -167,6 +160,7 @@ function PositionAssetPickerPopover({
   requirePoc: boolean
   disabled: boolean
   emptyMessage: string
+  compact?: boolean
   onSelect: (assetKey: string, pointOfContactMemberId?: string) => void
 }) {
   const [open, setOpen] = useState(false)
@@ -183,7 +177,7 @@ function PositionAssetPickerPopover({
   }
 
   return (
-    <div className="space-y-1 pt-1">
+    <div className={compact ? 'min-w-[6.5rem] flex-1' : 'space-y-1 pt-1'}>
       <Popover
         open={open}
         onOpenChange={(nextOpen) => {
@@ -196,7 +190,11 @@ function PositionAssetPickerPopover({
             type="button"
             size="sm"
             variant="outline"
-            className="h-7 w-full gap-1 text-xs"
+            className={
+              compact
+                ? 'h-7 w-full gap-1 px-2 text-[11px]'
+                : 'h-7 w-full gap-1 text-xs'
+            }
             disabled={disabled || assets.length === 0}
           >
             <Truck className="h-3.5 w-3.5 shrink-0" />
@@ -260,155 +258,9 @@ function PositionAssetPickerPopover({
           )}
         </PopoverContent>
       </Popover>
-      {assets.length === 0 && emptyMessage ? (
+      {assets.length === 0 && emptyMessage && !compact ? (
         <p className="px-1 text-[11px] text-muted-foreground">{emptyMessage}</p>
       ) : null}
     </div>
-  )
-}
-
-export function PositionRosterAssetSections({
-  entry,
-  assignableAssets,
-  scheduleAssignableAssets,
-  scheduleUnassignableAssets,
-  pocMembers,
-  canManageRoster,
-  isBusy,
-  onAssignAsset,
-  onUnassignAsset,
-  onScheduleAssignAsset,
-  onScheduleUnassignAsset,
-  onRemoveScheduledAssignAsset,
-  onRemoveScheduledUnassignAsset,
-  onUpdateAssetPointOfContact,
-}: PositionRosterAssetSectionsProps) {
-  const policy = entry.memberSchedulePolicy
-  const canAssignNow = policy.allowActiveAssignment
-  const canScheduleAssign = policy.allowScheduleAssign
-  const canScheduleUnassign = policy.allowScheduleUnassign
-
-  return (
-    <>
-      <div className="space-y-1.5 rounded-md border bg-muted/10 px-2.5 py-2">
-        <p className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground">
-          <Package className="h-3.5 w-3.5" />
-          Assigned assets
-        </p>
-        {entry.assets.length === 0 ? (
-          <p className="rounded-md border border-dashed px-2 py-2 text-center text-[11px] text-muted-foreground">
-            No assets assigned to this position.
-          </p>
-        ) : (
-          entry.assets.map((asset) => (
-            <PositionAssetRow
-              key={`asset-now-${entry.position}-${asset.assetKey}`}
-              asset={asset}
-              badgeLabel="Assigned"
-              pocMembers={pocMembers}
-              canManage={canManageRoster && canAssignNow}
-              canEditPoc={canManageRoster}
-              isBusy={isBusy}
-              removeLabel={`Remove ${asset.name} from ${entry.position}`}
-              onRemove={() => onUnassignAsset(asset.assetKey, entry.position)}
-              onUpdateAssetPointOfContact={onUpdateAssetPointOfContact}
-            />
-          ))
-        )}
-        {canManageRoster && canAssignNow ? (
-          <PositionAssetPickerPopover
-            label="Assign asset"
-            assets={assignableAssets}
-            pocMembers={pocMembers}
-            requirePoc
-            disabled={isBusy}
-            emptyMessage="No workspace assets are available to assign to this position."
-            onSelect={(assetKey, pointOfContactMemberId) =>
-              onAssignAsset(assetKey, entry.position, pointOfContactMemberId)
-            }
-          />
-        ) : null}
-      </div>
-
-      {entry.scheduledAssignAssets.length > 0 || canScheduleAssign ? (
-        <div className="space-y-1.5 rounded-md border bg-muted/10 px-2.5 py-2">
-          <p className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground">
-            <CalendarClock className="h-3.5 w-3.5" />
-            Scheduled assign (next OP)
-          </p>
-          {entry.scheduledAssignAssets.length === 0 ? (
-            <p className="rounded-md border border-dashed px-2 py-2 text-center text-[11px] text-muted-foreground">
-              No assets scheduled to assign.
-            </p>
-          ) : (
-            entry.scheduledAssignAssets.map((asset) => (
-              <PositionAssetRow
-                key={`asset-sched-assign-${entry.position}-${asset.assetKey}`}
-                asset={asset}
-                badgeLabel="Next OP"
-                pocMembers={pocMembers}
-                canManage={canManageRoster}
-                canEditPoc={canManageRoster}
-                isBusy={isBusy}
-                removeLabel={`Remove ${asset.name} from next OP assign schedule`}
-                onRemove={() => onRemoveScheduledAssignAsset(asset.assetKey, entry.position)}
-                onUpdateAssetPointOfContact={onUpdateAssetPointOfContact}
-              />
-            ))
-          )}
-          {canManageRoster && canScheduleAssign ? (
-            <PositionAssetPickerPopover
-              label="Schedule assign for next OP"
-              assets={scheduleAssignableAssets}
-              pocMembers={pocMembers}
-              requirePoc={false}
-              disabled={isBusy}
-              emptyMessage="No workspace assets are available to schedule for this position."
-              onSelect={(assetKey) => onScheduleAssignAsset(assetKey, entry.position)}
-            />
-          ) : null}
-        </div>
-      ) : null}
-
-      {entry.scheduledUnassignAssets.length > 0 || canScheduleUnassign ? (
-        <div className="space-y-1.5 rounded-md border bg-muted/10 px-2.5 py-2">
-          <p className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground">
-            <CalendarClock className="h-3.5 w-3.5" />
-            Scheduled unassign (next OP)
-          </p>
-          {entry.scheduledUnassignAssets.length === 0 ? (
-            <p className="rounded-md border border-dashed px-2 py-2 text-center text-[11px] text-muted-foreground">
-              No assets scheduled to unassign.
-            </p>
-          ) : (
-            entry.scheduledUnassignAssets.map((asset) => (
-              <PositionAssetRow
-                key={`asset-sched-unassign-${entry.position}-${asset.assetKey}`}
-                asset={asset}
-                badgeLabel="Next OP"
-                pocMembers={pocMembers}
-                canManage={canManageRoster}
-                canEditPoc={canManageRoster}
-                isBusy={isBusy}
-                removeLabel={`Remove ${asset.name} from next OP unassign schedule`}
-                onRemove={() => onRemoveScheduledUnassignAsset(asset.assetKey, entry.position)}
-                onUpdateAssetPointOfContact={onUpdateAssetPointOfContact}
-              />
-            ))
-          )}
-          {canManageRoster && canScheduleUnassign ? (
-            <PositionAssetPickerPopover
-              label="Schedule unassign for next OP"
-              assets={scheduleUnassignableAssets}
-              pocMembers={pocMembers}
-              requirePoc={false}
-              disabled={isBusy}
-              emptyMessage="No assigned assets can be scheduled to unassign."
-              onSelect={(assetKey) => onScheduleUnassignAsset(assetKey, entry.position)}
-            />
-          ) : null}
-        </div>
-      ) : null}
-    </>
   )
 }
