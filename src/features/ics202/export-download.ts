@@ -1,215 +1,13 @@
 import type { Ics202ExportLayoutBlock } from '@/features/ics202/export-layout'
 import { ICS202_FORM_TITLE_LINES } from '@/features/ics202/export-layout'
+import {
+  assertIcs202DocxLayoutConsistency,
+  buildIcs202DocxXml,
+  ICS202_PDF_CONTENT_WIDTH,
+  ICS202_PDF_PAGE,
+} from '@/features/ics202/export-docx-layout'
 
-function escapeXml(text: string): string {
-  return text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&apos;')
-}
-
-const DOCX_TABLE_BORDERS =
-  `<w:tblBorders>` +
-  `<w:top w:val="single" w:sz="6" w:space="0" w:color="000000"/>` +
-  `<w:left w:val="single" w:sz="6" w:space="0" w:color="000000"/>` +
-  `<w:bottom w:val="single" w:sz="6" w:space="0" w:color="000000"/>` +
-  `<w:right w:val="single" w:sz="6" w:space="0" w:color="000000"/>` +
-  `<w:insideH w:val="single" w:sz="6" w:space="0" w:color="000000"/>` +
-  `<w:insideV w:val="single" w:sz="6" w:space="0" w:color="000000"/>` +
-  `</w:tblBorders>`
-
-function docxParagraph(text: string, opts: { bold?: boolean; size?: number; center?: boolean } = {}) {
-  const size = opts.size ?? 18
-  const jc = opts.center ? `<w:jc w:val="center"/>` : ''
-  const bold = opts.bold ? `<w:b/>` : ''
-  return (
-    `<w:p><w:pPr><w:spacing w:before="0" w:after="40"/>${jc}</w:pPr>` +
-    `<w:r><w:rPr>${bold}<w:sz w:val="${size}"/><w:szCs w:val="${size}"/></w:rPr>` +
-    `<w:t xml:space="preserve">${escapeXml(text || ' ')}</w:t></w:r></w:p>`
-  )
-}
-
-function docxMultilineParagraphs(text: string, size = 18): string {
-  const lines = (text ?? '').split(/\r?\n/)
-  if (lines.length === 0 || (lines.length === 1 && lines[0].trim() === '')) {
-    return docxParagraph(' ', { size })
-  }
-  return lines
-    .map((line) => docxParagraph(line.length > 0 ? line : ' ', { size }))
-    .join('')
-}
-
-function docxLabelParagraph(label: string): string {
-  return docxParagraph(label, { bold: true, size: 16 })
-}
-
-function docxBoxTable(innerXml: string, widthPct = 5000): string {
-  return (
-    `<w:tbl>` +
-    `<w:tblPr><w:tblW w:w="${widthPct}" w:type="pct"/>${DOCX_TABLE_BORDERS}</w:tblPr>` +
-    `<w:tr><w:tc><w:tcPr><w:tcW w:w="${widthPct}" w:type="pct"/>` +
-    `<w:tcMar><w:top w:w="80" w:type="dxa"/><w:left w:w="100" w:type="dxa"/><w:bottom w:w="80" w:type="dxa"/><w:right w:w="100" w:type="dxa"/></w:tcMar>` +
-    `</w:tcPr>${innerXml}</w:tc></w:tr></w:tbl>`
-  )
-}
-
-function renderLayoutBlockDocx(block: Ics202ExportLayoutBlock): string {
-  switch (block.kind) {
-    case 'form-title':
-      return ICS202_FORM_TITLE_LINES.map((line, index) =>
-        docxParagraph(line, {
-          bold: index === ICS202_FORM_TITLE_LINES.length - 1,
-          center: true,
-          size: index === ICS202_FORM_TITLE_LINES.length - 1 ? 20 : 16,
-        })
-      ).join('')
-    case 'header-row': {
-      const cellWidth = Math.floor(5000 / block.cells.length)
-      const cells = block.cells
-        .map((cell) => {
-          let inner = docxLabelParagraph(cell.label)
-          if (cell.subLabels?.length) {
-            inner += cell.subLabels
-              .map((sub) => docxParagraph(sub, { size: 14 }))
-              .join('')
-          }
-          inner += docxParagraph(cell.value || ' ', { size: 18 })
-          return (
-            `<w:tc><w:tcPr><w:tcW w:w="${cellWidth}" w:type="pct"/>` +
-            `<w:tcMar><w:top w:w="60" w:type="dxa"/><w:left w:w="80" w:type="dxa"/><w:bottom w:w="60" w:type="dxa"/><w:right w:w="80" w:type="dxa"/></w:tcMar>` +
-            `</w:tcPr>${inner}</w:tc>`
-          )
-        })
-        .join('')
-      return (
-        `<w:tbl><w:tblPr><w:tblW w:w="5000" w:type="pct"/>${DOCX_TABLE_BORDERS}</w:tblPr>` +
-        `<w:tr>${cells}</w:tr></w:tbl>`
-      )
-    }
-    case 'lifelines': {
-      const rows: string[] = []
-      for (let i = 0; i < block.options.length; i += 4) {
-        const slice = block.options.slice(i, i + 4)
-        const cells = slice
-          .map((opt) => {
-            const mark = opt.checked ? '\u2611' : '\u2610'
-            return (
-              `<w:tc><w:tcPr><w:tcW w:w="1250" w:type="pct"/></w:tcPr>` +
-              docxParagraph(`${mark} ${opt.label}`, { size: 16 }) +
-              `</w:tc>`
-            )
-          })
-          .join('')
-        rows.push(`<w:tr>${cells}</w:tr>`)
-      }
-      const grid =
-        `<w:tbl><w:tblPr><w:tblW w:w="5000" w:type="pct"/>${DOCX_TABLE_BORDERS}</w:tblPr>` +
-        rows.join('') +
-        `</w:tbl>`
-      return docxBoxTable(docxLabelParagraph(block.label) + grid)
-    }
-    case 'text-box':
-      return docxBoxTable(
-        docxLabelParagraph(block.label) + docxMultilineParagraphs(block.body, 18)
-      )
-    case 'objectives': {
-      const header =
-        `<w:tbl><w:tblPr><w:tblW w:w="5000" w:type="pct"/>${DOCX_TABLE_BORDERS}</w:tblPr>` +
-        `<w:tr>` +
-        `<w:tc><w:tcPr><w:tcW w:w="400" w:type="pct"/></w:tcPr>${docxParagraph('O/M', { bold: true, size: 14 })}</w:tc>` +
-        `<w:tc><w:tcPr><w:tcW w:w="4600" w:type="pct"/></w:tcPr>${docxParagraph('Objective', { bold: true, size: 14 })}</w:tc>` +
-        `</w:tr>`
-      const bodyRows =
-        block.rows.length === 0
-          ? `<w:tr><w:tc><w:tcPr><w:gridSpan w:val="2"/></w:tcPr>${docxParagraph(' ', { size: 18 })}</w:tc></w:tr>`
-          : block.rows
-              .map((row) => {
-                const prefix = [row.kind, row.label].filter(Boolean).join(' ')
-                const text = prefix
-                  ? `${prefix}  ${row.objective}`
-                  : row.objective || ' '
-                return (
-                  `<w:tr>` +
-                  `<w:tc><w:tcPr><w:tcW w:w="400" w:type="pct"/></w:tcPr>${docxParagraph(row.kind || ' ', { size: 16 })}</w:tc>` +
-                  `<w:tc><w:tcPr><w:tcW w:w="4600" w:type="pct"/></w:tcPr>${docxMultilineParagraphs(text, 16)}</w:tc>` +
-                  `</w:tr>`
-                )
-              })
-              .join('')
-      const table = header + bodyRows + `</w:tbl>`
-      return docxBoxTable(docxLabelParagraph(block.label) + table)
-    }
-    case 'site-safety-plan': {
-      const yesMark = block.required ? '\u2611' : '\u2610'
-      const noMark = block.required ? '\u2610' : '\u2611'
-      const row =
-        `<w:tbl><w:tblPr><w:tblW w:w="5000" w:type="pct"/>${DOCX_TABLE_BORDERS}</w:tblPr>` +
-        `<w:tr>` +
-        `<w:tc><w:tcPr><w:tcW w:w="2500" w:type="pct"/></w:tcPr>` +
-        docxLabelParagraph('8. Site Safety Plan Required:') +
-        docxParagraph(`Yes ${yesMark}   No ${noMark}`, { size: 16 }) +
-        `</w:tc>` +
-        `<w:tc><w:tcPr><w:tcW w:w="2500" w:type="pct"/></w:tcPr>` +
-        docxLabelParagraph('9. Site Safety Plan located at:') +
-        docxMultilineParagraphs(block.location, 16) +
-        `</w:tc>` +
-        `</w:tr></w:tbl>`
-      return row
-    }
-    case 'prepared-by': {
-      const fields = [
-        { label: 'Name:', value: block.fields.name },
-        { label: 'Position Title:', value: block.fields.positionTitle },
-        { label: 'Signature:', value: block.fields.signature },
-        { label: 'Date/Time:', value: block.fields.dateTime },
-      ]
-      const cells = fields
-        .map((field) => {
-          return (
-            `<w:tc><w:tcPr><w:tcW w:w="1250" w:type="pct"/>` +
-            `<w:tcMar><w:top w:w="60" w:type="dxa"/><w:left w:w="60" w:type="dxa"/><w:bottom w:w="60" w:type="dxa"/><w:right w:w="60" w:type="dxa"/></w:tcMar>` +
-            `</w:tcPr>${docxLabelParagraph(field.label)}${docxMultilineParagraphs(field.value, 16)}</w:tc>`
-          )
-        })
-        .join('')
-      return docxBoxTable(
-        docxLabelParagraph(block.label) +
-          `<w:tbl><w:tblPr><w:tblW w:w="5000" w:type="pct"/>${DOCX_TABLE_BORDERS}</w:tblPr>` +
-          `<w:tr>${cells}</w:tr></w:tbl>`
-      )
-    }
-    case 'page-break':
-      return `<w:p><w:r><w:br w:type="page"/></w:r></w:p>`
-    case 'page-footer':
-      return (
-        `<w:p><w:pPr><w:tabs>` +
-        `<w:tab w:val="left" w:pos="0"/>` +
-        `<w:tab w:val="center" w:pos="4680"/>` +
-        `<w:tab w:val="right" w:pos="9360"/>` +
-        `</w:tabs><w:spacing w:before="240" w:after="0"/></w:pPr>` +
-        `<w:r><w:rPr><w:sz w:val="14"/><w:szCs w:val="14"/></w:rPr>` +
-        `<w:t xml:space="preserve">${escapeXml(block.left)}\t\t${escapeXml(block.pageLabel)}</w:t></w:r></w:p>`
-      )
-    default:
-      return ''
-  }
-}
-
-function buildIcs202DocxXml(blocks: Ics202ExportLayoutBlock[]): string {
-  const body = blocks.map(renderLayoutBlockDocx).join('')
-  const sectPr =
-    `<w:sectPr>` +
-    `<w:pgSz w:w="12240" w:h="15840"/>` +
-    `<w:pgMar w:top="720" w:right="720" w:bottom="720" w:left="720" w:header="0" w:footer="0" w:gutter="0"/>` +
-    `</w:sectPr>`
-  return (
-    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
-    `<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">` +
-    `<w:body>${body}${sectPr}</w:body></w:document>`
-  )
-}
+export { buildIcs202DocxXml } from '@/features/ics202/export-docx-layout'
 
 let crc32Table: Uint32Array | null = null
 function computeCrc32(bytes: Uint8Array): number {
@@ -317,6 +115,7 @@ function triggerBlobDownload(blob: Blob, filename: string): void {
 
 export function downloadIcs202Docx(filename: string, blocks: Ics202ExportLayoutBlock[]): void {
   const documentXml = buildIcs202DocxXml(blocks)
+  assertIcs202DocxLayoutConsistency(documentXml)
   const files = [
     {
       name: '[Content_Types].xml',
@@ -685,10 +484,10 @@ function layoutBlockToPdfElements(
 }
 
 function buildIcs202PdfBytes(blocks: Ics202ExportLayoutBlock[]): Uint8Array {
-  const pageWidth = 612
-  const pageHeight = 792
-  const margin = 36
-  const contentWidth = pageWidth - margin * 2
+  const pageWidth = ICS202_PDF_PAGE.widthPt
+  const pageHeight = ICS202_PDF_PAGE.heightPt
+  const margin = ICS202_PDF_PAGE.marginPt
+  const contentWidth = ICS202_PDF_CONTENT_WIDTH
   const contentTop = pageHeight - margin
   const contentBottom = margin + 24
 
@@ -836,5 +635,3 @@ export function downloadIcs202Pdf(filename: string, blocks: Ics202ExportLayoutBl
   const bytes = buildIcs202PdfBytes(blocks)
   triggerBlobDownload(new Blob([bytes.buffer as ArrayBuffer], { type: 'application/pdf' }), filename)
 }
-
-export { buildIcs202PdfBytes, buildIcs202DocxXml }

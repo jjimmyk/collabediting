@@ -80,7 +80,7 @@ function renderPreviewBlock(block: Ics202ExportLayoutBlock, index: number) {
           <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px] xl:grid-cols-4">
             {block.options.map((opt) => (
               <span key={opt.id}>
-                {opt.checked ? '☑' : '☐'} {opt.label}
+                {opt.checked ? '[X]' : '[ ]'} {opt.label}
               </span>
             ))}
           </div>
@@ -119,7 +119,7 @@ function renderPreviewBlock(block: Ics202ExportLayoutBlock, index: number) {
           <div className="border-r border-zinc-900 px-2 py-2">
             <p className="text-[10px] font-semibold">8. Site Safety Plan Required:</p>
             <p className="mt-1 text-[11px]">
-              Yes {block.required ? '☑' : '☐'} &nbsp; No {block.required ? '☐' : '☑'}
+              Yes {block.required ? '[X]' : '[ ]'} &nbsp; No {block.required ? '[ ]' : '[X]'}
             </p>
           </div>
           <div className="px-2 py-2">
