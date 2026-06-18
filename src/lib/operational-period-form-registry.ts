@@ -49,7 +49,7 @@ export const OPERATIONAL_PERIOD_FORM_REGISTRY: OperationalPeriodFormRegistryEntr
   },
   {
     key: 'ics202',
-    label: 'ICS-202 Incident Objectives',
+    label: 'ICS-202 Incident Briefing',
     tab: 'form-ICS-202',
     documentsTable: 'ics202_documents',
     versionsTable: 'ics202_versions',

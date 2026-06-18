@@ -28,10 +28,11 @@ import type { Ics201VersionSignature } from '@/features/ics201/types'
 import { Ics202ExportPreviewDialog } from '@/features/ics202/Ics202ExportPreviewDialog'
 import { Ics202FormSections } from '@/features/ics202/Ics202FormSections'
 import {
-  buildIcs202DocxBlocks,
-  buildIcs202ExportOptions,
+  buildIcs202ExportLayout,
+  downloadIcs202Docx,
+  downloadIcs202Pdf,
   ics202ExportFilenameBase,
-  type Ics202DocxBlock,
+  type Ics202ExportLayoutBlock,
 } from '@/features/ics202/export'
 import type {
   Ics202FormSectionDrafts,
@@ -41,9 +42,6 @@ import type {
 } from '@/features/ics202/types'
 import { cloneIcs202FormState, getIcs202FormForExport } from '@/features/ics202/utils'
 import { cn } from '@/lib/utils'
-
-type ExportBlock = Ics202DocxBlock
-type ExportOptions = ReturnType<typeof buildIcs202ExportOptions>
 
 type Ics202WorkspacePanelProps = {
   form: Ics202FormState | null
@@ -74,8 +72,6 @@ type Ics202WorkspacePanelProps = {
     latestVersion: Ics202Version,
     signature: Ics201VersionSignature
   ) => void
-  downloadDocx: (filename: string, blocks: ExportBlock[], options?: ExportOptions) => void
-  downloadPdf: (filename: string, blocks: ExportBlock[], options?: ExportOptions) => void
 }
 
 export function Ics202WorkspacePanel({
@@ -96,8 +92,6 @@ export function Ics202WorkspacePanel({
   onPatchSectionDraft,
   onAppendVersion,
   onSignReview,
-  downloadDocx,
-  downloadPdf,
 }: Ics202WorkspacePanelProps) {
   const liveFormRef = useRef<Ics202FormState | null>(null)
   const [viewingPastVersion, setViewingPastVersion] = useState<Ics202Version | null>(null)
@@ -109,7 +103,7 @@ export function Ics202WorkspacePanel({
   } | null>(null)
   const [signNameInput, setSignNameInput] = useState('You')
   const [isPreviewOpen, setIsPreviewOpen] = useState(false)
-  const [previewBlocks, setPreviewBlocks] = useState<Ics202DocxBlock[]>([])
+  const [previewBlocks, setPreviewBlocks] = useState<Ics202ExportLayoutBlock[]>([])
 
   const latestVersion = versions[versions.length - 1] ?? null
   const isLatestSigned = !!latestVersion && latestVersion.signatures.length > 0
@@ -127,31 +121,29 @@ export function Ics202WorkspacePanel({
   const openPreview = () => {
     const exportForm = getExportForm()
     if (!exportForm) return
-    setPreviewBlocks(buildIcs202DocxBlocks(exportForm, getExportContext()))
+    setPreviewBlocks(buildIcs202ExportLayout(exportForm, getExportContext()))
     setIsPreviewOpen(true)
   }
 
-  const exportWord = (blocks?: ExportBlock[]) => {
+  const exportWord = (blocks?: Ics202ExportLayoutBlock[]) => {
     const exportForm = getExportForm()
     if (!exportForm) return
     const context = getExportContext()
     const stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-')
-    downloadDocx(
+    downloadIcs202Docx(
       `ICS-202_${ics202ExportFilenameBase(exportForm)}_${stamp}.docx`,
-      blocks ?? buildIcs202DocxBlocks(exportForm, context),
-      buildIcs202ExportOptions(exportForm, context)
+      blocks ?? buildIcs202ExportLayout(exportForm, context)
     )
   }
 
-  const exportPdf = (blocks?: ExportBlock[]) => {
+  const exportPdf = (blocks?: Ics202ExportLayoutBlock[]) => {
     const exportForm = getExportForm()
     if (!exportForm) return
     const context = getExportContext()
     const stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-')
-    downloadPdf(
+    downloadIcs202Pdf(
       `ICS-202_${ics202ExportFilenameBase(exportForm)}_${stamp}.pdf`,
-      blocks ?? buildIcs202DocxBlocks(exportForm, context),
-      buildIcs202ExportOptions(exportForm, context)
+      blocks ?? buildIcs202ExportLayout(exportForm, context)
     )
   }
 

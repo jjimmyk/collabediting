@@ -1,5 +1,7 @@
+import { ICS202_COMMUNITY_LIFELINES } from '@/features/ics202/constants'
 import { ics201AuthorColorFromId } from '@/features/ics201/utils'
 import type {
+  Ics202CommunityLifelines,
   Ics202FormSectionDrafts,
   Ics202FormState,
   Ics202IncidentInfoDraft,
@@ -11,23 +13,51 @@ import type {
   Ics202VersionRow,
 } from '@/features/ics202/types'
 
+export function createEmptyIcs202CommunityLifelines(
+  partial?: Partial<Ics202CommunityLifelines>
+): Ics202CommunityLifelines {
+  return ICS202_COMMUNITY_LIFELINES.reduce<Ics202CommunityLifelines>((acc, item) => {
+    acc[item.id] = partial?.[item.id] ?? false
+    return acc
+  }, {} as Ics202CommunityLifelines)
+}
+
 export function cloneIcs202FormState(form: Ics202FormState): Ics202FormState {
   return {
     ...form,
+    communityLifelines: { ...form.communityLifelines },
     objectives: form.objectives.map((row) => ({ ...row })),
   }
 }
 
 export function normalizeIcs202FormState(form: Ics202FormState): Ics202FormState {
+  const lifelines = createEmptyIcs202CommunityLifelines(form.communityLifelines ?? {})
   return {
     ...form,
+    incidentName: String(form.incidentName ?? ''),
+    incidentLocation: String(form.incidentLocation ?? ''),
+    operationalPeriodFrom: String(form.operationalPeriodFrom ?? ''),
+    operationalPeriodTo: String(form.operationalPeriodTo ?? ''),
+    communityLifelines: lifelines,
+    incidentPriorities: String(form.incidentPriorities ?? ''),
     objectives: (form.objectives ?? []).map((row, index) => ({
       id: typeof row.id === 'number' ? row.id : index + 1,
       kind: row.kind === 'O' || row.kind === 'M' ? row.kind : '',
       label: String(row.label ?? ''),
       objective: String(row.objective ?? ''),
     })),
+    commandEmphasis: String(form.commandEmphasis ?? ''),
     siteSafetyPlanRequired: Boolean(form.siteSafetyPlanRequired),
+    siteSafetyPlanLocation: String(form.siteSafetyPlanLocation ?? ''),
+    preparedByName: String(form.preparedByName ?? ''),
+    preparedByPositionTitle: String(
+      form.preparedByPositionTitle ?? 'Planning Section Chief'
+    ),
+    preparedBySignature: String(form.preparedBySignature ?? ''),
+    preparedDateTime: String(form.preparedDateTime ?? ''),
+    criticalInformationRequirements: String(form.criticalInformationRequirements ?? ''),
+    limitationsAndConstraints: String(form.limitationsAndConstraints ?? ''),
+    keyDecisionsAndProcedures: String(form.keyDecisionsAndProcedures ?? ''),
   }
 }
 
@@ -50,12 +80,19 @@ export function createEmptyIcs202Form(id: string, partial?: Partial<Ics202FormSt
     incidentLocation: partial?.incidentLocation ?? '',
     operationalPeriodFrom: partial?.operationalPeriodFrom ?? '',
     operationalPeriodTo: partial?.operationalPeriodTo ?? '',
+    communityLifelines: createEmptyIcs202CommunityLifelines(partial?.communityLifelines),
+    incidentPriorities: partial?.incidentPriorities ?? '',
     objectives: partial?.objectives ?? [],
     commandEmphasis: partial?.commandEmphasis ?? '',
     siteSafetyPlanRequired: partial?.siteSafetyPlanRequired ?? false,
     siteSafetyPlanLocation: partial?.siteSafetyPlanLocation ?? '',
     preparedByName: partial?.preparedByName ?? '',
+    preparedByPositionTitle: partial?.preparedByPositionTitle ?? 'Planning Section Chief',
+    preparedBySignature: partial?.preparedBySignature ?? '',
     preparedDateTime: partial?.preparedDateTime ?? '',
+    criticalInformationRequirements: partial?.criticalInformationRequirements ?? '',
+    limitationsAndConstraints: partial?.limitationsAndConstraints ?? '',
+    keyDecisionsAndProcedures: partial?.keyDecisionsAndProcedures ?? '',
   })
 }
 
@@ -93,6 +130,8 @@ export function extractIcs202SiteSafetyPlanDraft(form: Ics202FormState): Ics202S
 export function extractIcs202PreparedByDraft(form: Ics202FormState): Ics202PreparedByDraft {
   return {
     preparedByName: form.preparedByName,
+    preparedByPositionTitle: form.preparedByPositionTitle,
+    preparedBySignature: form.preparedBySignature,
     preparedDateTime: form.preparedDateTime,
   }
 }
@@ -108,6 +147,10 @@ export function extractIcs202SectionDraft(
   switch (section) {
     case 'incident-info':
       return extractIcs202IncidentInfoDraft(form)
+    case 'community-lifelines':
+      return { ...form.communityLifelines }
+    case 'incident-priorities':
+      return form.incidentPriorities
     case 'objectives':
       return cloneIcs202ObjectiveRows(form.objectives)
     case 'command-emphasis':
@@ -116,6 +159,12 @@ export function extractIcs202SectionDraft(
       return extractIcs202SiteSafetyPlanDraft(form)
     case 'prepared-by':
       return extractIcs202PreparedByDraft(form)
+    case 'critical-information-requirements':
+      return form.criticalInformationRequirements
+    case 'limitations-constraints':
+      return form.limitationsAndConstraints
+    case 'key-decisions-procedures':
+      return form.keyDecisionsAndProcedures
     default:
       return undefined
   }
@@ -131,6 +180,18 @@ export function applyIcs202SectionDraft(
       return {
         ...form,
         ...(draft as Ics202IncidentInfoDraft),
+      }
+    case 'community-lifelines':
+      return {
+        ...form,
+        communityLifelines: createEmptyIcs202CommunityLifelines(
+          draft as Ics202CommunityLifelines
+        ),
+      }
+    case 'incident-priorities':
+      return {
+        ...form,
+        incidentPriorities: draft as string,
       }
     case 'objectives':
       return {
@@ -151,6 +212,21 @@ export function applyIcs202SectionDraft(
       return {
         ...form,
         ...(draft as Ics202PreparedByDraft),
+      }
+    case 'critical-information-requirements':
+      return {
+        ...form,
+        criticalInformationRequirements: draft as string,
+      }
+    case 'limitations-constraints':
+      return {
+        ...form,
+        limitationsAndConstraints: draft as string,
+      }
+    case 'key-decisions-procedures':
+      return {
+        ...form,
+        keyDecisionsAndProcedures: draft as string,
       }
     default:
       return form

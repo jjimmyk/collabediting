@@ -4115,7 +4115,7 @@ type LeftTab =
 const WORKSPACE_FORMS_MENU: Array<{ id: string; tab: LeftTab; label: string }> = [
   { id: 'ICS-201', tab: 'briefing', label: 'Incident Briefing / ICS-201' },
   { id: 'IAP', tab: 'form-IAP', label: 'Incident Action Plan' },
-  { id: 'ICS-202', tab: 'form-ICS-202', label: 'Incident Objectives / ICS-202' },
+  { id: 'ICS-202', tab: 'form-ICS-202', label: 'Incident Briefing / ICS-202' },
   { id: 'ICS-203', tab: 'form-ICS-203', label: 'Organization Assignment List / ICS-203' },
   { id: 'ICS-234', tab: 'form-ICS-234', label: 'Work Analysis Matrix / ICS-234' },
   { id: 'ICS-215', tab: 'form-ICS-215', label: 'Operational Planning Worksheet / ICS-215' },
@@ -10420,7 +10420,7 @@ function App() {
       return isInExerciseWorkspace ? 'Exercise Settings' : 'Incident Settings'
     }
     if (tab === 'form-ICS-204') return 'ICS-204 Assignment List'
-    if (tab === 'form-ICS-202') return 'ICS-202 Incident Objectives'
+    if (tab === 'form-ICS-202') return 'ICS-202 Incident Briefing'
     if (tab === 'form-IAP') return 'Incident Action Plan'
     if (tab === 'form-ICS-203') return 'ICS-203 Organization Assignment List'
     if (tab === 'form-ICS-234') return 'ICS-234 Work Analysis Matrix'
@@ -18028,6 +18028,24 @@ function App() {
                 new Date(Date.now() + 12 * 60 * 60 * 1000).toISOString().slice(0, 16),
             })
             break
+          case 'community-lifelines':
+            patchIcs202SectionDraft(section, {
+              'safety-security': true,
+              transportation: true,
+              'health-medical': true,
+              communications: true,
+              'hazardous-materials': false,
+              energy: false,
+              'food-hydration-shelter': false,
+              'water-systems': false,
+            })
+            break
+          case 'incident-priorities':
+            patchIcs202SectionDraft(
+              section,
+              `1. Life safety and responder accountability for ${incidentLabel}.\n2. Stabilize the incident and protect critical infrastructure.\n3. Maintain unified command and accurate situational awareness.`
+            )
+            break
           case 'objectives':
             patchIcs202SectionDraft(section, [
               {
@@ -18065,9 +18083,30 @@ function App() {
           case 'prepared-by':
             patchIcs202SectionDraft(section, {
               preparedByName: ics202Form.preparedByName || 'Planning Section Chief',
+              preparedByPositionTitle:
+                ics202Form.preparedByPositionTitle || 'Planning Section Chief',
+              preparedBySignature: ics202Form.preparedBySignature || '',
               preparedDateTime:
                 ics202Form.preparedDateTime || new Date().toISOString().slice(0, 16),
             })
+            break
+          case 'critical-information-requirements':
+            patchIcs202SectionDraft(
+              section,
+              `Confirm status of life-safety operations, resource availability, and any changes to incident scope affecting ${incidentLabel}. Report significant changes within the operational period.`
+            )
+            break
+          case 'limitations-constraints':
+            patchIcs202SectionDraft(
+              section,
+              'Weather, terrain, access restrictions, staffing levels, and communications coverage may limit operational tempo. Coordinate resource requests through the Planning Section.'
+            )
+            break
+          case 'key-decisions-procedures':
+            patchIcs202SectionDraft(
+              section,
+              'Unified Command meeting at start of operational period. All tactical assignments documented on ICS 204. Safety briefings required prior to operational periods.'
+            )
             break
           default:
             break
@@ -23891,7 +23930,7 @@ function App() {
                   {activeTab === 'files' && 'Incident Files'}
                   {activeTab === 'form-ICS-204' && 'ICS-204 Assignment List'}
                   {activeTab === 'form-IAP' && 'Incident Action Plan'}
-                  {activeTab === 'form-ICS-202' && 'ICS-202 Incident Objectives'}
+                  {activeTab === 'form-ICS-202' && 'ICS-202 Incident Briefing'}
                   {activeTab === 'form-ICS-203' && 'ICS-203 Organization Assignment List'}
                   {activeTab === 'form-ICS-234' && 'ICS-234 Work Analysis Matrix'}
                   {activeTab === 'form-ICS-215' && 'ICS-215 Operational Planning Worksheet'}
@@ -32885,7 +32924,7 @@ function App() {
                     isLoading={isLoadingHistoricalOperationalPeriod}
                     error={historicalOperationalPeriodError}
                     periodNumber={viewingHistoricalOperationalPeriodNumber ?? 0}
-                    formLabel="ICS-202 Incident Objectives"
+                    formLabel="ICS-202 Incident Briefing"
                     hasSnapshot={hasOperationalPeriodFormSnapshot(historicalBundle, 'ics202')}
                     glassItemBorderClasses={glassItemBorderClasses}
                   >
@@ -32909,8 +32948,6 @@ function App() {
                     onPatchSectionDraft={patchIcs202SectionDraft}
                     onAppendVersion={handleIcs202AppendVersion}
                     onSignReview={handleIcs202SignReview}
-                    downloadDocx={downloadDocx}
-                    downloadPdf={downloadPdf}
                   />
                   </OperationalPeriodHistoricalFormShell>
                 )}

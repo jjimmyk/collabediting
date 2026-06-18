@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Item } from '@/components/ui/item'
 import { Textarea } from '@/components/ui/textarea'
 import {
+  ICS202_COMMUNITY_LIFELINES,
   ICS202_OBJECTIVE_LABELS,
 } from '@/features/ics202/constants'
 import {
@@ -15,6 +16,7 @@ import {
   Ics202YesNoReadOnly,
 } from '@/features/ics202/Ics202SectionToolbar'
 import type {
+  Ics202CommunityLifelines,
   Ics202FormSectionDrafts,
   Ics202FormState,
   Ics202IncidentInfoDraft,
@@ -54,6 +56,18 @@ function isSectionEditing(
   return !!editingSections[section]
 }
 
+function PageDivider({ label }: { label: string }) {
+  return (
+    <div className="flex items-center gap-2 px-1 pt-1">
+      <div className="h-px flex-1 bg-border" />
+      <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+        {label}
+      </span>
+      <div className="h-px flex-1 bg-border" />
+    </div>
+  )
+}
+
 export function Ics202FormSections({
   form,
   canEdit,
@@ -72,6 +86,15 @@ export function Ics202FormSections({
     isSectionEditing(editingSections, 'incident-info') && drafts['incident-info']
       ? drafts['incident-info']
       : extractIcs202IncidentInfoDraft(form)
+  const communityLifelines =
+    isSectionEditing(editingSections, 'community-lifelines') && drafts['community-lifelines']
+      ? drafts['community-lifelines']
+      : form.communityLifelines
+  const incidentPriorities =
+    isSectionEditing(editingSections, 'incident-priorities') &&
+    drafts['incident-priorities'] !== undefined
+      ? drafts['incident-priorities']
+      : form.incidentPriorities
   const objectives =
     isSectionEditing(editingSections, 'objectives') && drafts.objectives
       ? drafts.objectives
@@ -89,9 +112,28 @@ export function Ics202FormSections({
     isSectionEditing(editingSections, 'prepared-by') && drafts['prepared-by']
       ? drafts['prepared-by']
       : extractIcs202PreparedByDraft(form)
+  const criticalInformationRequirements =
+    isSectionEditing(editingSections, 'critical-information-requirements') &&
+    drafts['critical-information-requirements'] !== undefined
+      ? drafts['critical-information-requirements']
+      : form.criticalInformationRequirements
+  const limitationsAndConstraints =
+    isSectionEditing(editingSections, 'limitations-constraints') &&
+    drafts['limitations-constraints'] !== undefined
+      ? drafts['limitations-constraints']
+      : form.limitationsAndConstraints
+  const keyDecisionsAndProcedures =
+    isSectionEditing(editingSections, 'key-decisions-procedures') &&
+    drafts['key-decisions-procedures'] !== undefined
+      ? drafts['key-decisions-procedures']
+      : form.keyDecisionsAndProcedures
 
   const patchIncidentInfo = (patch: Partial<Ics202IncidentInfoDraft>) => {
     onPatchDraft('incident-info', { ...incidentInfo, ...patch })
+  }
+
+  const patchCommunityLifelines = (patch: Partial<Ics202CommunityLifelines>) => {
+    onPatchDraft('community-lifelines', { ...communityLifelines, ...patch })
   }
 
   const patchSiteSafetyPlan = (patch: Partial<Ics202SiteSafetyPlanDraft>) => {
@@ -133,6 +175,25 @@ export function Ics202FormSections({
       objectives.filter((row) => row.id !== rowId)
     )
   }
+
+  const renderTextSection = (
+    section: Ics202SectionId,
+    value: string,
+    placeholder: string
+  ) =>
+    renderSectionShell(
+      section,
+      isSectionEditing(editingSections, section) ? (
+        <Textarea
+          value={value}
+          onChange={(event) => onPatchDraft(section, event.target.value as never)}
+          className="min-h-24 text-xs"
+          placeholder={placeholder}
+        />
+      ) : (
+        <Ics202ReadOnlyTextBlock value={value} />
+      )
+    )
 
   const renderSectionShell = (
     section: Ics202SectionId,
@@ -176,10 +237,10 @@ export function Ics202FormSections({
         <div className="grid grid-cols-1 gap-2 xl:grid-cols-2">
           {(
             [
-              ['Incident Name', 'incidentName'],
-              ['Incident Location', 'incidentLocation'],
-              ['Operational Period From', 'operationalPeriodFrom'],
-              ['Operational Period To', 'operationalPeriodTo'],
+              ['1. Incident Name', 'incidentName'],
+              ['2. Incident Location', 'incidentLocation'],
+              ['3. Operational Period From', 'operationalPeriodFrom'],
+              ['3. Operational Period To', 'operationalPeriodTo'],
             ] as const
           ).map(([label, field]) => (
             <div key={field} className="space-y-1">
@@ -197,6 +258,40 @@ export function Ics202FormSections({
             </div>
           ))}
         </div>
+      )}
+
+      <PageDivider label="Page 2 — Incident Briefing" />
+
+      {renderSectionShell(
+        'community-lifelines',
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
+          {ICS202_COMMUNITY_LIFELINES.map((item) => (
+            <label
+              key={item.id}
+              className="flex items-start gap-2 rounded-md border border-dashed border-border/60 bg-muted/10 px-2 py-1.5 text-xs"
+            >
+              {isSectionEditing(editingSections, 'community-lifelines') ? (
+                <input
+                  type="checkbox"
+                  checked={communityLifelines[item.id]}
+                  onChange={(event) =>
+                    patchCommunityLifelines({ [item.id]: event.target.checked })
+                  }
+                  className="mt-0.5 h-3.5 w-3.5 shrink-0"
+                />
+              ) : (
+                <span className="mt-0.5 shrink-0">{communityLifelines[item.id] ? '☑' : '☐'}</span>
+              )}
+              <span>{item.label}</span>
+            </label>
+          ))}
+        </div>
+      )}
+
+      {renderTextSection(
+        'incident-priorities',
+        incidentPriorities,
+        'Incident priorities for this operational period'
       )}
 
       {renderSectionShell(
@@ -273,53 +368,54 @@ export function Ics202FormSections({
         ) : null
       )}
 
-      {renderSectionShell(
+      {renderTextSection(
         'command-emphasis',
-        isSectionEditing(editingSections, 'command-emphasis') ? (
-          <Textarea
-            value={commandEmphasis}
-            onChange={(event) => onPatchDraft('command-emphasis', event.target.value)}
-            className="min-h-24 text-xs"
-            placeholder="Safety message, priorities, key decisions, and directions"
-          />
-        ) : (
-          <Ics202ReadOnlyTextBlock value={commandEmphasis} />
-        )
+        commandEmphasis,
+        'Safety message, priorities, key decisions, and directions'
       )}
 
       {renderSectionShell(
         'site-safety-plan',
         <div className="grid grid-cols-1 gap-2 xl:grid-cols-2">
           <div className="space-y-1">
-            <Ics202FieldLabel>Site Safety Plan Required?</Ics202FieldLabel>
+            <Ics202FieldLabel>8. Site Safety Plan Required?</Ics202FieldLabel>
             {isSectionEditing(editingSections, 'site-safety-plan') ? (
-              <label className="flex h-8 items-center gap-2 text-xs">
-                <input
-                  type="checkbox"
-                  checked={siteSafetyPlan.siteSafetyPlanRequired}
-                  onChange={(event) =>
-                    patchSiteSafetyPlan({ siteSafetyPlanRequired: event.target.checked })
-                  }
-                  className="h-3.5 w-3.5"
-                />
-                Required
-              </label>
+              <div className="flex h-8 items-center gap-4 text-xs">
+                <label className="flex items-center gap-1.5">
+                  <input
+                    type="radio"
+                    name="siteSafetyPlanRequired"
+                    checked={siteSafetyPlan.siteSafetyPlanRequired}
+                    onChange={() => patchSiteSafetyPlan({ siteSafetyPlanRequired: true })}
+                  />
+                  Yes
+                </label>
+                <label className="flex items-center gap-1.5">
+                  <input
+                    type="radio"
+                    name="siteSafetyPlanRequired"
+                    checked={!siteSafetyPlan.siteSafetyPlanRequired}
+                    onChange={() => patchSiteSafetyPlan({ siteSafetyPlanRequired: false })}
+                  />
+                  No
+                </label>
+              </div>
             ) : (
               <Ics202YesNoReadOnly value={siteSafetyPlan.siteSafetyPlanRequired} />
             )}
           </div>
           <div className="space-y-1">
-            <Ics202FieldLabel>Site Safety Plan Located At</Ics202FieldLabel>
+            <Ics202FieldLabel>9. Site Safety Plan Located At</Ics202FieldLabel>
             {isSectionEditing(editingSections, 'site-safety-plan') ? (
-              <input
+              <Textarea
                 value={siteSafetyPlan.siteSafetyPlanLocation}
                 onChange={(event) =>
                   patchSiteSafetyPlan({ siteSafetyPlanLocation: event.target.value })
                 }
-                className="h-8 w-full rounded-md border bg-transparent px-2 text-xs outline-none"
+                className="min-h-8 text-xs"
               />
             ) : (
-              <Ics202ReadOnlyField value={siteSafetyPlan.siteSafetyPlanLocation} />
+              <Ics202ReadOnlyTextBlock value={siteSafetyPlan.siteSafetyPlanLocation} />
             )}
           </div>
         </div>
@@ -328,33 +424,54 @@ export function Ics202FormSections({
       {renderSectionShell(
         'prepared-by',
         <div className="grid grid-cols-1 gap-2 xl:grid-cols-2">
-          <div className="space-y-1">
-            <Ics202FieldLabel>Prepared By (Name)</Ics202FieldLabel>
-            {isSectionEditing(editingSections, 'prepared-by') ? (
-              <input
-                value={preparedBy.preparedByName}
-                onChange={(event) => patchPreparedBy({ preparedByName: event.target.value })}
-                className="h-8 w-full rounded-md border bg-transparent px-2 text-xs outline-none"
-              />
-            ) : (
-              <Ics202ReadOnlyField value={preparedBy.preparedByName} />
-            )}
-          </div>
-          <div className="space-y-1">
-            <Ics202FieldLabel>Date/Time Prepared</Ics202FieldLabel>
-            {isSectionEditing(editingSections, 'prepared-by') ? (
-              <input
-                type="datetime-local"
-                value={preparedBy.preparedDateTime}
-                onChange={(event) => patchPreparedBy({ preparedDateTime: event.target.value })}
-                className="h-8 w-full rounded-md border bg-transparent px-2 text-xs outline-none"
-              />
-            ) : (
-              <Ics202ReadOnlyField value={preparedBy.preparedDateTime} />
-            )}
-          </div>
+          {(
+            [
+              ['Name', 'preparedByName', 'text'],
+              ['Position Title', 'preparedByPositionTitle', 'text'],
+              ['Signature', 'preparedBySignature', 'text'],
+              ['Date/Time', 'preparedDateTime', 'datetime-local'],
+            ] as const
+          ).map(([label, field, inputType]) => (
+            <div key={field} className="space-y-1">
+              <Ics202FieldLabel>{label}</Ics202FieldLabel>
+              {isSectionEditing(editingSections, 'prepared-by') ? (
+                <input
+                  type={inputType}
+                  value={preparedBy[field]}
+                  onChange={(event) => patchPreparedBy({ [field]: event.target.value })}
+                  className="h-8 w-full rounded-md border bg-transparent px-2 text-xs outline-none"
+                />
+              ) : (
+                <Ics202ReadOnlyField value={preparedBy[field]} />
+              )}
+            </div>
+          ))}
         </div>
       )}
+
+      <PageDivider label="Page 3 — Incident Briefing" />
+
+      {renderTextSection(
+        'critical-information-requirements',
+        criticalInformationRequirements,
+        'Critical information requirements for this operational period'
+      )}
+
+      {renderTextSection(
+        'limitations-constraints',
+        limitationsAndConstraints,
+        'Limitations and constraints affecting operations'
+      )}
+
+      {renderTextSection(
+        'key-decisions-procedures',
+        keyDecisionsAndProcedures,
+        'Key decisions and procedures for this operational period'
+      )}
+
+      <p className="px-1 text-[10px] text-muted-foreground">
+        Section 14 Prepared By repeats section 10 in the exported document.
+      </p>
     </div>
   )
 }

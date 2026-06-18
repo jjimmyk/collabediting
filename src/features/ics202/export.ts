@@ -1,6 +1,11 @@
-import { ICS202_SECTION_LABELS } from '@/features/ics202/constants'
+import { buildIcs202ExportLayout, type Ics202ExportContext } from '@/features/ics202/export-layout'
 import type { Ics202FormState } from '@/features/ics202/types'
 
+export type { Ics202ExportContext, Ics202ExportLayoutBlock } from '@/features/ics202/export-layout'
+export { buildIcs202ExportLayout, ics202ExportFilenameBase, ICS202_FORM_TITLE_LINES } from '@/features/ics202/export-layout'
+export { downloadIcs202Docx, downloadIcs202Pdf } from '@/features/ics202/export-download'
+
+/** Flat blocks for IAP bundle export and legacy consumers. */
 export type Ics202DocxBlock =
   | { kind: 'title'; text: string }
   | { kind: 'subtitle'; text: string }
@@ -8,61 +13,14 @@ export type Ics202DocxBlock =
   | { kind: 'paragraph'; text: string }
   | { kind: 'bullet'; text: string }
 
-export type Ics202DocxHeaderFooterCell = {
-  label: string
-  value?: string
-}
-
-export type Ics202DocxOptions = {
-  header?: {
-    cells: Ics202DocxHeaderFooterCell[]
-    topLines?: string[]
+function pushParagraphLines(blocks: Ics202DocxBlock[], text: string) {
+  const trimmed = text.trim()
+  if (trimmed.length === 0) {
+    blocks.push({ kind: 'paragraph', text: ' ' })
+    return
   }
-  footer?: {
-    cells: Ics202DocxHeaderFooterCell[]
-    topLines?: string[]
-  }
-}
-
-export type Ics202ExportContext = {
-  incidentName?: string
-}
-
-export function ics202ExportFilenameBase(form: Ics202FormState): string {
-  const name = form.incidentName.trim().replace(/[^a-zA-Z0-9-_]+/g, '_')
-  return name.length > 0 ? name : `ICS-202_${form.id.slice(0, 8)}`
-}
-
-export function buildIcs202ExportOptions(
-  form: Ics202FormState,
-  context: Ics202ExportContext = {}
-): Ics202DocxOptions {
-  return {
-    header: {
-      topLines: [
-        'DEPARTMENT OF HOMELAND SECURITY',
-        'MARATHON',
-        'INCIDENT OBJECTIVES (ICS 202-CG)',
-      ],
-      cells: [
-        { label: '1. Incident Name:', value: form.incidentName || context.incidentName || '' },
-        { label: '2. Incident Location:', value: form.incidentLocation },
-        {
-          label: '3. Operational Period:',
-          value: [form.operationalPeriodFrom, form.operationalPeriodTo]
-            .filter((part) => part.trim().length > 0)
-            .join(' – '),
-        },
-      ],
-    },
-    footer: {
-      topLines: ['Prepared by:'],
-      cells: [
-        { label: 'Name:', value: form.preparedByName },
-        { label: 'Position/Title:', value: 'Planning Section Chief' },
-        { label: 'Date/Time:', value: form.preparedDateTime || new Date().toLocaleString() },
-      ],
-    },
+  for (const line of trimmed.split(/\r?\n/)) {
+    blocks.push({ kind: 'paragraph', text: line.length > 0 ? line : ' ' })
   }
 }
 
@@ -70,59 +28,89 @@ export function buildIcs202DocxBlocks(
   form: Ics202FormState,
   context: Ics202ExportContext = {}
 ): Ics202DocxBlock[] {
-  const blocks: Ics202DocxBlock[] = []
-  const pushHeading = (text: string) => blocks.push({ kind: 'heading', text })
-  const pushParagraph = (text: string | undefined | null) => {
-    const trimmed = (text ?? '').trim()
-    if (trimmed.length === 0) return
-    for (const line of trimmed.split(/\r?\n/)) {
-      const segment = line.trim()
-      if (segment.length === 0) continue
-      blocks.push({ kind: 'paragraph', text: segment })
+  const blocks: Ics202DocxBlock[] = [
+    { kind: 'title', text: 'INCIDENT BRIEFING (ICS 202-CG)' },
+  ]
+  const incidentName = form.incidentName.trim() || context.incidentName?.trim() || ''
+  if (incidentName) {
+    blocks.push({ kind: 'subtitle', text: incidentName })
+  }
+
+  for (const block of buildIcs202ExportLayout(form, context)) {
+    switch (block.kind) {
+      case 'form-title':
+        break
+      case 'header-row':
+        blocks.push({ kind: 'heading', text: 'Incident Information' })
+        block.cells.forEach((cell) => {
+          blocks.push({ kind: 'paragraph', text: `${cell.label} ${cell.value || ' '}` })
+        })
+        break
+      case 'lifelines':
+        blocks.push({ kind: 'heading', text: block.label })
+        block.options.forEach((opt) => {
+          blocks.push({
+            kind: 'bullet',
+            text: `${opt.checked ? '[X]' : '[ ]'} ${opt.label}`,
+          })
+        })
+        break
+      case 'text-box':
+        blocks.push({ kind: 'heading', text: block.label })
+        pushParagraphLines(blocks, block.body)
+        break
+      case 'objectives':
+        blocks.push({ kind: 'heading', text: block.label })
+        if (block.rows.length === 0) {
+          blocks.push({ kind: 'paragraph', text: ' ' })
+        } else {
+          block.rows.forEach((row) => {
+            const prefix = [row.kind, row.label].filter(Boolean).join(' ')
+            pushParagraphLines(blocks, prefix ? `${prefix}  ${row.objective}` : row.objective)
+          })
+        }
+        break
+      case 'site-safety-plan':
+        blocks.push({
+          kind: 'heading',
+          text: '8. Site Safety Plan Required / 9. Site Safety Plan located at',
+        })
+        blocks.push({
+          kind: 'paragraph',
+          text: `Required: ${block.required ? 'Yes' : 'No'}`,
+        })
+        pushParagraphLines(blocks, block.location)
+        break
+      case 'prepared-by':
+        blocks.push({ kind: 'heading', text: block.label })
+        blocks.push({ kind: 'paragraph', text: `Name: ${block.fields.name || ' '}` })
+        blocks.push({
+          kind: 'paragraph',
+          text: `Position Title: ${block.fields.positionTitle || ' '}`,
+        })
+        blocks.push({ kind: 'paragraph', text: `Signature: ${block.fields.signature || ' '}` })
+        blocks.push({ kind: 'paragraph', text: `Date/Time: ${block.fields.dateTime || ' '}` })
+        break
+      case 'page-footer':
+        blocks.push({ kind: 'subtitle', text: block.pageLabel })
+        break
+      case 'page-break':
+        blocks.push({ kind: 'subtitle', text: '—' })
+        break
+      default:
+        break
     }
   }
-  const pushField = (label: string, value: string | undefined | null) => {
-    const trimmed = (value ?? '').trim()
-    if (trimmed.length === 0) return
-    pushParagraph(`${label}: ${trimmed}`)
-  }
-
-  blocks.push({ kind: 'title', text: 'Incident Objectives (ICS-202)' })
-  const subtitleParts: string[] = []
-  if (form.incidentName.trim()) subtitleParts.push(form.incidentName.trim())
-  else if (context.incidentName?.trim()) subtitleParts.push(context.incidentName.trim())
-  if (subtitleParts.length > 0) {
-    blocks.push({ kind: 'subtitle', text: subtitleParts.join(' • ') })
-  }
-
-  pushHeading(ICS202_SECTION_LABELS['incident-info'])
-  pushField('Incident Name', form.incidentName || context.incidentName)
-  pushField('Incident Location', form.incidentLocation)
-  pushField('Operational Period From', form.operationalPeriodFrom)
-  pushField('Operational Period To', form.operationalPeriodTo)
-
-  pushHeading(ICS202_SECTION_LABELS.objectives)
-  if (form.objectives.length === 0) {
-    pushParagraph('No objectives recorded.')
-  } else {
-    form.objectives.forEach((row, index) => {
-      const prefix = [row.kind, row.label].filter(Boolean).join(' ')
-      pushParagraph(
-        `${index + 1}. ${prefix}${prefix ? ' — ' : ''}${row.objective || '(no objective text)'}`
-      )
-    })
-  }
-
-  pushHeading(ICS202_SECTION_LABELS['command-emphasis'])
-  pushParagraph(form.commandEmphasis || 'No command emphasis recorded.')
-
-  pushHeading(ICS202_SECTION_LABELS['site-safety-plan'])
-  pushField('Site Safety Plan Required', form.siteSafetyPlanRequired ? 'Yes' : 'No')
-  pushField('Site Safety Plan Located At', form.siteSafetyPlanLocation)
-
-  pushHeading(ICS202_SECTION_LABELS['prepared-by'])
-  pushField('Prepared By', form.preparedByName)
-  pushField('Date/Time Prepared', form.preparedDateTime)
 
   return blocks
+}
+
+/** @deprecated Boxed export no longer uses header/footer options. */
+export function buildIcs202ExportOptions(
+  form: Ics202FormState,
+  context: Ics202ExportContext = {}
+) {
+  void form
+  void context
+  return {}
 }
