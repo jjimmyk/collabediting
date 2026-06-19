@@ -9,6 +9,7 @@ import {
 } from '@/features/ics204/utils'
 import {
   appendIcs204Version,
+  assignIcs204Document,
   bundlesToClientState,
   createIcs204Document,
   deleteIcs204Document,
@@ -26,6 +27,7 @@ type UseIcs204WorkspaceFormsOptions = {
   onLoaded: (payload: {
     forms: Ics204FormState[]
     versionsById: Record<string, Ics204Version[]>
+    assignedFormIds: Record<string, boolean>
   }) => void
   reloadKey?: number
 }
@@ -206,6 +208,32 @@ export function useIcs204WorkspaceForms({
     [authorColor, authorName, enabled, userId, workspaceId]
   )
 
+  const assignForm = useCallback(
+    async (
+      documentId: string,
+      assignedUnit: string
+    ): Promise<boolean> => {
+      if (!enabled || !workspaceId || documentId.startsWith('local-')) {
+        return true
+      }
+
+      setIsSaving(true)
+      try {
+        await assignIcs204Document(documentId, {
+          assignedUnit,
+          assignedBy: userId,
+        })
+        return true
+      } catch (assignError) {
+        setError(assignError instanceof Error ? assignError.message : 'Failed to assign ICS-204')
+        return false
+      } finally {
+        setIsSaving(false)
+      }
+    },
+    [enabled, userId, workspaceId]
+  )
+
   const saveSignedReview = useCallback(
     async (
       documentId: string,
@@ -247,5 +275,6 @@ export function useIcs204WorkspaceForms({
     saveDraft,
     appendVersion,
     saveSignedReview,
+    assignForm,
   }
 }

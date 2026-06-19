@@ -1,21 +1,25 @@
 import { Check, Pencil, Sparkles, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { ICS204_ASSIGNED_UNIT_OPTIONS, ICS204_SECTION_LABELS } from '@/features/ics204/constants'
+import { ICS204_SECTION_LABELS } from '@/features/ics204/constants'
+import type { Ics204AssignedUnitOption } from '@/features/ics204/ics204-assigned-unit-options'
+import { resolveIcs204AssignedUnitDisplayLabel } from '@/features/ics204/ics204-assigned-unit-options'
 import type { Ics204SectionId } from '@/features/ics204/types'
 import { cn } from '@/lib/utils'
 
 type Ics204AssignedUnitFieldProps = {
   value: string
+  options: Ics204AssignedUnitOption[]
   editable: boolean
   onChange: (value: string) => void
 }
 
 export function Ics204AssignedUnitField({
   value,
+  options,
   editable,
   onChange,
 }: Ics204AssignedUnitFieldProps) {
-  const displayTitle = value.trim().length > 0 ? value : 'Unassigned Unit'
+  const displayTitle = resolveIcs204AssignedUnitDisplayLabel(value, options)
 
   if (!editable) {
     return <p className="truncate text-sm font-semibold leading-tight">{displayTitle}</p>
@@ -32,9 +36,9 @@ export function Ics204AssignedUnitField({
       className="h-8 w-full max-w-md rounded-md border bg-transparent px-2 text-sm font-semibold outline-none"
     >
       <option value="">Select Assigned Unit</option>
-      {ICS204_ASSIGNED_UNIT_OPTIONS.map((option) => (
-        <option key={option} value={option}>
-          {option}
+      {options.map((option) => (
+        <option key={option.value} value={option.value} disabled={option.disabled}>
+          {option.label}
         </option>
       ))}
     </select>

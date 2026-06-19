@@ -248,17 +248,48 @@ export async function deleteIcs204Document(documentId: string): Promise<void> {
   }
 }
 
+export async function assignIcs204Document(
+  documentId: string,
+  input: {
+    assignedUnit: string
+    assignedBy: string | null
+  }
+): Promise<void> {
+  const supabase = getSupabaseClient()
+  if (!supabase) return
+
+  const { error } = await supabase
+    .from('ics204_documents')
+    .update({
+      assigned_at: new Date().toISOString(),
+      assigned_by: input.assignedBy,
+      assigned_unit: input.assignedUnit,
+      updated_at: new Date().toISOString(),
+      updated_by: input.assignedBy,
+    })
+    .eq('id', documentId)
+
+  if (error) {
+    throw new Error(error.message)
+  }
+}
+
 export function bundlesToClientState(bundles: Ics204DocumentBundle[]): {
   forms: Ics204FormState[]
   versionsById: Record<string, Ics204Version[]>
+  assignedFormIds: Record<string, boolean>
 } {
   const forms = bundles.map((bundle) => cloneIcs204FormState(bundle.document.form_data))
   const versionsById: Record<string, Ics204Version[]> = {}
+  const assignedFormIds: Record<string, boolean> = {}
   for (const bundle of bundles) {
     versionsById[bundle.document.id] = bundle.versions.map((version) => ({
       ...version,
       snapshot: cloneIcs204FormState(version.snapshot),
     }))
+    if (bundle.document.assigned_at) {
+      assignedFormIds[bundle.document.id] = true
+    }
   }
-  return { forms, versionsById }
+  return { forms, versionsById, assignedFormIds }
 }

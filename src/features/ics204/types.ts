@@ -68,6 +68,9 @@ export type Ics204DocumentRow = {
   workspace_id: string
   form_data: Ics204FormState
   latest_version_id: string | null
+  assigned_at: string | null
+  assigned_by: string | null
+  assigned_unit: string | null
   created_at: string
   updated_at: string
   updated_by: string | null

@@ -181,6 +181,11 @@ import {
   type Ics233ActionNotificationRow,
 } from '@/lib/ics233-notification-service'
 import {
+  formatIcs204NotificationTimestamp,
+  persistIcs204AssignmentNotifications,
+  type Ics204AssignmentNotificationRow,
+} from '@/lib/ics204-assignment-notification-service'
+import {
   fetchHubNotificationRecipients,
   formatHubNotificationTimestamp,
   persistHubUserNotifications,
@@ -498,6 +503,16 @@ import {
   getIcs204ResourceRowAssetKey,
   resolveIcs204ResourceSnapshot,
 } from '@/features/ics204/utils'
+import {
+  buildIcs204AssignedUnitOptions,
+  isIcs204AssignedUnitSelectable,
+  mergeLegacyIcs204AssignedUnitOption,
+  resolveIcs204AssignedUnitRecipients,
+} from '@/features/ics204/ics204-assigned-unit-options'
+import {
+  buildIcs204AssignmentNotificationSummary,
+  buildIcs204AssignmentNotificationTitle,
+} from '@/features/ics204/ics204-assignment-notifications'
 import { ResourceListItemCard } from '@/features/resources/ResourceListItemCard'
 import { AssetListHeaderRow } from '@/features/resources/AssetListHeaderRow'
 import type { ResourceListItemData } from '@/features/resources/types'
@@ -616,6 +631,7 @@ import { useIcs201ObjectivesSectionEditor } from '@/hooks/useIcs201ObjectivesSec
 import { useIcs201Presence } from '@/hooks/useIcs201Presence'
 import { useIcs201Sync } from '@/hooks/useIcs201Sync'
 import { useIcs204WorkspaceForms } from '@/hooks/useIcs204WorkspaceForms'
+import { useIcs204AssignmentNotificationSync } from '@/hooks/useIcs204AssignmentNotificationSync'
 import { useIcs233Sync } from '@/hooks/useIcs233Sync'
 import { useIcs233NotificationSync } from '@/hooks/useIcs233NotificationSync'
 import { useHubNotificationSync } from '@/hooks/useHubNotificationSync'
@@ -701,6 +717,7 @@ type NotificationItem = {
   relatedEventId?: number
   recipientEmail?: string
   ics233NotificationId?: string
+  ics204NotificationId?: string
   hubNotificationId?: string
   regionalThreats?: {
     region: string
@@ -12110,9 +12127,14 @@ function App() {
   const ics201LiveConnectedRef = useRef(false)
   const ics201LiveCurrentSituationRef = useRef('')
   const handleIcs204Loaded = useCallback(
-    (payload: { forms: Ics204FormState[]; versionsById: Record<string, Ics204Version[]> }) => {
+    (payload: {
+      forms: Ics204FormState[]
+      versionsById: Record<string, Ics204Version[]>
+      assignedFormIds: Record<string, boolean>
+    }) => {
       setIcs204Forms(payload.forms.map((form) => cloneIcs204FormState(form)))
       setIcs204VersionsById(payload.versionsById)
+      setIcs204AssignedByFormId(payload.assignedFormIds)
       setExpandedIcs204FormId((previous) => {
         if (previous && payload.forms.some((form) => form.id === previous)) {
           return previous
@@ -12415,6 +12437,49 @@ function App() {
     },
     [profileEmail]
   )
+  const deliverIcs204Notification = useCallback(
+    ({
+      recipientEmail,
+      title,
+      summary,
+      severity = 'Medium' as NotificationItem['severity'],
+      owner,
+    }: {
+      recipientEmail: string
+      title: string
+      summary: string
+      severity?: NotificationItem['severity']
+      owner?: string
+    }) => {
+      if (recipientEmail.toLowerCase() !== (profileEmail ?? '').toLowerCase()) {
+        return
+      }
+
+      const timestamp = new Date().toISOString().slice(0, 16).replace('T', ' ')
+      setNotifications((previous) => {
+        const nextId =
+          previous.length === 0 ? 1 : Math.max(...previous.map((item) => item.id)) + 1
+        return [
+          {
+            id: nextId,
+            title,
+            severity,
+            status: 'New',
+            category: 'Action',
+            timestamp,
+            owner: owner ?? profileEmail ?? 'System',
+            summary,
+            impact: summary,
+            location: [0, 0] as [number, number],
+            recipientEmail,
+          },
+          ...previous,
+        ]
+      })
+      toast.info(title, { description: summary })
+    },
+    [profileEmail]
+  )
   const upsertHubNotificationInTab = useCallback(
     (notification: HubUserNotificationRow, showToast: boolean) => {
       if (
@@ -12450,6 +12515,77 @@ function App() {
       if (showToast) {
         toast.info(notification.title, { description: notification.summary })
       }
+    },
+    [profileEmail]
+  )
+  const upsertIcs204NotificationInTab = useCallback(
+    (notification: Ics204AssignmentNotificationRow, showToast: boolean) => {
+      if (notification.recipient_email.toLowerCase() !== (profileEmail ?? '').toLowerCase()) {
+        return
+      }
+
+      setNotifications((previous) => {
+        if (previous.some((item) => item.ics204NotificationId === notification.id)) {
+          return previous
+        }
+
+        return [
+          {
+            id: stableNotificationIdFromUuid(notification.id),
+            ics204NotificationId: notification.id,
+            title: notification.title,
+            severity: notification.severity as NotificationItem['severity'],
+            status: 'New',
+            category: 'Action',
+            timestamp: formatIcs204NotificationTimestamp(notification.created_at),
+            owner: notification.created_by_email ?? profileEmail ?? 'System',
+            summary: notification.summary,
+            impact: notification.summary,
+            location: [0, 0] as [number, number],
+            recipientEmail: notification.recipient_email,
+          },
+          ...previous,
+        ]
+      })
+
+      if (showToast) {
+        toast.info(notification.title, { description: notification.summary })
+      }
+    },
+    [profileEmail]
+  )
+  const hydrateIcs204NotificationsInTab = useCallback(
+    (notifications: Ics204AssignmentNotificationRow[]) => {
+      if (notifications.length === 0) {
+        return
+      }
+
+      setNotifications((previous) => {
+        const existingIds = new Set(
+          previous
+            .map((item) => item.ics204NotificationId)
+            .filter((id): id is string => id !== undefined)
+        )
+
+        const hydratedItems = notifications
+          .filter((notification) => !existingIds.has(notification.id))
+          .map((notification) => ({
+            id: stableNotificationIdFromUuid(notification.id),
+            ics204NotificationId: notification.id,
+            title: notification.title,
+            severity: notification.severity as NotificationItem['severity'],
+            status: 'New' as const,
+            category: 'Action' as const,
+            timestamp: formatIcs204NotificationTimestamp(notification.created_at),
+            owner: notification.created_by_email ?? profileEmail ?? 'System',
+            summary: notification.summary,
+            impact: notification.summary,
+            location: [0, 0] as [number, number],
+            recipientEmail: notification.recipient_email,
+          }))
+
+        return [...hydratedItems, ...previous]
+      })
     },
     [profileEmail]
   )
@@ -12601,11 +12737,23 @@ function App() {
     },
     [upsertIcs233NotificationInTab]
   )
+  const handleIcs204AssignmentNotificationFromDb = useCallback(
+    (notification: Ics204AssignmentNotificationRow) => {
+      upsertIcs204NotificationInTab(notification, true)
+    },
+    [upsertIcs204NotificationInTab]
+  )
   useIcs233NotificationSync({
     enabled: isSupabaseEnabled && profileEmail !== null,
     profileEmail,
     onHydrate: hydrateIcs233NotificationsInTab,
     onLiveNotification: handleIcs233ActionNotificationFromDb,
+  })
+  useIcs204AssignmentNotificationSync({
+    enabled: isSupabaseEnabled && profileEmail !== null,
+    profileEmail,
+    onHydrate: hydrateIcs204NotificationsInTab,
+    onLiveNotification: handleIcs204AssignmentNotificationFromDb,
   })
   useHubNotificationSync({
     enabled: isSupabaseEnabled && profileEmail !== null,
@@ -12721,6 +12869,7 @@ function App() {
     saveDraft: saveIcs204DraftToServer,
     appendVersion: appendIcs204VersionToServer,
     saveSignedReview: saveIcs204SignedReviewToServer,
+    assignForm: assignIcs204FormToServer,
   } = useIcs204WorkspaceForms({
     enabled:
       isSupabaseEnabled &&
@@ -13628,6 +13777,10 @@ function App() {
   const effectiveCanManageRoster = canManageWorkspaceRoster && !isViewingHistoricalRoster
   const positionRosterEntriesByPosition = useMemo(
     () => Object.fromEntries(positionRosterEntries.map((entry) => [entry.position, entry])),
+    [positionRosterEntries]
+  )
+  const ics204AssignedUnitOptions = useMemo(
+    () => buildIcs204AssignedUnitOptions(positionRosterEntries),
     [positionRosterEntries]
   )
   const visibleRosterPositions = useMemo(
@@ -20470,6 +20623,71 @@ function App() {
     if (latestVersion && latestVersion.signatures.length === 0) {
       handleIcs204SaveDraft(formId, nextForm, latestVersion)
     }
+  }
+  const notifyIcs204Assignees = (form: Ics204FormState): boolean => {
+    const assignedUnit = form.assignedUnit.trim()
+    if (!assignedUnit || !isIcs204AssignedUnitSelectable(assignedUnit, ics204AssignedUnitOptions)) {
+      toast.error('Select a valid Assigned Unit before assigning.')
+      return false
+    }
+
+    const recipients = resolveIcs204AssignedUnitRecipients(
+      assignedUnit,
+      activeWorkspaceRoster,
+      memberSchedulesByPosition
+    )
+    if (recipients.length === 0) {
+      toast.error('No roster members are assigned to the selected position.')
+      return false
+    }
+
+    const title = buildIcs204AssignmentNotificationTitle(form)
+    const summary = buildIcs204AssignmentNotificationSummary(form, {
+      workspaceLabel: activeWorkspaceRosterLabel,
+      assignedByEmail: profileEmail,
+    })
+    const payloads = recipients.map((email) => ({
+      recipientEmail: email,
+      title,
+      summary,
+      documentId: form.id,
+      createdByEmail: profileEmail,
+    }))
+
+    if (isSupabaseEnabled && activeWorkspaceSupabaseId) {
+      void persistIcs204AssignmentNotifications(activeWorkspaceSupabaseId, payloads).catch(() => {
+        payloads.forEach((payload) => deliverIcs204Notification(payload))
+      })
+    } else {
+      payloads.forEach((payload) => deliverIcs204Notification(payload))
+    }
+
+    return true
+  }
+  const handleIcs204AssignConfirm = async (formId: string) => {
+    const form = ics204Forms.find((entry) => entry.id === formId)
+    if (!form) {
+      return
+    }
+
+    if (!notifyIcs204Assignees(form)) {
+      return
+    }
+
+    if (isSupabaseEnabled && activeWorkspaceSupabaseId && !formId.startsWith('local-')) {
+      const success = await assignIcs204FormToServer(formId, form.assignedUnit.trim())
+      if (!success) {
+        toast.error('Failed to persist ICS-204 assignment.')
+        return
+      }
+    }
+
+    setIcs204AssignedByFormId((previous) => ({
+      ...previous,
+      [formId]: true,
+    }))
+    setIcs204AssignConfirmDialog(null)
+    toast.success('ICS-204 assigned and notifications sent.')
   }
   const getIcs204ExportContext = () => ({
     incidentName: activeIncidentWorkspace?.name ?? activeExerciseWorkspace?.name ?? '',
@@ -33101,6 +33319,30 @@ function App() {
                             !!latestFormSignature && hasPlanningReview && hasOperationsReview
                           const isFormAssigned = !!ics204AssignedByFormId[form.id]
                           const ics204ListTitle = resolveIcs204ListTitle(form)
+                          const assignedUnitOptions = mergeLegacyIcs204AssignedUnitOption(
+                            ics204AssignedUnitOptions,
+                            form.assignedUnit
+                          )
+                          const assignedUnitSelectable = isIcs204AssignedUnitSelectable(
+                            form.assignedUnit,
+                            assignedUnitOptions
+                          )
+                          const canAssignIcs204 =
+                            effectiveCanEditWorkspaceForms &&
+                            !viewingPastFormVersion &&
+                            form.assignedUnit.trim().length > 0 &&
+                            assignedUnitSelectable &&
+                            isFormFullySigned &&
+                            !isFormAssigned
+                          const assignDisabledReason = isFormAssigned
+                            ? 'Already assigned'
+                            : !form.assignedUnit.trim()
+                              ? 'Select an Assigned Unit before assigning'
+                              : !assignedUnitSelectable
+                                ? 'Selected unit has nobody scheduled for next OP'
+                                : !isFormFullySigned
+                                  ? 'Complete signatures before assigning'
+                                  : ''
                           const assignedUnitEditable =
                             effectiveCanEditWorkspaceForms &&
                             !formIsLocked &&
@@ -33128,6 +33370,7 @@ function App() {
                                       </p>
                                       <Ics204AssignedUnitField
                                         value={form.assignedUnit}
+                                        options={assignedUnitOptions}
                                         editable={assignedUnitEditable}
                                         onChange={(value) =>
                                           handleIcs204AssignedUnitChange(
@@ -33205,26 +33448,42 @@ function App() {
                                         Delete
                                       </Button>
                                     ) : null}
-                                    {isFormFullySigned &&
-                                      (isFormAssigned ? (
+                                    {!isViewingHistoricalOperationalPeriod ? (
+                                      isFormAssigned ? (
                                         <span className="flex items-center gap-1 rounded-full border border-emerald-400 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-800 dark:border-emerald-500/60 dark:bg-emerald-500/10 dark:text-emerald-200">
                                           <Check className="h-3 w-3" />
                                           Assigned
                                         </span>
-                                      ) : (
-                                        <Button
-                                          type="button"
-                                          size="sm"
-                                          variant="outline"
-                                          className="h-7 gap-1 text-xs"
-                                          onClick={(event) => {
-                                            event.stopPropagation()
-                                            setIcs204AssignConfirmDialog({ formId: form.id })
-                                          }}
-                                        >
-                                          Assign
-                                        </Button>
-                                      ))}
+                                      ) : effectiveCanEditWorkspaceForms && !viewingPastFormVersion ? (
+                                        <Tooltip>
+                                          <TooltipTrigger asChild>
+                                            <span className="inline-flex">
+                                              <Button
+                                                type="button"
+                                                size="sm"
+                                                variant="outline"
+                                                className="h-7 gap-1 text-xs"
+                                                disabled={!canAssignIcs204 || isIcs204Saving}
+                                                onClick={(event) => {
+                                                  event.stopPropagation()
+                                                  setIcs204AssignConfirmDialog({ formId: form.id })
+                                                }}
+                                              >
+                                                Assign
+                                              </Button>
+                                            </span>
+                                          </TooltipTrigger>
+                                          {assignDisabledReason ? (
+                                            <TooltipContent>{assignDisabledReason}</TooltipContent>
+                                          ) : null}
+                                        </Tooltip>
+                                      ) : null
+                                    ) : isFormAssigned ? (
+                                      <span className="flex items-center gap-1 rounded-full border border-emerald-400 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-800 dark:border-emerald-500/60 dark:bg-emerald-500/10 dark:text-emerald-200">
+                                        <Check className="h-3 w-3" />
+                                        Assigned
+                                      </span>
+                                    ) : null}
                                     <CollapsibleTrigger asChild>
                                       <Button
                                         type="button"
@@ -38789,13 +39048,9 @@ function App() {
                     type="button"
                     size="sm"
                     className="h-8 gap-1 bg-emerald-600 text-xs text-white hover:bg-emerald-700"
+                    disabled={isIcs204Saving}
                     onClick={() => {
-                      const formId = ics204AssignConfirmDialog.formId
-                      setIcs204AssignedByFormId((previous) => ({
-                        ...previous,
-                        [formId]: true,
-                      }))
-                      setIcs204AssignConfirmDialog(null)
+                      void handleIcs204AssignConfirm(ics204AssignConfirmDialog.formId)
                     }}
                   >
                     <Check className="h-3.5 w-3.5" />
