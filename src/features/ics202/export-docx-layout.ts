@@ -39,6 +39,22 @@ export const ICS202_PDF_PAGE = {
 export const ICS202_PDF_CONTENT_WIDTH =
   ICS202_PDF_PAGE.widthPt - ICS202_PDF_PAGE.marginPt * 2
 
+/** Prepared-by table height in PDF footer (see renderPdfPagePreparedBy). */
+export const ICS202_PDF_PREPARED_BY_HEIGHT_PT = 48
+
+/** Baseline Y for ICS expiration line above bottom margin. */
+export const ICS202_PDF_ICS_LINE_Y_PT = ICS202_PDF_PAGE.marginPt + 14
+
+/** Top edge Y of the fixed prepared-by footer table on each PDF page. */
+export function ics202PdfPreparedByTopY(): number {
+  return (
+    ICS202_PDF_ICS_LINE_Y_PT +
+    7 +
+    8 +
+    ICS202_PDF_PREPARED_BY_HEIGHT_PT
+  )
+}
+
 function escapeXml(text: string): string {
   return text
     .replace(/&/g, '&amp;')

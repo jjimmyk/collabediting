@@ -8,6 +8,8 @@ import {
   buildIcs202DocxXml,
   ICS202_PDF_CONTENT_WIDTH,
   ICS202_PDF_PAGE,
+  ICS202_PDF_PREPARED_BY_HEIGHT_PT,
+  ics202PdfPreparedByTopY,
 } from '@/features/ics202/export-docx-layout'
 import {
   assertIcs202PaginationInvariants,
@@ -441,9 +443,8 @@ function renderPdfPagePreparedBy(
   preparedBy: Ics202PagePreparedBy,
   margin: number,
   contentWidth: number,
-  startY: number
-): { ops: string; lines: PdfLine[]; nextY: number } {
-  const gap = 6
+  topY: number
+): { ops: string; lines: PdfLine[] } {
   const cellW = contentWidth / 4
   const fields = [
     { label: 'Name:', value: preparedBy.fields.name },
@@ -451,8 +452,8 @@ function renderPdfPagePreparedBy(
     { label: 'Signature:', value: preparedBy.fields.signature },
     { label: 'Date/Time:', value: preparedBy.fields.dateTime },
   ]
-  const height = 48
-  const y = startY
+  const height = ICS202_PDF_PREPARED_BY_HEIGHT_PT
+  const y = topY
   const bottomY = y - height
   let ops = '0.75 w\n'
   ops += `${margin.toFixed(2)} ${bottomY.toFixed(2)} ${contentWidth.toFixed(2)} ${height.toFixed(2)} re S\n`
@@ -486,7 +487,7 @@ function renderPdfPagePreparedBy(
         lines.push({ text: line, font: 'F1', size: 7.5, x, y: y - 30 - i * 9 })
       })
   })
-  return { ops, lines, nextY: bottomY - gap }
+  return { ops, lines }
 }
 
 function renderPdfPageFooter(
@@ -523,6 +524,7 @@ function buildIcs202PdfBytes(pages: Ics202PhysicalPage[]): Uint8Array {
   const margin = ICS202_PDF_PAGE.marginPt
   const contentWidth = ICS202_PDF_CONTENT_WIDTH
   const contentTop = pageHeight - margin
+  const preparedByTopY = ics202PdfPreparedByTopY()
 
   const pdfPages: Array<{ ops: string; lines: PdfLine[] }> = pages.map((page) => {
     let ops = ''
@@ -537,7 +539,7 @@ function buildIcs202PdfBytes(pages: Ics202PhysicalPage[]): Uint8Array {
       lines.push(...rendered.lines)
       y = rendered.nextY
     }
-    const preparedBy = renderPdfPagePreparedBy(page.preparedBy, margin, contentWidth, y)
+    const preparedBy = renderPdfPagePreparedBy(page.preparedBy, margin, contentWidth, preparedByTopY)
     ops += preparedBy.ops
     lines.push(...preparedBy.lines)
     const footer = renderPdfPageFooter(page, margin, contentWidth)
