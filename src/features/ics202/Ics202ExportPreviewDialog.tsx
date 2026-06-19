@@ -9,7 +9,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { ICS202_FORM_TITLE_LINES } from '@/features/ics202/export-layout'
-import type { Ics202PhysicalPage, Ics202PhysicalPageSegment } from '@/features/ics202/export-pagination'
+import type { Ics202PagePreparedBy, Ics202PhysicalPage, Ics202PhysicalPageSegment } from '@/features/ics202/export-pagination'
 
 type Ics202ExportPreviewDialogProps = {
   open: boolean
@@ -117,29 +117,31 @@ function renderPreviewSegment(segment: Ics202PhysicalPageSegment, index: number)
           </div>
         </div>
       )
-    case 'prepared-by':
-      return (
-        <PreviewBox key={`ics202-seg-${index}`} label={segment.label}>
-          <div className="grid grid-cols-4 gap-2 text-[10px]">
-            {(
-              [
-                ['Name:', segment.fields.name],
-                ['Position Title:', segment.fields.positionTitle],
-                ['Signature:', segment.fields.signature],
-                ['Date/Time:', segment.fields.dateTime],
-              ] as const
-            ).map(([label, value]) => (
-              <div key={label}>
-                <p className="font-semibold">{label}</p>
-                <p className="mt-1 whitespace-pre-wrap">{value.trim().length > 0 ? value : ' '}</p>
-              </div>
-            ))}
-          </div>
-        </PreviewBox>
-      )
     default:
       return null
   }
+}
+
+function renderPreviewPreparedBy(preparedBy: Ics202PagePreparedBy) {
+  return (
+    <PreviewBox label={preparedBy.label}>
+      <div className="grid grid-cols-4 gap-2 text-[10px]">
+        {(
+          [
+            ['Name:', preparedBy.fields.name],
+            ['Position Title:', preparedBy.fields.positionTitle],
+            ['Signature:', preparedBy.fields.signature],
+            ['Date/Time:', preparedBy.fields.dateTime],
+          ] as const
+        ).map(([label, value]) => (
+          <div key={label}>
+            <p className="font-semibold">{label}</p>
+            <p className="mt-1 whitespace-pre-wrap">{value.trim().length > 0 ? value : ' '}</p>
+          </div>
+        ))}
+      </div>
+    </PreviewBox>
+  )
 }
 
 function renderPreviewPage(page: Ics202PhysicalPage, index: number) {
@@ -176,6 +178,7 @@ function renderPreviewPage(page: Ics202PhysicalPage, index: number) {
         ))}
       </div>
       <div className="space-y-2">{page.segments.map(renderPreviewSegment)}</div>
+      {renderPreviewPreparedBy(page.preparedBy)}
       <div className="flex items-center justify-between border-t border-zinc-300 pt-2 text-[10px] text-zinc-600">
         <span>{page.footerLeft}</span>
         <span>

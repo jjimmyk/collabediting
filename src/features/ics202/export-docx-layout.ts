@@ -1,6 +1,7 @@
 import type { Ics202ExportLayoutBlock, Ics202HeaderCell } from '@/features/ics202/export-layout'
 import { ICS202_FORM_TITLE_LINES } from '@/features/ics202/export-layout'
 import type {
+  Ics202PagePreparedBy,
   Ics202PhysicalPage,
   Ics202PhysicalPageSegment,
 } from '@/features/ics202/export-pagination'
@@ -193,10 +194,37 @@ function renderPageFooterDocx(
     `<w:p><w:pPr><w:tabs>` +
     `<w:tab w:val="clear" w:pos="0"/>` +
     `<w:tab w:val="right" w:pos="${rightTab}"/>` +
-    `</w:tabs><w:spacing w:before="240" w:after="0"/></w:pPr>` +
+    `</w:tabs><w:spacing w:before="120" w:after="0"/></w:pPr>` +
     `<w:r><w:rPr><w:sz w:val="14"/><w:szCs w:val="14"/></w:rPr>` +
     `<w:t xml:space="preserve">${escapeXml(footerLeft)}\t${escapeXml(pageLabel)}</w:t></w:r></w:p>`
   )
+}
+
+export function renderPreparedByDocx(preparedBy: Ics202PagePreparedBy): string {
+  const col = ICS202_DOCX_COL.quarter
+  const cols = [col, col, col, col]
+  const fields = [
+    { label: 'Name:', value: preparedBy.fields.name },
+    { label: 'Position Title:', value: preparedBy.fields.positionTitle },
+    { label: 'Signature:', value: preparedBy.fields.signature },
+    { label: 'Date/Time:', value: preparedBy.fields.dateTime },
+  ]
+  const labelRow = `<w:tr>${docxCell(ICS202_DOCX_CONTENT_WIDTH, docxLabelParagraph(preparedBy.label), {
+    gridSpan: 4,
+  })}</w:tr>`
+  const fieldRow =
+    `<w:tr>` +
+    fields
+      .map((field) =>
+        docxCell(
+          col,
+          docxLabelParagraph(field.label) + docxMultilineParagraphs(field.value, 16),
+          { mar: 'tight' }
+        )
+      )
+      .join('') +
+    `</w:tr>`
+  return docxSectionSpacer() + docxFixedTable(cols, labelRow + fieldRow) + docxSectionSpacer()
 }
 
 export function renderPhysicalPageSegmentDocx(segment: Ics202PhysicalPageSegment): string {
@@ -285,32 +313,6 @@ export function renderPhysicalPageSegmentDocx(segment: Ics202PhysicalPageSegment
           `</w:tr>`
       return docxSectionSpacer() + docxFixedTable(segment.continued ? [ICS202_DOCX_CONTENT_WIDTH] : [half, half], row) + docxSectionSpacer()
     }
-    case 'prepared-by': {
-      const col = ICS202_DOCX_COL.quarter
-      const cols = [col, col, col, col]
-      const fields = [
-        { label: 'Name:', value: segment.fields.name },
-        { label: 'Position Title:', value: segment.fields.positionTitle },
-        { label: 'Signature:', value: segment.fields.signature },
-        { label: 'Date/Time:', value: segment.fields.dateTime },
-      ]
-      const labelRow = `<w:tr>${docxCell(ICS202_DOCX_CONTENT_WIDTH, docxLabelParagraph(segment.label), {
-        gridSpan: 4,
-      })}</w:tr>`
-      const fieldRow =
-        `<w:tr>` +
-        fields
-          .map((field) =>
-            docxCell(
-              col,
-              docxLabelParagraph(field.label) + docxMultilineParagraphs(field.value, 16),
-              { mar: 'tight' }
-            )
-          )
-          .join('') +
-        `</w:tr>`
-      return docxSectionSpacer() + docxFixedTable(cols, labelRow + fieldRow) + docxSectionSpacer()
-    }
     default:
       return ''
   }
@@ -320,6 +322,7 @@ function renderPhysicalPageDocx(page: Ics202PhysicalPage): string {
   return (
     renderPageHeaderDocx(page.headerCells) +
     page.segments.map(renderPhysicalPageSegmentDocx).join('') +
+    renderPreparedByDocx(page.preparedBy) +
     renderPageFooterDocx(page.footerLeft, page.displayPageNumber, page.totalPages)
   )
 }
@@ -431,34 +434,7 @@ export function renderLayoutBlockDocx(block: Ics202ExportLayoutBlock): string {
       return docxSectionSpacer() + docxFixedTable([half, half], row) + docxSectionSpacer()
     }
     case 'prepared-by': {
-      const col = ICS202_DOCX_COL.quarter
-      const cols = [col, col, col, col]
-      const fields = [
-        { label: 'Name:', value: block.fields.name },
-        { label: 'Position Title:', value: block.fields.positionTitle },
-        { label: 'Signature:', value: block.fields.signature },
-        { label: 'Date/Time:', value: block.fields.dateTime },
-      ]
-      const labelRow = `<w:tr>${docxCell(ICS202_DOCX_CONTENT_WIDTH, docxLabelParagraph(block.label), {
-        gridSpan: 4,
-      })}</w:tr>`
-      const fieldRow =
-        `<w:tr>` +
-        fields
-          .map((field) =>
-            docxCell(
-              col,
-              docxLabelParagraph(field.label) + docxMultilineParagraphs(field.value, 16),
-              { mar: 'tight' }
-            )
-          )
-          .join('') +
-        `</w:tr>`
-      return (
-        docxSectionSpacer() +
-        docxFixedTable(cols, labelRow + fieldRow) +
-        docxSectionSpacer()
-      )
+      return renderPreparedByDocx({ label: block.label, fields: block.fields })
     }
     case 'page-break':
       return `<w:p><w:r><w:br w:type="page"/></w:r></w:p>`

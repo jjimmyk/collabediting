@@ -7,13 +7,18 @@ import {
   ICS202_PDF_PAGE,
 } from '@/features/ics202/export-docx-layout'
 import {
+  assertIcs202PaginationInvariants,
   paginateIcs202Export,
+  type Ics202PagePreparedBy,
   type Ics202PhysicalPage,
   type Ics202PhysicalPageSegment,
 } from '@/features/ics202/export-pagination'
 
 export { buildIcs202DocxXml } from '@/features/ics202/export-docx-layout'
-export { paginateIcs202Export } from '@/features/ics202/export-pagination'
+export {
+  assertIcs202PaginationInvariants,
+  paginateIcs202Export,
+} from '@/features/ics202/export-pagination'
 export type { Ics202PhysicalPage } from '@/features/ics202/export-pagination'
 
 let crc32Table: Uint32Array | null = null
@@ -122,6 +127,7 @@ function triggerBlobDownload(blob: Blob, filename: string): void {
 
 export function downloadIcs202Docx(filename: string, blocks: Ics202ExportLayoutBlock[]): void {
   const pages = paginateIcs202Export(blocks)
+  assertIcs202PaginationInvariants(pages)
   const documentXml = buildIcs202DocxXml(pages)
   assertIcs202DocxLayoutConsistency(documentXml)
   const files = [
@@ -411,54 +417,61 @@ function renderPdfPageSegment(
       y = bottomY - gap
       return { ops, lines, nextY: y }
     }
-    case 'prepared-by': {
-      const cellW = contentWidth / 4
-      const fields = [
-        { label: 'Name:', value: segment.fields.name },
-        { label: 'Position Title:', value: segment.fields.positionTitle },
-        { label: 'Signature:', value: segment.fields.signature },
-        { label: 'Date/Time:', value: segment.fields.dateTime },
-      ]
-      const height = 48
-      const bottomY = y - height
-      let ops = '0.75 w\n'
-      ops += `${margin.toFixed(2)} ${bottomY.toFixed(2)} ${contentWidth.toFixed(2)} ${height.toFixed(2)} re S\n`
-      for (let i = 1; i < 4; i += 1) {
-        const x = margin + cellW * i
-        ops += `${x.toFixed(2)} ${bottomY.toFixed(2)} m ${x.toFixed(2)} ${y.toFixed(2)} l S\n`
-      }
-      const lines: PdfLine[] = [
-        {
-          text: sanitizeForPdf(segment.label),
-          font: 'F2',
-          size: 7,
-          x: margin + 4,
-          y: y - 8,
-          bold: true,
-        },
-      ]
-      fields.forEach((field, index) => {
-        const x = margin + cellW * index + 4
-        lines.push({
-          text: sanitizeForPdf(field.label),
-          font: 'F2',
-          size: 6.5,
-          x,
-          y: y - 20,
-          bold: true,
-        })
-        wrapPdfText(sanitizeForPdf(field.value || ' '), cellW - 8, 7.5, false)
-          .slice(0, 2)
-          .forEach((line, i) => {
-            lines.push({ text: line, font: 'F1', size: 7.5, x, y: y - 30 - i * 9 })
-          })
-      })
-      y = bottomY - gap
-      return { ops, lines, nextY: y }
-    }
     default:
       return { ops: '', lines: [], nextY: y }
   }
+}
+
+function renderPdfPagePreparedBy(
+  preparedBy: Ics202PagePreparedBy,
+  margin: number,
+  contentWidth: number,
+  startY: number
+): { ops: string; lines: PdfLine[]; nextY: number } {
+  const gap = 6
+  const cellW = contentWidth / 4
+  const fields = [
+    { label: 'Name:', value: preparedBy.fields.name },
+    { label: 'Position Title:', value: preparedBy.fields.positionTitle },
+    { label: 'Signature:', value: preparedBy.fields.signature },
+    { label: 'Date/Time:', value: preparedBy.fields.dateTime },
+  ]
+  const height = 48
+  const y = startY
+  const bottomY = y - height
+  let ops = '0.75 w\n'
+  ops += `${margin.toFixed(2)} ${bottomY.toFixed(2)} ${contentWidth.toFixed(2)} ${height.toFixed(2)} re S\n`
+  for (let i = 1; i < 4; i += 1) {
+    const x = margin + cellW * i
+    ops += `${x.toFixed(2)} ${bottomY.toFixed(2)} m ${x.toFixed(2)} ${y.toFixed(2)} l S\n`
+  }
+  const lines: PdfLine[] = [
+    {
+      text: sanitizeForPdf(preparedBy.label),
+      font: 'F2',
+      size: 7,
+      x: margin + 4,
+      y: y - 8,
+      bold: true,
+    },
+  ]
+  fields.forEach((field, index) => {
+    const x = margin + cellW * index + 4
+    lines.push({
+      text: sanitizeForPdf(field.label),
+      font: 'F2',
+      size: 6.5,
+      x,
+      y: y - 20,
+      bold: true,
+    })
+    wrapPdfText(sanitizeForPdf(field.value || ' '), cellW - 8, 7.5, false)
+      .slice(0, 2)
+      .forEach((line, i) => {
+        lines.push({ text: line, font: 'F1', size: 7.5, x, y: y - 30 - i * 9 })
+      })
+  })
+  return { ops, lines, nextY: bottomY - gap }
 }
 
 function renderPdfPageFooter(
@@ -509,6 +522,9 @@ function buildIcs202PdfBytes(pages: Ics202PhysicalPage[]): Uint8Array {
       lines.push(...rendered.lines)
       y = rendered.nextY
     }
+    const preparedBy = renderPdfPagePreparedBy(page.preparedBy, margin, contentWidth, y)
+    ops += preparedBy.ops
+    lines.push(...preparedBy.lines)
     const footer = renderPdfPageFooter(page, margin, contentWidth)
     ops += footer.ops
     lines.push(...footer.lines)
@@ -615,6 +631,7 @@ function buildIcs202PdfBytes(pages: Ics202PhysicalPage[]): Uint8Array {
 
 export function downloadIcs202Pdf(filename: string, blocks: Ics202ExportLayoutBlock[]): void {
   const pages = paginateIcs202Export(blocks)
+  assertIcs202PaginationInvariants(pages)
   const bytes = buildIcs202PdfBytes(pages)
   triggerBlobDownload(new Blob([bytes.buffer as ArrayBuffer], { type: 'application/pdf' }), filename)
 }

@@ -4,13 +4,18 @@ import type {
   Ics202LifelineOption,
   Ics202PreparedByFields,
 } from '@/features/ics202/export-layout'
+import { ICS202_EXPORT_PAGE_METRICS as PAGE } from '@/features/ics202/export-page-metrics'
 import type { Ics202ObjectiveRow } from '@/features/ics202/types'
-import { ICS202_PDF_CONTENT_WIDTH } from '@/features/ics202/export-docx-layout'
 
 export const ICS202_EXPORT_FOOTER_LEFT = 'ICS 202-CG (08/25)  Expiration: 08/35'
 
 const PDF_AVG_WIDTH = 0.5
 const PDF_BOLD_AVG_WIDTH = 0.53
+
+export type Ics202PagePreparedBy = {
+  label: string
+  fields: Ics202PreparedByFields
+}
 
 export type Ics202PhysicalPageSegment =
   | { kind: 'lifelines'; label: string; options: Ics202LifelineOption[]; continued: boolean }
@@ -28,29 +33,20 @@ export type Ics202PhysicalPageSegment =
       locationLines: string[]
       continued: boolean
     }
-  | { kind: 'prepared-by'; label: string; fields: Ics202PreparedByFields }
 
 export type Ics202PhysicalPage = {
   displayPageNumber: number
   totalPages: number
   headerCells: Ics202HeaderCell[]
   segments: Ics202PhysicalPageSegment[]
+  preparedBy: Ics202PagePreparedBy
   footerLeft: string
 }
 
-const PAGE = {
-  heightPt: 792,
-  marginTopPt: 36,
-  marginBottomPt: 36,
-  footerHeightPt: 22,
-  headerTitleHeightPt: 44,
-  segmentGapPt: 6,
-  contentWidthPt: ICS202_PDF_CONTENT_WIDTH,
-  boxPaddingPt: 12,
-  labelHeightPt: 18,
-  bodyLineHeightPt: 11,
-  minBodyLines: 2,
-} as const
+type ContentGroup = {
+  blocks: Ics202ExportLayoutBlock[]
+  preparedBy: Ics202PagePreparedBy
+}
 
 function estimateTextWidth(text: string, fontSize: number, bold: boolean): number {
   const factor = bold ? PDF_BOLD_AVG_WIDTH : PDF_AVG_WIDTH
@@ -139,14 +135,15 @@ function pageSegmentCapacity(headerCells: Ics202HeaderCell[]): number {
     PAGE.marginTopPt -
     PAGE.marginBottomPt -
     PAGE.footerHeightPt -
+    PAGE.preparedByHeightPt -
     PAGE.headerTitleHeightPt -
     estimateHeaderRowHeight(headerCells) -
     8
   )
 }
 
-function estimateTextBoxHeight(lineCount: number): number {
-  const lines = Math.max(lineCount, PAGE.minBodyLines)
+function estimateTextBoxHeight(lineCount: number, minLines = PAGE.minBodyLines): number {
+  const lines = Math.max(lineCount, minLines)
   return (
     PAGE.boxPaddingPt +
     PAGE.labelHeightPt +
@@ -179,27 +176,27 @@ function estimateSiteSafetyHeight(locationLineCount: number): number {
   return Math.max(44, PAGE.labelHeightPt + 12 + lines * 10 + PAGE.boxPaddingPt)
 }
 
-function estimatePreparedByHeight(): number {
-  return 52
-}
-
 function computeDisplayPageNumbers(physicalPageCount: number): {
   displayPageNumbers: number[]
   totalPages: number
 } {
-  const totalPages = Math.max(3, physicalPageCount + 1)
-  const displayPageNumbers = Array.from({ length: physicalPageCount }, (_, index) => index + 2)
+  const totalPages = Math.max(1, physicalPageCount)
+  const displayPageNumbers = Array.from({ length: physicalPageCount }, (_, index) => index + 1)
   return { displayPageNumbers, totalPages }
 }
 
 type PageDraft = {
   headerCells: Ics202HeaderCell[]
+  preparedBy: Ics202PagePreparedBy
   segments: Ics202PhysicalPageSegment[]
   usedHeight: number
 }
 
-function createPageDraft(headerCells: Ics202HeaderCell[]): PageDraft {
-  return { headerCells, segments: [], usedHeight: 0 }
+function createPageDraft(
+  headerCells: Ics202HeaderCell[],
+  preparedBy: Ics202PagePreparedBy
+): PageDraft {
+  return { headerCells, preparedBy, segments: [], usedHeight: 0 }
 }
 
 function segmentHeight(segment: Ics202PhysicalPageSegment): number {
@@ -207,13 +204,14 @@ function segmentHeight(segment: Ics202PhysicalPageSegment): number {
     case 'lifelines':
       return estimateLifelinesHeight(segment.options.length)
     case 'text-box':
-      return estimateTextBoxHeight(segment.bodyLines.length)
+      return estimateTextBoxHeight(
+        segment.bodyLines.length,
+        segment.continued ? 1 : PAGE.minBodyLines
+      )
     case 'objectives':
       return estimateObjectivesHeight(segment.rows.length, segment.showTableHeader)
     case 'site-safety-plan':
       return estimateSiteSafetyHeight(segment.locationLines.length)
-    case 'prepared-by':
-      return estimatePreparedByHeight()
     default:
       return 0
   }
@@ -238,6 +236,7 @@ function finalizeDrafts(drafts: PageDraft[]): Ics202PhysicalPage[] {
     totalPages,
     headerCells: draft.headerCells,
     segments: draft.segments,
+    preparedBy: draft.preparedBy,
     footerLeft: ICS202_EXPORT_FOOTER_LEFT,
   }))
 }
@@ -255,16 +254,16 @@ function paginateSplittableLines(
     let draft = getCurrentDraft()
     const overhead =
       PAGE.boxPaddingPt * 2 + PAGE.labelHeightPt + 4 + (draft.segments.length > 0 ? PAGE.segmentGapPt : 0)
-    let capacity = remainingHeight(draft)
+    const capacity = remainingHeight(draft)
     if (capacity <= overhead + PAGE.bodyLineHeightPt) {
       startNewDraft()
-      draft = getCurrentDraft()
       isContinued = true
       continue
     }
 
+    const minLines = isContinued ? 1 : PAGE.minBodyLines
     const maxLines = Math.max(
-      PAGE.minBodyLines,
+      minLines,
       Math.floor((capacity - overhead) / PAGE.bodyLineHeightPt)
     )
     const chunk = lines.slice(lineIndex, lineIndex + maxLines)
@@ -311,7 +310,7 @@ function paginateObjectivesBlock(
 
   while (rowIndex < block.rows.length) {
     let draft = getCurrentDraft()
-    const label = isContinued ? formatIcs202ContinuedLabel(block.label) : block.label
+    const segmentLabel = isContinued ? formatIcs202ContinuedLabel(block.label) : block.label
     const showTableHeader = !isContinued
     const overhead =
       PAGE.boxPaddingPt * 2 +
@@ -319,22 +318,18 @@ function paginateObjectivesBlock(
       (showTableHeader ? 14 : 0) +
       (draft.segments.length > 0 ? PAGE.segmentGapPt : 0)
 
-    let capacity = remainingHeight(draft)
+    const capacity = remainingHeight(draft)
     if (capacity <= overhead + PAGE.bodyLineHeightPt) {
       startNewDraft()
-      draft = getCurrentDraft()
       isContinued = true
       continue
     }
 
-    const maxRows = Math.max(
-      1,
-      Math.floor((capacity - overhead) / PAGE.bodyLineHeightPt)
-    )
+    const maxRows = Math.max(1, Math.floor((capacity - overhead) / PAGE.bodyLineHeightPt))
     const chunk = block.rows.slice(rowIndex, rowIndex + maxRows)
     addSegmentToDraft(draft, {
       kind: 'objectives',
-      label,
+      label: segmentLabel,
       rows: chunk,
       continued: isContinued,
       showTableHeader,
@@ -383,7 +378,8 @@ function paginateSiteSafetyBlock(
   while (lineIndex < locationLines.length) {
     const isFirst = lineIndex === 0
     const draft = getCurrentDraft()
-    const overhead = estimateSiteSafetyHeight(isFirst ? 1 : 1) + (draft.segments.length > 0 ? PAGE.segmentGapPt : 0)
+    const overhead =
+      estimateSiteSafetyHeight(isFirst ? 1 : 1) + (draft.segments.length > 0 ? PAGE.segmentGapPt : 0)
     const maxLines = Math.max(
       1,
       Math.floor((remainingHeight(draft) - overhead) / 10)
@@ -418,12 +414,57 @@ function paginateAtomicSegment(
   addSegmentToDraft(draft, segment)
 }
 
+function estimateGroupContentHeight(blocks: Ics202ExportLayoutBlock[]): number {
+  let total = 0
+  for (const block of blocks) {
+    let height = 0
+    switch (block.kind) {
+      case 'lifelines':
+        height = estimateLifelinesHeight(block.options.length)
+        break
+      case 'text-box':
+        height = estimateTextBoxHeight(flattenWrappedBody(block.body, 9).length)
+        break
+      case 'objectives':
+        height = estimateObjectivesHeight(block.rows.length, true)
+        break
+      case 'site-safety-plan':
+        height = estimateSiteSafetyHeight(
+          flattenWrappedBody(block.location, 8).length > 0
+            ? flattenWrappedBody(block.location, 8).length
+            : 1
+        )
+        break
+      default:
+        break
+    }
+    if (height > 0) {
+      total += height + PAGE.segmentGapPt
+    }
+  }
+  return total
+}
+
 function extractContentBlocks(blocks: Ics202ExportLayoutBlock[]): {
   headerCells: Ics202HeaderCell[]
-  contentGroups: Ics202ExportLayoutBlock[][]
+  contentGroups: ContentGroup[]
 } {
   let headerCells: Ics202HeaderCell[] = []
-  const contentGroups: Ics202ExportLayoutBlock[][] = [[]]
+  const contentGroups: ContentGroup[] = []
+  let currentBlocks: Ics202ExportLayoutBlock[] = []
+  let currentPreparedBy: Ics202PagePreparedBy | null = null
+
+  const pushGroup = () => {
+    if (currentBlocks.length === 0 || !currentPreparedBy) {
+      return
+    }
+    contentGroups.push({
+      blocks: currentBlocks,
+      preparedBy: currentPreparedBy,
+    })
+    currentBlocks = []
+    currentPreparedBy = null
+  }
 
   for (const block of blocks) {
     if (block.kind === 'header-row') {
@@ -434,27 +475,57 @@ function extractContentBlocks(blocks: Ics202ExportLayoutBlock[]): {
       continue
     }
     if (block.kind === 'document-page-break') {
-      contentGroups.push([])
+      pushGroup()
       continue
     }
-    contentGroups[contentGroups.length - 1].push(block)
+    if (block.kind === 'prepared-by') {
+      currentPreparedBy = { label: block.label, fields: block.fields }
+      continue
+    }
+    currentBlocks.push(block)
   }
+
+  pushGroup()
 
   if (headerCells.length === 0) {
     throw new Error('ICS-202 export layout missing header row.')
   }
+  if (contentGroups.length === 0) {
+    throw new Error('ICS-202 export layout missing content groups.')
+  }
 
-  return { headerCells, contentGroups: contentGroups.filter((group) => group.length > 0) }
+  return { headerCells, contentGroups }
+}
+
+export function assertIcs202PaginationInvariants(pages: Ics202PhysicalPage[]): void {
+  if (pages.length === 0) {
+    throw new Error('ICS-202 export produced no pages.')
+  }
+  pages.forEach((page, index) => {
+    if (page.headerCells.length !== 3) {
+      throw new Error('ICS-202 export page missing header cells.')
+    }
+    if (!page.preparedBy?.label) {
+      throw new Error('ICS-202 export page missing prepared-by chrome.')
+    }
+    if (page.displayPageNumber !== index + 1) {
+      throw new Error('ICS-202 export page numbering is out of sequence.')
+    }
+    if (page.totalPages !== pages.length) {
+      throw new Error('ICS-202 export total page count mismatch.')
+    }
+  })
 }
 
 export function paginateIcs202Export(blocks: Ics202ExportLayoutBlock[]): Ics202PhysicalPage[] {
   const { headerCells, contentGroups } = extractContentBlocks(blocks)
   const drafts: PageDraft[] = []
-  let currentDraft = createPageDraft(headerCells)
+  let currentPreparedBy = contentGroups[0].preparedBy
+  let currentDraft = createPageDraft(headerCells, currentPreparedBy)
   drafts.push(currentDraft)
 
   const startNewDraft = () => {
-    currentDraft = createPageDraft(headerCells)
+    currentDraft = createPageDraft(headerCells, currentPreparedBy)
     drafts.push(currentDraft)
   }
 
@@ -462,10 +533,19 @@ export function paginateIcs202Export(blocks: Ics202ExportLayoutBlock[]): Ics202P
 
   contentGroups.forEach((group, groupIndex) => {
     if (groupIndex > 0) {
-      startNewDraft()
+      currentPreparedBy = group.preparedBy
+      const neededHeight = estimateGroupContentHeight(group.blocks)
+      if (remainingHeight(currentDraft) < neededHeight) {
+        startNewDraft()
+      } else {
+        currentDraft.preparedBy = group.preparedBy
+      }
+    } else {
+      currentPreparedBy = group.preparedBy
+      currentDraft.preparedBy = group.preparedBy
     }
 
-    for (const block of group) {
+    for (const block of group.blocks) {
       switch (block.kind) {
         case 'lifelines':
           paginateAtomicSegment(
@@ -493,22 +573,13 @@ export function paginateIcs202Export(blocks: Ics202ExportLayoutBlock[]): Ics202P
         case 'site-safety-plan':
           paginateSiteSafetyBlock(block, getCurrentDraft, startNewDraft)
           break
-        case 'prepared-by':
-          paginateAtomicSegment(
-            {
-              kind: 'prepared-by',
-              label: block.label,
-              fields: block.fields,
-            },
-            getCurrentDraft,
-            startNewDraft
-          )
-          break
         default:
           break
       }
     }
   })
 
-  return finalizeDrafts(drafts.filter((draft) => draft.segments.length > 0))
+  const pages = finalizeDrafts(drafts.filter((draft) => draft.segments.length > 0))
+  assertIcs202PaginationInvariants(pages)
+  return pages
 }
