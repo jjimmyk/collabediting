@@ -126,38 +126,41 @@ function pageSegmentCapacity(_headerCells: Ics202HeaderCell[]): number {
     PAGE.marginBottomPt -
     PAGE.wordHeaderReservePt -
     PAGE.wordFooterReservePt -
-    8
+    PAGE.pageLayoutBufferPt
   return Math.floor(raw * PAGE.capacitySafetyFactor)
 }
 
 function estimateTextBoxHeight(lineCount: number, minLines = PAGE.minBodyLines): number {
   const lines = Math.max(lineCount, minLines)
-  return textBoxShellHeightPt() + lines * PAGE.paginationLineHeightPt
+  return (
+    PAGE.sectionSpacerPt * 2 +
+    PAGE.sectionTableCellMarginPt * 2 +
+    PAGE.labelLineHeightPt +
+    lines * PAGE.paginationLineHeightPt
+  )
 }
 
 function estimateLifelinesHeight(optionCount: number): number {
   const rows = Math.ceil(optionCount / 4)
+  const innerRowHeightPt = PAGE.sectionTableCellMarginPt + PAGE.smallLineHeightPt
   return (
     PAGE.sectionSpacerPt * 2 +
     PAGE.sectionTableCellMarginPt +
     PAGE.labelLineHeightPt +
-    PAGE.sectionTableCellMarginPt +
-    rows * PAGE.smallLineHeightPt +
+    rows * innerRowHeightPt +
     PAGE.sectionTableCellMarginPt
   )
 }
 
 function estimateObjectivesHeight(rowCount: number, showTableHeader: boolean): number {
   const rows = Math.max(rowCount, 1)
-  const header = showTableHeader ? PAGE.smallLineHeightPt : 0
+  const header = showTableHeader ? PAGE.smallLineHeightPt + PAGE.sectionTableCellMarginPt : 0
   return (
     PAGE.sectionSpacerPt * 2 +
-    PAGE.sectionTableCellMarginPt +
+    PAGE.sectionTableCellMarginPt * 2 +
     PAGE.labelLineHeightPt +
-    PAGE.sectionTableCellMarginPt +
     header +
-    rows * PAGE.bodyLineHeightPt +
-    PAGE.sectionTableCellMarginPt
+    rows * PAGE.paginationLineHeightPt
   )
 }
 
@@ -168,8 +171,7 @@ function estimateSiteSafetyHeight(locationLineCount: number): number {
     PAGE.sectionTableCellMarginPt +
     PAGE.labelLineHeightPt * 2 +
     PAGE.smallLineHeightPt +
-    PAGE.sectionTableCellMarginPt +
-    lines * PAGE.bodyLineHeightPt +
+    lines * PAGE.paginationLineHeightPt +
     PAGE.sectionTableCellMarginPt
   )
 }
@@ -177,9 +179,8 @@ function estimateSiteSafetyHeight(locationLineCount: number): number {
 function textBoxShellHeightPt(): number {
   return (
     PAGE.sectionSpacerPt * 2 +
-    PAGE.sectionTableCellMarginPt +
-    PAGE.labelLineHeightPt +
-    PAGE.sectionTableCellMarginPt
+    PAGE.sectionTableCellMarginPt * 2 +
+    PAGE.labelLineHeightPt
   )
 }
 
@@ -332,6 +333,11 @@ function paginateSplittableLines(
   }
 }
 
+function canFitSegment(draft: PageDraft, segment: Ics202PhysicalPageSegment): boolean {
+  const gap = draft.segments.length > 0 ? PAGE.segmentGapPt : 0
+  return remainingHeight(draft) >= segmentHeight(segment) + gap
+}
+
 function paginateObjectivesBlock(
   block: Extract<Ics202ExportLayoutBlock, { kind: 'objectives' }>,
   getCurrentDraft: () => PageDraft,
@@ -346,7 +352,7 @@ function paginateObjectivesBlock(
       continued: false,
       showTableHeader: true,
     }
-    if (remainingHeight(draft) < segmentHeight(segment) + (draft.segments.length > 0 ? PAGE.segmentGapPt : 0)) {
+    if (!canFitSegment(draft, segment)) {
       startNewDraft()
     }
     addSegmentToDraft(getCurrentDraft(), segment)
@@ -357,32 +363,35 @@ function paginateObjectivesBlock(
   let isContinued = false
 
   while (rowIndex < block.rows.length) {
-    let draft = getCurrentDraft()
+    const draft = getCurrentDraft()
     const segmentLabel = isContinued ? formatIcs202ContinuedLabel(block.label) : block.label
     const showTableHeader = !isContinued
-    const overhead =
-      estimateObjectivesHeight(showTableHeader ? 1 : 0, showTableHeader) -
-      (showTableHeader ? PAGE.bodyLineHeightPt : 0) +
-      (draft.segments.length > 0 ? PAGE.segmentGapPt : 0)
+    const minRows = 1
+    let maxRows = block.rows.length - rowIndex
 
-    const capacity = remainingHeight(draft)
-    if (capacity <= overhead + PAGE.bodyLineHeightPt) {
-      startNewDraft()
-      isContinued = true
-      continue
+    for (let take = maxRows; take >= minRows; take -= 1) {
+      const candidate: Ics202PhysicalPageSegment = {
+        kind: 'objectives',
+        label: segmentLabel,
+        rows: block.rows.slice(rowIndex, rowIndex + take),
+        continued: isContinued,
+        showTableHeader,
+      }
+      if (canFitSegment(draft, candidate)) {
+        addSegmentToDraft(draft, candidate)
+        rowIndex += take
+        if (rowIndex < block.rows.length) {
+          isContinued = true
+        }
+        maxRows = 0
+        break
+      }
     }
 
-    const maxRows = Math.max(1, Math.floor((capacity - overhead) / PAGE.bodyLineHeightPt))
-    const chunk = block.rows.slice(rowIndex, rowIndex + maxRows)
-    addSegmentToDraft(draft, {
-      kind: 'objectives',
-      label: segmentLabel,
-      rows: chunk,
-      continued: isContinued,
-      showTableHeader,
-    })
-    rowIndex += chunk.length
-    isContinued = true
+    if (maxRows !== 0) {
+      startNewDraft()
+      isContinued = true
+    }
   }
 }
 
@@ -451,14 +460,10 @@ function paginateAtomicSegment(
   getCurrentDraft: () => PageDraft,
   startNewDraft: () => void
 ): void {
-  let draft = getCurrentDraft()
-  const height = segmentHeight(segment)
-  const gap = draft.segments.length > 0 ? PAGE.segmentGapPt : 0
-  if (remainingHeight(draft) < height + gap) {
+  if (!canFitSegment(getCurrentDraft(), segment)) {
     startNewDraft()
-    draft = getCurrentDraft()
   }
-  addSegmentToDraft(draft, segment)
+  addSegmentToDraft(getCurrentDraft(), segment)
 }
 
 function extractContentBlocks(blocks: Ics202ExportLayoutBlock[]): {

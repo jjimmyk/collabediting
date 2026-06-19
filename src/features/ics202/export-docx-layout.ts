@@ -60,14 +60,15 @@ const DOCX_TABLE_BORDERS =
 
 function docxParagraph(
   text: string,
-  opts: { bold?: boolean; size?: number; center?: boolean; after?: number } = {}
+  opts: { bold?: boolean; size?: number; center?: boolean; after?: number; keepNext?: boolean } = {}
 ) {
   const size = opts.size ?? 18
   const after = opts.after ?? 40
   const jc = opts.center ? `<w:jc w:val="center"/>` : ''
   const bold = opts.bold ? `<w:b/>` : ''
+  const keepNext = opts.keepNext ? `<w:keepNext/>` : ''
   return (
-    `<w:p><w:pPr><w:spacing w:before="0" w:after="${after}"/>${jc}</w:pPr>` +
+    `<w:p><w:pPr><w:spacing w:before="0" w:after="${after}"/>${keepNext}${jc}</w:pPr>` +
     `<w:r><w:rPr>${bold}<w:sz w:val="${size}"/><w:szCs w:val="${size}"/></w:rPr>` +
     `<w:t xml:space="preserve">${escapeXml(text || ' ')}</w:t></w:r></w:p>`
   )
@@ -84,9 +85,22 @@ function docxMultilineParagraphs(text: string, size = 18): string {
 }
 
 function docxLabelParagraph(label: string): string {
-  return docxParagraph(label, { bold: true, size: 16 })
+  return docxParagraph(label, { bold: true, size: 16, keepNext: true })
 }
 
+function docxCantSplitRow(cellsXml: string): string {
+  return `<w:tr><w:trPr><w:cantSplit/></w:trPr>${cellsXml}</w:tr>`
+}
+
+/** Single full-width bordered section: label + body stay in one unbreakable row/cell. */
+function docxSectionBox(label: string, bodyXml: string): string {
+  return docxFixedTable(
+    [ICS202_DOCX_CONTENT_WIDTH],
+    docxCantSplitRow(
+      docxCell(ICS202_DOCX_CONTENT_WIDTH, docxLabelParagraph(label) + bodyXml)
+    )
+  )
+}
 function docxCellMargins(kind: 'normal' | 'tight' = 'normal'): string {
   if (kind === 'tight') {
     return (
@@ -142,15 +156,6 @@ function docxSectionSpacer(): string {
 
 function docxCheckboxMark(checked: boolean): string {
   return checked ? '[X]' : '[ ]'
-}
-
-/** Single full-width bordered section: label row + content row. */
-function docxSectionBox(label: string, bodyXml: string): string {
-  return docxFixedTable(
-    [ICS202_DOCX_CONTENT_WIDTH],
-    `<w:tr>${docxCell(ICS202_DOCX_CONTENT_WIDTH, docxLabelParagraph(label))}</w:tr>` +
-      `<w:tr>${docxCell(ICS202_DOCX_CONTENT_WIDTH, bodyXml)}</w:tr>`
-  )
 }
 
 function docxLinesParagraphs(lines: string[], size = 18): string {
@@ -257,9 +262,6 @@ export function renderPhysicalPageSegmentDocx(segment: Ics202PhysicalPageSegment
     case 'lifelines': {
       const col = ICS202_DOCX_COL.lifeline
       const cols = [col, col, col, col]
-      const labelRow = `<w:tr>${docxCell(ICS202_DOCX_CONTENT_WIDTH, docxLabelParagraph(segment.label), {
-        gridSpan: 4,
-      })}</w:tr>`
       const gridRows: string[] = []
       for (let i = 0; i < segment.options.length; i += 4) {
         const slice = segment.options.slice(i, i + 4)
@@ -273,7 +275,20 @@ export function renderPhysicalPageSegmentDocx(segment: Ics202PhysicalPageSegment
           .join('')
         gridRows.push(`<w:tr>${cells}</w:tr>`)
       }
-      return docxSectionSpacer() + docxFixedTable(cols, labelRow + gridRows.join('')) + docxSectionSpacer()
+      const innerTable = docxFixedTable(cols, gridRows.join(''))
+      return (
+        docxSectionSpacer() +
+        docxFixedTable(
+          [ICS202_DOCX_CONTENT_WIDTH],
+          docxCantSplitRow(
+            docxCell(
+              ICS202_DOCX_CONTENT_WIDTH,
+              docxLabelParagraph(segment.label) + innerTable
+            )
+          )
+        ) +
+        docxSectionSpacer()
+      )
     }
     case 'text-box':
       return (
@@ -284,31 +299,36 @@ export function renderPhysicalPageSegmentDocx(segment: Ics202PhysicalPageSegment
     case 'objectives': {
       const omCol = ICS202_DOCX_COL.om
       const objCol = ICS202_DOCX_COL.objective
-      const labelRow = `<w:tr>${docxCell(ICS202_DOCX_CONTENT_WIDTH, docxLabelParagraph(segment.label), {
-        gridSpan: 2,
-      })}</w:tr>`
       const headerRow = segment.showTableHeader
-        ? `<w:tr>` +
-          docxCell(omCol, docxParagraph('O/M', { bold: true, size: 14 })) +
-          docxCell(objCol, docxParagraph('Objective', { bold: true, size: 14 })) +
-          `</w:tr>`
+        ? docxCantSplitRow(
+            docxCell(omCol, docxParagraph('O/M', { bold: true, size: 14 })) +
+              docxCell(objCol, docxParagraph('Objective', { bold: true, size: 14 }))
+          )
         : ''
       const bodyRows =
         segment.rows.length === 0
-          ? `<w:tr>${docxCell(ICS202_DOCX_CONTENT_WIDTH, docxParagraph(' ', { size: 18 }), {
-              gridSpan: 2,
-            })}</w:tr>`
+          ? docxCantSplitRow(
+              docxCell(ICS202_DOCX_CONTENT_WIDTH, docxParagraph(' ', { size: 18 }), {
+                gridSpan: 2,
+              })
+            )
           : segment.rows
-              .map((row) => (
-                  `<w:tr>` +
+              .map((row) =>
+                docxCantSplitRow(
                   docxCell(omCol, docxParagraph(row.kind || ' ', { size: 16 })) +
-                  docxCell(objCol, docxMultilineParagraphs(row.objective || ' ', 16)) +
-                  `</w:tr>`
-                ))
+                    docxCell(objCol, docxMultilineParagraphs(row.objective || ' ', 16))
+                )
+              )
               .join('')
+      const innerTable = docxFixedTable([omCol, objCol], headerRow + bodyRows)
       return (
         docxSectionSpacer() +
-        docxFixedTable([omCol, objCol], labelRow + headerRow + bodyRows) +
+        docxFixedTable(
+          [ICS202_DOCX_CONTENT_WIDTH],
+          docxCantSplitRow(
+            docxCell(ICS202_DOCX_CONTENT_WIDTH, docxLabelParagraph(segment.label) + innerTable)
+          )
+        ) +
         docxSectionSpacer()
       )
     }
@@ -319,13 +339,16 @@ export function renderPhysicalPageSegmentDocx(segment: Ics202PhysicalPageSegment
       const locationLabel = segment.continued
         ? '9. Site Safety Plan located at: (Continued):'
         : '9. Site Safety Plan located at:'
-      const row = segment.continued
-        ? `<w:tr>${docxCell(
-            ICS202_DOCX_CONTENT_WIDTH,
-            docxLabelParagraph(locationLabel) +
-              docxLinesParagraphs(segment.locationLines, 16)
-          )}</w:tr>`
-        : `<w:tr>` +
+      if (segment.continued) {
+        return (
+          docxSectionSpacer() +
+          docxSectionBox(locationLabel, docxLinesParagraphs(segment.locationLines, 16)) +
+          docxSectionSpacer()
+        )
+      }
+      const innerTable = docxFixedTable(
+        [half, half],
+        `<w:tr>` +
           docxCell(
             half,
             docxLabelParagraph('8. Site Safety Plan Required:') +
@@ -336,7 +359,15 @@ export function renderPhysicalPageSegmentDocx(segment: Ics202PhysicalPageSegment
             docxLabelParagraph(locationLabel) + docxLinesParagraphs(segment.locationLines, 16)
           ) +
           `</w:tr>`
-      return docxSectionSpacer() + docxFixedTable(segment.continued ? [ICS202_DOCX_CONTENT_WIDTH] : [half, half], row) + docxSectionSpacer()
+      )
+      return (
+        docxSectionSpacer() +
+        docxFixedTable(
+          [ICS202_DOCX_CONTENT_WIDTH],
+          docxCantSplitRow(docxCell(ICS202_DOCX_CONTENT_WIDTH, innerTable))
+        ) +
+        docxSectionSpacer()
+      )
     }
     default:
       return ''
@@ -578,6 +609,9 @@ export function assertIcs202DocxLayoutConsistency(documentXml: string): void {
   }
   if (documentXml.includes('10. Prepared by:') || documentXml.includes('14. Prepared by:')) {
     throw new Error('ICS-202 prepared-by must render in Word footer parts, not document body.')
+  }
+  if (!documentXml.includes('<w:cantSplit/>')) {
+    throw new Error('ICS-202 DOCX export missing cantSplit row guards on section tables.')
   }
   if (documentXml.includes('<w:tbl><w:tblPr><w:tblW w:w="5000" w:type="pct"')) {
     throw new Error('ICS-202 DOCX export still contains legacy pct-width tables.')

@@ -129,6 +129,7 @@ function assertDocxFooterLayout(pages: ReturnType<typeof paginateIcs202Export>):
     !documentXml.includes('10. Prepared by:') && !documentXml.includes('14. Prepared by:'),
     'Prepared-by must not appear in document body.'
   )
+  assert(documentXml.includes('<w:cantSplit/>'), 'DOCX must guard section rows with cantSplit.')
 }
 
 export function runIcs202ExportPaginationFixtureChecks(): void {
@@ -150,8 +151,30 @@ export function runIcs202ExportPaginationFixtureChecks(): void {
     )
   )
   assert(
-    userContinuedSegments.length === 0,
-    'User fixture should not produce a spurious Box 5 continuation page.'
+    userContinuedSegments.length >= 1,
+    'Planning fixture must split Box 5 with an explicit (Continued) segment.'
+  )
+  const planningContinuationPage = userPages.find((page) =>
+    page.segments.some(
+      (segment) =>
+        segment.kind === 'text-box' &&
+        segment.label === formatIcs202ContinuedLabel('5. Incident Priorities:')
+    )
+  )
+  assert(planningContinuationPage !== undefined, 'Planning fixture must label Box 5 continuation pages.')
+  const planningContinuedSegment = planningContinuationPage!.segments.find(
+    (segment) =>
+      segment.kind === 'text-box' &&
+      segment.label === formatIcs202ContinuedLabel('5. Incident Priorities:')
+  )
+  assert(
+    planningContinuedSegment?.kind === 'text-box' && planningContinuedSegment.bodyLines.length > 0,
+    'Planning continuation page must carry Box 5 body lines.'
+  )
+  const planningContinuationPageIndex = userPages.indexOf(planningContinuationPage!)
+  assert(
+    planningContinuationPageIndex >= 1,
+    'Planning fixture must not place Box 5 continuation on the first page.'
   )
   assert(
     countTinyContinuations(userPages) === 0,
@@ -159,6 +182,10 @@ export function runIcs202ExportPaginationFixtureChecks(): void {
   )
 
   assertDocxFooterLayout(userPages)
+  assert(
+    buildIcs202DocxXml(userPages).includes('5. Incident Priorities (Continued):'),
+    'Planning fixture DOCX must include Box 5 continuation label.'
+  )
 
   const madDogPages = paginateIcs202Export(
     buildIcs202ExportLayout(buildMadDogFixtureForm(), {
@@ -175,9 +202,12 @@ export function runIcs202ExportPaginationFixtureChecks(): void {
     )
   )
   assert(continuationPage !== undefined, 'Mad Dog fixture must label Box 5 continuation pages.')
+  const madDogContinuedSegment = continuationPage!.segments.find(
+    (segment) => segment.kind === 'text-box' && segment.label === continuedLabel
+  )
   assert(
-    continuationPage!.segments.some((segment) => segment.kind === 'objectives'),
-    'Mad Dog continuation page should pack Box 6 with the Box 5 tail when space allows.'
+    madDogContinuedSegment?.kind === 'text-box' && madDogContinuedSegment.bodyLines.length > 0,
+    'Mad Dog continuation page must carry Box 5 body lines.'
   )
   assertDocxFooterLayout(madDogPages)
 
