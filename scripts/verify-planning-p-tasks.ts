@@ -1,6 +1,8 @@
 import {
   PLANNING_P_STEPS,
   getPlanningPStepLabel,
+  getPlanningPWorkflowProgress,
+  parsePlanningPStepSchedule,
 } from '../src/features/planning-p/planning-p-steps'
 import { PLANNING_P_DEFAULT_POSITION } from '../src/features/planning-p/planning-p-task-templates'
 import {
@@ -74,5 +76,17 @@ assert(
   getPlanningPStepLabel('objectives-meeting') === 'IC / UC Objectives Meeting',
   'getPlanningPStepLabel should resolve step labels'
 )
+
+assert(
+  getPlanningPWorkflowProgress('objectives-meeting') === 0,
+  'First Planning-P phase should have 0 workflow progress'
+)
+assert(
+  getPlanningPWorkflowProgress('operations-briefing') === 88,
+  'Last Planning-P phase should reflect completed prior phases'
+)
+
+const schedule = parsePlanningPStepSchedule('11:30 – 12:00')
+assert(schedule.start === '11:30' && schedule.end === '12:00', 'Should parse phase schedule window')
 
 console.log('verify-planning-p-tasks: all assertions passed')

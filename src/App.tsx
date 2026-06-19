@@ -62,7 +62,6 @@ import {
   MoreVertical,
   MousePointer2,
   Table2,
-  ListOrdered,
   Lock,
   Moon,
   Network,
@@ -656,7 +655,8 @@ import {
 import { PlanningPStepper } from '@/features/planning-p/PlanningPStepper'
 import { MyPositionBadge } from '@/features/planning-p/MyPositionBadge'
 import { PlanningPTasksDialog } from '@/features/planning-p/PlanningPTasksDialog'
-import { PLANNING_P_STEPS, getPlanningPStepLabel } from '@/features/planning-p/planning-p-steps'
+import { PlanningPPhaseHeaderButton } from '@/features/planning-p/PlanningPPhaseHeaderButton'
+import { PLANNING_P_STEPS, getPlanningPStepLabel, getPlanningPWorkflowProgress } from '@/features/planning-p/planning-p-steps'
 import type { PlanningPTaskDialogScope } from '@/features/planning-p/planning-p-task-types'
 import { usePlanningPMyTasks } from '@/hooks/usePlanningPMyTasks'
 import { WorkspaceSettingsPage } from '@/features/workspace-settings/WorkspaceSettingsPage'
@@ -13836,6 +13836,12 @@ function App() {
     () => getPlanningPStepLabel(planningPStepId),
     [planningPStepId]
   )
+  const planningPWorkflowProgressPercent = useMemo(
+    () => getPlanningPWorkflowProgress(planningPStepId),
+    [planningPStepId]
+  )
+  const planningPPhaseTaskProgressPercent =
+    planningPAllTaskProgressByStepId[planningPStepId]?.percent ?? 0
   const openPlanningPTasksDialog = useCallback(
     (stepId: string, scope: PlanningPTaskDialogScope) => {
       setPlanningPMyTasksDialogStepId(stepId)
@@ -23337,25 +23343,15 @@ function App() {
                 </Badge>
               ) : null}
               {showPlanningPStepper && (
-                <TooltipProvider delayDuration={150}>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        type="button"
-                        variant={isPlanningPStepperOpen ? 'default' : 'outline'}
-                        size="sm"
-                        className={cn('ml-1 h-8 max-w-[14rem] gap-1.5', glassIconButtonClasses)}
-                        onClick={() => setIsPlanningPStepperOpen((open) => !open)}
-                        aria-pressed={isPlanningPStepperOpen}
-                        aria-label={`${activePlanningPStepLabel} stepper, ${isPlanningPStepperOpen ? 'expanded' : 'collapsed'}`}
-                      >
-                        <ListOrdered className="h-4 w-4 shrink-0" />
-                        <span className="hidden truncate sm:inline">{activePlanningPStepLabel}</span>
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>{activePlanningPStepLabel}</TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
+                <PlanningPPhaseHeaderButton
+                  activeStepId={planningPStepId}
+                  phaseLabel={activePlanningPStepLabel}
+                  workflowProgressPercent={planningPWorkflowProgressPercent}
+                  phaseTaskProgressPercent={planningPPhaseTaskProgressPercent}
+                  isStepperOpen={isPlanningPStepperOpen}
+                  onToggleStepper={() => setIsPlanningPStepperOpen((open) => !open)}
+                  className={glassIconButtonClasses}
+                />
               )}
             </div>
           </div>
