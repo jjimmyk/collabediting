@@ -246,16 +246,12 @@ export function renderPhysicalPageSegmentDocx(segment: Ics202PhysicalPageSegment
               gridSpan: 2,
             })}</w:tr>`
           : segment.rows
-              .map((row) => {
-                const prefix = [row.kind, row.label].filter(Boolean).join(' ')
-                const text = prefix ? `${prefix}  ${row.objective}` : row.objective || ' '
-                return (
+              .map((row) => (
                   `<w:tr>` +
                   docxCell(omCol, docxParagraph(row.kind || ' ', { size: 16 })) +
-                  docxCell(objCol, docxMultilineParagraphs(text, 16)) +
+                  docxCell(objCol, docxMultilineParagraphs(row.objective || ' ', 16)) +
                   `</w:tr>`
-                )
-              })
+                ))
               .join('')
       return (
         docxSectionSpacer() +
@@ -401,12 +397,10 @@ export function renderLayoutBlockDocx(block: Ics202ExportLayoutBlock): string {
             })}</w:tr>`
           : block.rows
               .map((row) => {
-                const prefix = [row.kind, row.label].filter(Boolean).join(' ')
-                const text = prefix ? `${prefix}  ${row.objective}` : row.objective || ' '
                 return (
                   `<w:tr>` +
                   docxCell(omCol, docxParagraph(row.kind || ' ', { size: 16 })) +
-                  docxCell(objCol, docxMultilineParagraphs(text, 16)) +
+                  docxCell(objCol, docxMultilineParagraphs(row.objective || ' ', 16)) +
                   `</w:tr>`
                 )
               })

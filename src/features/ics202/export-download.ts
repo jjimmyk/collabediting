@@ -345,10 +345,7 @@ function renderPdfPageSegment(
       const body =
         segment.rows.length === 0
           ? [' ']
-          : segment.rows.map((row) => {
-              const prefix = [row.kind, row.label].filter(Boolean).join(' ')
-              return prefix ? `${prefix}  ${row.objective}` : row.objective || ' '
-            })
+          : segment.rows.map((row) => row.objective || ' ')
       const box = drawBoxExact(margin, y, contentWidth, segment.label, body, 8.5, 7, 1)
       y -= box.height + gap
       return { ops: box.ops, lines: box.lines, nextY: y }

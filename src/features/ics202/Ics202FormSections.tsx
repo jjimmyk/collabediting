@@ -1,11 +1,18 @@
 import type { ReactNode } from 'react'
-import { Trash2 } from 'lucide-react'
+import { Info, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Item } from '@/components/ui/item'
 import { Textarea } from '@/components/ui/textarea'
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
+import {
   ICS202_COMMUNITY_LIFELINES,
-  ICS202_OBJECTIVE_LABELS,
+  ICS202_OBJECTIVE_KIND_OPTIONS,
+  ICS202_OBJECTIVE_KIND_TOOLTIP,
 } from '@/features/ics202/constants'
 import {
   Ics202FieldLabel,
@@ -20,6 +27,7 @@ import type {
   Ics202FormSectionDrafts,
   Ics202FormState,
   Ics202IncidentInfoDraft,
+  Ics202ObjectiveKind,
   Ics202ObjectiveRow,
   Ics202SectionId,
   Ics202SiteSafetyPlanDraft,
@@ -146,24 +154,28 @@ export function Ics202FormSections({
 
   const patchObjectiveRow = (
     rowId: number,
-    field: keyof Ics202ObjectiveRow,
+    field: 'kind' | 'objective',
     value: string
   ) => {
     onPatchDraft(
       'objectives',
-      objectives.map((row) => (row.id === rowId ? { ...row, [field]: value } : row))
+      objectives.map((row) =>
+        row.id === rowId
+          ? {
+              ...row,
+              [field]: field === 'kind' ? (value as Ics202ObjectiveKind) : value,
+            }
+          : row
+      )
     )
   }
 
   const addObjectiveRow = () => {
-    const nextLabel =
-      ICS202_OBJECTIVE_LABELS[objectives.length] ?? String.fromCharCode(65 + objectives.length)
     onPatchDraft('objectives', [
       ...objectives,
       {
         id: objectives.length === 0 ? 1 : Math.max(...objectives.map((row) => row.id)) + 1,
         kind: 'O',
-        label: nextLabel,
         objective: '',
       },
     ])
@@ -297,9 +309,26 @@ export function Ics202FormSections({
       {renderSectionShell(
         'objectives',
         <div className="space-y-2">
-          <div className="grid grid-cols-[3rem_3rem_minmax(0,1fr)_auto] gap-2 text-[11px] font-semibold text-muted-foreground">
-            <span>O/M</span>
-            <span>Label</span>
+          <div className="grid grid-cols-[4.5rem_minmax(0,1fr)_auto] gap-2 text-[11px] font-semibold text-muted-foreground">
+            <div className="flex items-center gap-1">
+              <span>O/M</span>
+              <TooltipProvider delayDuration={150}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      className="inline-flex shrink-0 rounded-sm text-muted-foreground hover:text-foreground"
+                      aria-label="O/M field help"
+                    >
+                      <Info className="h-3.5 w-3.5" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="max-w-xs text-xs">
+                    {ICS202_OBJECTIVE_KIND_TOOLTIP}
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
             <span>Objective</span>
             <span />
           </div>
@@ -309,7 +338,7 @@ export function Ics202FormSections({
             objectives.map((row) => (
               <div
                 key={row.id}
-                className="grid grid-cols-[3rem_3rem_minmax(0,1fr)_auto] items-start gap-2"
+                className="grid grid-cols-[4.5rem_minmax(0,1fr)_auto] items-start gap-2"
               >
                 {isSectionEditing(editingSections, 'objectives') ? (
                   <>
@@ -321,16 +350,12 @@ export function Ics202FormSections({
                       className="h-8 rounded-md border bg-transparent px-1 text-xs outline-none"
                     >
                       <option value="">—</option>
-                      <option value="O">O</option>
-                      <option value="M">M</option>
+                      {ICS202_OBJECTIVE_KIND_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
                     </select>
-                    <input
-                      value={row.label}
-                      onChange={(event) =>
-                        patchObjectiveRow(row.id, 'label', event.target.value)
-                      }
-                      className="h-8 rounded-md border bg-transparent px-2 text-xs outline-none"
-                    />
                     <Textarea
                       value={row.objective}
                       onChange={(event) =>
@@ -352,7 +377,6 @@ export function Ics202FormSections({
                 ) : (
                   <>
                     <Ics202ReadOnlyField value={row.kind} />
-                    <Ics202ReadOnlyField value={row.label} />
                     <Ics202ReadOnlyTextBlock value={row.objective} />
                     <span />
                   </>

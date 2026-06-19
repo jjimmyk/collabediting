@@ -1,11 +1,10 @@
 import type { Ics201VersionSignature } from '@/features/ics201/types'
 
-export type Ics202ObjectiveKind = 'O' | 'M' | ''
+export type Ics202ObjectiveKind = 'O' | 'M' | 'O&M' | ''
 
 export type Ics202ObjectiveRow = {
   id: number
   kind: Ics202ObjectiveKind
-  label: string
   objective: string
 }
 

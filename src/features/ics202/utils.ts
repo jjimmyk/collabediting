@@ -5,6 +5,7 @@ import type {
   Ics202FormSectionDrafts,
   Ics202FormState,
   Ics202IncidentInfoDraft,
+  Ics202ObjectiveKind,
   Ics202ObjectiveRow,
   Ics202PreparedByDraft,
   Ics202SectionId,
@@ -30,6 +31,16 @@ export function cloneIcs202FormState(form: Ics202FormState): Ics202FormState {
   }
 }
 
+export function normalizeIcs202ObjectiveKind(kind: unknown): Ics202ObjectiveKind {
+  if (kind === 'O' || kind === 'M' || kind === 'O&M') {
+    return kind
+  }
+  if (kind === 'O/M') {
+    return 'O&M'
+  }
+  return ''
+}
+
 export function normalizeIcs202FormState(form: Ics202FormState): Ics202FormState {
   const lifelines = createEmptyIcs202CommunityLifelines(form.communityLifelines ?? {})
   return {
@@ -42,8 +53,7 @@ export function normalizeIcs202FormState(form: Ics202FormState): Ics202FormState
     incidentPriorities: String(form.incidentPriorities ?? ''),
     objectives: (form.objectives ?? []).map((row, index) => ({
       id: typeof row.id === 'number' ? row.id : index + 1,
-      kind: row.kind === 'O' || row.kind === 'M' ? row.kind : '',
-      label: String(row.label ?? ''),
+      kind: normalizeIcs202ObjectiveKind(row.kind),
       objective: String(row.objective ?? ''),
     })),
     commandEmphasis: String(form.commandEmphasis ?? ''),

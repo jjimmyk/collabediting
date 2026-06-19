@@ -66,8 +66,7 @@ export function buildIcs202DocxBlocks(
           blocks.push({ kind: 'paragraph', text: ' ' })
         } else {
           block.rows.forEach((row) => {
-            const prefix = [row.kind, row.label].filter(Boolean).join(' ')
-            pushParagraphLines(blocks, prefix ? `${prefix}  ${row.objective}` : row.objective)
+            pushParagraphLines(blocks, row.objective)
           })
         }
         break

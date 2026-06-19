@@ -18052,20 +18052,19 @@ function App() {
               {
                 id: 1,
                 kind: 'O',
-                label: 'A',
                 objective: `Protect life safety and stabilize conditions for ${incidentLabel}.`,
               },
               {
                 id: 2,
-                kind: 'O',
-                label: 'B',
-                objective: 'Establish unified command objectives and maintain situational awareness.',
+                kind: 'O&M',
+                objective:
+                  'Establish unified command objectives and maintain situational awareness.',
               },
               {
                 id: 3,
                 kind: 'M',
-                label: 'C',
-                objective: 'Provide accurate incident information to command and cooperating agencies.',
+                objective:
+                  'Provide accurate incident information to command and cooperating agencies.',
               },
             ])
             break

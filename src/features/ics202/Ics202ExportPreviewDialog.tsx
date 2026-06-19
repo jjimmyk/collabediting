@@ -77,9 +77,7 @@ function renderPreviewSegment(segment: Ics202PhysicalPageSegment, index: number)
               segment.rows.map((row) => (
                 <div key={row.id} className="grid grid-cols-[2.5rem_minmax(0,1fr)] gap-2 text-[11px]">
                   <span className="font-medium">{row.kind || ' '}</span>
-                  <span className="whitespace-pre-wrap">
-                    {[row.label, row.objective].filter(Boolean).join('  ') || ' '}
-                  </span>
+                  <span className="whitespace-pre-wrap">{row.objective.trim().length > 0 ? row.objective : ' '}</span>
                 </div>
               ))
             )}

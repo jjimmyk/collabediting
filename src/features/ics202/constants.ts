@@ -1,4 +1,4 @@
-import type { Ics202CommunityLifelineId, Ics202SectionId } from '@/features/ics202/types'
+import type { Ics202CommunityLifelineId, Ics202ObjectiveKind, Ics202SectionId } from '@/features/ics202/types'
 
 export const ICS202_FORM_TITLE_LINES = [
   'DEPARTMENT OF HOMELAND SECURITY',
@@ -54,7 +54,7 @@ export const ICS202_SECTION_PROMPTS: Record<Ics202SectionId, string> = {
   'incident-priorities':
     'Draft ICS-202-CG Incident Priorities as clear, ordered statements for the current operational period.',
   objectives:
-    'Draft ICS-202-CG Incident Objectives as clear, prioritized statements. Mark each as Operational (O) or Management (M) and use letter labels (A, B, C, etc.).',
+    'Draft ICS-202-CG Incident Objectives as clear, prioritized statements. Mark each as Operational (O), Managerial (M), or Operational and Managerial (O&M).',
   'command-emphasis':
     'Draft Operational Period Command Emphasis including safety message, priorities, and key command decisions or directions for this operational period.',
   'site-safety-plan':
@@ -69,4 +69,14 @@ export const ICS202_SECTION_PROMPTS: Record<Ics202SectionId, string> = {
     'Draft Key Decisions and Procedures established or required for this operational period.',
 }
 
-export const ICS202_OBJECTIVE_LABELS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'] as const
+export const ICS202_OBJECTIVE_KIND_OPTIONS: ReadonlyArray<{
+  value: Ics202ObjectiveKind
+  label: string
+}> = [
+  { value: 'O', label: 'O' },
+  { value: 'M', label: 'M' },
+  { value: 'O&M', label: 'O&M' },
+]
+
+export const ICS202_OBJECTIVE_KIND_TOOLTIP =
+  'Indicates whether an objective is operational (O), managerial (M), or operational and managerial (O&M).'
