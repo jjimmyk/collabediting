@@ -7,26 +7,31 @@ import {
   waitForTutorialElement,
 } from '@/features/hub/tutorial-selectors'
 
-type HubTab =
-  | 'notifications'
-  | 'incident-list'
-  | 'exercises'
-  | 'events'
-  | 'analytics'
+type HubTab = 'notifications' | 'fema-regions' | 'events'
 
 type HubTutorialWizardProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
   onNavigateToTab: (tab: HubTab) => void
   onEnsurePanelOpen: () => void
+  onOpenMoreMenu: (open: boolean) => void
+  moreMenuLabels: readonly string[]
+}
+
+function formatMoreMenuDescription(labels: readonly string[]): string {
+  const bulletList = labels.map((label) => `• ${label}`).join('\n')
+  return `Open More to reach additional hub views:\n\n${bulletList}\n\nUse search inside the menu to jump quickly to Analytics, Assets, Incidents, and more.`
 }
 
 function buildHubTutorialSteps(
   onNavigateToTab: (tab: HubTab) => void,
   onEnsurePanelOpen: () => void,
+  onOpenMoreMenu: (open: boolean) => void,
+  moreMenuLabels: readonly string[],
   refreshTour: () => void
 ): DriveStep[] {
   const ensureTabVisible = (tab: HubTab, selector: string) => {
+    onOpenMoreMenu(false)
     onEnsurePanelOpen()
     onNavigateToTab(tab)
     window.setTimeout(() => {
@@ -40,21 +45,11 @@ function buildHubTutorialSteps(
 
   return [
     {
-      element: HUB_TUTORIAL_SELECTORS.hubMenu,
+      element: HUB_TUTORIAL_SELECTORS.productTours,
       popover: {
         title: 'Welcome to PRATUS Coach',
         description:
-          'This tour walks you through The Hub — your home for incidents, exercises, events, and operational awareness across United States Coast Guard.',
-        side: 'bottom',
-        align: 'start',
-      },
-    },
-    {
-      element: HUB_TUTORIAL_SELECTORS.sidebarMenu,
-      popover: {
-        title: 'Navigation menu',
-        description:
-          'Open the menu to jump between The Hub, File Manager, and your incident or exercise workspaces.',
+          'Product Tours walk you through The Hub — your home for notifications, business units, events, and operational awareness across United States Coast Guard.',
         side: 'bottom',
         align: 'start',
       },
@@ -64,7 +59,7 @@ function buildHubTutorialSteps(
       popover: {
         title: 'Hub panel tabs',
         description:
-          'These icons switch the left panel between Notifications, Incidents, Exercises, Events, Analytics, and more.',
+          'These icons switch the left panel between Notifications, Business Units, Events, and More.',
         side: 'bottom',
         align: 'start',
       },
@@ -83,28 +78,35 @@ function buildHubTutorialSteps(
       },
     },
     {
-      element: HUB_TUTORIAL_SELECTORS.incidentsTab,
+      element: () => requireTutorialElement(HUB_TUTORIAL_SELECTORS.hubPanel),
+      popover: {
+        title: 'Notifications panel',
+        description:
+          'Alerts and tasks load here. Use filters and search within the panel to find what needs attention.',
+        side: 'right',
+        align: 'start',
+      },
+    },
+    {
+      element: HUB_TUTORIAL_SELECTORS.businessUnitsTab,
       onHighlightStarted: () => {
-        ensureTabVisible('incident-list', HUB_TUTORIAL_SELECTORS.hubPanel)
+        ensureTabVisible('fema-regions', HUB_TUTORIAL_SELECTORS.hubPanel)
       },
       popover: {
-        title: 'Incidents',
+        title: 'Business Units',
         description:
-          'Browse and create incidents. Select an incident to enter its workspace for forms, roster, and operational tools.',
+          'Browse Coast Guard districts and regions. Business units organize incidents, exercises, assets, and reporting scope.',
         side: 'bottom',
         align: 'start',
       },
     },
     {
-      element: HUB_TUTORIAL_SELECTORS.exercisesTab,
-      onHighlightStarted: () => {
-        ensureTabVisible('exercises', HUB_TUTORIAL_SELECTORS.hubPanel)
-      },
+      element: () => requireTutorialElement(HUB_TUTORIAL_SELECTORS.hubPanel),
       popover: {
-        title: 'Exercises',
+        title: 'Business Units panel',
         description:
-          'Plan and run training exercises. Open an exercise workspace to practice with MSEL injects and ICS forms.',
-        side: 'bottom',
+          'Select a business unit to filter hub data and open workspaces tied to that geography.',
+        side: 'right',
         align: 'start',
       },
     },
@@ -122,64 +124,41 @@ function buildHubTutorialSteps(
       },
     },
     {
-      element: HUB_TUTORIAL_SELECTORS.analyticsTab,
-      onHighlightStarted: () => {
-        ensureTabVisible('analytics', HUB_TUTORIAL_SELECTORS.hubPanel)
-      },
-      popover: {
-        title: 'Analytics',
-        description:
-          'View trends and summaries across your operational data to support decision-making.',
-        side: 'bottom',
-        align: 'start',
-      },
-    },
-    {
       element: () => requireTutorialElement(HUB_TUTORIAL_SELECTORS.hubPanel),
       popover: {
-        title: 'Panel content',
+        title: 'Events panel',
         description:
-          'Each tab loads its list or dashboard here. Use search and filters within the panel to find records quickly.',
+          'Review event timelines and details here. Events help you spot emerging situations before they escalate.',
         side: 'right',
         align: 'start',
       },
     },
     {
-      element: HUB_TUTORIAL_SELECTORS.searchBar,
+      element: HUB_TUTORIAL_SELECTORS.moreMenu,
+      onHighlightStarted: () => {
+        onEnsurePanelOpen()
+        onOpenMoreMenu(true)
+        window.setTimeout(() => refreshTour(), 120)
+      },
+      onDeselected: () => {
+        onOpenMoreMenu(false)
+      },
       popover: {
-        title: 'Global search',
-        description:
-          'Search across notifications, assets, incidents, exercises, events, and map features. Apply filters or zoom to results on the map.',
+        title: 'More menu',
+        description: formatMoreMenuDescription(moreMenuLabels),
         side: 'bottom',
-        align: 'end',
+        align: 'start',
       },
     },
     {
-      element: HUB_TUTORIAL_SELECTORS.mapToggle,
-      popover: {
-        title: 'Map view',
-        description:
-          'Toggle the map on or off. When visible, the panel shares the screen so you can work with geospatial context.',
-        side: 'bottom',
-        align: 'end',
+      element: HUB_TUTORIAL_SELECTORS.productTours,
+      onHighlightStarted: () => {
+        onOpenMoreMenu(false)
       },
-    },
-    {
-      element: HUB_TUTORIAL_SELECTORS.pratusAi,
-      popover: {
-        title: 'PRATUS AI',
-        description:
-          'Open the AI assistant to draft forms, generate rules, and get help with operational workflows.',
-        side: 'bottom',
-        align: 'end',
-      },
-    },
-    {
-      element: HUB_TUTORIAL_SELECTORS.hubMenu,
       popover: {
         title: "You're ready",
         description:
-          'Explore incidents and exercises from The Hub anytime. Use the Start Here button next to the header to restart PRATUS Coach.',
+          'Explore The Hub anytime. Open Product Tours here to restart PRATUS Coach or start the Workspace Tour after opening an incident or exercise.',
         side: 'bottom',
         align: 'start',
         doneBtnText: 'Finish',
@@ -217,16 +196,22 @@ export function HubTutorialWizard({
   onOpenChange,
   onNavigateToTab,
   onEnsurePanelOpen,
+  onOpenMoreMenu,
+  moreMenuLabels,
 }: HubTutorialWizardProps) {
   const driverRef = useRef<Driver | null>(null)
   const suppressCloseRef = useRef(false)
   const onNavigateToTabRef = useRef(onNavigateToTab)
   const onEnsurePanelOpenRef = useRef(onEnsurePanelOpen)
+  const onOpenMoreMenuRef = useRef(onOpenMoreMenu)
   const onOpenChangeRef = useRef(onOpenChange)
+  const moreMenuLabelsRef = useRef(moreMenuLabels)
 
   onNavigateToTabRef.current = onNavigateToTab
   onEnsurePanelOpenRef.current = onEnsurePanelOpen
+  onOpenMoreMenuRef.current = onOpenMoreMenu
   onOpenChangeRef.current = onOpenChange
+  moreMenuLabelsRef.current = moreMenuLabels
 
   const destroyTour = () => {
     if (!driverRef.current) {
@@ -242,6 +227,7 @@ export function HubTutorialWizard({
   useEffect(() => {
     if (!open) {
       destroyTour()
+      onOpenMoreMenuRef.current(false)
       return
     }
 
@@ -254,6 +240,8 @@ export function HubTutorialWizard({
     const steps = buildHubTutorialSteps(
       (tab) => onNavigateToTabRef.current(tab),
       () => onEnsurePanelOpenRef.current(),
+      (menuOpen) => onOpenMoreMenuRef.current(menuOpen),
+      moreMenuLabelsRef.current,
       refreshTour
     )
 
@@ -262,12 +250,14 @@ export function HubTutorialWizard({
       if (suppressCloseRef.current) {
         return
       }
+      onOpenMoreMenuRef.current(false)
       onOpenChangeRef.current(false)
     })
     driverRef.current = tour
     tour.drive()
 
     return () => {
+      onOpenMoreMenuRef.current(false)
       destroyTour()
     }
   }, [open])

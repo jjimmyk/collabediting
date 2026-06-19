@@ -127,7 +127,7 @@ function buildTutorialSteps(
       popover: {
         title: "You're ready",
         description:
-          'Open Forms → ICS-201 Incident Briefing anytime from this workspace. Use the Start Here button here to restart PRATUS Coach.',
+          'Open Forms → ICS-201 Incident Briefing anytime from this workspace. Use Product Tours here to restart PRATUS Coach.',
         side: 'bottom',
         align: 'start',
         doneBtnText: 'Finish',

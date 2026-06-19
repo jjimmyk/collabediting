@@ -586,7 +586,7 @@ import pratusLogo from '@/assets/pratus-logo.png'
 import { Ics201SectionEditorBadges } from '@/features/ics201/Ics201SectionEditorBadges'
 import { Ics201TutorialWizard } from '@/features/ics201/Ics201TutorialWizard'
 import { HubTutorialWizard } from '@/features/hub/HubTutorialWizard'
-import { StartHereButton } from '@/components/StartHereButton'
+import { ProductToursMenu } from '@/components/ProductToursMenu'
 import { CreateHubNotificationDialog } from '@/components/CreateHubNotificationDialog'
 import {
   BASELINE_MAP_SKETCH_POLYGON,
@@ -7230,6 +7230,7 @@ function App() {
   const [isIcs201SignNameDialogOpen, setIsIcs201SignNameDialogOpen] = useState(false)
   const [isIcs201TutorialOpen, setIsIcs201TutorialOpen] = useState(false)
   const [isHubTutorialOpen, setIsHubTutorialOpen] = useState(false)
+  const [isHubMoreMenuOpen, setIsHubMoreMenuOpen] = useState(false)
   const [ics201SignNameInput, setIcs201SignNameInput] = useState('You')
   const [viewingIcs201Version, setViewingIcs201Version] = useState<Ics201Version | null>(null)
   const [currentSituationEdit, setCurrentSituationEdit] = useState<string | null>(null)
@@ -23241,12 +23242,12 @@ function App() {
                   {formatOperationalPeriodLabel(startedOperationalPeriodCount)}
                 </Badge>
               ) : null}
-              <StartHereButton
+              <ProductToursMenu
                 className={cn('ml-2 h-10', glassIconButtonClasses)}
-                data-ics201-tutorial="workspace-menu"
-                data-hub-tutorial="hub-menu"
-                onClick={() => {
-                  if (isInIncidentWorkspace || isInExerciseWorkspace) {
+                isOnHub={!isInIncidentWorkspace && !isInExerciseWorkspace}
+                isInWorkspace={isInIncidentWorkspace || isInExerciseWorkspace}
+                onStartTour={(tourId) => {
+                  if (tourId === 'workspace') {
                     setIsIcs201TutorialOpen(true)
                   } else {
                     setIsHubTutorialOpen(true)
@@ -23604,6 +23605,7 @@ function App() {
                           className={selectedGlassTabClasses(activeTab === 'fema-regions')}
                           onClick={() => setActiveTab('fema-regions')}
                           aria-label="Open Business Units tab"
+                          data-hub-tutorial="business-units-tab"
                           data-pratus-context-id="tab:fema-regions"
                           data-pratus-context-label="Business Units"
                         >
@@ -23667,6 +23669,9 @@ function App() {
                         glassIconButtonClasses={glassIconButtonClasses}
                         selectedGlassTabClasses={selectedGlassTabClasses}
                         isGlassMode={isGlassMode}
+                        open={isHubMoreMenuOpen}
+                        onOpenChange={setIsHubMoreMenuOpen}
+                        data-hub-tutorial="more-menu"
                         data-pratus-context-id="tab:more"
                         data-pratus-context-label="More"
                       />
@@ -36663,6 +36668,8 @@ function App() {
           onOpenChange={setIsHubTutorialOpen}
           onNavigateToTab={(tab) => setActiveTab(tab)}
           onEnsurePanelOpen={() => setIsObjectivesOpen(true)}
+          onOpenMoreMenu={setIsHubMoreMenuOpen}
+          moreMenuLabels={HUB_MORE_MENU.map((item) => item.label)}
         />
       )}
       <Dialog

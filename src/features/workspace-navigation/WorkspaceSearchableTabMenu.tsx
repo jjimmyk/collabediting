@@ -39,7 +39,10 @@ type WorkspaceSearchableTabMenuProps = {
   glassIconButtonClasses?: string
   selectedGlassTabClasses: (isSelected: boolean) => string
   isGlassMode: boolean
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
   'data-ics201-tutorial'?: string
+  'data-hub-tutorial'?: string
   'data-pratus-context-id'?: string
   'data-pratus-context-label'?: string
 }
@@ -55,11 +58,23 @@ export function WorkspaceSearchableTabMenu({
   glassIconButtonClasses,
   selectedGlassTabClasses,
   isGlassMode,
+  open: controlledOpen,
+  onOpenChange: controlledOnOpenChange,
   'data-ics201-tutorial': dataIcs201Tutorial,
+  'data-hub-tutorial': dataHubTutorial,
   'data-pratus-context-id': dataPratusContextId,
   'data-pratus-context-label': dataPratusContextLabel,
 }: WorkspaceSearchableTabMenuProps) {
-  const [open, setOpen] = useState(false)
+  const [internalOpen, setInternalOpen] = useState(false)
+  const isControlled = controlledOpen !== undefined
+  const open = isControlled ? controlledOpen : internalOpen
+
+  const setOpen = (nextOpen: boolean) => {
+    if (!isControlled) {
+      setInternalOpen(nextOpen)
+    }
+    controlledOnOpenChange?.(nextOpen)
+  }
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -76,6 +91,7 @@ export function WorkspaceSearchableTabMenu({
           )}
           aria-label={triggerAriaLabel}
           data-ics201-tutorial={dataIcs201Tutorial}
+          data-hub-tutorial={dataHubTutorial}
           data-pratus-context-id={dataPratusContextId}
           data-pratus-context-label={dataPratusContextLabel}
         >
