@@ -654,7 +654,10 @@ import {
   formatWorkingOperationalPeriodLabel,
 } from '@/lib/operational-period-utils'
 import { PlanningPStepper } from '@/features/planning-p/PlanningPStepper'
+import { MyPositionBadge } from '@/features/planning-p/MyPositionBadge'
+import { PlanningPMyTasksDialog } from '@/features/planning-p/PlanningPMyTasksDialog'
 import { PLANNING_P_STEPS } from '@/features/planning-p/planning-p-steps'
+import { usePlanningPMyTasks } from '@/hooks/usePlanningPMyTasks'
 import { WorkspaceSettingsPage } from '@/features/workspace-settings/WorkspaceSettingsPage'
 import {
   WorkspaceSearchableTabMenu,
@@ -6440,6 +6443,9 @@ function App() {
     DEFAULT_INCIDENT_COMPLEXITY
   )
   const [planningPStepId, setPlanningPStepId] = useState(PLANNING_P_STEPS[0]?.id ?? 'objectives-meeting')
+  const [planningPMyTasksDialogStepId, setPlanningPMyTasksDialogStepId] = useState<string | null>(
+    null
+  )
   const [isPlanningPStepperOpen, setIsPlanningPStepperOpen] = useState(true)
   const [incidentTemplate, setIncidentTemplate] = useState('')
   const [previewTemplateId, setPreviewTemplateId] = useState<string | null>(null)
@@ -13795,6 +13801,32 @@ function App() {
   )
   const currentUserRosterPosition =
     currentUserRosterMember?.icsPosition ?? 'Incident Commander'
+  const currentUserIcsPositions = currentUserRosterMember?.icsPositions ?? []
+  const myPositionLabel = currentUserRosterMember ? currentUserRosterPosition : 'Unassigned'
+  const planningPTasksWorkspaceKey = useMemo(() => {
+    if (activeWorkspaceSupabaseId) return activeWorkspaceSupabaseId
+    if (activeIncidentWorkspaceId !== null) return `incident-${activeIncidentWorkspaceId}`
+    if (activeExerciseWorkspaceId !== null) return `exercise-${activeExerciseWorkspaceId}`
+    return null
+  }, [activeWorkspaceSupabaseId, activeIncidentWorkspaceId, activeExerciseWorkspaceId])
+  const {
+    completions: planningPMyTaskCompletions,
+    setTaskCompleted: setPlanningPMyTaskCompleted,
+    getTasksForPhase: getPlanningPMyTasksForPhase,
+    taskProgressByStepId: planningPMyTaskProgressByStepId,
+  } = usePlanningPMyTasks({
+    enabled: showPlanningPStepper && (isInIncidentWorkspace || isInExerciseWorkspace),
+    workspaceKey: planningPTasksWorkspaceKey,
+    supabaseWorkspaceId: activeWorkspaceSupabaseId,
+    userId: user?.id ?? null,
+    operationalPeriodNumber: workingOperationalPeriodNumber,
+    positions: currentUserIcsPositions,
+    readOnly: isViewingHistoricalOperationalPeriod,
+  })
+  const planningPMyTasksDialogStep = useMemo(
+    () => PLANNING_P_STEPS.find((step) => step.id === planningPMyTasksDialogStepId) ?? null,
+    [planningPMyTasksDialogStepId]
+  )
   const ics202PreparedByRosterMembers = useMemo(
     () =>
       activeWorkspaceRoster.map((member) => ({
@@ -23273,6 +23305,16 @@ function App() {
                     ? activeIncidentWorkspace.name
                     : 'United States Coast Guard'}
               </span>
+              {showPlanningPStepper ? (
+                <MyPositionBadge
+                  position={myPositionLabel}
+                  allPositions={
+                    currentUserIcsPositions.length > 0
+                      ? currentUserIcsPositions
+                      : [myPositionLabel]
+                  }
+                />
+              ) : null}
               {showPlanningPStepper && startedOperationalPeriodCount > 0 ? (
                 <Badge variant="secondary" className="ml-2">
                   {formatOperationalPeriodLabel(startedOperationalPeriodCount)}
@@ -23557,6 +23599,9 @@ function App() {
             activeStepId={planningPStepId}
             onStepChange={setPlanningPStepId}
             onHide={() => setIsPlanningPStepperOpen(false)}
+            taskProgressByStepId={planningPMyTaskProgressByStepId}
+            onOpenTasks={setPlanningPMyTasksDialogStepId}
+            tasksReadOnly={isViewingHistoricalOperationalPeriod}
             className="h-full"
           />
         </aside>
@@ -35969,6 +36014,20 @@ function App() {
           )}
         </DialogContent>
       </Dialog>
+      {showPlanningPStepper && planningPMyTasksDialogStep ? (
+        <PlanningPMyTasksDialog
+          open={planningPMyTasksDialogStepId !== null}
+          onOpenChange={(open) => {
+            if (!open) setPlanningPMyTasksDialogStepId(null)
+          }}
+          phaseLabel={planningPMyTasksDialogStep.label}
+          positions={currentUserIcsPositions}
+          tasks={getPlanningPMyTasksForPhase(planningPMyTasksDialogStep.id)}
+          completions={planningPMyTaskCompletions}
+          onTaskCompletedChange={setPlanningPMyTaskCompleted}
+          readOnly={isViewingHistoricalOperationalPeriod}
+        />
+      ) : null}
       <Dialog open={isPlanningPDialogOpen} onOpenChange={setIsPlanningPDialogOpen}>
         <DialogContent className="!w-[75vw] !max-w-[75vw] sm:!max-w-[75vw]">
           <div className="p-1">
