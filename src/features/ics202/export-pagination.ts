@@ -119,61 +119,70 @@ export function formatIcs202ContinuedLabel(label: string): string {
   return `${label} (Continued)`
 }
 
-function estimateHeaderRowHeight(cells: Ics202HeaderCell[]): number {
-  const cellW = PAGE.contentWidthPt / cells.length
-  let maxH = 36
-  for (const cell of cells) {
-    const valueLines = wrapIcs202TextLines(cell.value || ' ', cellW - 8, 8.5, false)
-    maxH = Math.max(maxH, 12 + valueLines.length * 10 + 10)
-  }
-  return maxH
-}
-
-function pageSegmentCapacity(headerCells: Ics202HeaderCell[]): number {
-  return (
+function pageSegmentCapacity(_headerCells: Ics202HeaderCell[]): number {
+  const raw =
     PAGE.heightPt -
     PAGE.marginTopPt -
     PAGE.marginBottomPt -
-    PAGE.footerHeightPt -
+    PAGE.wordHeaderReservePt -
+    PAGE.wordFooterReservePt -
     PAGE.preparedByHeightPt -
-    PAGE.headerTitleHeightPt -
-    estimateHeaderRowHeight(headerCells) -
-    8
-  )
+    12
+  return Math.floor(raw * PAGE.capacitySafetyFactor)
 }
 
 function estimateTextBoxHeight(lineCount: number, minLines = PAGE.minBodyLines): number {
   const lines = Math.max(lineCount, minLines)
-  return (
-    PAGE.boxPaddingPt +
-    PAGE.labelHeightPt +
-    4 +
-    lines * PAGE.bodyLineHeightPt +
-    PAGE.boxPaddingPt
-  )
+  return textBoxShellHeightPt() + lines * PAGE.bodyLineHeightPt
 }
 
 function estimateLifelinesHeight(optionCount: number): number {
   const rows = Math.ceil(optionCount / 4)
-  return PAGE.boxPaddingPt + PAGE.labelHeightPt + rows * 14 + PAGE.boxPaddingPt + 4
+  return (
+    PAGE.sectionSpacerPt * 2 +
+    PAGE.tableCellMarginPt * 2 +
+    PAGE.labelLineHeightPt +
+    rows * PAGE.smallLineHeightPt +
+    PAGE.tableCellMarginPt * 2
+  )
 }
 
 function estimateObjectivesHeight(rowCount: number, showTableHeader: boolean): number {
   const rows = Math.max(rowCount, 1)
-  const header = showTableHeader ? 14 : 0
+  const header = showTableHeader ? PAGE.smallLineHeightPt : 0
   return (
-    PAGE.boxPaddingPt +
-    PAGE.labelHeightPt +
+    PAGE.sectionSpacerPt * 2 +
+    PAGE.tableCellMarginPt * 2 +
+    PAGE.labelLineHeightPt +
     header +
     rows * PAGE.bodyLineHeightPt +
-    PAGE.boxPaddingPt +
-    4
+    PAGE.tableCellMarginPt * 2
   )
 }
 
 function estimateSiteSafetyHeight(locationLineCount: number): number {
   const lines = Math.max(locationLineCount, 1)
-  return Math.max(44, PAGE.labelHeightPt + 12 + lines * 10 + PAGE.boxPaddingPt)
+  return (
+    PAGE.sectionSpacerPt * 2 +
+    PAGE.tableCellMarginPt * 2 +
+    PAGE.labelLineHeightPt * 2 +
+    PAGE.smallLineHeightPt +
+    lines * PAGE.bodyLineHeightPt +
+    PAGE.tableCellMarginPt * 2
+  )
+}
+
+function textBoxShellHeightPt(): number {
+  return (
+    PAGE.sectionSpacerPt * 2 +
+    PAGE.tableCellMarginPt * 2 +
+    PAGE.labelLineHeightPt +
+    PAGE.tableCellMarginPt * 2
+  )
+}
+
+function textBoxOverheadPt(draft: PageDraft): number {
+  return textBoxShellHeightPt() + (draft.segments.length > 0 ? PAGE.segmentGapPt : 0)
 }
 
 function computeDisplayPageNumbers(physicalPageCount: number): {
@@ -247,27 +256,52 @@ function paginateSplittableLines(
   getCurrentDraft: () => PageDraft,
   startNewDraft: () => void
 ): void {
+  if (lines.length === 0) {
+    return
+  }
+
+  const initialDraft = getCurrentDraft()
+  const initialGap = initialDraft.segments.length > 0 ? PAGE.segmentGapPt : 0
+  if (estimateTextBoxHeight(lines.length) + initialGap <= remainingHeight(initialDraft)) {
+    addSegmentToDraft(initialDraft, {
+      kind: 'text-box',
+      label,
+      bodyLines: lines,
+      continued: false,
+    })
+    return
+  }
+
   let lineIndex = 0
   let isContinued = false
 
   while (lineIndex < lines.length) {
-    let draft = getCurrentDraft()
-    const overhead =
-      PAGE.boxPaddingPt * 2 + PAGE.labelHeightPt + 4 + (draft.segments.length > 0 ? PAGE.segmentGapPt : 0)
+    const draft = getCurrentDraft()
+    const overhead = textBoxOverheadPt(draft)
     const capacity = remainingHeight(draft)
+    const remainingLines = lines.length - lineIndex
+
     if (capacity <= overhead + PAGE.bodyLineHeightPt) {
       startNewDraft()
       isContinued = true
       continue
     }
 
-    const minLines = isContinued ? 1 : PAGE.minBodyLines
-    const maxLines = Math.max(
-      minLines,
-      Math.floor((capacity - overhead) / PAGE.bodyLineHeightPt)
-    )
-    const chunk = lines.slice(lineIndex, lineIndex + maxLines)
-    if (chunk.length === 0) {
+    const maxLines = Math.max(1, Math.floor((capacity - overhead) / PAGE.bodyLineHeightPt))
+    let take = Math.min(maxLines, remainingLines)
+
+    if (take < remainingLines) {
+      const tailLines = remainingLines - take
+      if (tailLines > 0 && tailLines <= PAGE.tinyContinuationLineThreshold) {
+        if (remainingLines <= maxLines) {
+          take = remainingLines
+        } else if (take - tailLines >= 1) {
+          take -= tailLines
+        }
+      }
+    }
+
+    if (take <= 0) {
       startNewDraft()
       isContinued = true
       continue
@@ -276,10 +310,10 @@ function paginateSplittableLines(
     addSegmentToDraft(draft, {
       kind: 'text-box',
       label: isContinued ? formatIcs202ContinuedLabel(label) : label,
-      bodyLines: chunk,
+      bodyLines: lines.slice(lineIndex, lineIndex + take),
       continued: isContinued,
     })
-    lineIndex += chunk.length
+    lineIndex += take
     isContinued = true
   }
 }
@@ -313,9 +347,8 @@ function paginateObjectivesBlock(
     const segmentLabel = isContinued ? formatIcs202ContinuedLabel(block.label) : block.label
     const showTableHeader = !isContinued
     const overhead =
-      PAGE.boxPaddingPt * 2 +
-      PAGE.labelHeightPt +
-      (showTableHeader ? 14 : 0) +
+      estimateObjectivesHeight(showTableHeader ? 1 : 0, showTableHeader) -
+      (showTableHeader ? PAGE.bodyLineHeightPt : 0) +
       (draft.segments.length > 0 ? PAGE.segmentGapPt : 0)
 
     const capacity = remainingHeight(draft)

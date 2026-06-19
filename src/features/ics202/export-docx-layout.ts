@@ -154,7 +154,7 @@ function docxLinesParagraphs(lines: string[], size = 18): string {
   return lines.map((line) => docxParagraph(line.length > 0 ? line : ' ', { size })).join('')
 }
 
-function renderPageHeaderDocx(headerCells: Ics202HeaderCell[]): string {
+function renderHeaderContentDocx(headerCells: Ics202HeaderCell[]): string {
   const title = ICS202_FORM_TITLE_LINES.map((line, index) =>
     docxParagraph(line, {
       bold: index === ICS202_FORM_TITLE_LINES.length - 1,
@@ -318,12 +318,49 @@ export function renderPhysicalPageSegmentDocx(segment: Ics202PhysicalPageSegment
   }
 }
 
-function renderPhysicalPageDocx(page: Ics202PhysicalPage): string {
+function renderPhysicalPageBodyDocx(page: Ics202PhysicalPage): string {
   return (
-    renderPageHeaderDocx(page.headerCells) +
     page.segments.map(renderPhysicalPageSegmentDocx).join('') +
-    renderPreparedByDocx(page.preparedBy) +
-    renderPageFooterDocx(page.footerLeft, page.displayPageNumber, page.totalPages)
+    renderPreparedByDocx(page.preparedBy)
+  )
+}
+
+export function buildIcs202DocxHeaderXml(headerCells: Ics202HeaderCell[]): string {
+  return (
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">` +
+    renderHeaderContentDocx(headerCells) +
+    `</w:hdr>`
+  )
+}
+
+export function buildIcs202DocxFooterXml(footerLeft: string): string {
+  const rightTab = ICS202_DOCX_CONTENT_WIDTH * 20
+  return (
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<w:ftr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">` +
+    `<w:p><w:pPr><w:tabs>` +
+    `<w:tab w:val="clear" w:pos="0"/>` +
+    `<w:tab w:val="right" w:pos="${rightTab}"/>` +
+    `</w:tabs><w:spacing w:before="0" w:after="0"/></w:pPr>` +
+    `<w:r><w:rPr><w:sz w:val="14"/><w:szCs w:val="14"/></w:rPr>` +
+    `<w:t xml:space="preserve">${escapeXml(footerLeft)}\tPage </w:t></w:r>` +
+    `<w:fldSimple w:instr=" PAGE ">` +
+    `<w:r><w:rPr><w:sz w:val="14"/><w:szCs w:val="14"/></w:rPr><w:t>1</w:t></w:r></w:fldSimple>` +
+    `<w:r><w:rPr><w:sz w:val="14"/><w:szCs w:val="14"/></w:rPr><w:t xml:space="preserve"> of </w:t></w:r>` +
+    `<w:fldSimple w:instr=" NUMPAGES ">` +
+    `<w:r><w:rPr><w:sz w:val="14"/><w:szCs w:val="14"/></w:rPr><w:t>1</w:t></w:r></w:fldSimple>` +
+    `</w:p></w:ftr>`
+  )
+}
+
+export function buildIcs202DocxDocumentRelsXml(): string {
+  return (
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+    `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="header1.xml"/>` +
+    `<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer1.xml"/>` +
+    `</Relationships>`
   )
 }
 
@@ -455,25 +492,32 @@ export function renderLayoutBlockDocx(block: Ics202ExportLayoutBlock): string {
 }
 
 export function buildIcs202DocxXml(pages: Ics202PhysicalPage[]): string {
-  const body =
-    pages
-      .map((page, index) => {
-        const pageXml = renderPhysicalPageDocx(page)
-        if (index < pages.length - 1) {
-          return pageXml + `<w:p><w:r><w:br w:type="page"/></w:r></w:p>`
-        }
-        return pageXml
-      })
-      .join('') +
-    ''
+  if (pages.length === 0) {
+    throw new Error('ICS-202 DOCX export requires at least one page.')
+  }
+
+  const body = pages
+    .map((page, index) => {
+      const pageXml = renderPhysicalPageBodyDocx(page)
+      if (index < pages.length - 1) {
+        return pageXml + `<w:p><w:r><w:br w:type="page"/></w:r></w:p>`
+      }
+      return pageXml
+    })
+    .join('')
+
+  const headerReserveDxa = 1440
+  const footerReserveDxa = 360
   const sectPr =
     `<w:sectPr>` +
+    `<w:headerReference w:type="default" r:id="rId1"/>` +
+    `<w:footerReference w:type="default" r:id="rId2"/>` +
     `<w:pgSz w:w="${ICS202_DOCX_PAGE.widthDxa}" w:h="${ICS202_DOCX_PAGE.heightDxa}"/>` +
-    `<w:pgMar w:top="${ICS202_DOCX_PAGE.marginDxa}" w:right="${ICS202_DOCX_PAGE.marginDxa}" w:bottom="${ICS202_DOCX_PAGE.marginDxa}" w:left="${ICS202_DOCX_PAGE.marginDxa}" w:header="0" w:footer="0" w:gutter="0"/>` +
+    `<w:pgMar w:top="${ICS202_DOCX_PAGE.marginDxa}" w:right="${ICS202_DOCX_PAGE.marginDxa}" w:bottom="${ICS202_DOCX_PAGE.marginDxa}" w:left="${ICS202_DOCX_PAGE.marginDxa}" w:header="${headerReserveDxa}" w:footer="${footerReserveDxa}" w:gutter="0"/>` +
     `</w:sectPr>`
   return (
     `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
-    `<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">` +
+    `<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">` +
     `<w:body>${body}${sectPr}</w:body></w:document>`
   )
 }
@@ -488,6 +532,15 @@ export function buildIcs202DocxXmlFromBlocks(blocks: Ics202ExportLayoutBlock[]):
 export function assertIcs202DocxLayoutConsistency(documentXml: string): void {
   if (!documentXml.includes(`w:w="${ICS202_DOCX_CONTENT_WIDTH}" w:type="dxa"`)) {
     throw new Error('ICS-202 DOCX export missing full-width section tables.')
+  }
+  if (!documentXml.includes('<w:headerReference w:type="default" r:id="rId1"/>')) {
+    throw new Error('ICS-202 DOCX export missing default header reference.')
+  }
+  if (!documentXml.includes('<w:footerReference w:type="default" r:id="rId2"/>')) {
+    throw new Error('ICS-202 DOCX export missing default footer reference.')
+  }
+  if (documentXml.includes('INCIDENT BRIEFING (ICS 202-CG)')) {
+    throw new Error('ICS-202 DOCX body should not duplicate header title content.')
   }
   if (documentXml.includes('<w:tbl><w:tblPr><w:tblW w:w="5000" w:type="pct"')) {
     throw new Error('ICS-202 DOCX export still contains legacy pct-width tables.')

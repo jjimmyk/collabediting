@@ -2,6 +2,9 @@ import type { Ics202ExportLayoutBlock } from '@/features/ics202/export-layout'
 import { ICS202_FORM_TITLE_LINES } from '@/features/ics202/export-layout'
 import {
   assertIcs202DocxLayoutConsistency,
+  buildIcs202DocxDocumentRelsXml,
+  buildIcs202DocxFooterXml,
+  buildIcs202DocxHeaderXml,
   buildIcs202DocxXml,
   ICS202_PDF_CONTENT_WIDTH,
   ICS202_PDF_PAGE,
@@ -130,6 +133,8 @@ export function downloadIcs202Docx(filename: string, blocks: Ics202ExportLayoutB
   assertIcs202PaginationInvariants(pages)
   const documentXml = buildIcs202DocxXml(pages)
   assertIcs202DocxLayoutConsistency(documentXml)
+  const headerCells = pages[0]?.headerCells ?? []
+  const footerLeft = pages[0]?.footerLeft ?? 'ICS 202-CG (08/25)  Expiration: 08/35'
   const files = [
     {
       name: '[Content_Types].xml',
@@ -139,6 +144,8 @@ export function downloadIcs202Docx(filename: string, blocks: Ics202ExportLayoutB
         `<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>` +
         `<Default Extension="xml" ContentType="application/xml"/>` +
         `<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>` +
+        `<Override PartName="/word/header1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/>` +
+        `<Override PartName="/word/footer1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/>` +
         `</Types>`,
     },
     {
@@ -151,11 +158,11 @@ export function downloadIcs202Docx(filename: string, blocks: Ics202ExportLayoutB
     },
     {
       name: 'word/_rels/document.xml.rels',
-      content:
-        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
-        `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"></Relationships>`,
+      content: buildIcs202DocxDocumentRelsXml(),
     },
     { name: 'word/document.xml', content: documentXml },
+    { name: 'word/header1.xml', content: buildIcs202DocxHeaderXml(headerCells) },
+    { name: 'word/footer1.xml', content: buildIcs202DocxFooterXml(footerLeft) },
   ]
   const bytes = buildStoredZip(files)
   triggerBlobDownload(new Blob([bytes.buffer as ArrayBuffer], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }), filename)

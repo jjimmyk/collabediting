@@ -1,4 +1,10 @@
-import { buildIcs202DocxXml } from '@/features/ics202/export-docx-layout'
+import {
+  assertIcs202DocxLayoutConsistency,
+  buildIcs202DocxDocumentRelsXml,
+  buildIcs202DocxFooterXml,
+  buildIcs202DocxHeaderXml,
+  buildIcs202DocxXml,
+} from '@/features/ics202/export-docx-layout'
 import { buildIcs202ExportLayout } from '@/features/ics202/export-layout'
 import {
   assertIcs202PaginationInvariants,
@@ -13,52 +19,121 @@ function assert(condition: boolean, message: string): void {
   }
 }
 
+const USER_FIXTURE_PRIORITIES = `asdsadf
+asdfadfasd
+asdfasdfs
+as
+sdfasdfasdas
+sdfasdfadfsfas
+asdfasfdsafsd
+hahahahahahaha
+hahahahahaa
+asdfasdfsadffad
+asdfasdsfasdfsd
+asdfasdsfadfsa
+dasdfasdfs`
+
+function buildUserFixtureForm() {
+  return createEmptyIcs202Form('fixture-export', {
+    incidentName: 'planning p 61426',
+    incidentPriorities: USER_FIXTURE_PRIORITIES,
+    commandEmphasis: 'this is a version of the 202 and now imma sign this',
+    criticalInformationRequirements: '',
+    limitationsAndConstraints: '',
+    keyDecisionsAndProcedures: '',
+    preparedByName: 'Jimmy King',
+    preparedByPositionTitle: 'Incident Commander',
+    preparedDateTime: '2026-06-18T14:23',
+  })
+}
+
+function countTinyContinuations(pages: ReturnType<typeof paginateIcs202Export>): number {
+  return pages.reduce((count, page) => {
+    return (
+      count +
+      page.segments.filter(
+        (segment) =>
+          segment.kind === 'text-box' &&
+          segment.continued &&
+          segment.bodyLines.length <= 3
+      ).length
+    )
+  }, 0)
+}
+
 export function runIcs202ExportPaginationFixtureChecks(): void {
-  const form = createEmptyIcs202Form('fixture-export', {
+  const userForm = buildUserFixtureForm()
+  const userPages = paginateIcs202Export(
+    buildIcs202ExportLayout(userForm, { incidentName: userForm.incidentName })
+  )
+  assertIcs202PaginationInvariants(userPages)
+
+  userPages.forEach((page) => {
+    assert(page.preparedBy.label.length > 0, 'Every page must include prepared-by chrome.')
+  })
+
+  const userContinuedSegments = userPages.flatMap((page) =>
+    page.segments.filter(
+      (segment) =>
+        segment.kind === 'text-box' &&
+        segment.label === formatIcs202ContinuedLabel('5. Incident Priorities:')
+    )
+  )
+  assert(
+    userContinuedSegments.length === 0,
+    'User fixture should not produce a spurious Box 5 continuation page.'
+  )
+  assert(
+    countTinyContinuations(userPages) === 0,
+    'Continuation segments should not contain tiny one-line overflow chunks.'
+  )
+
+  const longForm = createEmptyIcs202Form('fixture-long', {
     incidentName: 'planning p 61426',
     incidentPriorities: Array.from({ length: 48 }, (_, index) => `priority line ${index}`).join(
       '\n'
     ),
-    criticalInformationRequirements: '',
-    limitationsAndConstraints: '',
-    keyDecisionsAndProcedures: '',
   })
+  const longPages = paginateIcs202Export(
+    buildIcs202ExportLayout(longForm, { incidentName: longForm.incidentName })
+  )
+  assert(longPages.length >= 2, 'Expected multi-page export for long incident priorities.')
+  assertIcs202PaginationInvariants(longPages)
 
-  const pages = paginateIcs202Export(buildIcs202ExportLayout(form, { incidentName: form.incidentName }))
-  assert(pages.length >= 2, 'Expected multi-page export for long incident priorities.')
-  assertIcs202PaginationInvariants(pages)
-
-  pages.forEach((page) => {
-    assert(page.preparedBy.label.length > 0, 'Every page must include prepared-by chrome.')
-    assert(page.headerCells.length === 3, 'Every page must repeat boxes 1–3.')
-  })
-
-  const overflowPage = pages.find((page) =>
+  const overflowPage = longPages.find((page) =>
     page.segments.some(
       (segment) =>
         segment.kind === 'text-box' &&
         segment.label === formatIcs202ContinuedLabel('5. Incident Priorities:')
     )
   )
-  assert(overflowPage !== undefined, 'Expected Box 5 continuation label on overflow page.')
+  assert(overflowPage !== undefined, 'Expected Box 5 continuation label on genuine overflow.')
+  assert(
+    overflowPage!.segments.some(
+      (segment) =>
+        segment.kind === 'text-box' &&
+        segment.label === formatIcs202ContinuedLabel('5. Incident Priorities:') &&
+        segment.bodyLines.length > 3
+    ),
+    'Continuation page should carry a meaningful chunk of Box 5 content.'
+  )
 
-  const firstPage = pages[0]
-  assert(firstPage.preparedBy.label.includes('10.'), 'First form page must use Box 10 prepared-by.')
-  assert(firstPage.displayPageNumber === 1, 'Page numbering should start at 1.')
-  assert(firstPage.totalPages === pages.length, 'Total pages should match physical page count.')
+  const documentXml = buildIcs202DocxXml(userPages)
+  const headerXml = buildIcs202DocxHeaderXml(userPages[0].headerCells)
+  const footerXml = buildIcs202DocxFooterXml(userPages[0].footerLeft)
+  const relsXml = buildIcs202DocxDocumentRelsXml()
 
-  const documentXml = buildIcs202DocxXml(pages)
-  const headerCount = (documentXml.match(/1\. Incident Name:/g) ?? []).length
-  assert(headerCount === pages.length, 'DOCX must repeat header row on every page.')
-  pages.forEach((page) => {
-    const preparedCount = (documentXml.match(new RegExp(escapeRegex(page.preparedBy.label), 'g')) ?? [])
-      .length
-    assert(preparedCount >= 1, `DOCX must include prepared-by label: ${page.preparedBy.label}`)
-  })
-}
-
-function escapeRegex(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  assertIcs202DocxLayoutConsistency(documentXml)
+  assert(headerXml.includes('1. Incident Name:'), 'Header part must include boxes 1–3.')
+  assert(headerXml.includes('INCIDENT BRIEFING (ICS 202-CG)'), 'Header part must include form title.')
+  assert(footerXml.includes('NUMPAGES'), 'Footer part must include total page count field.')
+  assert(relsXml.includes('header1.xml'), 'Document relationships must link header part.')
+  assert(relsXml.includes('footer1.xml'), 'Document relationships must link footer part.')
+  assert(
+    (documentXml.match(/10\. Prepared by:/g) ?? []).length ===
+      userPages.filter((page) => page.preparedBy.label.includes('10.')).length,
+    'Each logical page must render Box 10 prepared-by in the document body.'
+  )
 }
 
 runIcs202ExportPaginationFixtureChecks()
