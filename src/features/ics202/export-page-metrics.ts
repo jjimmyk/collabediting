@@ -3,6 +3,8 @@ import {
   ICS202_DOCX_FOOTER_RESERVE_DXA,
   ICS202_DOCX_HEADER_RESERVE_DXA,
   ICS202_DOCX_PAGE,
+  ICS202_PDF_PAGE,
+  ics202PdfPreparedByTopY,
 } from '@/features/ics202/export-docx-layout'
 
 /** Twentieths of a point (dxa/twips) → PDF points for pagination estimates aligned with DOCX layout. */
@@ -48,3 +50,32 @@ export const ICS202_EXPORT_PAGE_METRICS = {
   /** Merge tail continuation chunks with ≤ this many lines when possible. */
   tinyContinuationLineThreshold: 3,
 } as const
+
+/** Matches renderPdfPageHeader title + boxes 1–3 block. */
+const ICS202_PDF_HEADER_ESTIMATE_PT = 120
+
+/** Small safety margin below the PDF header/footer stack. */
+const ICS202_PDF_PAGE_LAYOUT_BUFFER_PT = 24
+
+export function ics202DocxPageSegmentCapacityPt(): number {
+  const raw =
+    ICS202_EXPORT_PAGE_METRICS.heightPt -
+    ICS202_EXPORT_PAGE_METRICS.marginTopPt -
+    ICS202_EXPORT_PAGE_METRICS.marginBottomPt -
+    ICS202_EXPORT_PAGE_METRICS.wordHeaderReservePt -
+    ICS202_EXPORT_PAGE_METRICS.wordFooterReservePt -
+    ICS202_EXPORT_PAGE_METRICS.pageLayoutBufferPt
+  return Math.floor(raw * ICS202_EXPORT_PAGE_METRICS.capacitySafetyFactor)
+}
+
+/** PDF pages can use nearly the full body height between header and footer. */
+export function ics202PdfPageSegmentCapacityPt(): number {
+  const contentTop = ICS202_PDF_PAGE.heightPt - ICS202_PDF_PAGE.marginPt
+  const contentBottom = ics202PdfPreparedByTopY() + ICS202_EXPORT_PAGE_METRICS.segmentGapPt
+  return Math.floor(
+    contentTop -
+      contentBottom -
+      ICS202_PDF_HEADER_ESTIMATE_PT -
+      ICS202_PDF_PAGE_LAYOUT_BUFFER_PT
+  )
+}

@@ -5,7 +5,19 @@ import type {
   Ics202PreparedByFields,
 } from '@/features/ics202/export-layout'
 import { ICS202_EXPORT_PAGE_METRICS as PAGE } from '@/features/ics202/export-page-metrics'
+import {
+  ics202DocxPageSegmentCapacityPt,
+  ics202PdfPageSegmentCapacityPt,
+} from '@/features/ics202/export-page-metrics'
 import type { Ics202ObjectiveRow } from '@/features/ics202/types'
+
+export type Ics202ExportPaginationTarget = 'docx' | 'pdf'
+
+export type Ics202ExportPaginationOptions = {
+  target?: Ics202ExportPaginationTarget
+}
+
+let activePageSegmentCapacity = ics202DocxPageSegmentCapacityPt()
 
 export const ICS202_EXPORT_FOOTER_LEFT = 'ICS 202-CG (08/25)  Expiration: 08/35'
 
@@ -119,15 +131,8 @@ export function formatIcs202ContinuedLabel(label: string): string {
   return `${label} (Continued)`
 }
 
-function pageSegmentCapacity(_headerCells: Ics202HeaderCell[]): number {
-  const raw =
-    PAGE.heightPt -
-    PAGE.marginTopPt -
-    PAGE.marginBottomPt -
-    PAGE.wordHeaderReservePt -
-    PAGE.wordFooterReservePt -
-    PAGE.pageLayoutBufferPt
-  return Math.floor(raw * PAGE.capacitySafetyFactor)
+function remainingHeight(draft: PageDraft): number {
+  return activePageSegmentCapacity - draft.usedHeight
 }
 
 function estimateTextBoxHeight(lineCount: number, minLines = PAGE.minBodyLines): number {
@@ -237,10 +242,6 @@ function addSegmentToDraft(draft: PageDraft, segment: Ics202PhysicalPageSegment)
   draft.usedHeight += segmentHeight(segment)
 }
 
-function remainingHeight(draft: PageDraft): number {
-  return pageSegmentCapacity(draft.headerCells) - draft.usedHeight
-}
-
 function finalizeDrafts(drafts: PageDraft[]): Ics202PhysicalPage[] {
   const { displayPageNumbers, totalPages } = computeDisplayPageNumbers(drafts.length)
   return drafts.map((draft, index) => ({
@@ -268,9 +269,9 @@ function paginateSplittableLines(
   }
 
   let lineIndex = 0
-  let isContinued = false
 
   while (lineIndex < lines.length) {
+    const isContinued = lineIndex > 0
     const draft = getCurrentDraft()
     const gap = draft.segments.length > 0 ? PAGE.segmentGapPt : 0
     const overhead = textBoxOverheadPt(draft)
@@ -279,7 +280,6 @@ function paginateSplittableLines(
 
     if (capacity <= overhead + PAGE.paginationLineHeightPt) {
       startNewDraft()
-      isContinued = true
       continue
     }
 
@@ -316,7 +316,6 @@ function paginateSplittableLines(
 
     if (take <= 0) {
       startNewDraft()
-      isContinued = true
       continue
     }
 
@@ -327,9 +326,6 @@ function paginateSplittableLines(
       continued: isContinued,
     })
     lineIndex += take
-    if (lineIndex < lines.length) {
-      isContinued = true
-    }
   }
 }
 
@@ -360,9 +356,9 @@ function paginateObjectivesBlock(
   }
 
   let rowIndex = 0
-  let isContinued = false
 
   while (rowIndex < block.rows.length) {
+    const isContinued = rowIndex > 0
     const draft = getCurrentDraft()
     const segmentLabel = isContinued ? formatIcs202ContinuedLabel(block.label) : block.label
     const showTableHeader = !isContinued
@@ -380,9 +376,6 @@ function paginateObjectivesBlock(
       if (canFitSegment(draft, candidate)) {
         addSegmentToDraft(draft, candidate)
         rowIndex += take
-        if (rowIndex < block.rows.length) {
-          isContinued = true
-        }
         maxRows = 0
         break
       }
@@ -390,7 +383,6 @@ function paginateObjectivesBlock(
 
     if (maxRows !== 0) {
       startNewDraft()
-      isContinued = true
     }
   }
 }
@@ -538,7 +530,15 @@ export function assertIcs202PaginationInvariants(pages: Ics202PhysicalPage[]): v
   })
 }
 
-export function paginateIcs202Export(blocks: Ics202ExportLayoutBlock[]): Ics202PhysicalPage[] {
+export function paginateIcs202Export(
+  blocks: Ics202ExportLayoutBlock[],
+  options: Ics202ExportPaginationOptions = {}
+): Ics202PhysicalPage[] {
+  activePageSegmentCapacity =
+    options.target === 'pdf'
+      ? ics202PdfPageSegmentCapacityPt()
+      : ics202DocxPageSegmentCapacityPt()
+
   const { headerCells, contentGroups } = extractContentBlocks(blocks)
   const drafts: PageDraft[] = []
   let currentPreparedBy = contentGroups[0].preparedBy

@@ -186,6 +186,15 @@ export function runIcs202ExportPaginationFixtureChecks(): void {
     buildIcs202DocxXml(userPages).includes('5. Incident Priorities (Continued):'),
     'Planning fixture DOCX must include Box 5 continuation label.'
   )
+  const firstObjectivesSegment = userPages
+    .flatMap((page) => page.segments)
+    .find((segment) => segment.kind === 'objectives')
+  assert(
+    firstObjectivesSegment?.kind === 'objectives' &&
+      firstObjectivesSegment.label === '6. Incident Objectives:' &&
+      firstObjectivesSegment.continued === false,
+    'First Box 6 segment must not use a Continued label.'
+  )
 
   const madDogPages = paginateIcs202Export(
     buildIcs202ExportLayout(buildMadDogFixtureForm(), {

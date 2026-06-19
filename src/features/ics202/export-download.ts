@@ -647,7 +647,7 @@ function buildIcs202PdfBytes(pages: Ics202PhysicalPage[]): Uint8Array {
 }
 
 export function downloadIcs202Pdf(filename: string, blocks: Ics202ExportLayoutBlock[]): void {
-  const pages = paginateIcs202Export(blocks)
+  const pages = paginateIcs202Export(blocks, { target: 'pdf' })
   assertIcs202PaginationInvariants(pages)
   const bytes = buildIcs202PdfBytes(pages)
   triggerBlobDownload(new Blob([bytes.buffer as ArrayBuffer], { type: 'application/pdf' }), filename)
