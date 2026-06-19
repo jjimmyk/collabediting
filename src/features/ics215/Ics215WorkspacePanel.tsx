@@ -25,6 +25,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
 import type { Ics201VersionSignature } from '@/features/ics201/types'
+import type { Ics204AssignedUnitOption } from '@/features/ics204/ics204-assigned-unit-options'
 import { Ics215ExportPreviewDialog } from '@/features/ics215/Ics215ExportPreviewDialog'
 import { Ics215FormSections } from '@/features/ics215/Ics215FormSections'
 import {
@@ -54,6 +55,7 @@ type Ics215WorkspacePanelProps = {
   isSaving: boolean
   glassItemBorderClasses: string
   incidentName: string
+  assigneeOptions: Ics204AssignedUnitOption[]
   editingSections: Partial<Record<Ics215SectionId, boolean>>
   sectionDrafts: Ics215FormSectionDrafts
   onStartSectionEdit: (section: Ics215SectionId) => void
@@ -87,6 +89,7 @@ export function Ics215WorkspacePanel({
   isSaving,
   glassItemBorderClasses,
   incidentName,
+  assigneeOptions,
   editingSections,
   sectionDrafts,
   onStartSectionEdit,
@@ -465,6 +468,7 @@ export function Ics215WorkspacePanel({
             formIsLocked={formIsLocked}
             isSaving={isSaving}
             glassItemBorderClasses={glassItemBorderClasses}
+            assigneeOptions={assigneeOptions}
             editingSections={editingSections}
             drafts={sectionDrafts}
             onStartSectionEdit={onStartSectionEdit}
@@ -534,7 +538,7 @@ export function Ics215WorkspacePanel({
                       ? 'Current'
                       : `v${indexInAll + 1}`
                   const preview = (
-                    version.snapshot.workAssignments[0]?.workAssignmentInstructions ||
+                    version.snapshot.workAssignments[0]?.workAssignment ||
                     version.snapshot.incidentName ||
                     ''
                   ).slice(0, 80)

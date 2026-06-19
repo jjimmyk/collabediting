@@ -1,5 +1,17 @@
 import type { Ics201VersionSignature } from '@/features/ics201/types'
 
+export type Ics215ResourceValue = {
+  required: string
+  have: string
+  need: string
+}
+
+export type Ics215ResourceColumn = {
+  id: string
+  label: string
+}
+
+/** @deprecated Legacy per-row resource line — migrated to resourceValues on load */
 export type Ics215ResourceLine = {
   id: number
   categoryKindType: string
@@ -10,14 +22,14 @@ export type Ics215ResourceLine = {
 
 export type Ics215WorkAssignmentRow = {
   id: number
-  branch: string
-  divisionGroupOther: string
-  workAssignmentInstructions: string
-  resources: Ics215ResourceLine[]
+  assignee: string
+  workAssignment: string
+  resourceValues: Record<string, Ics215ResourceValue>
   overheadPositions: string
   specialEquipmentSupplies: string
   reportingLocation: string
   requestedArrivalTime: string
+  status: string
 }
 
 export type Ics215FormState = {
@@ -28,6 +40,7 @@ export type Ics215FormState = {
   operationalPeriodDateTo: string
   operationalPeriodTimeFrom: string
   operationalPeriodTimeTo: string
+  resourceColumns: Ics215ResourceColumn[]
   workAssignments: Ics215WorkAssignmentRow[]
   totalResourcesRequired: string
   totalResourcesHaveOnHand: string
@@ -90,6 +103,11 @@ export type Ics215IncidentInfoDraft = Pick<
   | 'operationalPeriodTimeTo'
 >
 
+export type Ics215WorkAssignmentsDraft = {
+  resourceColumns: Ics215ResourceColumn[]
+  workAssignments: Ics215WorkAssignmentRow[]
+}
+
 export type Ics215ResourceTotalsDraft = Pick<
   Ics215FormState,
   'totalResourcesRequired' | 'totalResourcesHaveOnHand' | 'totalResourcesNeedToOrder'
@@ -102,7 +120,7 @@ export type Ics215PreparedByDraft = Pick<
 
 export type Ics215FormSectionDrafts = {
   'incident-info'?: Ics215IncidentInfoDraft
-  'work-assignments'?: Ics215WorkAssignmentRow[]
+  'work-assignments'?: Ics215WorkAssignmentsDraft
   'resource-totals'?: Ics215ResourceTotalsDraft
   'prepared-by'?: Ics215PreparedByDraft
 }

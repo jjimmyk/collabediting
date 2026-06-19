@@ -1,5 +1,6 @@
 import { ICS215_SECTION_LABELS } from '@/features/ics215/constants'
 import type { Ics215FormState } from '@/features/ics215/types'
+import { computeIcs215ColumnTotals } from '@/features/ics215/utils'
 
 export type Ics215DocxBlock =
   | { kind: 'title'; text: string }
@@ -113,25 +114,38 @@ export function buildIcs215DocxBlocks(
   if (form.workAssignments.length === 0) {
     pushParagraph('No work assignments recorded.')
   } else {
+    const columnTotals = computeIcs215ColumnTotals(form.resourceColumns, form.workAssignments)
     form.workAssignments.forEach((row, index) => {
       pushParagraph(`Assignment ${index + 1}`)
-      pushField('Branch', row.branch)
-      pushField('Division/Group/Other', row.divisionGroupOther)
-      pushField('Work Assignment & Special Instructions', row.workAssignmentInstructions)
-      if (row.resources.length === 0) {
-        pushParagraph('No resource lines recorded.')
-      } else {
-        row.resources.forEach((resource, resourceIndex) => {
-          pushParagraph(
-            `Resource ${resourceIndex + 1}: ${resource.categoryKindType || '(category)'} — Req: ${resource.required || '—'}, Have: ${resource.have || '—'}, Need: ${resource.need || '—'}`
-          )
-        })
+      pushField('Assignee', row.assignee)
+      pushField('Work Assignment', row.workAssignment)
+      for (const column of form.resourceColumns) {
+        const value = row.resourceValues[column.id]
+        if (!value) continue
+        const hasValue =
+          value.required.trim().length > 0 ||
+          value.have.trim().length > 0 ||
+          value.need.trim().length > 0
+        if (!hasValue) continue
+        pushParagraph(
+          `${column.label}: Req ${value.required || '—'}, Have ${value.have || '—'}, Need ${value.need || '—'}`
+        )
       }
       pushField('Overhead Position(s)', row.overheadPositions)
       pushField('Special Equipment & Supplies', row.specialEquipmentSupplies)
       pushField('Reporting Location', row.reportingLocation)
       pushField('Requested Arrival Time', row.requestedArrivalTime)
+      pushField('Status', row.status)
     })
+
+    pushParagraph('Column Totals')
+    for (const column of form.resourceColumns) {
+      const value = columnTotals[column.id]
+      if (!value) continue
+      pushParagraph(
+        `${column.label}: Req ${value.required || '—'}, Have ${value.have || '—'}, Need ${value.need || '—'}`
+      )
+    }
   }
 
   pushHeading(ICS215_SECTION_LABELS['resource-totals'])

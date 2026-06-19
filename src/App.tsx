@@ -18671,35 +18671,27 @@ function App() {
             })
             break
           case 'work-assignments':
-            patchIcs215SectionDraft(section, [
-              {
-                id: 1,
-                branch: 'Operations Branch',
-                divisionGroupOther: 'Division A',
-                workAssignmentInstructions: `Conduct primary response operations for ${incidentLabel}. Maintain accountability and coordinate resource needs with the Planning Section.`,
-                resources: [
-                  {
-                    id: 1,
-                    categoryKindType: 'Engine / Type 1',
-                    required: '2',
-                    have: '1',
-                    need: '1',
+            patchIcs215SectionDraft(section, {
+              resourceColumns: ics215Form.resourceColumns,
+              workAssignments: [
+                {
+                  id: 1,
+                  assignee: 'Operations Section Chief',
+                  workAssignment: `Conduct primary response operations for ${incidentLabel}. Maintain accountability and coordinate resource needs with the Planning Section.`,
+                  resourceValues: {
+                    helicopter: { required: '1', have: '0', need: '1' },
+                    'small-boat': { required: '2', have: '1', need: '1' },
+                    'large-boat': { required: '1', have: '1', need: '0' },
                   },
-                  {
-                    id: 2,
-                    categoryKindType: 'Crew / Hand',
-                    required: '4',
-                    have: '2',
-                    need: '2',
-                  },
-                ],
-                overheadPositions: 'Division Supervisor, Safety Officer',
-                specialEquipmentSupplies: 'Lighting trailer, accountability tags',
-                reportingLocation: 'Staging Area Alpha',
-                requestedArrivalTime: '13:00',
-              },
-              ...createDefaultIcs215WorkAssignments().slice(1),
-            ])
+                  overheadPositions: 'Division Supervisor, Safety Officer',
+                  specialEquipmentSupplies: 'Lighting trailer, accountability tags',
+                  reportingLocation: 'Staging Area Alpha',
+                  requestedArrivalTime: '13:00',
+                  status: 'Assigned',
+                },
+                ...createDefaultIcs215WorkAssignments(ics215Form.resourceColumns).slice(1),
+              ],
+            })
             break
           case 'resource-totals':
             patchIcs215SectionDraft(section, {
@@ -32862,6 +32854,7 @@ function App() {
                     incidentName={
                       activeIncidentWorkspace?.name ?? activeExerciseWorkspace?.name ?? ''
                     }
+                    assigneeOptions={ics204AssignedUnitOptions}
                     editingSections={ics215EditingSections}
                     sectionDrafts={ics215SectionDrafts}
                     onStartSectionEdit={startIcs215SectionEdit}
