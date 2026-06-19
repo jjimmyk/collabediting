@@ -1,5 +1,9 @@
-import type { Ics202ExportLayoutBlock } from '@/features/ics202/export-layout'
+import type { Ics202ExportLayoutBlock, Ics202HeaderCell } from '@/features/ics202/export-layout'
 import { ICS202_FORM_TITLE_LINES } from '@/features/ics202/export-layout'
+import type {
+  Ics202PhysicalPage,
+  Ics202PhysicalPageSegment,
+} from '@/features/ics202/export-pagination'
 
 export const ICS202_DOCX_PAGE = {
   widthDxa: 12240,
@@ -139,6 +143,188 @@ function docxSectionBox(label: string, bodyXml: string): string {
     [ICS202_DOCX_CONTENT_WIDTH],
     `<w:tr>${docxCell(ICS202_DOCX_CONTENT_WIDTH, docxLabelParagraph(label))}</w:tr>` +
       `<w:tr>${docxCell(ICS202_DOCX_CONTENT_WIDTH, bodyXml)}</w:tr>`
+  )
+}
+
+function docxLinesParagraphs(lines: string[], size = 18): string {
+  if (lines.length === 0) {
+    return docxParagraph(' ', { size })
+  }
+  return lines.map((line) => docxParagraph(line.length > 0 ? line : ' ', { size })).join('')
+}
+
+function renderPageHeaderDocx(headerCells: Ics202HeaderCell[]): string {
+  const title = ICS202_FORM_TITLE_LINES.map((line, index) =>
+    docxParagraph(line, {
+      bold: index === ICS202_FORM_TITLE_LINES.length - 1,
+      center: true,
+      size: index === ICS202_FORM_TITLE_LINES.length - 1 ? 20 : 16,
+    })
+  ).join('')
+
+  const col = ICS202_DOCX_COL.third
+  const cells = headerCells
+    .map((cell) => {
+      let inner = docxLabelParagraph(cell.label)
+      if (cell.subLabels?.length) {
+        inner += cell.subLabels.map((sub) => docxParagraph(sub, { size: 14 })).join('')
+      }
+      inner += docxMultilineParagraphs(cell.value || ' ', 18)
+      return docxCell(col, inner, { mar: 'tight' })
+    })
+    .join('')
+
+  return (
+    title +
+    docxSectionSpacer() +
+    docxFixedTable([col, col, col], `<w:tr>${cells}</w:tr>`) +
+    docxSectionSpacer()
+  )
+}
+
+function renderPageFooterDocx(
+  footerLeft: string,
+  displayPageNumber: number,
+  totalPages: number
+): string {
+  const pageLabel = `Page ${displayPageNumber} of ${totalPages}`
+  const rightTab = ICS202_DOCX_CONTENT_WIDTH * 20
+  return (
+    `<w:p><w:pPr><w:tabs>` +
+    `<w:tab w:val="clear" w:pos="0"/>` +
+    `<w:tab w:val="right" w:pos="${rightTab}"/>` +
+    `</w:tabs><w:spacing w:before="240" w:after="0"/></w:pPr>` +
+    `<w:r><w:rPr><w:sz w:val="14"/><w:szCs w:val="14"/></w:rPr>` +
+    `<w:t xml:space="preserve">${escapeXml(footerLeft)}\t${escapeXml(pageLabel)}</w:t></w:r></w:p>`
+  )
+}
+
+export function renderPhysicalPageSegmentDocx(segment: Ics202PhysicalPageSegment): string {
+  switch (segment.kind) {
+    case 'lifelines': {
+      const col = ICS202_DOCX_COL.lifeline
+      const cols = [col, col, col, col]
+      const labelRow = `<w:tr>${docxCell(ICS202_DOCX_CONTENT_WIDTH, docxLabelParagraph(segment.label), {
+        gridSpan: 4,
+      })}</w:tr>`
+      const gridRows: string[] = []
+      for (let i = 0; i < segment.options.length; i += 4) {
+        const slice = segment.options.slice(i, i + 4)
+        const cells = slice
+          .map((opt) =>
+            docxCell(
+              col,
+              docxParagraph(`${docxCheckboxMark(opt.checked)} ${opt.label}`, { size: 16 })
+            )
+          )
+          .join('')
+        gridRows.push(`<w:tr>${cells}</w:tr>`)
+      }
+      return docxSectionSpacer() + docxFixedTable(cols, labelRow + gridRows.join('')) + docxSectionSpacer()
+    }
+    case 'text-box':
+      return (
+        docxSectionSpacer() +
+        docxSectionBox(segment.label, docxLinesParagraphs(segment.bodyLines, 18)) +
+        docxSectionSpacer()
+      )
+    case 'objectives': {
+      const omCol = ICS202_DOCX_COL.om
+      const objCol = ICS202_DOCX_COL.objective
+      const labelRow = `<w:tr>${docxCell(ICS202_DOCX_CONTENT_WIDTH, docxLabelParagraph(segment.label), {
+        gridSpan: 2,
+      })}</w:tr>`
+      const headerRow = segment.showTableHeader
+        ? `<w:tr>` +
+          docxCell(omCol, docxParagraph('O/M', { bold: true, size: 14 })) +
+          docxCell(objCol, docxParagraph('Objective', { bold: true, size: 14 })) +
+          `</w:tr>`
+        : ''
+      const bodyRows =
+        segment.rows.length === 0
+          ? `<w:tr>${docxCell(ICS202_DOCX_CONTENT_WIDTH, docxParagraph(' ', { size: 18 }), {
+              gridSpan: 2,
+            })}</w:tr>`
+          : segment.rows
+              .map((row) => {
+                const prefix = [row.kind, row.label].filter(Boolean).join(' ')
+                const text = prefix ? `${prefix}  ${row.objective}` : row.objective || ' '
+                return (
+                  `<w:tr>` +
+                  docxCell(omCol, docxParagraph(row.kind || ' ', { size: 16 })) +
+                  docxCell(objCol, docxMultilineParagraphs(text, 16)) +
+                  `</w:tr>`
+                )
+              })
+              .join('')
+      return (
+        docxSectionSpacer() +
+        docxFixedTable([omCol, objCol], labelRow + headerRow + bodyRows) +
+        docxSectionSpacer()
+      )
+    }
+    case 'site-safety-plan': {
+      const half = ICS202_DOCX_COL.half
+      const yesMark = docxCheckboxMark(segment.required)
+      const noMark = docxCheckboxMark(!segment.required)
+      const locationLabel = segment.continued
+        ? '9. Site Safety Plan located at: (Continued):'
+        : '9. Site Safety Plan located at:'
+      const row = segment.continued
+        ? `<w:tr>${docxCell(
+            ICS202_DOCX_CONTENT_WIDTH,
+            docxLabelParagraph(locationLabel) +
+              docxLinesParagraphs(segment.locationLines, 16)
+          )}</w:tr>`
+        : `<w:tr>` +
+          docxCell(
+            half,
+            docxLabelParagraph('8. Site Safety Plan Required:') +
+              docxParagraph(`Yes ${yesMark}   No ${noMark}`, { size: 16 })
+          ) +
+          docxCell(
+            half,
+            docxLabelParagraph(locationLabel) + docxLinesParagraphs(segment.locationLines, 16)
+          ) +
+          `</w:tr>`
+      return docxSectionSpacer() + docxFixedTable(segment.continued ? [ICS202_DOCX_CONTENT_WIDTH] : [half, half], row) + docxSectionSpacer()
+    }
+    case 'prepared-by': {
+      const col = ICS202_DOCX_COL.quarter
+      const cols = [col, col, col, col]
+      const fields = [
+        { label: 'Name:', value: segment.fields.name },
+        { label: 'Position Title:', value: segment.fields.positionTitle },
+        { label: 'Signature:', value: segment.fields.signature },
+        { label: 'Date/Time:', value: segment.fields.dateTime },
+      ]
+      const labelRow = `<w:tr>${docxCell(ICS202_DOCX_CONTENT_WIDTH, docxLabelParagraph(segment.label), {
+        gridSpan: 4,
+      })}</w:tr>`
+      const fieldRow =
+        `<w:tr>` +
+        fields
+          .map((field) =>
+            docxCell(
+              col,
+              docxLabelParagraph(field.label) + docxMultilineParagraphs(field.value, 16),
+              { mar: 'tight' }
+            )
+          )
+          .join('') +
+        `</w:tr>`
+      return docxSectionSpacer() + docxFixedTable(cols, labelRow + fieldRow) + docxSectionSpacer()
+    }
+    default:
+      return ''
+  }
+}
+
+function renderPhysicalPageDocx(page: Ics202PhysicalPage): string {
+  return (
+    renderPageHeaderDocx(page.headerCells) +
+    page.segments.map(renderPhysicalPageSegmentDocx).join('') +
+    renderPageFooterDocx(page.footerLeft, page.displayPageNumber, page.totalPages)
   )
 }
 
@@ -298,8 +484,18 @@ export function renderLayoutBlockDocx(block: Ics202ExportLayoutBlock): string {
   }
 }
 
-export function buildIcs202DocxXml(blocks: Ics202ExportLayoutBlock[]): string {
-  const body = blocks.map(renderLayoutBlockDocx).join('')
+export function buildIcs202DocxXml(pages: Ics202PhysicalPage[]): string {
+  const body =
+    pages
+      .map((page, index) => {
+        const pageXml = renderPhysicalPageDocx(page)
+        if (index < pages.length - 1) {
+          return pageXml + `<w:p><w:r><w:br w:type="page"/></w:r></w:p>`
+        }
+        return pageXml
+      })
+      .join('') +
+    ''
   const sectPr =
     `<w:sectPr>` +
     `<w:pgSz w:w="${ICS202_DOCX_PAGE.widthDxa}" w:h="${ICS202_DOCX_PAGE.heightDxa}"/>` +
@@ -310,6 +506,12 @@ export function buildIcs202DocxXml(blocks: Ics202ExportLayoutBlock[]): string {
     `<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">` +
     `<w:body>${body}${sectPr}</w:body></w:document>`
   )
+}
+
+/** @deprecated Used by legacy flat block rendering paths. */
+export function buildIcs202DocxXmlFromBlocks(blocks: Ics202ExportLayoutBlock[]): string {
+  void blocks
+  throw new Error('Use paginateIcs202Export() before buildIcs202DocxXml().')
 }
 
 /** Sanity check: every section table uses fixed content width in dxa. */

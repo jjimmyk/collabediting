@@ -6,8 +6,15 @@ import {
   ICS202_PDF_CONTENT_WIDTH,
   ICS202_PDF_PAGE,
 } from '@/features/ics202/export-docx-layout'
+import {
+  paginateIcs202Export,
+  type Ics202PhysicalPage,
+  type Ics202PhysicalPageSegment,
+} from '@/features/ics202/export-pagination'
 
 export { buildIcs202DocxXml } from '@/features/ics202/export-docx-layout'
+export { paginateIcs202Export } from '@/features/ics202/export-pagination'
+export type { Ics202PhysicalPage } from '@/features/ics202/export-pagination'
 
 let crc32Table: Uint32Array | null = null
 function computeCrc32(bytes: Uint8Array): number {
@@ -114,7 +121,8 @@ function triggerBlobDownload(blob: Blob, filename: string): void {
 }
 
 export function downloadIcs202Docx(filename: string, blocks: Ics202ExportLayoutBlock[]): void {
-  const documentXml = buildIcs202DocxXml(blocks)
+  const pages = paginateIcs202Export(blocks)
+  const documentXml = buildIcs202DocxXml(pages)
   assertIcs202DocxLayoutConsistency(documentXml)
   const files = [
     {
@@ -212,25 +220,24 @@ type PdfLine = { text: string; font: 'F1' | 'F2'; size: number; x: number; y: nu
 
 type PdfBoxResult = { ops: string; height: number; lines: PdfLine[] }
 
-function drawBox(
+function drawBoxExact(
   leftX: number,
   topY: number,
   width: number,
   label: string,
   bodyLines: string[],
   bodySize = 9,
-  labelSize = 7
+  labelSize = 7,
+  minBodyLines = 1
 ): PdfBoxResult {
   const pad = 6
   const labelLead = 10
   const bodyLead = 11
   const labelLines = wrapPdfText(sanitizeForPdf(label), width - pad * 2, labelSize, true)
-  const wrappedBody = bodyLines.flatMap((line) =>
-    wrapPdfText(sanitizeForPdf(line), width - pad * 2, bodySize, false)
-  )
-  const minBodyLines = Math.max(wrappedBody.length, 2)
-  const height =
-    pad + labelLines.length * labelLead + 4 + minBodyLines * bodyLead + pad
+  const bodyToRender =
+    bodyLines.length > 0 ? bodyLines.map((line) => sanitizeForPdf(line)) : [' ']
+  const renderedBodyLines = Math.max(bodyToRender.length, minBodyLines)
+  const height = pad + labelLines.length * labelLead + 4 + renderedBodyLines * bodyLead + pad
   const bottomY = topY - height
   let ops = '0.75 w\n'
   ops += `${leftX.toFixed(2)} ${bottomY.toFixed(2)} ${width.toFixed(2)} ${height.toFixed(2)} re S\n`
@@ -242,128 +249,130 @@ function drawBox(
     y -= labelLead
   }
   y -= 4
-  const bodyToRender = wrappedBody.length > 0 ? wrappedBody : [' ']
-  for (const line of bodyToRender) {
+  for (let i = 0; i < renderedBodyLines; i += 1) {
+    const line = bodyToRender[i] ?? ' '
     pdfLines.push({ text: line, font: 'F1', size: bodySize, x: leftX + pad, y: y - bodySize })
     y -= bodyLead
   }
   return { ops, height, lines: pdfLines }
 }
 
-function layoutBlockToPdfElements(
-  block: Ics202ExportLayoutBlock,
+function renderPdfPageHeader(
+  page: Ics202PhysicalPage,
   margin: number,
   contentWidth: number,
   startY: number
-): { elements: Array<{ ops?: string; lines?: PdfLine[]; pageBreak?: boolean }>; nextY: number } {
+): { ops: string; lines: PdfLine[]; nextY: number } {
   const gap = 6
   let y = startY
-  const elements: Array<{ ops?: string; lines?: PdfLine[]; pageBreak?: boolean }> = []
+  let ops = ''
+  const lines: PdfLine[] = []
 
-  switch (block.kind) {
-    case 'form-title': {
-      for (let i = 0; i < ICS202_FORM_TITLE_LINES.length; i += 1) {
-        const line = ICS202_FORM_TITLE_LINES[i]
-        const size = i === ICS202_FORM_TITLE_LINES.length - 1 ? 11 : 8
-        const bold = i === ICS202_FORM_TITLE_LINES.length - 1
-        const textWidth = estimatePdfTextWidth(sanitizeForPdf(line), size, bold)
-        const x = margin + Math.max(0, (contentWidth - textWidth) / 2)
-        y -= size + 4
-        elements.push({
-          lines: [{ text: sanitizeForPdf(line), font: bold ? 'F2' : 'F1', size, x, y, bold }],
-        })
-      }
-      y -= gap
-      return { elements, nextY: y }
-    }
-    case 'header-row': {
-      const cellW = contentWidth / block.cells.length
-      const cellHeights = block.cells.map((cell) => {
-        const labelH = 12
-        const valueLines = wrapPdfText(
-          sanitizeForPdf(cell.value || ' '),
-          cellW - 8,
-          8.5,
-          false
-        )
-        return labelH + (cell.subLabels?.length ?? 0) * 9 + valueLines.length * 10 + 10
-      })
-      const height = Math.max(...cellHeights, 36)
-      const bottomY = y - height
-      let ops = '0.75 w\n'
-      ops += `${margin.toFixed(2)} ${bottomY.toFixed(2)} ${contentWidth.toFixed(2)} ${height.toFixed(2)} re S\n`
-      for (let i = 1; i < block.cells.length; i += 1) {
-        const x = margin + cellW * i
-        ops += `${x.toFixed(2)} ${bottomY.toFixed(2)} m ${x.toFixed(2)} ${y.toFixed(2)} l S\n`
-      }
-      const lines: PdfLine[] = []
-      block.cells.forEach((cell, index) => {
-        const x = margin + cellW * index + 4
-        let cy = y - 8
-        lines.push({
-          text: sanitizeForPdf(cell.label),
-          font: 'F2',
-          size: 7,
-          x,
-          y: cy,
-          bold: true,
-        })
-        cy -= 10
-        cell.subLabels?.forEach((sub) => {
-          lines.push({ text: sanitizeForPdf(sub), font: 'F1', size: 6.5, x, y: cy })
-          cy -= 9
-        })
-        wrapPdfText(sanitizeForPdf(cell.value || ' '), cellW - 8, 8.5, false).forEach((line) => {
-          lines.push({ text: line, font: 'F1', size: 8.5, x, y: cy })
-          cy -= 10
-        })
-      })
-      elements.push({ ops, lines })
-      y = bottomY - gap
-      return { elements, nextY: y }
-    }
+  for (let i = 0; i < ICS202_FORM_TITLE_LINES.length; i += 1) {
+    const line = ICS202_FORM_TITLE_LINES[i]
+    const size = i === ICS202_FORM_TITLE_LINES.length - 1 ? 11 : 8
+    const bold = i === ICS202_FORM_TITLE_LINES.length - 1
+    const textWidth = estimatePdfTextWidth(sanitizeForPdf(line), size, bold)
+    const x = margin + Math.max(0, (contentWidth - textWidth) / 2)
+    y -= size + 4
+    lines.push({ text: sanitizeForPdf(line), font: bold ? 'F2' : 'F1', size, x, y, bold })
+  }
+  y -= gap
+
+  const cellW = contentWidth / page.headerCells.length
+  const cellHeights = page.headerCells.map((cell) => {
+    const labelH = 12
+    const valueLines = wrapPdfText(sanitizeForPdf(cell.value || ' '), cellW - 8, 8.5, false)
+    return labelH + (cell.subLabels?.length ?? 0) * 9 + valueLines.length * 10 + 10
+  })
+  const height = Math.max(...cellHeights, 36)
+  const bottomY = y - height
+  ops += '0.75 w\n'
+  ops += `${margin.toFixed(2)} ${bottomY.toFixed(2)} ${contentWidth.toFixed(2)} ${height.toFixed(2)} re S\n`
+  for (let i = 1; i < page.headerCells.length; i += 1) {
+    const x = margin + cellW * i
+    ops += `${x.toFixed(2)} ${bottomY.toFixed(2)} m ${x.toFixed(2)} ${y.toFixed(2)} l S\n`
+  }
+  page.headerCells.forEach((cell, index) => {
+    const x = margin + cellW * index + 4
+    let cy = y - 8
+    lines.push({
+      text: sanitizeForPdf(cell.label),
+      font: 'F2',
+      size: 7,
+      x,
+      y: cy,
+      bold: true,
+    })
+    cy -= 10
+    cell.subLabels?.forEach((sub) => {
+      lines.push({ text: sanitizeForPdf(sub), font: 'F1', size: 6.5, x, y: cy })
+      cy -= 9
+    })
+    wrapPdfText(sanitizeForPdf(cell.value || ' '), cellW - 8, 8.5, false).forEach((line) => {
+      lines.push({ text: line, font: 'F1', size: 8.5, x, y: cy })
+      cy -= 10
+    })
+  })
+  y = bottomY - gap
+  return { ops, lines, nextY: y }
+}
+
+function renderPdfPageSegment(
+  segment: Ics202PhysicalPageSegment,
+  margin: number,
+  contentWidth: number,
+  startY: number
+): { ops: string; lines: PdfLine[]; nextY: number } {
+  const gap = 6
+  let y = startY
+
+  switch (segment.kind) {
     case 'lifelines': {
-      const optionLines = block.options.map(
+      const optionLines = segment.options.map(
         (opt) => `${opt.checked ? '[X]' : '[ ]'} ${opt.label}`
       )
-      const body = optionLines.join('\n')
-      const box = drawBox(margin, y, contentWidth, block.label, body.split('\n'), 8, 7)
-      elements.push({ ops: box.ops, lines: box.lines })
+      const box = drawBoxExact(margin, y, contentWidth, segment.label, optionLines, 8, 7, 2)
       y -= box.height + gap
-      return { elements, nextY: y }
+      return { ops: box.ops, lines: box.lines, nextY: y }
     }
     case 'text-box': {
-      const box = drawBox(
-        margin,
-        y,
-        contentWidth,
-        block.label,
-        (block.body || '').split('\n'),
-        9,
-        7
-      )
-      elements.push({ ops: box.ops, lines: box.lines })
+      const box = drawBoxExact(margin, y, contentWidth, segment.label, segment.bodyLines, 9, 7, 1)
       y -= box.height + gap
-      return { elements, nextY: y }
+      return { ops: box.ops, lines: box.lines, nextY: y }
     }
     case 'objectives': {
       const body =
-        block.rows.length === 0
+        segment.rows.length === 0
           ? [' ']
-          : block.rows.map((row) => {
+          : segment.rows.map((row) => {
               const prefix = [row.kind, row.label].filter(Boolean).join(' ')
               return prefix ? `${prefix}  ${row.objective}` : row.objective || ' '
             })
-      const box = drawBox(margin, y, contentWidth, block.label, body, 8.5, 7)
-      elements.push({ ops: box.ops, lines: box.lines })
+      const box = drawBoxExact(margin, y, contentWidth, segment.label, body, 8.5, 7, 1)
       y -= box.height + gap
-      return { elements, nextY: y }
+      return { ops: box.ops, lines: box.lines, nextY: y }
     }
     case 'site-safety-plan': {
-      const yes = block.required ? '[X]' : '[ ]'
-      const no = block.required ? '[ ]' : '[X]'
+      if (segment.continued) {
+        const label = '9. Site Safety Plan located at: (Continued):'
+        const box = drawBoxExact(
+          margin,
+          y,
+          contentWidth,
+          label,
+          segment.locationLines,
+          8,
+          7,
+          1
+        )
+        y -= box.height + gap
+        return { ops: box.ops, lines: box.lines, nextY: y }
+      }
+      const yes = segment.required ? '[X]' : '[ ]'
+      const no = segment.required ? '[ ]' : '[X]'
       const half = contentWidth / 2
-      const height = 44
+      const height = Math.max(44, 20 + segment.locationLines.length * 10 + 12)
       const bottomY = y - height
       let ops = '0.75 w\n'
       ops += `${margin.toFixed(2)} ${bottomY.toFixed(2)} ${contentWidth.toFixed(2)} ${height.toFixed(2)} re S\n`
@@ -393,26 +402,25 @@ function layoutBlockToPdfElements(
           bold: true,
         },
       ]
-      wrapPdfText(sanitizeForPdf(block.location || ' '), half - 8, 8, false).forEach((line, i) => {
+      segment.locationLines.forEach((line, i) => {
         lines.push({
-          text: line,
+          text: sanitizeForPdf(line),
           font: 'F1',
           size: 8,
           x: margin + half + 4,
           y: y - 20 - i * 10,
         })
       })
-      elements.push({ ops, lines })
       y = bottomY - gap
-      return { elements, nextY: y }
+      return { ops, lines, nextY: y }
     }
     case 'prepared-by': {
       const cellW = contentWidth / 4
       const fields = [
-        { label: 'Name:', value: block.fields.name },
-        { label: 'Position Title:', value: block.fields.positionTitle },
-        { label: 'Signature:', value: block.fields.signature },
-        { label: 'Date/Time:', value: block.fields.dateTime },
+        { label: 'Name:', value: segment.fields.name },
+        { label: 'Position Title:', value: segment.fields.positionTitle },
+        { label: 'Signature:', value: segment.fields.signature },
+        { label: 'Date/Time:', value: segment.fields.dateTime },
       ]
       const height = 48
       const bottomY = y - height
@@ -424,7 +432,7 @@ function layoutBlockToPdfElements(
       }
       const lines: PdfLine[] = [
         {
-          text: sanitizeForPdf(block.label),
+          text: sanitizeForPdf(segment.label),
           font: 'F2',
           size: 7,
           x: margin + 4,
@@ -448,92 +456,69 @@ function layoutBlockToPdfElements(
             lines.push({ text: line, font: 'F1', size: 7.5, x, y: y - 30 - i * 9 })
           })
       })
-      elements.push({ ops, lines })
       y = bottomY - gap
-      return { elements, nextY: y }
+      return { ops, lines, nextY: y }
     }
-    case 'page-footer': {
-      y -= 8
-      elements.push({
-        lines: [
-          {
-            text: sanitizeForPdf(block.left),
-            font: 'F1',
-            size: 7,
-            x: margin,
-            y,
-          },
-          {
-            text: sanitizeForPdf(block.pageLabel),
-            font: 'F1',
-            size: 7,
-            x: margin + contentWidth - estimatePdfTextWidth(block.pageLabel, 7, false),
-            y,
-          },
-        ],
-      })
-      y -= 12
-      return { elements, nextY: y }
-    }
-    case 'page-break':
-      elements.push({ pageBreak: true })
-      return { elements, nextY: startY }
     default:
-      return { elements, nextY: y }
+      return { ops: '', lines: [], nextY: y }
   }
 }
 
-function buildIcs202PdfBytes(blocks: Ics202ExportLayoutBlock[]): Uint8Array {
+function renderPdfPageFooter(
+  page: Ics202PhysicalPage,
+  margin: number,
+  contentWidth: number
+): { ops: string; lines: PdfLine[] } {
+  const pageLabel = `Page ${page.displayPageNumber} of ${page.totalPages}`
+  const y = margin + 14
+  return {
+    ops: '',
+    lines: [
+      {
+        text: sanitizeForPdf(page.footerLeft),
+        font: 'F1',
+        size: 7,
+        x: margin,
+        y,
+      },
+      {
+        text: sanitizeForPdf(pageLabel),
+        font: 'F1',
+        size: 7,
+        x: margin + contentWidth - estimatePdfTextWidth(pageLabel, 7, false),
+        y,
+      },
+    ],
+  }
+}
+
+function buildIcs202PdfBytes(pages: Ics202PhysicalPage[]): Uint8Array {
   const pageWidth = ICS202_PDF_PAGE.widthPt
   const pageHeight = ICS202_PDF_PAGE.heightPt
   const margin = ICS202_PDF_PAGE.marginPt
   const contentWidth = ICS202_PDF_CONTENT_WIDTH
   const contentTop = pageHeight - margin
-  const contentBottom = margin + 24
 
-  const pages: Array<{ ops: string; lines: PdfLine[] }> = []
-  let currentOps = ''
-  let currentLines: PdfLine[] = []
-  let y = contentTop
+  const pdfPages: Array<{ ops: string; lines: PdfLine[] }> = pages.map((page) => {
+    let ops = ''
+    const lines: PdfLine[] = []
+    const header = renderPdfPageHeader(page, margin, contentWidth, contentTop)
+    ops += header.ops
+    lines.push(...header.lines)
+    let y = header.nextY
+    for (const segment of page.segments) {
+      const rendered = renderPdfPageSegment(segment, margin, contentWidth, y)
+      ops += rendered.ops
+      lines.push(...rendered.lines)
+      y = rendered.nextY
+    }
+    const footer = renderPdfPageFooter(page, margin, contentWidth)
+    ops += footer.ops
+    lines.push(...footer.lines)
+    return { ops, lines }
+  })
 
-  const startNewPage = () => {
-    if (currentOps.length > 0 || currentLines.length > 0) {
-      pages.push({ ops: currentOps, lines: currentLines })
-    }
-    currentOps = ''
-    currentLines = []
-    y = contentTop
-  }
-
-  for (const block of blocks) {
-    if (block.kind === 'page-break') {
-      startNewPage()
-      continue
-    }
-    const result = layoutBlockToPdfElements(block, margin, contentWidth, y)
-    const estimatedHeight = y - result.nextY + 20
-    if (y - estimatedHeight < contentBottom && currentLines.length > 0) {
-      startNewPage()
-      const retry = layoutBlockToPdfElements(block, margin, contentWidth, y)
-      if (retry.elements[0]?.ops) currentOps += retry.elements[0].ops
-      if (retry.elements[0]?.lines) currentLines.push(...retry.elements[0].lines)
-      y = retry.nextY
-      continue
-    }
-    for (const el of result.elements) {
-      if (el.pageBreak) {
-        startNewPage()
-        continue
-      }
-      if (el.ops) currentOps += el.ops
-      if (el.lines) currentLines.push(...el.lines)
-    }
-    y = result.nextY
-  }
-  if (currentOps.length > 0 || currentLines.length > 0) {
-    pages.push({ ops: currentOps, lines: currentLines })
-  }
-  if (pages.length === 0) pages.push({ ops: '', lines: [] })
+  if (pdfPages.length === 0) pdfPages.push({ ops: '', lines: [] })
 
   const stringToLatin1Bytes = (text: string): Uint8Array => {
     const bytes = new Uint8Array(text.length)
@@ -541,7 +526,7 @@ function buildIcs202PdfBytes(blocks: Ics202ExportLayoutBlock[]): Uint8Array {
     return bytes
   }
 
-  const contentStreams = pages.map((page) => {
+  const contentStreams = pdfPages.map((page) => {
     let body = page.ops
     body += 'BT\n'
     let currentFont: string | null = null
@@ -632,6 +617,7 @@ function buildIcs202PdfBytes(blocks: Ics202ExportLayoutBlock[]): Uint8Array {
 }
 
 export function downloadIcs202Pdf(filename: string, blocks: Ics202ExportLayoutBlock[]): void {
-  const bytes = buildIcs202PdfBytes(blocks)
+  const pages = paginateIcs202Export(blocks)
+  const bytes = buildIcs202PdfBytes(pages)
   triggerBlobDownload(new Blob([bytes.buffer as ArrayBuffer], { type: 'application/pdf' }), filename)
 }

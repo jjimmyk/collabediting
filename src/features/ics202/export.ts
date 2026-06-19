@@ -3,7 +3,8 @@ import type { Ics202FormState } from '@/features/ics202/types'
 
 export type { Ics202ExportContext, Ics202ExportLayoutBlock } from '@/features/ics202/export-layout'
 export { buildIcs202ExportLayout, ics202ExportFilenameBase, ICS202_FORM_TITLE_LINES } from '@/features/ics202/export-layout'
-export { downloadIcs202Docx, downloadIcs202Pdf } from '@/features/ics202/export-download'
+export { downloadIcs202Docx, downloadIcs202Pdf, paginateIcs202Export } from '@/features/ics202/export-download'
+export type { Ics202PhysicalPage } from '@/features/ics202/export-pagination'
 
 /** Flat blocks for IAP bundle export and legacy consumers. */
 export type Ics202DocxBlock =
@@ -94,6 +95,7 @@ export function buildIcs202DocxBlocks(
       case 'page-footer':
         blocks.push({ kind: 'subtitle', text: block.pageLabel })
         break
+      case 'document-page-break':
       case 'page-break':
         blocks.push({ kind: 'subtitle', text: '—' })
         break

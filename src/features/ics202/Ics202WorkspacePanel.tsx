@@ -32,7 +32,9 @@ import {
   downloadIcs202Docx,
   downloadIcs202Pdf,
   ics202ExportFilenameBase,
+  paginateIcs202Export,
   type Ics202ExportLayoutBlock,
+  type Ics202PhysicalPage,
 } from '@/features/ics202/export'
 import type {
   Ics202FormSectionDrafts,
@@ -103,7 +105,7 @@ export function Ics202WorkspacePanel({
   } | null>(null)
   const [signNameInput, setSignNameInput] = useState('You')
   const [isPreviewOpen, setIsPreviewOpen] = useState(false)
-  const [previewBlocks, setPreviewBlocks] = useState<Ics202ExportLayoutBlock[]>([])
+  const [previewPages, setPreviewPages] = useState<Ics202PhysicalPage[]>([])
 
   const latestVersion = versions[versions.length - 1] ?? null
   const isLatestSigned = !!latestVersion && latestVersion.signatures.length > 0
@@ -121,7 +123,9 @@ export function Ics202WorkspacePanel({
   const openPreview = () => {
     const exportForm = getExportForm()
     if (!exportForm) return
-    setPreviewBlocks(buildIcs202ExportLayout(exportForm, getExportContext()))
+    setPreviewPages(
+      paginateIcs202Export(buildIcs202ExportLayout(exportForm, getExportContext()))
+    )
     setIsPreviewOpen(true)
   }
 
@@ -650,9 +654,9 @@ export function Ics202WorkspacePanel({
         open={isPreviewOpen}
         onOpenChange={setIsPreviewOpen}
         title={`ICS-202 Preview — ${form.incidentName || incidentName || 'Incident Objectives'}`}
-        blocks={previewBlocks}
-        onExportWord={() => exportWord(previewBlocks)}
-        onExportPdf={() => exportPdf(previewBlocks)}
+        pages={previewPages}
+        onExportWord={() => exportWord()}
+        onExportPdf={() => exportPdf()}
       />
     </>
   )

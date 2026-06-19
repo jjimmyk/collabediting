@@ -35,7 +35,10 @@ export type Ics202ExportLayoutBlock =
   | { kind: 'objectives'; label: string; rows: Ics202ObjectiveRow[] }
   | { kind: 'site-safety-plan'; required: boolean; location: string }
   | { kind: 'prepared-by'; label: string; fields: Ics202PreparedByFields }
+  | { kind: 'document-page-break' }
+  /** @deprecated Legacy blocks ignored by paginator. */
   | { kind: 'page-break' }
+  /** @deprecated Legacy blocks ignored by paginator. */
   | { kind: 'page-footer'; left: string; pageLabel: string }
 
 function resolveIncidentName(form: Ics202FormState, context: Ics202ExportContext): string {
@@ -94,8 +97,7 @@ export function buildIcs202ExportLayout(
   const headerCells = buildHeaderCells(form, context)
   const preparedBy = buildPreparedByFields(form)
 
-  const page2: Ics202ExportLayoutBlock[] = [
-    { kind: 'form-title' },
+  return [
     { kind: 'header-row', cells: headerCells },
     {
       kind: 'lifelines',
@@ -127,14 +129,7 @@ export function buildIcs202ExportLayout(
       label: '10. Prepared by:',
       fields: preparedBy,
     },
-    {
-      kind: 'page-footer',
-      left: 'ICS 202-CG (08/25)  Expiration: 08/35',
-      pageLabel: 'Page 2 of 3',
-    },
-    { kind: 'page-break' },
-    { kind: 'form-title' },
-    { kind: 'header-row', cells: headerCells },
+    { kind: 'document-page-break' },
     {
       kind: 'text-box',
       label: '11. Critical Information Requirements:',
@@ -155,14 +150,7 @@ export function buildIcs202ExportLayout(
       label: '14. Prepared by:',
       fields: preparedBy,
     },
-    {
-      kind: 'page-footer',
-      left: 'ICS 202-CG (08/25)  Expiration: 08/35',
-      pageLabel: 'Page 3 of 3',
-    },
   ]
-
-  return page2
 }
 
 export { ICS202_FORM_TITLE_LINES }
