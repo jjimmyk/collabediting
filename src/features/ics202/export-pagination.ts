@@ -297,13 +297,13 @@ function paginateSplittableLines(
     }
 
     if (take < remainingLines) {
-      const tailLines = remainingLines - take
-      if (tailLines > 0 && tailLines <= PAGE.tinyContinuationLineThreshold) {
-        if (remainingLines <= maxLines) {
-          take = remainingLines
-        } else if (take - tailLines >= 1) {
-          take -= tailLines
-        }
+      while (
+        take > 1 &&
+        remainingLines - take > 0 &&
+        remainingLines - take <= PAGE.tinyContinuationLineThreshold &&
+        textBoxSegmentHeight(remainingLines, isContinued) + gap > capacity
+      ) {
+        take -= 1
       }
     }
 

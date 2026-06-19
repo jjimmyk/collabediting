@@ -36,15 +36,15 @@ export const ICS202_EXPORT_PAGE_METRICS = {
   sectionTableCellMarginPt: DOCX_SECTION_CELL_VERTICAL_MARGIN_PT,
   preparedByTableCellMarginPt: DOCX_PREPARED_BY_CELL_VERTICAL_MARGIN_PT,
   bodyLineHeightPt: DOCX_BODY_LINE_PT,
-  /** Per-line estimate for splittable body text (DOCX line + paragraph after + table cell slack). */
-  paginationLineHeightPt: DOCX_BODY_LINE_PT + 4,
+  /** Per-line estimate when splitting text boxes across pages. */
+  paginationLineHeightPt: DOCX_BODY_LINE_PT + 1,
   labelLineHeightPt: DOCX_LABEL_LINE_PT,
   smallLineHeightPt: DOCX_SMALL_LINE_PT,
   minBodyLines: 1,
-  /** Header/footer chrome beyond pgMar reserves (title block + prepared-by table). */
-  pageLayoutBufferPt: 132,
-  /** Conservative capacity so logical pages fit one Word sheet without soft breaks. */
-  capacitySafetyFactor: 0.48,
+  /** Header chrome that extends below the Word header margin reserve. */
+  pageLayoutBufferPt: 40,
+  /** Applied after buffer so each logical page fills one sheet without soft breaks. */
+  capacitySafetyFactor: 0.52,
   /** Merge tail continuation chunks with ≤ this many lines when possible. */
   tinyContinuationLineThreshold: 3,
 } as const
