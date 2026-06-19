@@ -148,7 +148,7 @@ function renderPreviewPage(page: Ics202PhysicalPage, index: number) {
   return (
     <div
       key={`ics202-page-${page.displayPageNumber}-${index}`}
-      className="space-y-2 border-2 border-zinc-900 bg-white p-4 shadow-sm dark:bg-zinc-100"
+      className="flex min-h-[720px] flex-col border-2 border-zinc-900 bg-white p-4 shadow-sm dark:bg-zinc-100"
     >
       <div className="space-y-0.5 text-center">
         {ICS202_FORM_TITLE_LINES.map((line, lineIndex) => (
@@ -177,13 +177,10 @@ function renderPreviewPage(page: Ics202PhysicalPage, index: number) {
           </div>
         ))}
       </div>
-      <div className="space-y-2">{page.segments.map(renderPreviewSegment)}</div>
-      {renderPreviewPreparedBy(page.preparedBy)}
-      <div className="flex items-center justify-between border-t border-zinc-300 pt-2 text-[10px] text-zinc-600">
-        <span>{page.footerLeft}</span>
-        <span>
-          Page {page.displayPageNumber} of {page.totalPages}
-        </span>
+      <div className="mt-2 flex-1 space-y-2">{page.segments.map(renderPreviewSegment)}</div>
+      <div className="mt-auto space-y-2 border-t border-zinc-300 pt-2">
+        {renderPreviewPreparedBy(page.preparedBy)}
+        <div className="text-[10px] text-zinc-600">{page.footerLeft}</div>
       </div>
     </div>
   )
@@ -206,8 +203,8 @@ export function Ics202ExportPreviewDialog({
             {title}
           </DialogTitle>
           <DialogDescription className="text-xs">
-            USCG ICS 202-CG boxed layout preview. Sections repeat their label on continuation pages;
-            headers and footers appear on every exported page.
+            USCG ICS 202-CG boxed layout preview. Continuation sections repeat their label;
+            prepared-by and the ICS expiration line appear in the page footer on export.
           </DialogDescription>
         </DialogHeader>
         <div className="max-h-[70vh] overflow-y-auto">

@@ -134,7 +134,12 @@ export function downloadIcs202Docx(filename: string, blocks: Ics202ExportLayoutB
   const documentXml = buildIcs202DocxXml(pages)
   assertIcs202DocxLayoutConsistency(documentXml)
   const headerCells = pages[0]?.headerCells ?? []
-  const footerLeft = pages[0]?.footerLeft ?? 'ICS 202-CG (08/25)  Expiration: 08/35'
+  const footerOverrides = pages
+    .map(
+      (_, index) =>
+        `<Override PartName="/word/footer${index + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/>`
+    )
+    .join('')
   const files = [
     {
       name: '[Content_Types].xml',
@@ -145,7 +150,7 @@ export function downloadIcs202Docx(filename: string, blocks: Ics202ExportLayoutB
         `<Default Extension="xml" ContentType="application/xml"/>` +
         `<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>` +
         `<Override PartName="/word/header1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/>` +
-        `<Override PartName="/word/footer1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/>` +
+        footerOverrides +
         `</Types>`,
     },
     {
@@ -158,11 +163,14 @@ export function downloadIcs202Docx(filename: string, blocks: Ics202ExportLayoutB
     },
     {
       name: 'word/_rels/document.xml.rels',
-      content: buildIcs202DocxDocumentRelsXml(),
+      content: buildIcs202DocxDocumentRelsXml(pages.length),
     },
     { name: 'word/document.xml', content: documentXml },
     { name: 'word/header1.xml', content: buildIcs202DocxHeaderXml(headerCells) },
-    { name: 'word/footer1.xml', content: buildIcs202DocxFooterXml(footerLeft) },
+    ...pages.map((page, index) => ({
+      name: `word/footer${index + 1}.xml`,
+      content: buildIcs202DocxFooterXml(page.preparedBy, page.footerLeft),
+    })),
   ]
   const bytes = buildStoredZip(files)
   triggerBlobDownload(new Blob([bytes.buffer as ArrayBuffer], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }), filename)

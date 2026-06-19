@@ -12,6 +12,12 @@ export const ICS202_DOCX_PAGE = {
   marginDxa: 720,
 } as const
 
+/** Space reserved below body for repeating header (title + boxes 1–3). */
+export const ICS202_DOCX_HEADER_RESERVE_DXA = 1440
+
+/** Space reserved above bottom margin for prepared-by table + ICS expiration line. */
+export const ICS202_DOCX_FOOTER_RESERVE_DXA = 2160
+
 export const ICS202_DOCX_CONTENT_WIDTH =
   ICS202_DOCX_PAGE.widthDxa - ICS202_DOCX_PAGE.marginDxa * 2
 
@@ -201,6 +207,13 @@ function renderPageFooterDocx(
 }
 
 export function renderPreparedByDocx(preparedBy: Ics202PagePreparedBy): string {
+  return renderPreparedByTableDocx(preparedBy, { includeOuterSpacers: true })
+}
+
+function renderPreparedByTableDocx(
+  preparedBy: Ics202PagePreparedBy,
+  opts: { includeOuterSpacers?: boolean } = {}
+): string {
   const col = ICS202_DOCX_COL.quarter
   const cols = [col, col, col, col]
   const fields = [
@@ -224,7 +237,19 @@ export function renderPreparedByDocx(preparedBy: Ics202PagePreparedBy): string {
       )
       .join('') +
     `</w:tr>`
-  return docxSectionSpacer() + docxFixedTable(cols, labelRow + fieldRow) + docxSectionSpacer()
+  const table = docxFixedTable(cols, labelRow + fieldRow)
+  if (opts.includeOuterSpacers) {
+    return docxSectionSpacer() + table + docxSectionSpacer()
+  }
+  return table
+}
+
+function renderIcsExpirationLineDocx(footerLeft: string): string {
+  return (
+    `<w:p><w:pPr><w:spacing w:before="80" w:after="0"/></w:pPr>` +
+    `<w:r><w:rPr><w:sz w:val="14"/><w:szCs w:val="14"/></w:rPr>` +
+    `<w:t xml:space="preserve">${escapeXml(footerLeft)}</w:t></w:r></w:p>`
+  )
 }
 
 export function renderPhysicalPageSegmentDocx(segment: Ics202PhysicalPageSegment): string {
@@ -319,9 +344,19 @@ export function renderPhysicalPageSegmentDocx(segment: Ics202PhysicalPageSegment
 }
 
 function renderPhysicalPageBodyDocx(page: Ics202PhysicalPage): string {
+  return page.segments.map(renderPhysicalPageSegmentDocx).join('')
+}
+
+function buildSectionPropertiesXml(footerRelationshipId: string, nextPage: boolean): string {
+  const sectionType = nextPage ? `<w:type w:val="nextPage"/>` : ''
   return (
-    page.segments.map(renderPhysicalPageSegmentDocx).join('') +
-    renderPreparedByDocx(page.preparedBy)
+    `<w:sectPr>` +
+    `<w:headerReference w:type="default" r:id="rId1"/>` +
+    `<w:footerReference w:type="default" r:id="${footerRelationshipId}"/>` +
+    `<w:pgSz w:w="${ICS202_DOCX_PAGE.widthDxa}" w:h="${ICS202_DOCX_PAGE.heightDxa}"/>` +
+    `<w:pgMar w:top="${ICS202_DOCX_PAGE.marginDxa}" w:right="${ICS202_DOCX_PAGE.marginDxa}" w:bottom="${ICS202_DOCX_PAGE.marginDxa}" w:left="${ICS202_DOCX_PAGE.marginDxa}" w:header="${ICS202_DOCX_HEADER_RESERVE_DXA}" w:footer="${ICS202_DOCX_FOOTER_RESERVE_DXA}" w:gutter="0"/>` +
+    sectionType +
+    `</w:sectPr>`
   )
 }
 
@@ -334,32 +369,34 @@ export function buildIcs202DocxHeaderXml(headerCells: Ics202HeaderCell[]): strin
   )
 }
 
-export function buildIcs202DocxFooterXml(footerLeft: string): string {
-  const rightTab = ICS202_DOCX_CONTENT_WIDTH * 20
+export function buildIcs202DocxFooterXml(
+  preparedBy: Ics202PagePreparedBy,
+  footerLeft: string
+): string {
   return (
     `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
     `<w:ftr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">` +
-    `<w:p><w:pPr><w:tabs>` +
-    `<w:tab w:val="clear" w:pos="0"/>` +
-    `<w:tab w:val="right" w:pos="${rightTab}"/>` +
-    `</w:tabs><w:spacing w:before="0" w:after="0"/></w:pPr>` +
-    `<w:r><w:rPr><w:sz w:val="14"/><w:szCs w:val="14"/></w:rPr>` +
-    `<w:t xml:space="preserve">${escapeXml(footerLeft)}\tPage </w:t></w:r>` +
-    `<w:fldSimple w:instr=" PAGE ">` +
-    `<w:r><w:rPr><w:sz w:val="14"/><w:szCs w:val="14"/></w:rPr><w:t>1</w:t></w:r></w:fldSimple>` +
-    `<w:r><w:rPr><w:sz w:val="14"/><w:szCs w:val="14"/></w:rPr><w:t xml:space="preserve"> of </w:t></w:r>` +
-    `<w:fldSimple w:instr=" NUMPAGES ">` +
-    `<w:r><w:rPr><w:sz w:val="14"/><w:szCs w:val="14"/></w:rPr><w:t>1</w:t></w:r></w:fldSimple>` +
-    `</w:p></w:ftr>`
+    renderPreparedByTableDocx(preparedBy) +
+    renderIcsExpirationLineDocx(footerLeft) +
+    `</w:ftr>`
   )
 }
 
-export function buildIcs202DocxDocumentRelsXml(): string {
+export function buildIcs202DocxDocumentRelsXml(footerPartCount: number): string {
+  if (footerPartCount < 1) {
+    throw new Error('ICS-202 DOCX export requires at least one footer part.')
+  }
+  const footerRelationships = Array.from({ length: footerPartCount }, (_, index) => {
+    const relationshipId = index + 2
+    return (
+      `<Relationship Id="rId${relationshipId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer${index + 1}.xml"/>`
+    )
+  }).join('')
   return (
     `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
     `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
     `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="header1.xml"/>` +
-    `<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer1.xml"/>` +
+    footerRelationships +
     `</Relationships>`
   )
 }
@@ -499,26 +536,23 @@ export function buildIcs202DocxXml(pages: Ics202PhysicalPage[]): string {
   const body = pages
     .map((page, index) => {
       const pageXml = renderPhysicalPageBodyDocx(page)
+      const footerRelationshipId = `rId${index + 2}`
       if (index < pages.length - 1) {
-        return pageXml + `<w:p><w:r><w:br w:type="page"/></w:r></w:p>`
+        return (
+          pageXml +
+          `<w:p><w:pPr>${buildSectionPropertiesXml(footerRelationshipId, true)}</w:pPr></w:p>`
+        )
       }
       return pageXml
     })
     .join('')
 
-  const headerReserveDxa = 1440
-  const footerReserveDxa = 360
-  const sectPr =
-    `<w:sectPr>` +
-    `<w:headerReference w:type="default" r:id="rId1"/>` +
-    `<w:footerReference w:type="default" r:id="rId2"/>` +
-    `<w:pgSz w:w="${ICS202_DOCX_PAGE.widthDxa}" w:h="${ICS202_DOCX_PAGE.heightDxa}"/>` +
-    `<w:pgMar w:top="${ICS202_DOCX_PAGE.marginDxa}" w:right="${ICS202_DOCX_PAGE.marginDxa}" w:bottom="${ICS202_DOCX_PAGE.marginDxa}" w:left="${ICS202_DOCX_PAGE.marginDxa}" w:header="${headerReserveDxa}" w:footer="${footerReserveDxa}" w:gutter="0"/>` +
-    `</w:sectPr>`
+  const finalFooterRelationshipId = `rId${pages.length + 1}`
+  const finalSectPr = buildSectionPropertiesXml(finalFooterRelationshipId, false)
   return (
     `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
     `<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">` +
-    `<w:body>${body}${sectPr}</w:body></w:document>`
+    `<w:body>${body}${finalSectPr}</w:body></w:document>`
   )
 }
 
@@ -536,11 +570,14 @@ export function assertIcs202DocxLayoutConsistency(documentXml: string): void {
   if (!documentXml.includes('<w:headerReference w:type="default" r:id="rId1"/>')) {
     throw new Error('ICS-202 DOCX export missing default header reference.')
   }
-  if (!documentXml.includes('<w:footerReference w:type="default" r:id="rId2"/>')) {
-    throw new Error('ICS-202 DOCX export missing default footer reference.')
+  if (!documentXml.includes('<w:footerReference w:type="default" r:id="rId')) {
+    throw new Error('ICS-202 DOCX export missing footer references.')
   }
   if (documentXml.includes('INCIDENT BRIEFING (ICS 202-CG)')) {
     throw new Error('ICS-202 DOCX body should not duplicate header title content.')
+  }
+  if (documentXml.includes('10. Prepared by:') || documentXml.includes('14. Prepared by:')) {
+    throw new Error('ICS-202 prepared-by must render in Word footer parts, not document body.')
   }
   if (documentXml.includes('<w:tbl><w:tblPr><w:tblW w:w="5000" w:type="pct"')) {
     throw new Error('ICS-202 DOCX export still contains legacy pct-width tables.')

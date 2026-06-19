@@ -126,24 +126,24 @@ function pageSegmentCapacity(_headerCells: Ics202HeaderCell[]): number {
     PAGE.marginBottomPt -
     PAGE.wordHeaderReservePt -
     PAGE.wordFooterReservePt -
-    PAGE.preparedByHeightPt -
-    12
+    8
   return Math.floor(raw * PAGE.capacitySafetyFactor)
 }
 
 function estimateTextBoxHeight(lineCount: number, minLines = PAGE.minBodyLines): number {
   const lines = Math.max(lineCount, minLines)
-  return textBoxShellHeightPt() + lines * PAGE.bodyLineHeightPt
+  return textBoxShellHeightPt() + lines * PAGE.paginationLineHeightPt
 }
 
 function estimateLifelinesHeight(optionCount: number): number {
   const rows = Math.ceil(optionCount / 4)
   return (
     PAGE.sectionSpacerPt * 2 +
-    PAGE.tableCellMarginPt * 2 +
+    PAGE.sectionTableCellMarginPt +
     PAGE.labelLineHeightPt +
+    PAGE.sectionTableCellMarginPt +
     rows * PAGE.smallLineHeightPt +
-    PAGE.tableCellMarginPt * 2
+    PAGE.sectionTableCellMarginPt
   )
 }
 
@@ -152,11 +152,12 @@ function estimateObjectivesHeight(rowCount: number, showTableHeader: boolean): n
   const header = showTableHeader ? PAGE.smallLineHeightPt : 0
   return (
     PAGE.sectionSpacerPt * 2 +
-    PAGE.tableCellMarginPt * 2 +
+    PAGE.sectionTableCellMarginPt +
     PAGE.labelLineHeightPt +
+    PAGE.sectionTableCellMarginPt +
     header +
     rows * PAGE.bodyLineHeightPt +
-    PAGE.tableCellMarginPt * 2
+    PAGE.sectionTableCellMarginPt
   )
 }
 
@@ -164,20 +165,21 @@ function estimateSiteSafetyHeight(locationLineCount: number): number {
   const lines = Math.max(locationLineCount, 1)
   return (
     PAGE.sectionSpacerPt * 2 +
-    PAGE.tableCellMarginPt * 2 +
+    PAGE.sectionTableCellMarginPt +
     PAGE.labelLineHeightPt * 2 +
     PAGE.smallLineHeightPt +
+    PAGE.sectionTableCellMarginPt +
     lines * PAGE.bodyLineHeightPt +
-    PAGE.tableCellMarginPt * 2
+    PAGE.sectionTableCellMarginPt
   )
 }
 
 function textBoxShellHeightPt(): number {
   return (
     PAGE.sectionSpacerPt * 2 +
-    PAGE.tableCellMarginPt * 2 +
+    PAGE.sectionTableCellMarginPt +
     PAGE.labelLineHeightPt +
-    PAGE.tableCellMarginPt * 2
+    PAGE.sectionTableCellMarginPt
   )
 }
 
@@ -250,6 +252,10 @@ function finalizeDrafts(drafts: PageDraft[]): Ics202PhysicalPage[] {
   }))
 }
 
+function textBoxSegmentHeight(lineCount: number, continued: boolean): number {
+  return estimateTextBoxHeight(lineCount, continued ? 1 : PAGE.minBodyLines)
+}
+
 function paginateSplittableLines(
   label: string,
   lines: string[],
@@ -260,35 +266,34 @@ function paginateSplittableLines(
     return
   }
 
-  const initialDraft = getCurrentDraft()
-  const initialGap = initialDraft.segments.length > 0 ? PAGE.segmentGapPt : 0
-  if (estimateTextBoxHeight(lines.length) + initialGap <= remainingHeight(initialDraft)) {
-    addSegmentToDraft(initialDraft, {
-      kind: 'text-box',
-      label,
-      bodyLines: lines,
-      continued: false,
-    })
-    return
-  }
-
   let lineIndex = 0
   let isContinued = false
 
   while (lineIndex < lines.length) {
     const draft = getCurrentDraft()
+    const gap = draft.segments.length > 0 ? PAGE.segmentGapPt : 0
     const overhead = textBoxOverheadPt(draft)
     const capacity = remainingHeight(draft)
     const remainingLines = lines.length - lineIndex
 
-    if (capacity <= overhead + PAGE.bodyLineHeightPt) {
+    if (capacity <= overhead + PAGE.paginationLineHeightPt) {
       startNewDraft()
       isContinued = true
       continue
     }
 
-    const maxLines = Math.max(1, Math.floor((capacity - overhead) / PAGE.bodyLineHeightPt))
+    const maxLines = Math.max(
+      1,
+      Math.floor((capacity - overhead) / PAGE.paginationLineHeightPt)
+    )
     let take = Math.min(maxLines, remainingLines)
+
+    while (
+      take > 0 &&
+      textBoxSegmentHeight(take, isContinued) + gap > capacity
+    ) {
+      take -= 1
+    }
 
     if (take < remainingLines) {
       const tailLines = remainingLines - take
@@ -299,6 +304,13 @@ function paginateSplittableLines(
           take -= tailLines
         }
       }
+    }
+
+    while (
+      take > 0 &&
+      textBoxSegmentHeight(take, isContinued) + gap > capacity
+    ) {
+      take -= 1
     }
 
     if (take <= 0) {
@@ -314,7 +326,9 @@ function paginateSplittableLines(
       continued: isContinued,
     })
     lineIndex += take
-    isContinued = true
+    if (lineIndex < lines.length) {
+      isContinued = true
+    }
   }
 }
 
@@ -447,37 +461,6 @@ function paginateAtomicSegment(
   addSegmentToDraft(draft, segment)
 }
 
-function estimateGroupContentHeight(blocks: Ics202ExportLayoutBlock[]): number {
-  let total = 0
-  for (const block of blocks) {
-    let height = 0
-    switch (block.kind) {
-      case 'lifelines':
-        height = estimateLifelinesHeight(block.options.length)
-        break
-      case 'text-box':
-        height = estimateTextBoxHeight(flattenWrappedBody(block.body, 9).length)
-        break
-      case 'objectives':
-        height = estimateObjectivesHeight(block.rows.length, true)
-        break
-      case 'site-safety-plan':
-        height = estimateSiteSafetyHeight(
-          flattenWrappedBody(block.location, 8).length > 0
-            ? flattenWrappedBody(block.location, 8).length
-            : 1
-        )
-        break
-      default:
-        break
-    }
-    if (height > 0) {
-      total += height + PAGE.segmentGapPt
-    }
-  }
-  return total
-}
-
 function extractContentBlocks(blocks: Ics202ExportLayoutBlock[]): {
   headerCells: Ics202HeaderCell[]
   contentGroups: ContentGroup[]
@@ -567,12 +550,7 @@ export function paginateIcs202Export(blocks: Ics202ExportLayoutBlock[]): Ics202P
   contentGroups.forEach((group, groupIndex) => {
     if (groupIndex > 0) {
       currentPreparedBy = group.preparedBy
-      const neededHeight = estimateGroupContentHeight(group.blocks)
-      if (remainingHeight(currentDraft) < neededHeight) {
-        startNewDraft()
-      } else {
-        currentDraft.preparedBy = group.preparedBy
-      }
+      startNewDraft()
     } else {
       currentPreparedBy = group.preparedBy
       currentDraft.preparedBy = group.preparedBy
