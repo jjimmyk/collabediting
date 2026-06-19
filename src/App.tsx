@@ -483,10 +483,12 @@ import {
 } from '@/features/ics214/utils'
 import { useIcs214WorkspaceForm } from '@/hooks/useIcs214WorkspaceForm'
 import {
-  buildIcs204DocxBlocks,
-  buildIcs204ExportOptions,
+  buildIcs204ExportLayout,
+  downloadIcs204Docx,
+  downloadIcs204Pdf,
   ics204ExportFilenameBase,
-  type Ics204DocxBlock,
+  paginateIcs204Export,
+  type Ics204PhysicalPage,
 } from '@/features/ics204/export'
 import {
   applyIcs204SectionDraft,
@@ -7126,7 +7128,7 @@ function App() {
   const pratusAiLoadingTimerRef = useRef<number | null>(null)
   const [ics204ResourcePickerFormId, setIcs204ResourcePickerFormId] = useState<string | null>(null)
   const [isIcs204PreviewOpen, setIsIcs204PreviewOpen] = useState(false)
-  const [ics204PreviewBlocks, setIcs204PreviewBlocks] = useState<DocxBlock[]>([])
+  const [ics204PreviewPages, setIcs204PreviewPages] = useState<Ics204PhysicalPage[]>([])
   const [ics204PreviewTitle, setIcs204PreviewTitle] = useState('ICS-204 Preview')
   const [ics204PreviewFormId, setIcs204PreviewFormId] = useState<string | null>(null)
   const [ics204ResourceNameFilter, setIcs204ResourceNameFilter] = useState('')
@@ -20689,9 +20691,33 @@ function App() {
     setIcs204AssignConfirmDialog(null)
     toast.success('ICS-204 assigned and notifications sent.')
   }
-  const getIcs204ExportContext = () => ({
-    incidentName: activeIncidentWorkspace?.name ?? activeExerciseWorkspace?.name ?? '',
-  })
+  const getIcs204ExportContext = () => {
+    const activePeriod = operationalPeriods[operationalPeriods.length - 1]
+    return {
+      incidentName: activeIncidentWorkspace?.name ?? activeExerciseWorkspace?.name ?? '',
+      operationalPeriodFrom: activePeriod?.startedAt ?? '',
+      operationalPeriodTo: '',
+    }
+  }
+  const resolveIcs204ExportPayload = (formId: string) => {
+    const exportForm = getIcs204FormForExport(
+      formId,
+      ics204Forms,
+      ics204SectionDraftsByFormId
+    )
+    if (!exportForm) {
+      return null
+    }
+    const formVersions = ics204VersionsById[formId] ?? []
+    const latestVersion = formVersions[formVersions.length - 1]
+    const context = getIcs204ExportContext()
+    const layout = buildIcs204ExportLayout(
+      exportForm,
+      context,
+      latestVersion?.signatures ?? []
+    )
+    return { exportForm, layout }
+  }
   const getIcs204aBuildContext = (): Ics204aBuildContext => {
     const activePeriod = operationalPeriods[operationalPeriods.length - 1]
     return {
@@ -20820,46 +20846,29 @@ function App() {
     )
   }
   const openIcs204Preview = (formId: string) => {
-    const exportForm = getIcs204FormForExport(
-      formId,
-      ics204Forms,
-      ics204SectionDraftsByFormId
-    )
-    if (!exportForm) return
-    const context = getIcs204ExportContext()
+    const payload = resolveIcs204ExportPayload(formId)
+    if (!payload) return
     setIcs204PreviewFormId(formId)
-    setIcs204PreviewBlocks(buildIcs204DocxBlocks(exportForm, context) as DocxBlock[])
-    setIcs204PreviewTitle(`ICS-204 Preview — ${resolveIcs204ListTitle(exportForm)}`)
+    setIcs204PreviewPages(paginateIcs204Export(payload.layout))
+    setIcs204PreviewTitle(`ICS-204 Preview — ${resolveIcs204ListTitle(payload.exportForm)}`)
     setIsIcs204PreviewOpen(true)
   }
-  const exportIcs204Word = (formId: string, blocks?: DocxBlock[]) => {
-    const exportForm = getIcs204FormForExport(
-      formId,
-      ics204Forms,
-      ics204SectionDraftsByFormId
-    )
-    if (!exportForm) return
-    const context = getIcs204ExportContext()
+  const exportIcs204Word = (formId: string) => {
+    const payload = resolveIcs204ExportPayload(formId)
+    if (!payload) return
     const stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-')
-    downloadDocx(
-      `ICS-204_${ics204ExportFilenameBase(exportForm)}_${stamp}.docx`,
-      (blocks ?? buildIcs204DocxBlocks(exportForm, context)) as DocxBlock[],
-      buildIcs204ExportOptions(exportForm, context) as DocxOptions
+    downloadIcs204Docx(
+      `ICS-204_${ics204ExportFilenameBase(payload.exportForm)}_${stamp}.docx`,
+      payload.layout
     )
   }
-  const exportIcs204Pdf = (formId: string, blocks?: DocxBlock[]) => {
-    const exportForm = getIcs204FormForExport(
-      formId,
-      ics204Forms,
-      ics204SectionDraftsByFormId
-    )
-    if (!exportForm) return
-    const context = getIcs204ExportContext()
+  const exportIcs204Pdf = (formId: string) => {
+    const payload = resolveIcs204ExportPayload(formId)
+    if (!payload) return
     const stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-')
-    downloadPdf(
-      `ICS-204_${ics204ExportFilenameBase(exportForm)}_${stamp}.pdf`,
-      (blocks ?? buildIcs204DocxBlocks(exportForm, context)) as DocxBlock[],
-      buildIcs204ExportOptions(exportForm, context) as DocxOptions
+    downloadIcs204Pdf(
+      `ICS-204_${ics204ExportFilenameBase(payload.exportForm)}_${stamp}.pdf`,
+      payload.layout
     )
   }
   const mergePersistedIcs204Version = (
@@ -36548,14 +36557,14 @@ function App() {
         open={isIcs204PreviewOpen}
         onOpenChange={setIsIcs204PreviewOpen}
         title={ics204PreviewTitle}
-        blocks={ics204PreviewBlocks as Ics204DocxBlock[]}
+        pages={ics204PreviewPages}
         onExportWord={() => {
           if (!ics204PreviewFormId) return
-          exportIcs204Word(ics204PreviewFormId, ics204PreviewBlocks)
+          exportIcs204Word(ics204PreviewFormId)
         }}
         onExportPdf={() => {
           if (!ics204PreviewFormId) return
-          exportIcs204Pdf(ics204PreviewFormId, ics204PreviewBlocks)
+          exportIcs204Pdf(ics204PreviewFormId)
         }}
       />
       <Ics204aDocumentDialog

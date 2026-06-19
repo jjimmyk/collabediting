@@ -1,5 +1,13 @@
 import type { Ics204SectionId } from '@/features/ics204/types'
 
+export const ICS204_FORM_TITLE_LINES = [
+  'DEPARTMENT OF HOMELAND SECURITY',
+  'U.S. COAST GUARD',
+  'ASSIGNMENT LIST ATTACHMENT (ICS 204-CG)',
+] as const
+
+export const ICS204_EXPORT_FOOTER_LEFT = 'ICS 204-CG (08/25)  Expiration: 08/35'
+
 export const ICS204_ASSIGNED_UNIT_OPTIONS = [
   'Division A Task Force',
   'Division B Task Force',

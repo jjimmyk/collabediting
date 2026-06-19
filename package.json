@@ -9,6 +9,7 @@
     "verify:ics202": "npx vite-node scripts/verify-ics202-export.ts",
     "verify:planning-p-tasks": "npx vite-node scripts/verify-planning-p-tasks.ts",
     "verify:ics204-assignment": "npx vite-node scripts/verify-ics204-assignment.ts",
+    "verify:ics204-export": "npx vite-node scripts/verify-ics204-export.ts",
     "lint": "eslint .",
     "preview": "vite preview",
     "db:apply": "node scripts/apply-supabase-schema.mjs"
