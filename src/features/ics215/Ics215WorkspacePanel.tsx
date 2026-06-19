@@ -266,7 +266,7 @@ export function Ics215WorkspacePanel({
 
   return (
     <>
-      <div className="space-y-3">
+      <div className="min-w-0 w-full max-w-full space-y-3">
         <div className="flex items-center justify-end gap-2">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -458,7 +458,7 @@ export function Ics215WorkspacePanel({
 
         <div
           className={cn(
-            'space-y-3',
+            'min-w-0 w-full max-w-full space-y-3',
             formIsLocked && 'pointer-events-none opacity-70 select-none'
           )}
         >

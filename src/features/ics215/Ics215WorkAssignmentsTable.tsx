@@ -168,16 +168,16 @@ export function Ics215WorkAssignmentsTable({
   )
 
   return (
-    <div className="min-w-0 space-y-2">
-      <div className="w-full max-w-full overflow-hidden rounded-md border">
+    <div className="min-w-0 w-full max-w-full space-y-2">
+      <div className="min-w-0 w-full max-w-full overflow-hidden rounded-md border">
         <div
-          className="w-full max-w-full overflow-x-auto overscroll-x-contain [-webkit-overflow-scrolling:touch]"
+          className="w-0 min-w-full overflow-x-auto overscroll-x-contain touch-pan-x [scrollbar-gutter:stable] [-webkit-overflow-scrolling:touch]"
           tabIndex={0}
           aria-label="Work assignments table — scroll horizontally to view additional columns"
         >
           <table
-            className="border-collapse text-xs"
-            style={{ width: 'max-content', minWidth: `${tableMinWidthPx}px` }}
+            className="w-full border-collapse text-xs"
+            style={{ minWidth: `${tableMinWidthPx}px` }}
           >
             <thead>
               <tr className="border-b bg-muted/40 text-[10px] uppercase tracking-wide text-muted-foreground">

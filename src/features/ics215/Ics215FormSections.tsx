@@ -105,15 +105,20 @@ export function Ics215FormSections({
   const renderSectionShell = (
     section: Ics215SectionId,
     content: ReactNode,
-    headerActions?: ReactNode
+    headerActions?: ReactNode,
+    itemClassName?: string
   ) => {
     const editing = isSectionEditing(editingSections, section)
     return (
       <Item
         variant="outline"
-        className={cn('min-w-0 flex-col items-stretch p-0', glassItemBorderClasses)}
+        className={cn(
+          'min-w-0 max-w-full flex-nowrap flex-col items-stretch overflow-hidden p-0',
+          glassItemBorderClasses,
+          itemClassName
+        )}
       >
-        <div className="min-w-0 space-y-2 px-3 py-2.5">
+        <div className="min-w-0 w-full max-w-full space-y-2 px-3 py-2.5">
           <div className="flex items-start justify-between gap-2">
             <Ics202SectionHeader
               sectionId="incident-info"
@@ -139,7 +144,7 @@ export function Ics215FormSections({
   }
 
   return (
-    <div className="space-y-3">
+    <div className="min-w-0 w-full max-w-full space-y-3">
       {renderSectionShell(
         'incident-info',
         <div className="grid grid-cols-1 gap-2 xl:grid-cols-2">
@@ -182,7 +187,7 @@ export function Ics215FormSections({
 
       {renderSectionShell(
         'work-assignments',
-        <div className="w-full min-w-0 overflow-hidden">
+        <div className="min-w-0 w-full max-w-full">
           <Ics215WorkAssignmentsTable
             resourceColumns={workAssignmentsDraft.resourceColumns}
             workAssignments={workAssignmentsDraft.workAssignments}
