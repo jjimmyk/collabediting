@@ -33275,6 +33275,7 @@ function App() {
                     hasSnapshot={hasOperationalPeriodFormSnapshot(historicalBundle, 'ics204')}
                     glassItemBorderClasses={glassItemBorderClasses}
                   >
+                  <TooltipProvider delayDuration={150}>
                   <div className="space-y-3">
                     <div className="flex items-center justify-end gap-2">
                       {isIcs204Loading ? (
@@ -33900,6 +33901,7 @@ function App() {
                           )
                         })}
                   </div>
+                  </TooltipProvider>
                   </OperationalPeriodHistoricalFormShell>
                 )}
 
