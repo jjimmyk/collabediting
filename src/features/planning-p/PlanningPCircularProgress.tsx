@@ -3,6 +3,7 @@ import { cn } from '@/lib/utils'
 type PlanningPCircularProgressProps = {
   percent: number
   label: string
+  inverted?: boolean
   className?: string
   size?: number
 }
@@ -10,6 +11,7 @@ type PlanningPCircularProgressProps = {
 export function PlanningPCircularProgress({
   percent,
   label,
+  inverted = false,
   className,
   size = 20,
 }: PlanningPCircularProgressProps) {
@@ -24,7 +26,6 @@ export function PlanningPCircularProgress({
       className={cn('relative inline-flex shrink-0 items-center justify-center', className)}
       style={{ width: size, height: size }}
       aria-label={`${label}: ${clamped}%`}
-      title={`${label}: ${clamped}%`}
     >
       <svg
         width={size}
@@ -40,7 +41,7 @@ export function PlanningPCircularProgress({
           fill="none"
           stroke="currentColor"
           strokeWidth={strokeWidth}
-          className="text-muted-foreground/30"
+          className={inverted ? 'text-primary-foreground/30' : 'text-muted-foreground/30'}
         />
         <circle
           cx={size / 2}
@@ -52,10 +53,18 @@ export function PlanningPCircularProgress({
           strokeLinecap="round"
           strokeDasharray={circumference}
           strokeDashoffset={dashOffset}
-          className="text-primary transition-[stroke-dashoffset]"
+          className={cn(
+            'transition-[stroke-dashoffset]',
+            inverted ? 'text-primary-foreground' : 'text-primary'
+          )}
         />
       </svg>
-      <span className="absolute text-[7px] font-semibold tabular-nums leading-none">
+      <span
+        className={cn(
+          'absolute text-[7px] font-semibold tabular-nums leading-none',
+          inverted ? 'text-primary-foreground' : 'text-foreground'
+        )}
+      >
         {clamped}
       </span>
     </span>

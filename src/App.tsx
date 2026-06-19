@@ -656,7 +656,7 @@ import { PlanningPStepper } from '@/features/planning-p/PlanningPStepper'
 import { MyPositionBadge } from '@/features/planning-p/MyPositionBadge'
 import { PlanningPTasksDialog } from '@/features/planning-p/PlanningPTasksDialog'
 import { PlanningPPhaseHeaderButton } from '@/features/planning-p/PlanningPPhaseHeaderButton'
-import { PLANNING_P_STEPS, getPlanningPStepLabel, getPlanningPWorkflowProgress } from '@/features/planning-p/planning-p-steps'
+import { PLANNING_P_STEPS, getPlanningPStepLabel, getPlanningPWorkflowProgress, getPlanningPCompletedPhaseCount } from '@/features/planning-p/planning-p-steps'
 import type { PlanningPTaskDialogScope } from '@/features/planning-p/planning-p-task-types'
 import { usePlanningPMyTasks } from '@/hooks/usePlanningPMyTasks'
 import { WorkspaceSettingsPage } from '@/features/workspace-settings/WorkspaceSettingsPage'
@@ -13840,8 +13840,17 @@ function App() {
     () => getPlanningPWorkflowProgress(planningPStepId),
     [planningPStepId]
   )
-  const planningPPhaseTaskProgressPercent =
-    planningPAllTaskProgressByStepId[planningPStepId]?.percent ?? 0
+  const planningPWorkflowCompletedPhases = useMemo(
+    () => getPlanningPCompletedPhaseCount(planningPStepId),
+    [planningPStepId]
+  )
+  const planningPPhaseAllTasksProgress =
+    planningPAllTaskProgressByStepId[planningPStepId] ?? {
+      completed: 0,
+      total: 0,
+      percent: 0,
+    }
+  const planningPPhaseTaskProgressPercent = planningPPhaseAllTasksProgress.percent
   const openPlanningPTasksDialog = useCallback(
     (stepId: string, scope: PlanningPTaskDialogScope) => {
       setPlanningPMyTasksDialogStepId(stepId)
@@ -23347,7 +23356,10 @@ function App() {
                   activeStepId={planningPStepId}
                   phaseLabel={activePlanningPStepLabel}
                   workflowProgressPercent={planningPWorkflowProgressPercent}
+                  workflowCompletedPhases={planningPWorkflowCompletedPhases}
                   phaseTaskProgressPercent={planningPPhaseTaskProgressPercent}
+                  phaseTasksCompleted={planningPPhaseAllTasksProgress.completed}
+                  phaseTasksTotal={planningPPhaseAllTasksProgress.total}
                   isStepperOpen={isPlanningPStepperOpen}
                   onToggleStepper={() => setIsPlanningPStepperOpen((open) => !open)}
                   className={glassIconButtonClasses}

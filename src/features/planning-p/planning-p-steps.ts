@@ -64,6 +64,15 @@ export function getPlanningPWorkflowProgress(activeStepId: string): number {
   return Math.round((activeIndex / PLANNING_P_STEPS.length) * 100)
 }
 
+export function getPlanningPCompletedPhaseCount(activeStepId: string): number {
+  const activeIndex = PLANNING_P_STEPS.findIndex((step) => step.id === activeStepId)
+  return activeIndex > 0 ? activeIndex : 0
+}
+
+export function getPlanningPPhaseCount(): number {
+  return PLANNING_P_STEPS.length
+}
+
 export function parsePlanningPStepSchedule(timeWindow: string): {
   start: string
   end: string
