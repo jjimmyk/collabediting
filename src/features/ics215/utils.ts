@@ -481,3 +481,23 @@ export function createNextIcs215WorkAssignmentId(rows: Ics215WorkAssignmentRow[]
   if (rows.length === 0) return 1
   return Math.max(...rows.map((row) => row.id)) + 1
 }
+
+export function appendIcs215ResourceColumn(
+  draft: Ics215WorkAssignmentsDraft
+): Ics215WorkAssignmentsDraft {
+  const nextId = createNextIcs215ResourceColumnId(draft.resourceColumns)
+  const resourceColumns = [
+    ...draft.resourceColumns,
+    { id: nextId, label: `Resource ${draft.resourceColumns.length + 1}` },
+  ]
+  return {
+    resourceColumns,
+    workAssignments: draft.workAssignments.map((row) => ({
+      ...row,
+      resourceValues: {
+        ...createEmptyResourceValues(resourceColumns),
+        ...row.resourceValues,
+      },
+    })),
+  }
+}

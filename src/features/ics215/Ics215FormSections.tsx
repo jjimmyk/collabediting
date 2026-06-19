@@ -1,4 +1,5 @@
 import { type ReactNode } from 'react'
+import { Button } from '@/components/ui/button'
 import {
   Ics202FieldLabel,
   Ics202ReadOnlyField,
@@ -22,6 +23,7 @@ import {
   extractIcs215PreparedByDraft,
   extractIcs215ResourceTotalsDraft,
   extractIcs215WorkAssignmentsDraft,
+  appendIcs215ResourceColumn,
 } from '@/features/ics215/utils'
 import { Item } from '@/components/ui/item'
 import { cn } from '@/lib/utils'
@@ -100,7 +102,11 @@ export function Ics215FormSections({
     onPatchDraft('prepared-by', { ...preparedBy, ...patch })
   }
 
-  const renderSectionShell = (section: Ics215SectionId, content: ReactNode) => {
+  const renderSectionShell = (
+    section: Ics215SectionId,
+    content: ReactNode,
+    headerActions?: ReactNode
+  ) => {
     const editing = isSectionEditing(editingSections, section)
     return (
       <Item
@@ -108,14 +114,17 @@ export function Ics215FormSections({
         className={cn('min-w-0 flex-col items-stretch p-0', glassItemBorderClasses)}
       >
         <div className="min-w-0 space-y-2 px-3 py-2.5">
-          <Ics202SectionHeader
-            sectionId="incident-info"
-            title={ICS215_SECTION_LABELS[section]}
-            isEditing={editing}
-            canEdit={canEdit}
-            disabled={formIsLocked}
-            onStartEdit={() => onStartSectionEdit(section)}
-          />
+          <div className="flex items-start justify-between gap-2">
+            <Ics202SectionHeader
+              sectionId="incident-info"
+              title={ICS215_SECTION_LABELS[section]}
+              isEditing={editing}
+              canEdit={canEdit}
+              disabled={formIsLocked}
+              onStartEdit={() => onStartSectionEdit(section)}
+            />
+            {headerActions}
+          </div>
           {content}
           <Ics202SectionEditActions
             isEditing={editing}
@@ -179,7 +188,23 @@ export function Ics215FormSections({
           assigneeOptions={assigneeOptions}
           editing={isSectionEditing(editingSections, 'work-assignments')}
           onChange={(next) => onPatchDraft('work-assignments', next)}
-        />
+        />,
+        isSectionEditing(editingSections, 'work-assignments') ? (
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-7 shrink-0 text-xs"
+            onClick={() =>
+              onPatchDraft(
+                'work-assignments',
+                appendIcs215ResourceColumn(workAssignmentsDraft)
+              )
+            }
+          >
+            + Add Resource Requirement
+          </Button>
+        ) : null
       )}
 
       {renderSectionShell(

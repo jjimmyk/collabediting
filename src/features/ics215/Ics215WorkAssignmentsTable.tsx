@@ -13,7 +13,6 @@ import type {
 import {
   computeIcs215ColumnTotals,
   createEmptyResourceValues,
-  createNextIcs215ResourceColumnId,
   createNextIcs215WorkAssignmentId,
 } from '@/features/ics215/utils'
 import { cn } from '@/lib/utils'
@@ -146,15 +145,6 @@ export function Ics215WorkAssignmentsTable({
     patchRows(workAssignments.filter((row) => row.id !== rowId))
   }
 
-  const addResourceColumn = () => {
-    const nextId = createNextIcs215ResourceColumnId(resourceColumns)
-    const nextColumns = [
-      ...resourceColumns,
-      { id: nextId, label: `Resource ${resourceColumns.length + 1}` },
-    ]
-    patchColumns(nextColumns)
-  }
-
   const deleteResourceColumn = (columnId: string) => {
     patchColumns(resourceColumns.filter((column) => column.id !== columnId))
   }
@@ -165,22 +155,53 @@ export function Ics215WorkAssignmentsTable({
     )
   }
 
-  const fixedColumnClass = 'min-w-[8.5rem] align-top'
+  const fixedColumnClass = 'min-w-[8.5rem] w-[8.5rem] align-top'
+  const stickyAssigneeClass =
+    'sticky left-0 z-20 bg-background shadow-[2px_0_4px_-2px_rgba(0,0,0,0.12)] dark:shadow-[2px_0_4px_-2px_rgba(0,0,0,0.35)]'
+  const stickyWorkAssignmentClass =
+    'sticky left-[8.5rem] z-20 bg-background shadow-[2px_0_4px_-2px_rgba(0,0,0,0.12)] dark:shadow-[2px_0_4px_-2px_rgba(0,0,0,0.35)]'
+  const stickyHeaderClass = 'bg-muted/40'
   const resourceColumnClass = 'min-w-[7.5rem] align-top'
   const overflowColumnClass = 'min-w-[9rem] align-top'
+  const tableMinWidth = Math.max(
+    960,
+    17 + resourceColumns.length * 7.5 + OVERFLOW_COLUMNS.length * 9
+  )
 
   return (
-    <div className="space-y-2">
-      <div className="overflow-x-auto rounded-md border">
-        <table className="w-full min-w-[960px] border-collapse text-xs">
-          <thead>
-            <tr className="border-b bg-muted/40 text-[10px] uppercase tracking-wide text-muted-foreground">
-              <th className={cn(fixedColumnClass, 'px-2 py-2 text-left font-semibold')}>
-                Assignee
-              </th>
-              <th className={cn(fixedColumnClass, 'px-2 py-2 text-left font-semibold')}>
-                Work Assignment
-              </th>
+    <div className="min-w-0 space-y-2">
+      <div className="relative min-w-0 max-w-full">
+        <div
+          className="overflow-x-auto overscroll-x-contain rounded-md border [-webkit-overflow-scrolling:touch]"
+          tabIndex={0}
+          aria-label="Work assignments table — scroll horizontally to view additional columns"
+        >
+          <table
+            className="w-max min-w-full border-collapse text-xs"
+            style={{ minWidth: `${tableMinWidth}rem` }}
+          >
+            <thead>
+              <tr className="border-b bg-muted/40 text-[10px] uppercase tracking-wide text-muted-foreground">
+                <th
+                  className={cn(
+                    fixedColumnClass,
+                    stickyAssigneeClass,
+                    stickyHeaderClass,
+                    'px-2 py-2 text-left font-semibold'
+                  )}
+                >
+                  Assignee
+                </th>
+                <th
+                  className={cn(
+                    fixedColumnClass,
+                    stickyWorkAssignmentClass,
+                    stickyHeaderClass,
+                    'px-2 py-2 text-left font-semibold'
+                  )}
+                >
+                  Work Assignment
+                </th>
               {resourceColumns.map((column) => (
                 <th
                   key={column.id}
@@ -248,7 +269,7 @@ export function Ics215WorkAssignmentsTable({
 
                 return (
                   <tr key={row.id} className="border-b align-top">
-                    <td className={cn(fixedColumnClass, 'px-2 py-2')}>
+                    <td className={cn(fixedColumnClass, stickyAssigneeClass, 'px-2 py-2')}>
                       {editing ? (
                         <Ics204AssignedUnitField
                           value={row.assignee}
@@ -265,7 +286,7 @@ export function Ics215WorkAssignmentsTable({
                         />
                       )}
                     </td>
-                    <td className={cn(fixedColumnClass, 'px-2 py-2')}>
+                    <td className={cn(fixedColumnClass, stickyWorkAssignmentClass, 'px-2 py-2')}>
                       {editing ? (
                         <Textarea
                           value={row.workAssignment}
@@ -342,7 +363,13 @@ export function Ics215WorkAssignmentsTable({
           {workAssignments.length > 0 ? (
             <tfoot>
               <tr className="border-t bg-muted/20">
-                <td colSpan={2} className="px-2 py-2 text-[11px] font-semibold">
+                <td
+                  colSpan={2}
+                  className={cn(
+                    stickyAssigneeClass,
+                    'bg-muted/20 px-2 py-2 text-[11px] font-semibold'
+                  )}
+                >
                   Totals
                 </td>
                 {resourceColumns.map((column) => (
@@ -360,16 +387,17 @@ export function Ics215WorkAssignmentsTable({
               </tr>
             </tfoot>
           ) : null}
-        </table>
+          </table>
+        </div>
+        <p className="mt-1 text-[10px] text-muted-foreground">
+          Scroll horizontally to view additional columns.
+        </p>
       </div>
 
       {editing ? (
         <div className="flex flex-wrap items-center gap-2">
           <Button type="button" size="sm" variant="outline" onClick={addAssignment}>
             + Add Assignment
-          </Button>
-          <Button type="button" size="sm" variant="outline" onClick={addResourceColumn}>
-            + Add Resource
           </Button>
         </div>
       ) : null}
