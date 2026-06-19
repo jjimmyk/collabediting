@@ -33,16 +33,22 @@ import {
   downloadIcs202Pdf,
   ics202ExportFilenameBase,
   paginateIcs202Export,
-  type Ics202ExportLayoutBlock,
   type Ics202PhysicalPage,
 } from '@/features/ics202/export'
 import type {
   Ics202FormSectionDrafts,
   Ics202FormState,
+  Ics202PreparedByDraft,
   Ics202SectionId,
   Ics202Version,
 } from '@/features/ics202/types'
-import { cloneIcs202FormState, getIcs202FormForExport } from '@/features/ics202/utils'
+import {
+  cloneIcs202FormState,
+  getIcs202FormForExport,
+  mergePreparedByIntoForm,
+  resolveIcs202PreparedByFromVersion,
+  type Ics202PreparedByRosterMember,
+} from '@/features/ics202/utils'
 import { cn } from '@/lib/utils'
 
 type Ics202WorkspacePanelProps = {
@@ -54,6 +60,8 @@ type Ics202WorkspacePanelProps = {
   isSaving: boolean
   glassItemBorderClasses: string
   incidentName: string
+  profileEmail: string | null
+  rosterMembers: Ics202PreparedByRosterMember[]
   editingSections: Partial<Record<Ics202SectionId, boolean>>
   sectionDrafts: Ics202FormSectionDrafts
   onStartSectionEdit: (section: Ics202SectionId) => void
@@ -85,6 +93,8 @@ export function Ics202WorkspacePanel({
   isSaving,
   glassItemBorderClasses,
   incidentName,
+  profileEmail,
+  rosterMembers,
   editingSections,
   sectionDrafts,
   onStartSectionEdit,
@@ -118,10 +128,34 @@ export function Ics202WorkspacePanel({
     return getIcs202FormForExport(form, sectionDrafts)
   }
 
+  const getRelevantVersion = (): Ics202Version | null =>
+    viewingPastVersion ?? latestVersion ?? null
+
+  const resolvePreparedByFields = (): Ics202PreparedByDraft => {
+    const relevantVersion = getRelevantVersion()
+    if (!relevantVersion) {
+      return {
+        preparedByName: form?.preparedByName ?? '',
+        preparedByPositionTitle: form?.preparedByPositionTitle ?? '',
+        preparedBySignature: form?.preparedBySignature ?? '',
+        preparedDateTime: form?.preparedDateTime ?? '',
+      }
+    }
+    return resolveIcs202PreparedByFromVersion(relevantVersion, rosterMembers, profileEmail)
+  }
+
+  const getExportFormWithPreparedBy = () => {
+    const exportForm = getExportForm()
+    if (!exportForm) return null
+    const relevantVersion = getRelevantVersion()
+    if (!relevantVersion) return exportForm
+    return mergePreparedByIntoForm(exportForm, relevantVersion, rosterMembers, profileEmail)
+  }
+
   const getExportContext = () => ({ incidentName })
 
   const openPreview = () => {
-    const exportForm = getExportForm()
+    const exportForm = getExportFormWithPreparedBy()
     if (!exportForm) return
     setPreviewPages(
       paginateIcs202Export(buildIcs202ExportLayout(exportForm, getExportContext()))
@@ -129,25 +163,23 @@ export function Ics202WorkspacePanel({
     setIsPreviewOpen(true)
   }
 
-  const exportWord = (blocks?: Ics202ExportLayoutBlock[]) => {
-    const exportForm = getExportForm()
+  const exportWord = () => {
+    const exportForm = getExportFormWithPreparedBy()
     if (!exportForm) return
-    const context = getExportContext()
     const stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-')
     downloadIcs202Docx(
       `ICS-202_${ics202ExportFilenameBase(exportForm)}_${stamp}.docx`,
-      blocks ?? buildIcs202ExportLayout(exportForm, context)
+      buildIcs202ExportLayout(exportForm, getExportContext())
     )
   }
 
-  const exportPdf = (blocks?: Ics202ExportLayoutBlock[]) => {
-    const exportForm = getExportForm()
+  const exportPdf = () => {
+    const exportForm = getExportFormWithPreparedBy()
     if (!exportForm) return
-    const context = getExportContext()
     const stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-')
     downloadIcs202Pdf(
       `ICS-202_${ics202ExportFilenameBase(exportForm)}_${stamp}.pdf`,
-      blocks ?? buildIcs202ExportLayout(exportForm, context)
+      buildIcs202ExportLayout(exportForm, getExportContext())
     )
   }
 
@@ -457,6 +489,7 @@ export function Ics202WorkspacePanel({
         >
           <Ics202FormSections
             form={form}
+            preparedBy={resolvePreparedByFields()}
             canEdit={canEdit}
             formIsLocked={formIsLocked}
             isSaving={isSaving}

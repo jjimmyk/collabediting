@@ -247,6 +247,7 @@ import {
   createLocalIcs202DocumentId,
   extractIcs202SectionDraft,
   ics202AuthorColor,
+  mergePreparedByIntoForm,
 } from '@/features/ics202/utils'
 import { useIcs202WorkspaceForm } from '@/hooks/useIcs202WorkspaceForm'
 import { IapWorkspacePanel } from '@/features/iap/IapWorkspacePanel'
@@ -13794,6 +13795,15 @@ function App() {
   )
   const currentUserRosterPosition =
     currentUserRosterMember?.icsPosition ?? 'Incident Commander'
+  const ics202PreparedByRosterMembers = useMemo(
+    () =>
+      activeWorkspaceRoster.map((member) => ({
+        email: member.email,
+        userId: member.userId,
+        icsPosition: member.icsPosition,
+      })),
+    [activeWorkspaceRoster]
+  )
   const {
     activeEditors: ics201ActiveEditors,
     sectionEditors: ics201SectionEditors,
@@ -18080,16 +18090,6 @@ function App() {
               siteSafetyPlanLocation: 'Command Post — Safety Officer desk / ICS-208 packet',
             })
             break
-          case 'prepared-by':
-            patchIcs202SectionDraft(section, {
-              preparedByName: ics202Form.preparedByName || 'Planning Section Chief',
-              preparedByPositionTitle:
-                ics202Form.preparedByPositionTitle || 'Planning Section Chief',
-              preparedBySignature: ics202Form.preparedBySignature || '',
-              preparedDateTime:
-                ics202Form.preparedDateTime || new Date().toISOString().slice(0, 16),
-            })
-            break
           case 'critical-information-requirements':
             patchIcs202SectionDraft(
               section,
@@ -20696,7 +20696,7 @@ function App() {
     setIsPratusAiDrawerOpen(true)
   }
   const startIcs202SectionEdit = (section: Ics202SectionId) => {
-    if (!canEditIcs201Form || !ics202Form) return
+    if (!canEditIcs201Form || !ics202Form || section === 'prepared-by') return
     setIcs202SectionDrafts((previous) => ({
       ...previous,
       [section]: extractIcs202SectionDraft(ics202Form, section),
@@ -20732,11 +20732,24 @@ function App() {
       toast.error('Your ICS position does not include permission to edit ICS-202 forms.')
       return
     }
+    if (section === 'prepared-by') return
     const draft = ics202SectionDrafts[section]
     if (draft === undefined || !ics202Form) return
-    const nextForm = applyIcs202SectionDraft(ics202Form, section, draft)
-    setIcs202Form(cloneIcs202FormState(nextForm))
+    let nextForm = applyIcs202SectionDraft(ics202Form, section, draft)
     const latestVersion = ics202Versions[ics202Versions.length - 1]
+    if (latestVersion) {
+      nextForm = mergePreparedByIntoForm(
+        nextForm,
+        {
+          ...latestVersion,
+          createdAt: Date.now(),
+          authorName: ics202AuthorName,
+        },
+        ics202PreparedByRosterMembers,
+        profileEmail
+      )
+    }
+    setIcs202Form(cloneIcs202FormState(nextForm))
     if (latestVersion && latestVersion.signatures.length === 0) {
       handleIcs202SaveDraft(nextForm, latestVersion)
     }
@@ -20750,10 +20763,18 @@ function App() {
       authorColor: ics202LocalAuthorColor,
       snapshot: cloneIcs202FormState(form),
     }
+    const formWithPreparedBy = mergePreparedByIntoForm(
+      form,
+      optimisticVersion,
+      ics202PreparedByRosterMembers,
+      profileEmail
+    )
+    optimisticVersion.snapshot = cloneIcs202FormState(formWithPreparedBy)
+    setIcs202Form(cloneIcs202FormState(formWithPreparedBy))
     setIcs202Versions((previous) =>
       mergePersistedIcs202Version(previous, latestVersion, optimisticVersion)
     )
-    void saveIcs202DraftToServer(form.id, form, latestVersion).then((persisted) => {
+    void saveIcs202DraftToServer(form.id, formWithPreparedBy, latestVersion).then((persisted) => {
       if (!persisted) return
       setIcs202Versions((previous) =>
         mergePersistedIcs202Version(previous, latestVersion, persisted)
@@ -20774,8 +20795,16 @@ function App() {
       snapshot: cloneIcs202FormState(form),
       signatures,
     }
+    const formWithPreparedBy = mergePreparedByIntoForm(
+      form,
+      optimisticVersion,
+      ics202PreparedByRosterMembers,
+      profileEmail
+    )
+    optimisticVersion.snapshot = cloneIcs202FormState(formWithPreparedBy)
+    setIcs202Form(cloneIcs202FormState(formWithPreparedBy))
     setIcs202Versions((previous) => [...previous, optimisticVersion].slice(-100))
-    void appendIcs202VersionToServer(form.id, form, signatures).then((persisted) => {
+    void appendIcs202VersionToServer(form.id, formWithPreparedBy, signatures).then((persisted) => {
       if (!persisted) return
       setIcs202Versions((previous) =>
         previous
@@ -20793,12 +20822,20 @@ function App() {
       ...latestVersion,
       signatures: [...latestVersion.signatures, signature],
     }
+    const formWithPreparedBy = mergePreparedByIntoForm(
+      form,
+      nextVersion,
+      ics202PreparedByRosterMembers,
+      profileEmail
+    )
+    nextVersion.snapshot = cloneIcs202FormState(formWithPreparedBy)
+    setIcs202Form(cloneIcs202FormState(formWithPreparedBy))
     setIcs202Versions((previous) =>
       mergePersistedIcs202Version(previous, latestVersion, nextVersion)
     )
     void saveIcs202SignedReviewToServer(
       form.id,
-      form,
+      formWithPreparedBy,
       latestVersion.id,
       nextVersion.signatures
     ).then((persisted) => {
@@ -32943,6 +32980,8 @@ function App() {
                     incidentName={
                       activeIncidentWorkspace?.name ?? activeExerciseWorkspace?.name ?? ''
                     }
+                    profileEmail={profileEmail}
+                    rosterMembers={ics202PreparedByRosterMembers}
                     editingSections={ics202EditingSections}
                     sectionDrafts={ics202SectionDrafts}
                     onStartSectionEdit={startIcs202SectionEdit}

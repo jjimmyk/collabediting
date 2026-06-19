@@ -99,9 +99,14 @@ export function Ics202SectionEditActions({
   )
 }
 
-export function Ics202ReadOnlyField({ value }: { value: string }) {
+export function Ics202ReadOnlyField({ value, className }: { value: string; className?: string }) {
   return (
-    <div className="rounded-md border border-dashed border-border/60 bg-muted/20 px-2.5 py-2 text-xs">
+    <div
+      className={cn(
+        'rounded-md border border-dashed border-border/60 bg-muted/20 px-2.5 py-2 text-xs',
+        className
+      )}
+    >
       {value.trim().length > 0 ? value : <span className="text-muted-foreground">—</span>}
     </div>
   )

@@ -1,5 +1,9 @@
 import { ICS202_COMMUNITY_LIFELINES } from '@/features/ics202/constants'
-import { ics201AuthorColorFromId } from '@/features/ics201/utils'
+import {
+  ics201AuthorColorFromId,
+  ics201DisplayNameFromEmail,
+  ics201VersionAuthorLabel,
+} from '@/features/ics201/utils'
 import type {
   Ics202CommunityLifelines,
   Ics202FormSectionDrafts,
@@ -13,6 +17,84 @@ import type {
   Ics202Version,
   Ics202VersionRow,
 } from '@/features/ics202/types'
+
+export type Ics202PreparedByRosterMember = {
+  email: string
+  userId: string | null
+  icsPosition: string
+}
+
+function formatIcs202DateTimeLocal(timestampMs: number): string {
+  return new Date(timestampMs).toISOString().slice(0, 16)
+}
+
+function resolveIcs202AuthorDisplayName(
+  version: Ics202Version,
+  rosterMembers: Ics202PreparedByRosterMember[],
+  profileEmail?: string | null
+): string {
+  const label = ics201VersionAuthorLabel(version, { profileEmail, rosterMembers })
+  if (label.includes('@')) {
+    return ics201DisplayNameFromEmail(label)
+  }
+  return label
+}
+
+function resolveIcs202AuthorPositionTitle(
+  version: Ics202Version,
+  rosterMembers: Ics202PreparedByRosterMember[],
+  profileEmail?: string | null
+): string {
+  const authorEmail = ics201VersionAuthorLabel(version, {
+    profileEmail,
+    rosterMembers,
+  }).toLowerCase()
+  const member = rosterMembers.find(
+    (entry) =>
+      (version.authorId && entry.userId === version.authorId) ||
+      entry.email.toLowerCase() === authorEmail
+  )
+  return member?.icsPosition ?? 'Planning Section Chief'
+}
+
+export function resolveIcs202PreparedByFromVersion(
+  version: Ics202Version,
+  rosterMembers: Ics202PreparedByRosterMember[] = [],
+  profileEmail?: string | null
+): Ics202PreparedByDraft {
+  const primarySignature = version.signatures[0]
+  if (primarySignature) {
+    return {
+      preparedByName: primarySignature.name,
+      preparedByPositionTitle: primarySignature.role,
+      preparedBySignature: primarySignature.name,
+      preparedDateTime: formatIcs202DateTimeLocal(primarySignature.signedAt),
+    }
+  }
+
+  return {
+    preparedByName: resolveIcs202AuthorDisplayName(version, rosterMembers, profileEmail),
+    preparedByPositionTitle: resolveIcs202AuthorPositionTitle(
+      version,
+      rosterMembers,
+      profileEmail
+    ),
+    preparedBySignature: '',
+    preparedDateTime: formatIcs202DateTimeLocal(version.createdAt),
+  }
+}
+
+export function mergePreparedByIntoForm(
+  form: Ics202FormState,
+  version: Ics202Version,
+  rosterMembers: Ics202PreparedByRosterMember[] = [],
+  profileEmail?: string | null
+): Ics202FormState {
+  return {
+    ...form,
+    ...resolveIcs202PreparedByFromVersion(version, rosterMembers, profileEmail),
+  }
+}
 
 export function createEmptyIcs202CommunityLifelines(
   partial?: Partial<Ics202CommunityLifelines>

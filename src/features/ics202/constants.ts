@@ -60,7 +60,7 @@ export const ICS202_SECTION_PROMPTS: Record<Ics202SectionId, string> = {
   'site-safety-plan':
     'Indicate whether a Site Safety Plan is required (Yes/No) and where the approved plan is located for review.',
   'prepared-by':
-    'Draft the Prepared By block with name, position/title, signature, and date/time prepared.',
+    'Prepared By is filled automatically from the latest version editor and signing workflow.',
   'critical-information-requirements':
     'Draft Critical Information Requirements (CIRs) needed by command for this operational period.',
   'limitations-constraints':
@@ -80,3 +80,6 @@ export const ICS202_OBJECTIVE_KIND_OPTIONS: ReadonlyArray<{
 
 export const ICS202_OBJECTIVE_KIND_TOOLTIP =
   'Indicates whether an objective is operational (O), managerial (M), or operational and managerial (O&M).'
+
+export const ICS202_PREPARED_BY_SIGNATURE_TOOLTIP =
+  'You must create a signed version and sign to create a Signature.'

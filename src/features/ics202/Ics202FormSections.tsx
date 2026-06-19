@@ -13,6 +13,7 @@ import {
   ICS202_COMMUNITY_LIFELINES,
   ICS202_OBJECTIVE_KIND_OPTIONS,
   ICS202_OBJECTIVE_KIND_TOOLTIP,
+  ICS202_PREPARED_BY_SIGNATURE_TOOLTIP,
 } from '@/features/ics202/constants'
 import {
   Ics202FieldLabel,
@@ -29,18 +30,19 @@ import type {
   Ics202IncidentInfoDraft,
   Ics202ObjectiveKind,
   Ics202ObjectiveRow,
+  Ics202PreparedByDraft,
   Ics202SectionId,
   Ics202SiteSafetyPlanDraft,
 } from '@/features/ics202/types'
 import {
   extractIcs202IncidentInfoDraft,
-  extractIcs202PreparedByDraft,
   extractIcs202SiteSafetyPlanDraft,
 } from '@/features/ics202/utils'
 import { cn } from '@/lib/utils'
 
 type Ics202FormSectionsProps = {
   form: Ics202FormState
+  preparedBy: Ics202PreparedByDraft
   canEdit: boolean
   formIsLocked: boolean
   isSaving: boolean
@@ -78,6 +80,7 @@ function PageDivider({ label }: { label: string }) {
 
 export function Ics202FormSections({
   form,
+  preparedBy,
   canEdit,
   formIsLocked,
   isSaving,
@@ -116,10 +119,6 @@ export function Ics202FormSections({
     isSectionEditing(editingSections, 'site-safety-plan') && drafts['site-safety-plan']
       ? drafts['site-safety-plan']
       : extractIcs202SiteSafetyPlanDraft(form)
-  const preparedBy =
-    isSectionEditing(editingSections, 'prepared-by') && drafts['prepared-by']
-      ? drafts['prepared-by']
-      : extractIcs202PreparedByDraft(form)
   const criticalInformationRequirements =
     isSectionEditing(editingSections, 'critical-information-requirements') &&
     drafts['critical-information-requirements'] !== undefined
@@ -146,10 +145,6 @@ export function Ics202FormSections({
 
   const patchSiteSafetyPlan = (patch: Partial<Ics202SiteSafetyPlanDraft>) => {
     onPatchDraft('site-safety-plan', { ...siteSafetyPlan, ...patch })
-  }
-
-  const patchPreparedBy = (patch: Partial<typeof preparedBy>) => {
-    onPatchDraft('prepared-by', { ...preparedBy, ...patch })
   }
 
   const patchObjectiveRow = (
@@ -210,9 +205,11 @@ export function Ics202FormSections({
   const renderSectionShell = (
     section: Ics202SectionId,
     content: ReactNode,
-    extraActions?: React.ReactNode
+    extraActions?: React.ReactNode,
+    options?: { allowEdit?: boolean }
   ) => {
     const editing = isSectionEditing(editingSections, section)
+    const allowEdit = options?.allowEdit ?? true
     return (
       <Item
         variant="outline"
@@ -223,20 +220,22 @@ export function Ics202FormSections({
             <Ics202SectionHeader
               sectionId={section}
               isEditing={editing}
-              canEdit={canEdit}
+              canEdit={canEdit && allowEdit}
               disabled={formIsLocked}
               onStartEdit={() => onStartSectionEdit(section)}
             />
             {extraActions}
           </div>
           {content}
-          <Ics202SectionEditActions
-            isEditing={editing}
-            isSaving={isSaving}
-            onGenerate={() => onGenerateSection(section)}
-            onCancel={() => onCancelSectionEdit(section)}
-            onSave={() => onSaveSection(section)}
-          />
+          {allowEdit ? (
+            <Ics202SectionEditActions
+              isEditing={editing}
+              isSaving={isSaving}
+              onGenerate={() => onGenerateSection(section)}
+              onCancel={() => onCancelSectionEdit(section)}
+              onSave={() => onSaveSection(section)}
+            />
+          ) : null}
         </div>
       </Item>
     )
@@ -450,27 +449,44 @@ export function Ics202FormSections({
         <div className="grid grid-cols-1 gap-2 xl:grid-cols-2">
           {(
             [
-              ['Name', 'preparedByName', 'text'],
-              ['Position Title', 'preparedByPositionTitle', 'text'],
-              ['Signature', 'preparedBySignature', 'text'],
-              ['Date/Time', 'preparedDateTime', 'datetime-local'],
+              ['Name', 'preparedByName'],
+              ['Position Title', 'preparedByPositionTitle'],
+              ['Date/Time', 'preparedDateTime'],
             ] as const
-          ).map(([label, field, inputType]) => (
+          ).map(([label, field]) => (
             <div key={field} className="space-y-1">
               <Ics202FieldLabel>{label}</Ics202FieldLabel>
-              {isSectionEditing(editingSections, 'prepared-by') ? (
-                <input
-                  type={inputType}
-                  value={preparedBy[field]}
-                  onChange={(event) => patchPreparedBy({ [field]: event.target.value })}
-                  className="h-8 w-full rounded-md border bg-transparent px-2 text-xs outline-none"
-                />
-              ) : (
-                <Ics202ReadOnlyField value={preparedBy[field]} />
-              )}
+              <Ics202ReadOnlyField value={preparedBy[field]} />
             </div>
           ))}
-        </div>
+          <div className="space-y-1">
+            <div className="flex items-center gap-1">
+              <Ics202FieldLabel>Signature</Ics202FieldLabel>
+              <TooltipProvider delayDuration={150}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      className="inline-flex shrink-0 rounded-sm text-muted-foreground hover:text-foreground"
+                      aria-label="Signature field help"
+                    >
+                      <Info className="h-3.5 w-3.5" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="max-w-xs text-xs">
+                    {ICS202_PREPARED_BY_SIGNATURE_TOOLTIP}
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
+            <Ics202ReadOnlyField
+              value={preparedBy.preparedBySignature}
+              className={preparedBy.preparedBySignature ? 'font-serif italic' : undefined}
+            />
+          </div>
+        </div>,
+        undefined,
+        { allowEdit: false }
       )}
 
       <PageDivider label="Page 3 — Incident Briefing" />
