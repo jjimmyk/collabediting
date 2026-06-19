@@ -655,8 +655,9 @@ import {
 } from '@/lib/operational-period-utils'
 import { PlanningPStepper } from '@/features/planning-p/PlanningPStepper'
 import { MyPositionBadge } from '@/features/planning-p/MyPositionBadge'
-import { PlanningPMyTasksDialog } from '@/features/planning-p/PlanningPMyTasksDialog'
-import { PLANNING_P_STEPS } from '@/features/planning-p/planning-p-steps'
+import { PlanningPTasksDialog } from '@/features/planning-p/PlanningPTasksDialog'
+import { PLANNING_P_STEPS, getPlanningPStepLabel } from '@/features/planning-p/planning-p-steps'
+import type { PlanningPTaskDialogScope } from '@/features/planning-p/planning-p-task-types'
 import { usePlanningPMyTasks } from '@/hooks/usePlanningPMyTasks'
 import { WorkspaceSettingsPage } from '@/features/workspace-settings/WorkspaceSettingsPage'
 import {
@@ -6446,6 +6447,8 @@ function App() {
   const [planningPMyTasksDialogStepId, setPlanningPMyTasksDialogStepId] = useState<string | null>(
     null
   )
+  const [planningPTasksDialogScope, setPlanningPTasksDialogScope] =
+    useState<PlanningPTaskDialogScope>('my')
   const [isPlanningPStepperOpen, setIsPlanningPStepperOpen] = useState(true)
   const [incidentTemplate, setIncidentTemplate] = useState('')
   const [previewTemplateId, setPreviewTemplateId] = useState<string | null>(null)
@@ -13812,8 +13815,10 @@ function App() {
   const {
     completions: planningPMyTaskCompletions,
     setTaskCompleted: setPlanningPMyTaskCompleted,
-    getTasksForPhase: getPlanningPMyTasksForPhase,
-    taskProgressByStepId: planningPMyTaskProgressByStepId,
+    getMyTasksForPhase: getPlanningPMyTasksForPhase,
+    getAllTasksForPhase: getPlanningPAllTasksForPhase,
+    myTaskProgressByStepId: planningPMyTaskProgressByStepId,
+    allTaskProgressByStepId: planningPAllTaskProgressByStepId,
   } = usePlanningPMyTasks({
     enabled: showPlanningPStepper && (isInIncidentWorkspace || isInExerciseWorkspace),
     workspaceKey: planningPTasksWorkspaceKey,
@@ -13826,6 +13831,17 @@ function App() {
   const planningPMyTasksDialogStep = useMemo(
     () => PLANNING_P_STEPS.find((step) => step.id === planningPMyTasksDialogStepId) ?? null,
     [planningPMyTasksDialogStepId]
+  )
+  const activePlanningPStepLabel = useMemo(
+    () => getPlanningPStepLabel(planningPStepId),
+    [planningPStepId]
+  )
+  const openPlanningPTasksDialog = useCallback(
+    (stepId: string, scope: PlanningPTaskDialogScope) => {
+      setPlanningPMyTasksDialogStepId(stepId)
+      setPlanningPTasksDialogScope(scope)
+    },
+    []
   )
   const ics202PreparedByRosterMembers = useMemo(
     () =>
@@ -23340,22 +23356,16 @@ function App() {
                         type="button"
                         variant={isPlanningPStepperOpen ? 'default' : 'outline'}
                         size="sm"
-                        className={cn('ml-1 h-8 gap-1.5', glassIconButtonClasses)}
+                        className={cn('ml-1 h-8 max-w-[14rem] gap-1.5', glassIconButtonClasses)}
                         onClick={() => setIsPlanningPStepperOpen((open) => !open)}
                         aria-pressed={isPlanningPStepperOpen}
-                        aria-label={
-                          isPlanningPStepperOpen ? 'Hide Planning P' : 'Show Planning P'
-                        }
+                        aria-label={`${activePlanningPStepLabel} stepper, ${isPlanningPStepperOpen ? 'expanded' : 'collapsed'}`}
                       >
-                        <ListOrdered className="h-4 w-4" />
-                        <span className="hidden sm:inline">
-                          {isPlanningPStepperOpen ? 'Hide Planning P' : 'Show Planning P'}
-                        </span>
+                        <ListOrdered className="h-4 w-4 shrink-0" />
+                        <span className="hidden truncate sm:inline">{activePlanningPStepLabel}</span>
                       </Button>
                     </TooltipTrigger>
-                    <TooltipContent>
-                      {isPlanningPStepperOpen ? 'Hide Planning P' : 'Show Planning P'}
-                    </TooltipContent>
+                    <TooltipContent>{activePlanningPStepLabel}</TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
               )}
@@ -23599,8 +23609,9 @@ function App() {
             activeStepId={planningPStepId}
             onStepChange={setPlanningPStepId}
             onHide={() => setIsPlanningPStepperOpen(false)}
-            taskProgressByStepId={planningPMyTaskProgressByStepId}
-            onOpenTasks={setPlanningPMyTasksDialogStepId}
+            myTaskProgressByStepId={planningPMyTaskProgressByStepId}
+            allTaskProgressByStepId={planningPAllTaskProgressByStepId}
+            onOpenTasks={openPlanningPTasksDialog}
             tasksReadOnly={isViewingHistoricalOperationalPeriod}
             className="h-full"
           />
@@ -36015,14 +36026,16 @@ function App() {
         </DialogContent>
       </Dialog>
       {showPlanningPStepper && planningPMyTasksDialogStep ? (
-        <PlanningPMyTasksDialog
+        <PlanningPTasksDialog
           open={planningPMyTasksDialogStepId !== null}
           onOpenChange={(open) => {
             if (!open) setPlanningPMyTasksDialogStepId(null)
           }}
+          initialScope={planningPTasksDialogScope}
           phaseLabel={planningPMyTasksDialogStep.label}
           positions={currentUserIcsPositions}
-          tasks={getPlanningPMyTasksForPhase(planningPMyTasksDialogStep.id)}
+          myTasks={getPlanningPMyTasksForPhase(planningPMyTasksDialogStep.id)}
+          allTasks={getPlanningPAllTasksForPhase(planningPMyTasksDialogStep.id)}
           completions={planningPMyTaskCompletions}
           onTaskCompletedChange={setPlanningPMyTaskCompleted}
           readOnly={isViewingHistoricalOperationalPeriod}

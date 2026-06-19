@@ -1,7 +1,12 @@
-import { PLANNING_P_STEPS } from '../src/features/planning-p/planning-p-steps'
+import {
+  PLANNING_P_STEPS,
+  getPlanningPStepLabel,
+} from '../src/features/planning-p/planning-p-steps'
 import { PLANNING_P_DEFAULT_POSITION } from '../src/features/planning-p/planning-p-task-templates'
 import {
-  buildTaskProgressByStepId,
+  buildAllTaskProgressByStepId,
+  buildMyTaskProgressByStepId,
+  getAllTasksForPhase,
   getTaskProgress,
   getTasksForPhaseAndPositions,
 } from '../src/features/planning-p/planning-p-task-utils'
@@ -14,6 +19,12 @@ function assert(condition: unknown, message: string): asserts condition {
 
 const icTasks = getTasksForPhaseAndPositions('objectives-meeting', ['Incident Commander'])
 assert(icTasks.length >= 2, 'Incident Commander should have multiple objectives-meeting tasks')
+
+const allObjectivesTasks = getAllTasksForPhase('objectives-meeting')
+assert(
+  allObjectivesTasks.length >= icTasks.length,
+  'All Tasks should include at least as many tasks as My Tasks for IC'
+)
 
 const mergedTasks = getTasksForPhaseAndPositions('cg-staff-meeting', [
   'Operations Section Chief',
@@ -46,10 +57,22 @@ assert(
   'Progress percent should be rounded correctly'
 )
 
-const byStep = buildTaskProgressByStepId(['Planning Section Chief'], {})
+const myByStep = buildMyTaskProgressByStepId(['Planning Section Chief'], {})
+const allByStep = buildAllTaskProgressByStepId({})
 assert(
-  PLANNING_P_STEPS.every((step) => byStep[step.id]?.total > 0),
-  'Each Planning-P phase should expose tasks for Planning Section Chief'
+  PLANNING_P_STEPS.every((step) => myByStep[step.id]?.total > 0),
+  'Each Planning-P phase should expose My Tasks for Planning Section Chief'
+)
+assert(
+  PLANNING_P_STEPS.every(
+    (step) => allByStep[step.id]?.total >= myByStep[step.id]?.total
+  ),
+  'All Tasks totals should be greater than or equal to My Tasks totals'
+)
+
+assert(
+  getPlanningPStepLabel('objectives-meeting') === 'IC / UC Objectives Meeting',
+  'getPlanningPStepLabel should resolve step labels'
 )
 
 console.log('verify-planning-p-tasks: all assertions passed')

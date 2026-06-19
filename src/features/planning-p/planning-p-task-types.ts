@@ -14,3 +14,5 @@ export type PlanningPTaskProgress = {
   total: number
   percent: number
 }
+
+export type PlanningPTaskDialogScope = 'my' | 'all'

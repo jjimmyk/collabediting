@@ -46,3 +46,9 @@ export const PLANNING_P_STEPS: PlanningPStep[] = [
     timeWindow: '16:00 – 16:30',
   },
 ]
+
+export type PlanningPStepId = PlanningPStep['id']
+
+export function getPlanningPStepLabel(stepId: string): string {
+  return PLANNING_P_STEPS.find((step) => step.id === stepId)?.label ?? 'Planning-P'
+}

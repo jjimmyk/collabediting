@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import type { PlanningPStepId } from '@/features/planning-p/planning-p-task-types'
+import type { PlanningPStepId } from '@/features/planning-p/planning-p-steps'
 import {
-  buildTaskProgressByStepId,
+  buildAllTaskProgressByStepId,
+  buildMyTaskProgressByStepId,
+  getAllTasksForPhase,
   getTasksForPhaseAndPositions,
 } from '@/features/planning-p/planning-p-task-utils'
 import {
@@ -165,21 +167,33 @@ export function usePlanningPMyTasks({
     ]
   )
 
-  const getTasksForPhase = useCallback(
+  const getMyTasksForPhase = useCallback(
     (phaseId: PlanningPStepId) => getTasksForPhaseAndPositions(phaseId, positions),
     [positions]
   )
 
-  const taskProgressByStepId = useMemo(
-    () => buildTaskProgressByStepId(positions, completions),
+  const getAllTasksForPhaseById = useCallback(
+    (phaseId: PlanningPStepId) => getAllTasksForPhase(phaseId),
+    []
+  )
+
+  const myTaskProgressByStepId = useMemo(
+    () => buildMyTaskProgressByStepId(positions, completions),
     [positions, completions]
+  )
+
+  const allTaskProgressByStepId = useMemo(
+    () => buildAllTaskProgressByStepId(completions),
+    [completions]
   )
 
   return {
     completions,
     isLoading,
     setTaskCompleted,
-    getTasksForPhase,
-    taskProgressByStepId,
+    getMyTasksForPhase,
+    getAllTasksForPhase: getAllTasksForPhaseById,
+    myTaskProgressByStepId,
+    allTaskProgressByStepId,
   }
 }

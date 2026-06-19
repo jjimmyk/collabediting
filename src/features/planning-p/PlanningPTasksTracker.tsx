@@ -1,26 +1,32 @@
 import { cn } from '@/lib/utils'
 import type { PlanningPTaskProgress } from '@/features/planning-p/planning-p-task-types'
 
-type PlanningPMyTasksTrackerProps = {
+type PlanningPTasksTrackerProps = {
+  label: 'My Tasks' | 'All Tasks'
   progress: PlanningPTaskProgress
   onOpen: () => void
   readOnly?: boolean
   className?: string
 }
 
-export function PlanningPMyTasksTracker({
+export function PlanningPTasksTracker({
+  label,
   progress,
   onOpen,
   readOnly = false,
   className,
-}: PlanningPMyTasksTrackerProps) {
+}: PlanningPTasksTrackerProps) {
   const { completed, total, percent } = progress
+
+  if (total === 0) {
+    return null
+  }
 
   return (
     <button
       type="button"
       className={cn(
-        'mt-1.5 flex w-full items-center gap-2 rounded-sm px-0.5 py-0.5 text-left transition-colors',
+        'mt-1 flex w-full items-center gap-2 rounded-sm px-0.5 py-0.5 text-left transition-colors',
         readOnly ? 'cursor-default opacity-80' : 'hover:bg-muted/60',
         className
       )}
@@ -28,9 +34,11 @@ export function PlanningPMyTasksTracker({
         event.stopPropagation()
         onOpen()
       }}
-      aria-label={`My Tasks ${completed} of ${total} complete`}
+      aria-label={`${label} ${completed} of ${total} complete`}
     >
-      <span className="shrink-0 text-[10px] font-medium text-muted-foreground">My Tasks</span>
+      <span className="w-[3.75rem] shrink-0 text-[10px] font-medium text-muted-foreground">
+        {label}
+      </span>
       <span className="shrink-0 text-[10px] font-semibold tabular-nums text-foreground">
         {completed}/{total}
       </span>

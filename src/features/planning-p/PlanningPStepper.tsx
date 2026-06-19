@@ -1,16 +1,17 @@
 import { ChevronLeft } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
-import { PlanningPMyTasksTracker } from '@/features/planning-p/PlanningPMyTasksTracker'
+import { PlanningPTasksTracker } from '@/features/planning-p/PlanningPTasksTracker'
 import { PLANNING_P_STEPS } from '@/features/planning-p/planning-p-steps'
-import type { PlanningPTaskProgress } from '@/features/planning-p/planning-p-task-types'
+import type { PlanningPTaskProgress, PlanningPTaskDialogScope } from '@/features/planning-p/planning-p-task-types'
 
 type PlanningPStepperProps = {
   activeStepId: string
   onStepChange: (stepId: string) => void
   onHide?: () => void
-  taskProgressByStepId?: Record<string, PlanningPTaskProgress>
-  onOpenTasks?: (stepId: string) => void
+  myTaskProgressByStepId?: Record<string, PlanningPTaskProgress>
+  allTaskProgressByStepId?: Record<string, PlanningPTaskProgress>
+  onOpenTasks?: (stepId: string, scope: PlanningPTaskDialogScope) => void
   tasksReadOnly?: boolean
   className?: string
 }
@@ -19,7 +20,8 @@ export function PlanningPStepper({
   activeStepId,
   onStepChange,
   onHide,
-  taskProgressByStepId,
+  myTaskProgressByStepId,
+  allTaskProgressByStepId,
   onOpenTasks,
   tasksReadOnly = false,
   className,
@@ -54,7 +56,12 @@ export function PlanningPStepper({
         {PLANNING_P_STEPS.map((step, index) => {
           const isActive = step.id === activeStepId
           const isComplete = activeIndex > index
-          const taskProgress = taskProgressByStepId?.[step.id] ?? {
+          const myTaskProgress = myTaskProgressByStepId?.[step.id] ?? {
+            completed: 0,
+            total: 0,
+            percent: 0,
+          }
+          const allTaskProgress = allTaskProgressByStepId?.[step.id] ?? {
             completed: 0,
             total: 0,
             percent: 0,
@@ -104,12 +111,21 @@ export function PlanningPStepper({
                   <span className="mt-0.5 block text-[10px] text-muted-foreground">
                     {step.timeWindow}
                   </span>
-                  {onOpenTasks && taskProgress.total > 0 ? (
-                    <PlanningPMyTasksTracker
-                      progress={taskProgress}
-                      readOnly={tasksReadOnly}
-                      onOpen={() => onOpenTasks(step.id)}
-                    />
+                  {onOpenTasks ? (
+                    <>
+                      <PlanningPTasksTracker
+                        label="My Tasks"
+                        progress={myTaskProgress}
+                        readOnly={tasksReadOnly}
+                        onOpen={() => onOpenTasks(step.id, 'my')}
+                      />
+                      <PlanningPTasksTracker
+                        label="All Tasks"
+                        progress={allTaskProgress}
+                        readOnly={tasksReadOnly}
+                        onOpen={() => onOpenTasks(step.id, 'all')}
+                      />
+                    </>
                   ) : null}
                 </span>
               </button>

@@ -47,6 +47,49 @@ export function getTasksForPhaseAndPositions(
   return [...byId.values()].sort((left, right) => left.label.localeCompare(right.label))
 }
 
+export function getAllTasksForPhase(phaseId: PlanningPStepId): PlanningPTaskTemplate[] {
+  const byId = new Map<string, PlanningPTaskTemplate>()
+  for (const task of PLANNING_P_TASK_TEMPLATES) {
+    if (task.phaseId !== phaseId) continue
+    byId.set(task.id, task)
+  }
+
+  return [...byId.values()].sort((left, right) => {
+    const positionCompare = left.position.localeCompare(right.position)
+    if (positionCompare !== 0) return positionCompare
+    return left.label.localeCompare(right.label)
+  })
+}
+
+export function groupTasksByPosition(
+  tasks: PlanningPTaskTemplate[]
+): { position: string; tasks: PlanningPTaskTemplate[] }[] {
+  const groups = new Map<string, PlanningPTaskTemplate[]>()
+  for (const task of tasks) {
+    const position =
+      task.position === PLANNING_P_DEFAULT_POSITION ? 'General / All Positions' : task.position
+    const current = groups.get(position) ?? []
+    current.push(task)
+    groups.set(position, current)
+  }
+
+  return [...groups.entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([position, groupedTasks]) => ({ position, tasks: groupedTasks }))
+}
+
+export function isPlanningPTaskEditableForUser(
+  task: PlanningPTaskTemplate,
+  positions: string[]
+): boolean {
+  if (positions.length === 0) {
+    return task.position === PLANNING_P_DEFAULT_POSITION
+  }
+  return (
+    positions.includes(task.position) || task.position === PLANNING_P_DEFAULT_POSITION
+  )
+}
+
 export function getTaskProgress(
   tasks: PlanningPTaskTemplate[],
   completions: Record<string, boolean>
@@ -57,7 +100,7 @@ export function getTaskProgress(
   return { completed, total, percent }
 }
 
-export function buildTaskProgressByStepId(
+export function buildMyTaskProgressByStepId(
   positions: string[],
   completions: Record<string, boolean>
 ): Record<PlanningPStepId, PlanningPTaskProgress> {
@@ -69,4 +112,25 @@ export function buildTaskProgressByStepId(
     },
     {} as Record<PlanningPStepId, PlanningPTaskProgress>
   )
+}
+
+export function buildAllTaskProgressByStepId(
+  completions: Record<string, boolean>
+): Record<PlanningPStepId, PlanningPTaskProgress> {
+  return PLANNING_P_STEPS.reduce(
+    (accumulator, step) => {
+      const tasks = getAllTasksForPhase(step.id)
+      accumulator[step.id] = getTaskProgress(tasks, completions)
+      return accumulator
+    },
+    {} as Record<PlanningPStepId, PlanningPTaskProgress>
+  )
+}
+
+/** @deprecated Use buildMyTaskProgressByStepId */
+export function buildTaskProgressByStepId(
+  positions: string[],
+  completions: Record<string, boolean>
+): Record<PlanningPStepId, PlanningPTaskProgress> {
+  return buildMyTaskProgressByStepId(positions, completions)
 }
