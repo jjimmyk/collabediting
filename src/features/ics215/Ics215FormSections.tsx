@@ -182,13 +182,15 @@ export function Ics215FormSections({
 
       {renderSectionShell(
         'work-assignments',
-        <Ics215WorkAssignmentsTable
-          resourceColumns={workAssignmentsDraft.resourceColumns}
-          workAssignments={workAssignmentsDraft.workAssignments}
-          assigneeOptions={assigneeOptions}
-          editing={isSectionEditing(editingSections, 'work-assignments')}
-          onChange={(next) => onPatchDraft('work-assignments', next)}
-        />,
+        <div className="w-full min-w-0 overflow-hidden">
+          <Ics215WorkAssignmentsTable
+            resourceColumns={workAssignmentsDraft.resourceColumns}
+            workAssignments={workAssignmentsDraft.workAssignments}
+            assigneeOptions={assigneeOptions}
+            editing={isSectionEditing(editingSections, 'work-assignments')}
+            onChange={(next) => onPatchDraft('work-assignments', next)}
+          />
+        </div>,
         isSectionEditing(editingSections, 'work-assignments') ? (
           <Button
             type="button"

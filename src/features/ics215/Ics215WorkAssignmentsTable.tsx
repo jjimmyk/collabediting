@@ -155,101 +155,86 @@ export function Ics215WorkAssignmentsTable({
     )
   }
 
-  const fixedColumnClass = 'min-w-[8.5rem] w-[8.5rem] align-top'
-  const stickyAssigneeClass =
-    'sticky left-0 z-20 bg-background shadow-[2px_0_4px_-2px_rgba(0,0,0,0.12)] dark:shadow-[2px_0_4px_-2px_rgba(0,0,0,0.35)]'
-  const stickyWorkAssignmentClass =
-    'sticky left-[8.5rem] z-20 bg-background shadow-[2px_0_4px_-2px_rgba(0,0,0,0.12)] dark:shadow-[2px_0_4px_-2px_rgba(0,0,0,0.35)]'
-  const stickyHeaderClass = 'bg-muted/40'
-  const resourceColumnClass = 'min-w-[7.5rem] align-top'
+  const fixedColumnClass = 'min-w-[8.5rem] align-top'
+  const resourceColumnClass = 'min-w-[7.5rem] align-top whitespace-nowrap'
   const overflowColumnClass = 'min-w-[9rem] align-top'
-  const tableMinWidth = Math.max(
+  const tableMinWidthPx = Math.max(
     960,
-    17 + resourceColumns.length * 7.5 + OVERFLOW_COLUMNS.length * 9
+    170 +
+      170 +
+      resourceColumns.length * 120 +
+      OVERFLOW_COLUMNS.length * 144 +
+      (editing ? 40 : 0)
   )
 
   return (
     <div className="min-w-0 space-y-2">
-      <div className="relative min-w-0 max-w-full">
+      <div className="w-full max-w-full overflow-hidden rounded-md border">
         <div
-          className="overflow-x-auto overscroll-x-contain rounded-md border [-webkit-overflow-scrolling:touch]"
+          className="w-full max-w-full overflow-x-auto overscroll-x-contain [-webkit-overflow-scrolling:touch]"
           tabIndex={0}
           aria-label="Work assignments table — scroll horizontally to view additional columns"
         >
           <table
-            className="w-max min-w-full border-collapse text-xs"
-            style={{ minWidth: `${tableMinWidth}rem` }}
+            className="border-collapse text-xs"
+            style={{ width: 'max-content', minWidth: `${tableMinWidthPx}px` }}
           >
             <thead>
               <tr className="border-b bg-muted/40 text-[10px] uppercase tracking-wide text-muted-foreground">
-                <th
-                  className={cn(
-                    fixedColumnClass,
-                    stickyAssigneeClass,
-                    stickyHeaderClass,
-                    'px-2 py-2 text-left font-semibold'
-                  )}
-                >
+                <th className={cn(fixedColumnClass, 'px-2 py-2 text-left font-semibold')}>
                   Assignee
                 </th>
-                <th
-                  className={cn(
-                    fixedColumnClass,
-                    stickyWorkAssignmentClass,
-                    stickyHeaderClass,
-                    'px-2 py-2 text-left font-semibold'
-                  )}
-                >
+                <th className={cn(fixedColumnClass, 'px-2 py-2 text-left font-semibold')}>
                   Work Assignment
                 </th>
-              {resourceColumns.map((column) => (
-                <th
-                  key={column.id}
-                  className={cn(resourceColumnClass, 'px-2 py-2 text-left font-semibold')}
-                >
-                  <div className="space-y-1">
-                    {editing ? (
-                      <div className="flex items-center gap-1">
-                        <input
-                          value={column.label}
-                          onChange={(event) => patchColumnLabel(column.id, event.target.value)}
-                          className="h-7 w-full rounded border bg-transparent px-1 text-[11px] font-semibold normal-case outline-none"
-                        />
-                        {resourceColumns.length > 1 ? (
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            aria-label={`Delete ${column.label} column`}
-                            className="h-7 w-7 shrink-0 text-destructive hover:text-destructive"
-                            onClick={() => deleteResourceColumn(column.id)}
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
-                        ) : null}
+                {resourceColumns.map((column) => (
+                  <th
+                    key={column.id}
+                    className={cn(resourceColumnClass, 'px-2 py-2 text-left font-semibold')}
+                  >
+                    <div className="space-y-1">
+                      {editing ? (
+                        <div className="flex items-center gap-1">
+                          <input
+                            value={column.label}
+                            onChange={(event) => patchColumnLabel(column.id, event.target.value)}
+                            className="h-7 min-w-[5.5rem] flex-1 rounded border bg-transparent px-1 text-[11px] font-semibold normal-case outline-none"
+                          />
+                          {resourceColumns.length > 1 ? (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              aria-label={`Delete ${column.label} column`}
+                              className="h-7 w-7 shrink-0 text-destructive hover:text-destructive"
+                              onClick={() => deleteResourceColumn(column.id)}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          ) : null}
+                        </div>
+                      ) : (
+                        <span className="block normal-case">{column.label}</span>
+                      )}
+                      <div className="grid grid-cols-3 gap-1 text-[9px] font-normal normal-case">
+                        <span>Req</span>
+                        <span>Have</span>
+                        <span>Need</span>
                       </div>
-                    ) : (
-                      <span>{column.label}</span>
-                    )}
-                    <div className="grid grid-cols-3 gap-0.5 text-[9px] font-normal normal-case">
-                      <span>Req</span>
-                      <span>Have</span>
-                      <span>Need</span>
                     </div>
-                  </div>
-                </th>
-              ))}
-              {OVERFLOW_COLUMNS.map((column) => (
-                <th
-                  key={column.key}
-                  className={cn(overflowColumnClass, 'px-2 py-2 text-left font-semibold')}
-                >
-                  {column.label}
-                </th>
-              ))}
-              {editing ? <th className="w-10 px-1 py-2" aria-label="Row actions" /> : null}
-            </tr>
-          </thead>
+                  </th>
+                ))}
+                {OVERFLOW_COLUMNS.map((column) => (
+                  <th
+                    key={column.key}
+                    className={cn(overflowColumnClass, 'px-2 py-2 text-left font-semibold')}
+                  >
+                    {column.label}
+                  </th>
+                ))}
+                {editing ? <th className="w-10 px-1 py-2" aria-label="Row actions" /> : null}
+              </tr>
+            </thead>
           <tbody>
             {workAssignments.length === 0 ? (
               <tr>
@@ -269,7 +254,7 @@ export function Ics215WorkAssignmentsTable({
 
                 return (
                   <tr key={row.id} className="border-b align-top">
-                    <td className={cn(fixedColumnClass, stickyAssigneeClass, 'px-2 py-2')}>
+                    <td className={cn(fixedColumnClass, 'px-2 py-2')}>
                       {editing ? (
                         <Ics204AssignedUnitField
                           value={row.assignee}
@@ -286,7 +271,7 @@ export function Ics215WorkAssignmentsTable({
                         />
                       )}
                     </td>
-                    <td className={cn(fixedColumnClass, stickyWorkAssignmentClass, 'px-2 py-2')}>
+                    <td className={cn(fixedColumnClass, 'px-2 py-2')}>
                       {editing ? (
                         <Textarea
                           value={row.workAssignment}
@@ -363,13 +348,7 @@ export function Ics215WorkAssignmentsTable({
           {workAssignments.length > 0 ? (
             <tfoot>
               <tr className="border-t bg-muted/20">
-                <td
-                  colSpan={2}
-                  className={cn(
-                    stickyAssigneeClass,
-                    'bg-muted/20 px-2 py-2 text-[11px] font-semibold'
-                  )}
-                >
+                <td colSpan={2} className="px-2 py-2 text-[11px] font-semibold">
                   Totals
                 </td>
                 {resourceColumns.map((column) => (
@@ -389,10 +368,10 @@ export function Ics215WorkAssignmentsTable({
           ) : null}
           </table>
         </div>
-        <p className="mt-1 text-[10px] text-muted-foreground">
-          Scroll horizontally to view additional columns.
-        </p>
       </div>
+      <p className="text-[10px] text-muted-foreground">
+        Scroll horizontally to view additional columns.
+      </p>
 
       {editing ? (
         <div className="flex flex-wrap items-center gap-2">
