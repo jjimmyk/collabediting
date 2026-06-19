@@ -14,6 +14,7 @@ import { cn } from '@/lib/utils'
 
 type ProductToursMenuProps = {
   className?: string
+  layout?: 'header' | 'sidebar'
   isOnHub: boolean
   isInWorkspace: boolean
   onStartTour: (tourId: ProductTourId) => void
@@ -21,21 +22,25 @@ type ProductToursMenuProps = {
 
 export function ProductToursMenu({
   className,
+  layout = 'header',
   isOnHub,
   isInWorkspace,
   onStartTour,
 }: ProductToursMenuProps) {
   const options = getProductTourOptions({ isOnHub, isInWorkspace })
+  const isSidebar = layout === 'sidebar'
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button
           type="button"
-          size="sm"
+          size={isSidebar ? 'default' : 'sm'}
           variant="outline"
           className={cn(
-            'h-10 shrink-0 gap-1 !border-2 !border-black font-medium dark:!border-white',
+            isSidebar
+              ? 'h-10 w-full justify-between gap-2 px-3 font-medium'
+              : 'h-10 shrink-0 gap-1 !border-2 !border-black font-medium dark:!border-white',
             className
           )}
           aria-label="Product Tours"
@@ -46,7 +51,7 @@ export function ProductToursMenu({
           <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-70" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-64">
+      <DropdownMenuContent align={isSidebar ? 'start' : 'start'} className="w-64">
         {options.map((option) => (
           <DropdownMenuItem
             key={option.id}

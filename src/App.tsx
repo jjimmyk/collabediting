@@ -23336,18 +23336,6 @@ function App() {
                   {formatOperationalPeriodLabel(startedOperationalPeriodCount)}
                 </Badge>
               ) : null}
-              <ProductToursMenu
-                className={cn('ml-2 h-10', glassIconButtonClasses)}
-                isOnHub={!isInIncidentWorkspace && !isInExerciseWorkspace}
-                isInWorkspace={isInIncidentWorkspace || isInExerciseWorkspace}
-                onStartTour={(tourId) => {
-                  if (tourId === 'workspace') {
-                    setIsIcs201TutorialOpen(true)
-                  } else {
-                    setIsHubTutorialOpen(true)
-                  }
-                }}
-              />
               {showPlanningPStepper && (
                 <TooltipProvider delayDuration={150}>
                   <Tooltip>
@@ -37702,6 +37690,19 @@ function App() {
             </SheetHeader>
             <nav className="flex-1 overflow-y-auto px-2 py-3">
               <div className="space-y-2">
+                <ProductToursMenu
+                  layout="sidebar"
+                  isOnHub={!isInIncidentWorkspace && !isInExerciseWorkspace}
+                  isInWorkspace={isInIncidentWorkspace || isInExerciseWorkspace}
+                  onStartTour={(tourId) => {
+                    setIsLeftSidebarOpen(false)
+                    if (tourId === 'workspace') {
+                      setIsIcs201TutorialOpen(true)
+                    } else {
+                      setIsHubTutorialOpen(true)
+                    }
+                  }}
+                />
                 <button
                   type="button"
                   onClick={navigateToHub}

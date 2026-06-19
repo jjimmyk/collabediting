@@ -74,10 +74,7 @@ function TaskChecklist({
               onCheckedChange={(value) => onTaskCompletedChange(task.id, value === true)}
             />
             <div className="min-w-0 space-y-1">
-              <Label
-                htmlFor={checkboxId}
-                className={cnLabel(editable)}
-              >
+              <Label htmlFor={checkboxId} className={cnLabel(editable)}>
                 {task.label}
               </Label>
               {showPositionLabel ? (
@@ -128,7 +125,7 @@ export function PlanningPTasksDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="!w-[64rem] !max-w-[min(64rem,calc(100%-2rem))] sm:!max-w-[min(64rem,calc(100%-2rem))]">
         <DialogHeader>
           <DialogTitle>{phaseLabel}</DialogTitle>
           <DialogDescription>
@@ -139,8 +136,12 @@ export function PlanningPTasksDialog({
 
         <Tabs value={scope} onValueChange={(value) => setScope(value as PlanningPTaskDialogScope)}>
           <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="my">My Tasks ({myProgress.completed}/{myProgress.total})</TabsTrigger>
-            <TabsTrigger value="all">All Tasks ({allProgress.completed}/{allProgress.total})</TabsTrigger>
+            <TabsTrigger value="my" className="whitespace-nowrap">
+              My Tasks ({myProgress.completed}/{myProgress.total})
+            </TabsTrigger>
+            <TabsTrigger value="all" className="whitespace-nowrap">
+              All Tasks ({allProgress.completed}/{allProgress.total})
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="my" className="mt-4">
@@ -180,7 +181,7 @@ export function PlanningPTasksDialog({
           </TabsContent>
         </Tabs>
 
-        <DialogFooter className="sm:justify-between">
+        <DialogFooter className="flex flex-row items-center justify-between gap-2">
           <p className="text-sm text-muted-foreground">
             {scope === 'my'
               ? `${myProgress.completed} of ${myProgress.total} complete`

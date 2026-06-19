@@ -158,7 +158,7 @@ function buildHubTutorialSteps(
       popover: {
         title: "You're ready",
         description:
-          'Explore The Hub anytime. Open Product Tours here to restart PRATUS Coach or start the Workspace Tour after opening an incident or exercise.',
+          'Explore The Hub anytime. Open Product Tours in the menu above The Hub to restart PRATUS Coach or start the Workspace Tour after opening an incident or exercise.',
         side: 'bottom',
         align: 'start',
         doneBtnText: 'Finish',
