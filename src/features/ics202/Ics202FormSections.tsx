@@ -66,18 +66,6 @@ function isSectionEditing(
   return !!editingSections[section]
 }
 
-function PageDivider({ label }: { label: string }) {
-  return (
-    <div className="flex items-center gap-2 px-1 pt-1">
-      <div className="h-px flex-1 bg-border" />
-      <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-        {label}
-      </span>
-      <div className="h-px flex-1 bg-border" />
-    </div>
-  )
-}
-
 export function Ics202FormSections({
   form,
   preparedBy,
@@ -271,8 +259,6 @@ export function Ics202FormSections({
         </div>
       )}
 
-      <PageDivider label="Page 2 — Incident Briefing" />
-
       {renderSectionShell(
         'community-lifelines',
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
@@ -291,7 +277,13 @@ export function Ics202FormSections({
                   className="mt-0.5 h-3.5 w-3.5 shrink-0"
                 />
               ) : (
-                <span className="mt-0.5 shrink-0">{communityLifelines[item.id] ? '☑' : '☐'}</span>
+                <span
+                  className={cn(
+                    'mt-0.5 box-border h-3.5 w-3.5 shrink-0 rounded-[2px] border border-foreground',
+                    communityLifelines[item.id] ? 'bg-foreground' : 'bg-background'
+                  )}
+                  aria-hidden
+                />
               )}
               <span>{item.label}</span>
             </label>
@@ -488,8 +480,6 @@ export function Ics202FormSections({
         undefined,
         { allowEdit: false }
       )}
-
-      <PageDivider label="Page 3 — Incident Briefing" />
 
       {renderTextSection(
         'critical-information-requirements',
