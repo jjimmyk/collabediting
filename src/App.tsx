@@ -199,7 +199,8 @@ import {
   fetchCanManageWorkspaceRoster,
   fetchWorkspacePositionPermissions,
   fetchWorkspacePositionSettings,
-  fetchWorkspaceRoster,
+  fetchWorkspaceRosterWithPendingAssignments as fetchWorkspaceRoster,
+  cancelMemberPendingAssignment,
   findAccessibleWorkspaceUuid,
   inviteWorkspaceMember,
   addExistingWorkspaceMember,
@@ -608,6 +609,7 @@ import type {
   PositionRosterInviteSubmitResult,
   RosterInviteAssignmentMode,
 } from '@/features/roster/position-roster-messages'
+import type { RosterMemberEffectiveWhen } from '@/lib/roster-member-assignment'
 import {
   buildOpAdvanceLifecycleSummary,
   canAssignMembersToPositionNow,
@@ -8682,8 +8684,8 @@ function App() {
     'Incident Commander',
   ])
   const [rosterInvitePositionPreset, setRosterInvitePositionPreset] = useState<string | null>(null)
-  const [rosterInviteAssignmentMode, setRosterInviteAssignmentMode] =
-    useState<RosterInviteAssignmentMode>('assign_now')
+  const [addMemberDefaultEffectiveWhen, setAddMemberDefaultEffectiveWhen] =
+    useState<RosterMemberEffectiveWhen>('now')
   const [pendingInlinePositionInvite, setPendingInlinePositionInvite] = useState<{
     email: string
     password: string
@@ -11978,7 +11980,7 @@ function App() {
     setRosterMemberPositionsDraft(['Incident Commander'])
     setRosterMemberPositionDraft(ICS_POSITIONS[0])
     setRosterInvitePositionPreset(null)
-    setRosterInviteAssignmentMode('assign_now')
+    setAddMemberDefaultEffectiveWhen('now')
   }
   useEffect(() => {
     if (!isSupabaseEnabled || accessibleWorkspaces.length === 0) {
@@ -14651,6 +14653,7 @@ function App() {
     password: string
     icsPositions: string[]
     mode: RosterInviteAssignmentMode
+    effectiveWhen?: RosterMemberEffectiveWhen
     positionPreset: string | null
     personSource?: WorkspaceMemberPersonSource
     assignmentKind?: MemberAssignmentKind
@@ -14687,11 +14690,20 @@ function App() {
       return 'error'
     }
 
+    const effectiveWhen: RosterMemberEffectiveWhen =
+      input.effectiveWhen ??
+      (input.mode === 'schedule_on_op_advance' ? 'next_op_advance' : 'now')
     const scheduleOnOpAdvance =
-      assignmentKind === 'ics_position' &&
-      input.mode === 'schedule_on_op_advance' &&
-      input.positionPreset !== null &&
-      icsPositions.length === 1
+      effectiveWhen === 'next_op_advance' &&
+      operationalPeriodsEnabled &&
+      (assignmentKind === 'single_resource'
+        ? Boolean(input.orgChartReportsTo?.trim())
+        : icsPositions.length === 1)
+
+    if (effectiveWhen === 'next_op_advance' && !operationalPeriodsEnabled) {
+      toast.error('Next operational period assignment requires operational periods.')
+      return 'error'
+    }
 
     if (scheduleOnOpAdvance && !isSupabaseEnabled) {
       toast.error('Schedule invites require Supabase persistence.')
@@ -14731,6 +14743,7 @@ function App() {
           ...(assignmentKind === 'ics_position'
             ? { icsPositions }
             : { orgChartReportsTo: input.orgChartReportsTo?.trim() }),
+          ...(scheduleOnOpAdvance ? { scheduleOnOpAdvance: true } : {}),
         })
         setIsInvitingRosterMember(false)
         if (!addResult.ok) {
@@ -14747,11 +14760,19 @@ function App() {
           resetAddRosterMemberDraft()
           setIsAddRosterMemberOpen(false)
         }
-        toast.success(
-          assignmentKind === 'single_resource'
-            ? `${email} was added to the roster as a single resource under ${input.orgChartReportsTo}.`
-            : `Added ${email} to ${icsPositions.join(', ')}.`
-        )
+        if (scheduleOnOpAdvance) {
+          toast.success(
+            assignmentKind === 'single_resource'
+              ? `${email} was added to the roster and will appear under ${input.orgChartReportsTo} on the next operational period.`
+              : `${email} was added to the roster and scheduled for ${icsPositions.join(', ')} on the next operational period.`
+          )
+        } else {
+          toast.success(
+            assignmentKind === 'single_resource'
+              ? `${email} was added to the roster as a single resource under ${input.orgChartReportsTo}.`
+              : `Added ${email} to ${icsPositions.join(', ')}.`
+          )
+        }
         return 'success'
       }
 
@@ -14880,6 +14901,7 @@ function App() {
       password: input.password,
       icsPositions: input.icsPositions,
       mode: input.mode,
+      effectiveWhen: input.effectiveWhen,
       positionPreset: input.positionPreset,
       personSource: input.personSource,
       assignmentKind: input.assignmentKind,
@@ -14946,7 +14968,9 @@ function App() {
     setRosterMemberPositionsDraft([position])
     setRosterMemberPositionDraft(position)
     setRosterInvitePositionPreset(position)
-    setRosterInviteAssignmentMode(mode)
+    setAddMemberDefaultEffectiveWhen(
+      mode === 'schedule_on_op_advance' ? 'next_op_advance' : 'now'
+    )
     setIsAddRosterMemberOpen(true)
   }
   const openAddRosterMemberDialog = () => {
@@ -15163,6 +15187,36 @@ function App() {
   }
   const removeScheduledAssignFromPosition = async (memberId: string, position: string) => {
     const member = activeWorkspaceRoster.find((entry) => entry.id === memberId)
+
+    if (member?.pendingOrgChartReportsTo === position) {
+      if (!isSupabaseEnabled || !activeWorkspaceSupabaseId) {
+        toast.error('This workspace is not synced to Supabase yet.')
+        return
+      }
+      const accessToken = await getAccessToken()
+      if (!accessToken) {
+        toast.error('Sign in again to manage roster schedules.')
+        return
+      }
+      const result = await cancelMemberPendingAssignment({
+        accessToken,
+        workspaceId: activeWorkspaceSupabaseId,
+        memberId,
+      })
+      if (!result.ok) {
+        toast.error(result.message)
+        return
+      }
+      const roster = await fetchWorkspaceRoster(activeWorkspaceSupabaseId)
+      setSupabaseWorkspaceRoster(roster)
+      toast.success(
+        member
+          ? `Removed ${member.email} from next OP org chart schedule for ${position}.`
+          : `Removed member from next OP org chart schedule for ${position}.`
+      )
+      return
+    }
+
     const current = memberSchedulesByPosition[position] ?? {
       assignMemberIds: [],
       unassignMemberIds: [],
@@ -37413,9 +37467,10 @@ function App() {
         }}
         workspaceLabel={activeWorkspaceRosterLabel}
         isSupabaseEnabled={isSupabaseEnabled}
+        operationalPeriodsEnabled={operationalPeriodsEnabled}
         catalog={workspacePositionCatalog}
         positionPreset={rosterInvitePositionPreset}
-        inviteAssignmentMode={rosterInviteAssignmentMode}
+        defaultEffectiveWhen={addMemberDefaultEffectiveWhen}
         isSubmitting={isInvitingRosterMember}
         onSearchExistingPeople={async (query) => {
           if (!activeWorkspaceSupabaseId) return []

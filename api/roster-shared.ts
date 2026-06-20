@@ -302,6 +302,79 @@ export async function upsertWorkspaceMemberAsSingleResource(
   return { memberId: memberRow.id }
 }
 
+export async function upsertWorkspaceMemberAsDeferredSingleResource(
+  admin: SupabaseClient,
+  params: {
+    workspaceId: string
+    email: string
+    status: 'invited' | 'active'
+    userId?: string | null
+    invitedBy: string
+    joinedAt?: string | null
+  }
+): Promise<{ memberId: string }> {
+  const { data: memberRow, error: memberError } = await admin
+    .from('workspace_members')
+    .upsert(
+      {
+        workspace_id: params.workspaceId,
+        email: params.email,
+        ics_position: SINGLE_RESOURCE_POSITION_LABEL,
+        assignment_kind: 'single_resource',
+        org_chart_reports_to: null,
+        org_chart_sort_order: 0,
+        status: params.status,
+        user_id: params.userId ?? null,
+        invited_by: params.invitedBy,
+        invited_at: new Date().toISOString(),
+        joined_at: params.joinedAt ?? null,
+      },
+      { onConflict: 'workspace_id,email' }
+    )
+    .select('id')
+    .single()
+
+  if (memberError || !memberRow) {
+    throw memberError ?? new Error('Could not upsert workspace member.')
+  }
+
+  const { error: deleteError } = await admin
+    .from('workspace_member_positions')
+    .delete()
+    .eq('member_id', memberRow.id)
+
+  if (deleteError) {
+    throw deleteError
+  }
+
+  return { memberId: memberRow.id }
+}
+
+export async function resolveInviteActivePositions(
+  admin: SupabaseClient,
+  workspaceId: string,
+  icsPositions: string[],
+  scheduleOnOpAdvance: boolean
+): Promise<{ activePositions: string[]; scheduleTargetPosition: string | null }> {
+  if (!scheduleOnOpAdvance) {
+    return { activePositions: icsPositions, scheduleTargetPosition: null }
+  }
+
+  if (icsPositions.length !== 1) {
+    throw new Error('Schedule-on-op-advance requires exactly one ICS position.')
+  }
+
+  const targetPosition = icsPositions[0]
+  const lifecycle = await loadWorkspacePositionLifecycleContext(admin, workspaceId)
+  const policy = getPositionMemberSchedulePolicy(targetPosition, lifecycle)
+  if (!policy.allowScheduleAssign) {
+    throw new Error('Member assign schedules are not allowed for this position.')
+  }
+
+  const placeholder = await resolveInvitePlaceholderPosition(admin, workspaceId, targetPosition)
+  return { activePositions: [placeholder], scheduleTargetPosition: targetPosition }
+}
+
 export async function provisionWorkspaceSingleResourceMember(
   admin: SupabaseClient,
   params: {

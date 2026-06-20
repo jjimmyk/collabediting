@@ -6,6 +6,14 @@ export type MemberAssignmentKind = 'ics_position' | 'single_resource'
 
 export type WorkspaceMemberPersonSource = 'invite_new' | 'add_existing'
 
+export type RosterMemberEffectiveWhen = 'now' | 'next_op_advance'
+
+export function mapEffectiveWhenToInviteMode(
+  effectiveWhen: RosterMemberEffectiveWhen
+): 'assign_now' | 'schedule_on_op_advance' {
+  return effectiveWhen === 'next_op_advance' ? 'schedule_on_op_advance' : 'assign_now'
+}
+
 export function getSingleResourceRosterMembers(
   roster: WorkspaceRosterMember[]
 ): WorkspaceRosterMember[] {

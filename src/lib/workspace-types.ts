@@ -11,6 +11,8 @@ export type WorkspaceMemberCheckInStatus =
 
 export type WorkspaceMemberAssignmentKind = 'ics_position' | 'single_resource'
 
+export type RosterMemberEffectiveWhen = 'now' | 'next_op_advance'
+
 export type WorkspaceRosterMember = {
   id: string
   email: string
@@ -19,6 +21,8 @@ export type WorkspaceRosterMember = {
   icsPositions: string[]
   assignmentKind: WorkspaceMemberAssignmentKind
   orgChartReportsTo: string | null
+  /** Pending single-resource org chart placement (activates on next OP). */
+  pendingOrgChartReportsTo?: string | null
   status: WorkspaceMemberStatus
   checkInStatus: WorkspaceMemberCheckInStatus
   addedAt: string

@@ -4,6 +4,10 @@ import {
   clearPositionAssetDependencies,
 } from './roster-asset-assignments-shared.js'
 import { applyMemberSchedulesOnOperationalPeriodAdvance } from './roster-member-schedules-shared.js'
+import {
+  applyPendingSingleResourceAssignmentsOnOperationalPeriodAdvance,
+  validatePendingSingleResourceAssignmentsBeforeOpAdvance,
+} from './roster-pending-assignments-shared.js'
 import { ICS_POSITIONS } from './roster-shared.js'
 
 type DbCustomPositionRow = {
@@ -494,6 +498,8 @@ export async function snapshotAndApplyRosterLifecycleOnOperationalPeriodAdvance(
   }
 
   await applyRosterLifecycleOnOperationalPeriodAdvance(admin, workspaceId)
+  await validatePendingSingleResourceAssignmentsBeforeOpAdvance(admin, workspaceId)
   await applyMemberSchedulesOnOperationalPeriodAdvance(admin, workspaceId)
+  await applyPendingSingleResourceAssignmentsOnOperationalPeriodAdvance(admin, workspaceId)
   await applyAssetSchedulesOnOperationalPeriodAdvance(admin, workspaceId)
 }

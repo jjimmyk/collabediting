@@ -3,11 +3,13 @@ import { createClient } from '@supabase/supabase-js'
 import { authenticateRosterManager } from './roster-auth-shared.js'
 import {
   parseIcsPositionsInput,
-  upsertWorkspaceMemberAsSingleResource,
-  upsertWorkspaceMemberWithPositions,
   fetchWorkspacePositionAllowlist,
   type MemberAssignmentKind,
 } from './roster-shared.js'
+import {
+  addIcsWorkspaceMemberWithEffectiveWhen,
+  addSingleResourceWorkspaceMemberWithEffectiveWhen,
+} from './roster-member-add-shared.js'
 
 const supabaseUrl =
   process.env.VITE_SUPABASE_URL ??
@@ -22,6 +24,7 @@ type AddExistingWorkspaceMemberBody = {
   assignmentKind?: MemberAssignmentKind
   icsPositions?: string[]
   orgChartReportsTo?: string
+  scheduleOnOpAdvance?: boolean
 }
 
 function parseBody(req: VercelRequest): AddExistingWorkspaceMemberBody {
@@ -59,6 +62,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const userId = body.userId?.trim()
     const assignmentKind: MemberAssignmentKind =
       body.assignmentKind === 'single_resource' ? 'single_resource' : 'ics_position'
+    const scheduleOnOpAdvance = body.scheduleOnOpAdvance === true
 
     if (!workspaceId || !userId) {
       return res.status(400).json({ error: 'workspaceId and userId are required.' })
@@ -99,10 +103,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(400).json({ error: 'orgChartReportsTo is required for single resource members.' })
       }
 
-      const member = await upsertWorkspaceMemberAsSingleResource(admin, {
+      const member = await addSingleResourceWorkspaceMemberWithEffectiveWhen(admin, {
         workspaceId,
         email,
         orgChartReportsTo,
+        scheduleOnOpAdvance,
         status: 'active',
         userId: profile.id,
         invitedBy,
@@ -113,6 +118,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         ok: true,
         memberId: member.memberId,
         assignmentKind: 'single_resource',
+        scheduleOnOpAdvance: member.scheduled,
       })
     }
 
@@ -121,11 +127,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (icsPositions.length === 0) {
       return res.status(400).json({ error: 'Select at least one ICS position.' })
     }
+    if (scheduleOnOpAdvance && icsPositions.length !== 1) {
+      return res.status(400).json({
+        error: 'Schedule-on-op-advance requires exactly one ICS position.',
+      })
+    }
 
-    const member = await upsertWorkspaceMemberWithPositions(admin, {
+    const member = await addIcsWorkspaceMemberWithEffectiveWhen(admin, {
       workspaceId,
       email,
       icsPositions,
+      scheduleOnOpAdvance,
       status: 'active',
       userId: profile.id,
       invitedBy,
@@ -136,7 +148,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       ok: true,
       memberId: member.memberId,
       assignmentKind: 'ics_position',
-      icsPositions: member.icsPositions,
+      scheduleOnOpAdvance: Boolean(member.scheduleTargetPosition),
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Add existing member failed.'

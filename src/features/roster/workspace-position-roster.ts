@@ -119,9 +119,18 @@ export function buildPositionRosterEntries(
         assignMemberIds: [],
         unassignMemberIds: [],
       }
-      const scheduledAssignees = schedule.assignMemberIds
-        .map((memberId) => memberById.get(memberId))
-        .filter((member): member is WorkspaceRosterMember => Boolean(member))
+      const scheduledAssignees = [
+        ...schedule.assignMemberIds
+          .map((memberId) => memberById.get(memberId))
+          .filter((member): member is WorkspaceRosterMember => Boolean(member)),
+        ...roster.filter(
+          (member) =>
+            member.status !== 'removed' &&
+            member.pendingOrgChartReportsTo === position
+        ),
+      ].filter(
+        (member, index, list) => list.findIndex((entry) => entry.id === member.id) === index
+      )
       const scheduledUnassignees = schedule.unassignMemberIds
         .map((memberId) => memberById.get(memberId))
         .filter((member): member is WorkspaceRosterMember => Boolean(member))

@@ -25,12 +25,18 @@ import type {
   PositionRosterInviteSubmitResult,
   RosterInviteAssignmentMode,
 } from '@/features/roster/position-roster-messages'
+import {
+  effectiveWhenSummary,
+  validateRosterMemberEffectiveWhen,
+} from '@/features/roster/roster-member-effective-when'
 import { validateMemberOrgChartReportsTo } from '@/features/roster/workspace-member-org-chart'
 import { buildReportsToOptions, type WorkspacePositionCatalog } from '@/features/roster/workspace-positions'
 import type {
   MemberAssignmentKind,
+  RosterMemberEffectiveWhen,
   WorkspaceMemberPersonSource,
 } from '@/lib/roster-member-assignment'
+import { mapEffectiveWhenToInviteMode } from '@/lib/roster-member-assignment'
 import type { OrgMemberSearchResult } from '@/lib/workspace-service'
 import { WORKSPACE_ROSTER_POSITIONS } from '@/lib/ics-positions'
 import { cn } from '@/lib/utils'
@@ -38,6 +44,7 @@ import { cn } from '@/lib/utils'
 export type AddWorkspaceMemberSubmitInput = {
   personSource: WorkspaceMemberPersonSource
   assignmentKind: MemberAssignmentKind
+  effectiveWhen: RosterMemberEffectiveWhen
   email: string
   password: string
   existingUserId: string | null
@@ -52,9 +59,10 @@ type AddWorkspaceMemberDialogProps = {
   onOpenChange: (open: boolean) => void
   workspaceLabel: string
   isSupabaseEnabled: boolean
+  operationalPeriodsEnabled: boolean
   catalog: WorkspacePositionCatalog
   positionPreset: string | null
-  inviteAssignmentMode: RosterInviteAssignmentMode
+  defaultEffectiveWhen?: RosterMemberEffectiveWhen
   isSubmitting: boolean
   onSearchExistingPeople: (query: string) => Promise<OrgMemberSearchResult[]>
   onSubmit: (input: AddWorkspaceMemberSubmitInput) => Promise<PositionRosterInviteSubmitResult>
@@ -69,15 +77,17 @@ export function AddWorkspaceMemberDialog({
   onOpenChange,
   workspaceLabel,
   isSupabaseEnabled,
+  operationalPeriodsEnabled,
   catalog,
   positionPreset,
-  inviteAssignmentMode,
+  defaultEffectiveWhen = 'now',
   isSubmitting,
   onSearchExistingPeople,
   onSubmit,
 }: AddWorkspaceMemberDialogProps) {
   const [personSource, setPersonSource] = useState<WorkspaceMemberPersonSource>('invite_new')
   const [assignmentKind, setAssignmentKind] = useState<MemberAssignmentKind>('ics_position')
+  const [effectiveWhen, setEffectiveWhen] = useState<RosterMemberEffectiveWhen>('now')
   const [emailDraft, setEmailDraft] = useState('')
   const [passwordDraft, setPasswordDraft] = useState('')
   const [passwordVisible, setPasswordVisible] = useState(false)
@@ -92,10 +102,17 @@ export function AddWorkspaceMemberDialog({
 
   const reportsToOptions = useMemo(() => buildReportsToOptions(catalog), [catalog])
   const lockIcsPositions = Boolean(positionPreset) && assignmentKind === 'ics_position'
+  const showEffectiveWhen = operationalPeriodsEnabled && isSupabaseEnabled
+  const lockEffectiveWhenToNextOp =
+    showEffectiveWhen &&
+    assignmentKind === 'ics_position' &&
+    positionsDraft.length === 1 &&
+    catalog.positionMetaByName[positionsDraft[0] ?? '']?.isPlanned === true
 
   const resetDraft = () => {
     setPersonSource('invite_new')
     setAssignmentKind('ics_position')
+    setEffectiveWhen(defaultEffectiveWhen)
     setEmailDraft('')
     setPasswordDraft('')
     setPasswordVisible(false)
@@ -109,7 +126,13 @@ export function AddWorkspaceMemberDialog({
   useEffect(() => {
     if (!open) return
     resetDraft()
-  }, [open, positionPreset])
+  }, [open, positionPreset, defaultEffectiveWhen])
+
+  useEffect(() => {
+    if (lockEffectiveWhenToNextOp) {
+      setEffectiveWhen('next_op_advance')
+    }
+  }, [lockEffectiveWhenToNextOp])
 
   useEffect(() => {
     if (!open || personSource !== 'add_existing' || !isSupabaseEnabled) {
@@ -141,6 +164,10 @@ export function AddWorkspaceMemberDialog({
   }, [existingSearchQuery, isSupabaseEnabled, onSearchExistingPeople, open, personSource])
 
   const togglePositionDraft = (position: string) => {
+    if (effectiveWhen === 'next_op_advance') {
+      setPositionsDraft([position])
+      return
+    }
     setPositionsDraft((previous) => {
       if (previous.includes(position)) {
         if (previous.length === 1) return previous
@@ -155,9 +182,19 @@ export function AddWorkspaceMemberDialog({
       ? validateMemberOrgChartReportsTo(orgChartReportsToDraft, catalog)
       : null
 
+  const effectiveWhenValidationError = validateRosterMemberEffectiveWhen({
+    effectiveWhen,
+    assignmentKind,
+    icsPositions: positionsDraft,
+    orgChartReportsTo: orgChartReportsToDraft,
+    catalog,
+    operationalPeriodsEnabled: showEffectiveWhen,
+  })
+
   const canSubmit =
     !isSubmitting &&
     !orgChartValidationError &&
+    !effectiveWhenValidationError &&
     (assignmentKind === 'ics_position' ? positionsDraft.length > 0 : Boolean(orgChartReportsToDraft)) &&
     (personSource === 'invite_new'
       ? isValidRosterEmail(emailDraft) &&
@@ -171,6 +208,7 @@ export function AddWorkspaceMemberDialog({
     const result = await onSubmit({
       personSource,
       assignmentKind,
+      effectiveWhen,
       email:
         personSource === 'invite_new'
           ? emailDraft.trim().toLowerCase()
@@ -179,7 +217,7 @@ export function AddWorkspaceMemberDialog({
       existingUserId: selectedExistingUserId,
       icsPositions: positionsDraft,
       orgChartReportsTo: orgChartReportsToDraft,
-      mode: inviteAssignmentMode,
+      mode: mapEffectiveWhenToInviteMode(effectiveWhen),
       positionPreset,
     })
     if (result === 'success') {
@@ -191,15 +229,21 @@ export function AddWorkspaceMemberDialog({
     personSource === 'add_existing'
       ? isSubmitting
         ? 'Adding…'
-        : 'Add to roster'
+        : effectiveWhen === 'next_op_advance'
+          ? 'Add to roster (next OP)'
+          : 'Add to roster'
       : isSubmitting
         ? passwordDraft.length > 0
           ? 'Adding member…'
           : 'Sending invite…'
         : isSupabaseEnabled
           ? passwordDraft.length > 0
-            ? 'Add member'
-            : 'Send invite'
+            ? effectiveWhen === 'next_op_advance'
+              ? 'Add member (next OP)'
+              : 'Add member'
+            : effectiveWhen === 'next_op_advance'
+              ? 'Send invite (next OP)'
+              : 'Send invite'
           : 'Add to roster'
 
   return (
@@ -213,20 +257,12 @@ export function AddWorkspaceMemberDialog({
       <DialogContent className="!w-[32rem] !max-w-[32rem] sm:!max-w-[32rem]">
         <DialogHeader>
           <DialogTitle>
-            {positionPreset
-              ? inviteAssignmentMode === 'schedule_on_op_advance'
-                ? `Invite user for ${positionPreset} (next OP)`
-                : `Add member to ${positionPreset}`
-              : 'Add roster member'}
+            {positionPreset ? `Add member to ${positionPreset}` : 'Add roster member'}
           </DialogTitle>
           <DialogDescription>
-            {positionPreset
-              ? inviteAssignmentMode === 'schedule_on_op_advance'
-                ? `Send a workspace invitation. ${positionPreset} will be scheduled on the next operational period after they join.`
-                : `Add a team member to ${positionPreset} on ${workspaceLabel}.`
-              : isSupabaseEnabled
-                ? `Add someone to ${workspaceLabel}. Invite a new person or add someone who already has a Pratus account.`
-                : `Invite a team member by email and assign their role for ${workspaceLabel}.`}
+            {isSupabaseEnabled
+              ? `Add someone to ${workspaceLabel}. Invite a new person or add someone who already has a Pratus account.`
+              : `Invite a team member by email and assign their role for ${workspaceLabel}.`}
           </DialogDescription>
         </DialogHeader>
 
@@ -283,18 +319,70 @@ export function AddWorkspaceMemberDialog({
               <label
                 className={cn(
                   'flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm',
-                  assignmentKind === 'single_resource' && 'border-primary bg-primary/5',
-                  inviteAssignmentMode === 'schedule_on_op_advance' && 'cursor-not-allowed opacity-50'
+                  assignmentKind === 'single_resource' && 'border-primary bg-primary/5'
                 )}
               >
-                <RadioGroupItem
-                  value="single_resource"
-                  disabled={inviteAssignmentMode === 'schedule_on_op_advance'}
-                />
+                <RadioGroupItem value="single_resource" />
                 Add as single resource
               </label>
             </RadioGroup>
           </div>
+
+          {showEffectiveWhen ? (
+            <div className="grid gap-2">
+              <Label>Effective when</Label>
+              <RadioGroup
+                value={effectiveWhen}
+                onValueChange={(value) =>
+                  setEffectiveWhen(
+                    value === 'next_op_advance' ? 'next_op_advance' : 'now'
+                  )
+                }
+                className="grid grid-cols-1 gap-2"
+              >
+                <label
+                  className={cn(
+                    'flex cursor-pointer items-start gap-2 rounded-md border px-3 py-2 text-sm',
+                    effectiveWhen === 'now' && 'border-primary bg-primary/5',
+                    lockEffectiveWhenToNextOp && 'cursor-not-allowed opacity-50'
+                  )}
+                >
+                  <RadioGroupItem value="now" disabled={lockEffectiveWhenToNextOp} className="mt-0.5" />
+                  <span>
+                    <span className="font-medium">Now</span>
+                    <span className="mt-0.5 block text-[11px] text-muted-foreground">
+                      Assignment is active in this operational period.
+                    </span>
+                  </span>
+                </label>
+                <label
+                  className={cn(
+                    'flex cursor-pointer items-start gap-2 rounded-md border px-3 py-2 text-sm',
+                    effectiveWhen === 'next_op_advance' && 'border-primary bg-primary/5'
+                  )}
+                >
+                  <RadioGroupItem value="next_op_advance" className="mt-0.5" />
+                  <span>
+                    <span className="font-medium">Next operational period</span>
+                    <span className="mt-0.5 block text-[11px] text-muted-foreground">
+                      Person is added to the roster now; assignment applies when the next OP starts.
+                    </span>
+                  </span>
+                </label>
+              </RadioGroup>
+              <p className="text-[11px] text-muted-foreground">
+                {effectiveWhenSummary({
+                  effectiveWhen,
+                  assignmentKind,
+                  icsPositions: positionsDraft,
+                  orgChartReportsTo: orgChartReportsToDraft,
+                })}
+              </p>
+              {effectiveWhenValidationError ? (
+                <p className="text-xs text-destructive">{effectiveWhenValidationError}</p>
+              ) : null}
+            </div>
+          ) : null}
 
           {personSource === 'invite_new' ? (
             <>
@@ -391,15 +479,13 @@ export function AddWorkspaceMemberDialog({
 
           {assignmentKind === 'ics_position' ? (
             <div className="grid gap-2">
-              <Label>ICS Positions (select at least one)</Label>
+              <Label>
+                ICS Positions
+                {effectiveWhen === 'next_op_advance' ? ' (select one)' : ' (select at least one)'}
+              </Label>
               {lockIcsPositions ? (
                 <div className="rounded-md border px-3 py-2 text-sm">
                   {positionPreset}
-                  {inviteAssignmentMode === 'schedule_on_op_advance' ? (
-                    <p className="mt-1 text-[11px] text-muted-foreground">
-                      Scheduled for this position on the next operational period.
-                    </p>
-                  ) : null}
                 </div>
               ) : (
                 <div className="max-h-48 space-y-2 overflow-y-auto rounded-md border p-3">

@@ -424,6 +424,44 @@ export async function fetchWorkspaceRoster(workspaceId: string): Promise<Workspa
   return (data as DbWorkspaceMember[]).map(mapDbMember)
 }
 
+export async function fetchWorkspaceMemberPendingOrgChartReports(
+  workspaceId: string
+): Promise<Record<string, string>> {
+  const supabase = getSupabaseClient()
+  if (!supabase) return {}
+
+  const { data, error } = await supabase
+    .from('workspace_member_pending_assignments')
+    .select('member_id, org_chart_reports_to')
+    .eq('workspace_id', workspaceId)
+
+  if (error || !data) {
+    return {}
+  }
+
+  const map: Record<string, string> = {}
+  for (const row of data) {
+    if (typeof row.member_id === 'string' && typeof row.org_chart_reports_to === 'string') {
+      map[row.member_id] = row.org_chart_reports_to
+    }
+  }
+  return map
+}
+
+export async function fetchWorkspaceRosterWithPendingAssignments(
+  workspaceId: string
+): Promise<WorkspaceRosterMember[]> {
+  const [roster, pendingByMemberId] = await Promise.all([
+    fetchWorkspaceRoster(workspaceId),
+    fetchWorkspaceMemberPendingOrgChartReports(workspaceId),
+  ])
+
+  return roster.map((member) => ({
+    ...member,
+    pendingOrgChartReportsTo: pendingByMemberId[member.id] ?? null,
+  }))
+}
+
 export async function removeWorkspaceRosterMember(memberId: string): Promise<boolean> {
   const supabase = getSupabaseClient()
   if (!supabase) return false
@@ -547,6 +585,7 @@ export async function addExistingWorkspaceMember(params: {
   assignmentKind: 'ics_position' | 'single_resource'
   icsPositions?: string[]
   orgChartReportsTo?: string
+  scheduleOnOpAdvance?: boolean
 }): Promise<{ ok: true } | { ok: false; message: string }> {
   if (!isSupabaseConfigured) {
     return { ok: false, message: 'Supabase is not configured.' }
@@ -564,6 +603,7 @@ export async function addExistingWorkspaceMember(params: {
       assignmentKind: params.assignmentKind,
       icsPositions: params.icsPositions,
       orgChartReportsTo: params.orgChartReportsTo,
+      ...(params.scheduleOnOpAdvance ? { scheduleOnOpAdvance: true } : {}),
     }),
   })
 
@@ -573,6 +613,36 @@ export async function addExistingWorkspaceMember(params: {
 
   if (!response.ok) {
     return { ok: false, message: payload.error ?? 'Could not add person to roster.' }
+  }
+
+  return { ok: true }
+}
+
+export async function cancelMemberPendingAssignment(params: {
+  accessToken: string
+  workspaceId: string
+  memberId: string
+}): Promise<{ ok: true } | { ok: false; message: string }> {
+  if (!isSupabaseConfigured) {
+    return { ok: false, message: 'Supabase is not configured.' }
+  }
+
+  const response = await fetch('/api/cancel-member-pending-assignment', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${params.accessToken}`,
+    },
+    body: JSON.stringify({
+      workspaceId: params.workspaceId,
+      memberId: params.memberId,
+    }),
+  })
+
+  const payload = (await response.json().catch(() => ({}))) as { error?: string }
+
+  if (!response.ok) {
+    return { ok: false, message: payload.error ?? 'Could not cancel pending assignment.' }
   }
 
   return { ok: true }
