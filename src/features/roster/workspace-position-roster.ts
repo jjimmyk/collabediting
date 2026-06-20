@@ -17,7 +17,10 @@ import {
   resolveAllowWorkAssignment,
   type WorkspacePositionSettingsMap,
 } from '@/lib/workspace-position-settings'
-import { resolveScheduledPositionAssets } from '@/lib/workspace-position-asset-roster'
+import {
+  resolvePositionAssetEntry,
+  resolveScheduledPositionAssets,
+} from '@/lib/workspace-position-asset-roster'
 
 export type PositionPermissionMap = Record<string, { editIcs201: boolean }>
 
@@ -139,10 +142,22 @@ export function buildPositionRosterEntries(
         unassignAssetKeys: [],
       }
       const assets = assetsByPosition[position] ?? []
-      const scheduledAssignAssets = resolveScheduledPositionAssets(
-        assetSchedule.assignAssetKeys,
-        assetsByKey,
-        workspaceMetaByAssetKey
+      const scheduledAssignAssets = [
+        ...resolveScheduledPositionAssets(
+          assetSchedule.assignAssetKeys,
+          assetsByKey,
+          workspaceMetaByAssetKey
+        ),
+        ...Object.values(assetsByKey)
+          .filter(
+            (asset) =>
+              !asset.orgChartReportsTo &&
+              asset.pendingOrgChartReportsTo === position
+          )
+          .map((asset) => resolvePositionAssetEntry(asset.assetKey, assetsByKey, workspaceMetaByAssetKey))
+          .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry)),
+      ].filter(
+        (asset, index, list) => list.findIndex((entry) => entry.assetKey === asset.assetKey) === index
       )
       const scheduledUnassignAssets = resolveScheduledPositionAssets(
         assetSchedule.unassignAssetKeys,

@@ -14,6 +14,7 @@
     "verify:ics215-ics204-work-sync": "npx vite-node scripts/verify-ics215-ics204-work-sync.ts",
     "verify:workspace-asset-have-lookup": "npx vite-node scripts/verify-workspace-asset-have-lookup.ts",
     "verify:add-workspace-member": "npx vite-node scripts/verify-add-workspace-member.ts",
+    "verify:add-asset-effective-when": "npx vite-node scripts/verify-add-asset-effective-when.ts",
     "verify:ics215-work-assignments": "npx vite-node scripts/verify-ics215-work-assignments.ts",
     "verify:ics215-export": "npx vite-node scripts/verify-ics215-export.ts",
     "lint": "eslint .",

@@ -60,6 +60,8 @@ export type ResourceListItemData = HubAssetCatalogRecord & {
   ics204DocumentId: string | null
   /** Roster member id serving as workspace-scoped Point of Contact for this asset. */
   pointOfContactMemberId: string | null
+  /** Deferred org chart placement target when scheduled for next OP. */
+  pendingOrgChartReportsTo?: string | null
 }
 
 export type AssetWorkspaceOption = {

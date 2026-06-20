@@ -200,3 +200,88 @@ export async function updateWorkspaceAssetPointOfContact(params: {
 
   return { ok: true }
 }
+
+export async function fetchWorkspaceAssetPendingOrgChartReports(
+  workspaceId: string
+): Promise<Record<string, string>> {
+  const supabase = getSupabaseClient()
+  if (!supabase) return {}
+
+  const { data, error } = await supabase
+    .from('workspace_asset_pending_org_chart')
+    .select('asset_key, org_chart_reports_to')
+    .eq('workspace_id', workspaceId)
+
+  if (error || !data) {
+    return {}
+  }
+
+  const map: Record<string, string> = {}
+  for (const row of data) {
+    if (typeof row.asset_key === 'string' && typeof row.org_chart_reports_to === 'string') {
+      map[row.asset_key] = row.org_chart_reports_to
+    }
+  }
+  return map
+}
+
+export async function addAssetWithEffectiveWhen(params: {
+  accessToken: string
+  workspaceId: string
+  assetKey: string
+  assignmentKind: 'ics_position' | 'single_resource'
+  scheduleOnOpAdvance?: boolean
+  icsPosition?: string
+  orgChartReportsTo?: string
+  pointOfContactMemberId?: string | null
+}): Promise<{ ok: true; scheduleOnOpAdvance?: boolean } | { ok: false; message: string }> {
+  if (!isSupabaseConfigured) {
+    return { ok: false, message: 'Supabase is not configured.' }
+  }
+
+  const response = await fetch('/api/add-asset-with-effective-when', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${params.accessToken}`,
+    },
+    body: JSON.stringify(params),
+  })
+
+  const payload = (await response.json().catch(() => ({}))) as {
+    error?: string
+    scheduleOnOpAdvance?: boolean
+  }
+
+  if (!response.ok) {
+    return { ok: false, message: payload.error ?? 'Could not add asset.' }
+  }
+
+  return { ok: true, scheduleOnOpAdvance: payload.scheduleOnOpAdvance }
+}
+
+export async function cancelAssetPendingAssignment(params: {
+  accessToken: string
+  workspaceId: string
+  assetKey: string
+}): Promise<{ ok: true } | { ok: false; message: string }> {
+  if (!isSupabaseConfigured) {
+    return { ok: false, message: 'Supabase is not configured.' }
+  }
+
+  const response = await fetch('/api/cancel-asset-pending-assignment', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${params.accessToken}`,
+    },
+    body: JSON.stringify(params),
+  })
+
+  const payload = (await response.json().catch(() => ({}))) as { error?: string }
+  if (!response.ok) {
+    return { ok: false, message: payload.error ?? 'Could not cancel pending assignment.' }
+  }
+
+  return { ok: true }
+}

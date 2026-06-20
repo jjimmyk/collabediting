@@ -587,6 +587,9 @@ import {
   type WorkspaceMemberScheduleRow,
 } from '@/lib/workspace-member-schedule-service'
 import {
+  addAssetWithEffectiveWhen,
+  cancelAssetPendingAssignment,
+  fetchWorkspaceAssetPendingOrgChartReports,
   fetchWorkspaceAssetSchedules,
   fetchWorkspacePositionAssetAssignments,
   groupAssetSchedulesByPosition,
@@ -594,6 +597,7 @@ import {
   updatePositionAssetSchedules,
   updateWorkspaceAssetPointOfContact,
 } from '@/lib/workspace-position-asset-service'
+import type { AddAssetToOrgChartSubmitInput } from '@/lib/roster-asset-assignment'
 import type {
   WorkspacePositionAssetAssignmentRow,
   WorkspacePositionAssetScheduleRow,
@@ -8614,6 +8618,9 @@ function App() {
   const [workspaceAssetSchedules, setWorkspaceAssetSchedules] = useState<
     WorkspacePositionAssetScheduleRow[]
   >([])
+  const [assetPendingOrgChartByKey, setAssetPendingOrgChartByKey] = useState<Record<string, string>>(
+    {}
+  )
   const [activeWorkspaceSupabaseId, setActiveWorkspaceSupabaseId] = useState<string | null>(null)
   const {
     hubAssets,
@@ -8623,7 +8630,6 @@ function App() {
     setOrgChartPlacement,
     syncIcs204AttachmentsForDocument,
     getAssetsForWorkspace,
-    getAssetsForWorkspaceNotOnOrgChart,
     refreshAssignments,
   } = useWorkspaceAssetAssignments({
     enabled: true,
@@ -8653,6 +8659,14 @@ function App() {
   const workspaceAssignedAssets = useMemo(
     () => getAssetsForWorkspace(activeWorkspaceSupabaseId),
     [activeWorkspaceSupabaseId, getAssetsForWorkspace]
+  )
+  const workspaceAssignedAssetsWithPending = useMemo(
+    () =>
+      workspaceAssignedAssets.map((asset) => ({
+        ...asset,
+        pendingOrgChartReportsTo: assetPendingOrgChartByKey[asset.assetKey] ?? null,
+      })),
+    [assetPendingOrgChartByKey, workspaceAssignedAssets]
   )
   const unassignedHubAssets = useMemo(() => getUnassignedHubAssets(hubAssets), [hubAssets])
   const handleAssignAssetToCurrentWorkspace = useCallback(
@@ -11798,22 +11812,28 @@ function App() {
     () =>
       buildDynamicOrgChart(
         workspacePositionCatalog,
-        workspaceAssignedAssets,
+        workspaceAssignedAssetsWithPending,
         activeWorkspaceRoster
       ),
-    [workspacePositionCatalog, workspaceAssignedAssets, activeWorkspaceRoster]
+    [workspacePositionCatalog, workspaceAssignedAssetsWithPending, activeWorkspaceRoster]
   )
   const workspaceRosterById = useMemo(
     () => Object.fromEntries(activeWorkspaceRoster.map((member) => [member.id, member])),
     [activeWorkspaceRoster]
   )
   const workspaceAssetsByKey = useMemo(
-    () => Object.fromEntries(workspaceAssignedAssets.map((asset) => [asset.assetKey, asset])),
-    [workspaceAssignedAssets]
+    () =>
+      Object.fromEntries(
+        workspaceAssignedAssetsWithPending.map((asset) => [asset.assetKey, asset])
+      ),
+    [workspaceAssignedAssetsWithPending]
   )
-  const workspaceAssetsNotOnOrgChart = useMemo(
-    () => getAssetsForWorkspaceNotOnOrgChart(activeWorkspaceSupabaseId),
-    [activeWorkspaceSupabaseId, getAssetsForWorkspaceNotOnOrgChart]
+  const workspaceAssetsEligibleForOrgChartDialog = useMemo(
+    () =>
+      workspaceAssignedAssetsWithPending.filter(
+        (asset) => !asset.orgChartReportsTo && !asset.pendingOrgChartReportsTo
+      ),
+    [workspaceAssignedAssetsWithPending]
   )
   const persistActiveWorkspaceForms = (workspaceKey: string) => {
     workspaceFormsCacheRef.current[workspaceKey] = {
@@ -12065,11 +12085,12 @@ function App() {
         setWorkspaceMemberSchedules([])
         setWorkspacePositionAssetAssignments([])
         setWorkspaceAssetSchedules([])
+        setAssetPendingOrgChartByKey({})
         setIsRosterLoading(false)
         return
       }
 
-      const [roster, schedules, permissions, settings, positionAssets, assetSchedules] =
+      const [roster, schedules, permissions, settings, positionAssets, assetSchedules, pendingOrgChart] =
         await Promise.all([
         fetchWorkspaceRoster(workspaceId),
         fetchWorkspaceMemberSchedules(workspaceId),
@@ -12077,6 +12098,7 @@ function App() {
         fetchWorkspacePositionSettings(workspaceId),
         fetchWorkspacePositionAssetAssignments(workspaceId),
         fetchWorkspaceAssetSchedules(workspaceId),
+        fetchWorkspaceAssetPendingOrgChartReports(workspaceId),
       ])
       if (cancelled) return
       setSupabaseWorkspaceRoster(roster)
@@ -12085,6 +12107,7 @@ function App() {
       setActiveWorkspacePositionSettings(settings)
       setWorkspacePositionAssetAssignments(positionAssets)
       setWorkspaceAssetSchedules(assetSchedules)
+      setAssetPendingOrgChartByKey(pendingOrgChart)
 
       setIsRosterLoading(false)
     }
@@ -13320,8 +13343,8 @@ function App() {
     [workspaceAssetSchedules]
   )
   const positionAssetWorkspaceMetaByKey = useMemo(
-    () => buildPositionAssetWorkspaceMetaByKey(workspaceAssignedAssets, activeWorkspaceRoster),
-    [workspaceAssignedAssets, activeWorkspaceRoster]
+    () => buildPositionAssetWorkspaceMetaByKey(workspaceAssignedAssetsWithPending, activeWorkspaceRoster),
+    [workspaceAssignedAssetsWithPending, activeWorkspaceRoster]
   )
   const positionAssetsByPosition = useMemo(
     () =>
@@ -15108,12 +15131,14 @@ function App() {
   }
   const reloadWorkspacePositionAssets = async () => {
     if (!isSupabaseEnabled || !activeWorkspaceSupabaseId) return
-    const [positionAssets, assetSchedules] = await Promise.all([
+    const [positionAssets, assetSchedules, pendingOrgChart] = await Promise.all([
       fetchWorkspacePositionAssetAssignments(activeWorkspaceSupabaseId),
       fetchWorkspaceAssetSchedules(activeWorkspaceSupabaseId),
+      fetchWorkspaceAssetPendingOrgChartReports(activeWorkspaceSupabaseId),
     ])
     setWorkspacePositionAssetAssignments(positionAssets)
     setWorkspaceAssetSchedules(assetSchedules)
+    setAssetPendingOrgChartByKey(pendingOrgChart)
     await refreshAssignments()
   }
   const updatePositionScheduleLists = async (
@@ -15381,6 +15406,35 @@ function App() {
   }
   const removeScheduledAssignAssetFromPosition = async (assetKey: string, position: string) => {
     const asset = workspaceAssetsByKey[assetKey]
+
+    if (asset?.pendingOrgChartReportsTo === position) {
+      if (!isSupabaseEnabled || !activeWorkspaceSupabaseId) {
+        toast.error('This workspace is not synced to Supabase yet.')
+        return
+      }
+      const accessToken = await getAccessToken()
+      if (!accessToken) {
+        toast.error('Sign in again to manage asset schedules.')
+        return
+      }
+      const result = await cancelAssetPendingAssignment({
+        accessToken,
+        workspaceId: activeWorkspaceSupabaseId,
+        assetKey,
+      })
+      if (!result.ok) {
+        toast.error(result.message)
+        return
+      }
+      await reloadWorkspacePositionAssets()
+      toast.success(
+        asset
+          ? `Removed ${asset.name} from next OP org chart schedule for ${position}.`
+          : `Removed asset from next OP org chart schedule for ${position}.`
+      )
+      return
+    }
+
     const current = assetSchedulesByPosition[position] ?? {
       assignAssetKeys: [],
       unassignAssetKeys: [],
@@ -15644,11 +15698,78 @@ function App() {
       setIsSavingAssetOrgChartPlacement(false)
     }
   }
-  const handleAddAssetToOrgChart = async (assetKey: string, reportsTo: string) => {
+  const handleAddAssetToOrgChart = async (input: AddAssetToOrgChartSubmitInput) => {
+    const asset = workspaceAssetsByKey[input.assetKey]
+    const scheduleOnOpAdvance =
+      input.effectiveWhen === 'next_op_advance' && operationalPeriodsEnabled
+
+    if (input.effectiveWhen === 'next_op_advance' && !operationalPeriodsEnabled) {
+      toast.error('Next operational period assignment requires operational periods.')
+      throw new Error('Next operational period assignment requires operational periods.')
+    }
+
+    if (!isSupabaseEnabled || !activeWorkspaceSupabaseId) {
+      if (scheduleOnOpAdvance) {
+        toast.error('Schedule assignments require Supabase persistence.')
+        throw new Error('Schedule assignments require Supabase persistence.')
+      }
+      if (input.assignmentKind === 'ics_position') {
+        toast.error('ICS position assignment requires Supabase persistence.')
+        throw new Error('ICS position assignment requires Supabase persistence.')
+      }
+      setIsSavingAssetOrgChartPlacement(true)
+      try {
+        await setOrgChartPlacement(input.assetKey, input.orgChartReportsTo)
+        toast.success(`${asset?.name ?? 'Asset'} added to the org chart.`)
+      } finally {
+        setIsSavingAssetOrgChartPlacement(false)
+      }
+      return
+    }
+
+    const accessToken = await getAccessToken()
+    if (!accessToken) {
+      toast.error('Sign in again to add assets.')
+      throw new Error('Sign in again to add assets.')
+    }
+
     setIsSavingAssetOrgChartPlacement(true)
     try {
-      await setOrgChartPlacement(assetKey, reportsTo)
-      toast.success('Asset added to the org chart.')
+      const result = await addAssetWithEffectiveWhen({
+        accessToken,
+        workspaceId: activeWorkspaceSupabaseId,
+        assetKey: input.assetKey,
+        assignmentKind: input.assignmentKind,
+        ...(input.assignmentKind === 'ics_position'
+          ? {
+              icsPosition: input.icsPosition,
+              pointOfContactMemberId: input.pointOfContactMemberId,
+            }
+          : { orgChartReportsTo: input.orgChartReportsTo }),
+        ...(scheduleOnOpAdvance ? { scheduleOnOpAdvance: true } : {}),
+      })
+
+      if (!result.ok) {
+        toast.error(result.message)
+        throw new Error(result.message)
+      }
+
+      await reloadWorkspacePositionAssets()
+
+      if (scheduleOnOpAdvance) {
+        toast.success(
+          input.assignmentKind === 'single_resource'
+            ? `${asset?.name ?? 'Asset'} scheduled to appear under ${input.orgChartReportsTo} on the next operational period.`
+            : `${asset?.name ?? 'Asset'} scheduled for ${input.icsPosition} on the next operational period.`
+        )
+        return
+      }
+
+      toast.success(
+        input.assignmentKind === 'single_resource'
+          ? `${asset?.name ?? 'Asset'} added to the org chart under ${input.orgChartReportsTo}.`
+          : `${asset?.name ?? 'Asset'} assigned to ${input.icsPosition}.`
+      )
     } finally {
       setIsSavingAssetOrgChartPlacement(false)
     }
@@ -37495,8 +37616,14 @@ function App() {
       <AddAssetToOrgChartDialog
         open={isAddAssetToOrgChartOpen}
         onOpenChange={setIsAddAssetToOrgChartOpen}
-        assets={workspaceAssetsNotOnOrgChart}
+        isSupabaseEnabled={isSupabaseEnabled}
+        operationalPeriodsEnabled={operationalPeriodsEnabled}
+        assets={workspaceAssetsEligibleForOrgChartDialog}
+        workspaceAssignedAssets={workspaceAssignedAssetsWithPending}
+        assetSchedulesByPosition={assetSchedulesByPosition}
+        positionAssetsByPosition={positionAssetsByPosition}
         catalog={workspacePositionCatalog}
+        pocMembers={rosterPocMembers}
         isSaving={isSavingAssetOrgChartPlacement}
         onSubmit={handleAddAssetToOrgChart}
       />

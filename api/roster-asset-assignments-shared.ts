@@ -3,7 +3,7 @@ import {
   getPositionMemberSchedulePolicy,
   loadWorkspacePositionLifecycleContext,
 } from './roster-member-schedule-policy.js'
-import { fetchWorkspacePositionAllowlist } from './roster-shared.js'
+import { fetchWorkspacePositionAllowlist, validateOrgChartReportsToPosition } from './roster-shared.js'
 
 export type AssetScheduleAction = 'assign_on_op_advance' | 'unassign_on_op_advance'
 
@@ -85,7 +85,7 @@ async function loadActiveMemberIds(admin: SupabaseClient, workspaceId: string): 
   return new Set((data ?? []).map((row) => row.id))
 }
 
-async function assertAssetAssignedToWorkspace(
+export async function assertAssetAssignedToWorkspace(
   admin: SupabaseClient,
   workspaceId: string,
   assetKey: string
@@ -487,6 +487,87 @@ export async function applyAssetSchedulesOnOperationalPeriodAdvance(
   if (deleteError) {
     throw new Error(deleteError.message)
   }
+}
+
+export async function setAssetOrgChartReportsTo(
+  admin: SupabaseClient,
+  params: {
+    workspaceId: string
+    assetKey: string
+    orgChartReportsTo: string
+  }
+): Promise<void> {
+  const reportsToError = await validateOrgChartReportsToPosition(
+    admin,
+    params.workspaceId,
+    params.orgChartReportsTo
+  )
+  if (reportsToError) {
+    throw new Error(reportsToError)
+  }
+
+  await assertAssetAssignedToWorkspace(admin, params.workspaceId, params.assetKey)
+
+  const { error } = await admin
+    .from('workspace_asset_assignments')
+    .update({
+      org_chart_reports_to: params.orgChartReportsTo.trim(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq('asset_key', params.assetKey.trim())
+    .eq('workspace_id', params.workspaceId)
+
+  if (error) {
+    throw new Error(error.message)
+  }
+}
+
+export async function addAssetScheduleAssignOnOpAdvance(
+  admin: SupabaseClient,
+  params: {
+    workspaceId: string
+    positionName: string
+    assetKey: string
+    pointOfContactMemberId?: string | null
+    createdBy: string | null
+  }
+): Promise<void> {
+  const positionName = params.positionName.trim()
+  const assetKey = params.assetKey.trim()
+
+  const assignment = await assertAssetAssignedToWorkspace(admin, params.workspaceId, assetKey)
+
+  let pocMemberId = assignment.pointOfContactMemberId
+  if (params.pointOfContactMemberId) {
+    await assertValidPointOfContactMember(admin, params.workspaceId, params.pointOfContactMemberId)
+    await setWorkspaceAssetPointOfContact(admin, assetKey, params.pointOfContactMemberId)
+    pocMemberId = params.pointOfContactMemberId
+  }
+
+  if (!pocMemberId) {
+    throw new Error('Select a Point of Contact roster member before scheduling this asset.')
+  }
+
+  const schedules = await fetchWorkspaceAssetSchedules(admin, params.workspaceId)
+  const forPosition = schedules.filter((row) => row.position_name === positionName)
+  const assignAssetKeys = forPosition
+    .filter((row) => row.schedule_action === 'assign_on_op_advance')
+    .map((row) => row.asset_key)
+  const unassignAssetKeys = forPosition
+    .filter((row) => row.schedule_action === 'unassign_on_op_advance')
+    .map((row) => row.asset_key)
+
+  if (!assignAssetKeys.includes(assetKey)) {
+    assignAssetKeys.push(assetKey)
+  }
+
+  await replacePositionAssetSchedules(admin, {
+    workspaceId: params.workspaceId,
+    positionName,
+    assignAssetKeys,
+    unassignAssetKeys,
+    createdBy: params.createdBy,
+  })
 }
 
 export async function clearPositionAssetDependencies(

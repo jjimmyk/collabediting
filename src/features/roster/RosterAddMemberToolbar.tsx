@@ -18,7 +18,7 @@ export function RosterAddMemberToolbar({
   return (
     <>
       <Button type="button" size="sm" onClick={onAddMember}>
-        + Add Member
+        + Add Person
       </Button>
       {onAddAssetToOrgChart ? (
         <Button
