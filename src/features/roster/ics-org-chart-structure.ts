@@ -17,6 +17,13 @@ export type OrgChartNode =
       color?: OrgChartColor
     }
   | {
+      kind: 'single_resource'
+      memberId: string
+      label: string
+      email: string
+      color?: OrgChartColor
+    }
+  | {
       kind: 'group'
       label: string
       type: 'Section' | 'Command Staff'

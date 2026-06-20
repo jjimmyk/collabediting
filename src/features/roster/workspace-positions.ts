@@ -355,6 +355,9 @@ function cloneOrgChartNode(node: OrgChartNode): OrgChartNode {
   if (node.kind === 'asset') {
     return { ...node }
   }
+  if (node.kind === 'single_resource') {
+    return { ...node }
+  }
   return {
     ...node,
     children: node.children.map(cloneOrgChartNode),
@@ -367,7 +370,7 @@ function attachCustomPositionToTree(
   child: OrgChartNode
 ): boolean {
   for (const node of nodes) {
-    if (node.kind === 'asset') {
+    if (node.kind === 'asset' || node.kind === 'single_resource') {
       continue
     }
     if (node.kind === 'position') {

@@ -62,6 +62,9 @@ function attachOrgChartNodeToTree(
     if (node.kind === 'asset') {
       continue
     }
+    if (node.kind === 'single_resource') {
+      continue
+    }
     if (node.kind === 'position') {
       if (node.position === parentName) {
         node.children = [...(node.children ?? []), child]

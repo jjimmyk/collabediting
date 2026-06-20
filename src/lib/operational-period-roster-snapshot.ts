@@ -37,6 +37,8 @@ export function buildPositionRosterEntriesFromSnapshot(
           status: member.status as WorkspaceRosterMember['status'],
           icsPosition: member.icsPositions[0] ?? position.name,
           icsPositions: member.icsPositions,
+          assignmentKind: 'ics_position',
+          orgChartReportsTo: null,
           checkInStatus: member.checkInStatus ?? 'not_arrived',
           addedAt: snapshot.capturedAt,
         })

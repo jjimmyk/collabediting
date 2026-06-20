@@ -40,6 +40,8 @@ export function createDefaultRosterMember(email: string): WorkspaceRosterMember 
     email: email.toLowerCase(),
     icsPosition: DEFAULT_WORKSPACE_ROSTER_POSITION,
     icsPositions: [DEFAULT_WORKSPACE_ROSTER_POSITION],
+    assignmentKind: 'ics_position',
+    orgChartReportsTo: null,
     status: 'active',
     checkInStatus: 'not_arrived',
     addedAt: formatNow(),

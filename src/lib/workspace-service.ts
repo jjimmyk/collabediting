@@ -15,6 +15,7 @@ import {
   type WorkspacePositionSettingsMap,
 } from '@/lib/workspace-position-settings'
 import { parseWorkspaceMemberCheckInStatus } from '@/lib/roster-check-in-status'
+import { SINGLE_RESOURCE_POSITION_LABEL } from '@/lib/roster-member-assignment'
 import { getSeededWorkspaceId } from '@/lib/workspace-ids'
 import { getSupabaseClient, isSupabaseConfigured } from '@/lib/supabase'
 import type {
@@ -52,12 +53,20 @@ function mapMemberPositions(row: DbWorkspaceMember): string[] {
 }
 
 function mapDbMember(row: DbWorkspaceMember): WorkspaceRosterMember {
-  const icsPositions = mapMemberPositions(row)
+  const assignmentKind =
+    row.assignment_kind === 'single_resource' ? 'single_resource' : 'ics_position'
+  const icsPositions =
+    assignmentKind === 'single_resource' ? [] : mapMemberPositions(row)
   return {
     id: row.id,
     email: row.email,
-    icsPosition: primaryIcsPosition(icsPositions),
+    icsPosition:
+      assignmentKind === 'single_resource'
+        ? SINGLE_RESOURCE_POSITION_LABEL
+        : primaryIcsPosition(icsPositions),
     icsPositions,
+    assignmentKind,
+    orgChartReportsTo: row.org_chart_reports_to ?? null,
     status: row.status,
     checkInStatus: parseWorkspaceMemberCheckInStatus(row.check_in_status),
     addedAt: formatMemberDate(row.joined_at ?? row.invited_at),
@@ -394,6 +403,9 @@ export async function fetchWorkspaceRoster(workspaceId: string): Promise<Workspa
       user_id,
       email,
       ics_position,
+      assignment_kind,
+      org_chart_reports_to,
+      org_chart_sort_order,
       status,
       invited_at,
       joined_at,
@@ -432,6 +444,8 @@ export async function inviteWorkspaceMember(params: {
   password?: string
   confirmPasswordOverwrite?: boolean
   scheduleOnOpAdvance?: boolean
+  assignmentKind?: 'ics_position' | 'single_resource'
+  orgChartReportsTo?: string
 }): Promise<
   | { ok: true; warning?: string; method?: string; action?: 'created' | 'updated'; scheduleOnOpAdvance?: boolean }
   | { ok: false; message: string; code?: 'user_exists' | 'password_too_short' }
@@ -454,6 +468,8 @@ export async function inviteWorkspaceMember(params: {
       ...(params.password ? { password: params.password } : {}),
       ...(params.confirmPasswordOverwrite ? { confirmPasswordOverwrite: true } : {}),
       ...(params.scheduleOnOpAdvance ? { scheduleOnOpAdvance: true } : {}),
+      ...(params.assignmentKind ? { assignmentKind: params.assignmentKind } : {}),
+      ...(params.orgChartReportsTo ? { orgChartReportsTo: params.orgChartReportsTo } : {}),
     }),
   })
 
@@ -484,6 +500,82 @@ export async function inviteWorkspaceMember(params: {
     method: payload.method,
     action: payload.action,
   }
+}
+
+export type OrgMemberSearchResult = {
+  id: string
+  email: string
+  fullName: string | null
+}
+
+export async function searchOrgMembersForWorkspace(params: {
+  accessToken: string
+  workspaceId: string
+  query: string
+}): Promise<OrgMemberSearchResult[]> {
+  if (!isSupabaseConfigured) {
+    return []
+  }
+
+  const searchParams = new URLSearchParams({
+    workspaceId: params.workspaceId,
+    q: params.query.trim(),
+  })
+
+  const response = await fetch(`/api/search-org-members?${searchParams.toString()}`, {
+    headers: {
+      Authorization: `Bearer ${params.accessToken}`,
+    },
+  })
+
+  const payload = (await response.json().catch(() => ({}))) as {
+    error?: string
+    results?: OrgMemberSearchResult[]
+  }
+
+  if (!response.ok) {
+    throw new Error(payload.error ?? 'Could not search for people.')
+  }
+
+  return payload.results ?? []
+}
+
+export async function addExistingWorkspaceMember(params: {
+  accessToken: string
+  workspaceId: string
+  userId: string
+  assignmentKind: 'ics_position' | 'single_resource'
+  icsPositions?: string[]
+  orgChartReportsTo?: string
+}): Promise<{ ok: true } | { ok: false; message: string }> {
+  if (!isSupabaseConfigured) {
+    return { ok: false, message: 'Supabase is not configured.' }
+  }
+
+  const response = await fetch('/api/add-existing-workspace-member', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${params.accessToken}`,
+    },
+    body: JSON.stringify({
+      workspaceId: params.workspaceId,
+      userId: params.userId,
+      assignmentKind: params.assignmentKind,
+      icsPositions: params.icsPositions,
+      orgChartReportsTo: params.orgChartReportsTo,
+    }),
+  })
+
+  const payload = (await response.json().catch(() => ({}))) as {
+    error?: string
+  }
+
+  if (!response.ok) {
+    return { ok: false, message: payload.error ?? 'Could not add person to roster.' }
+  }
+
+  return { ok: true }
 }
 
 export async function updateRosterMemberPositions(params: {

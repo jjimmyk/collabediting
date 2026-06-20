@@ -179,6 +179,9 @@ export async function upsertWorkspaceMemberWithPositions(
         workspace_id: params.workspaceId,
         email: params.email,
         ics_position: primary,
+        assignment_kind: 'ics_position',
+        org_chart_reports_to: null,
+        org_chart_sort_order: 0,
         status: params.status,
         user_id: params.userId ?? null,
         invited_by: params.invitedBy,
@@ -220,6 +223,125 @@ export function parseIcsPositionsInput(
 }
 
 export const MIN_AUTH_PASSWORD_LENGTH = 8
+
+export const SINGLE_RESOURCE_POSITION_LABEL = 'Single Resource' as const
+
+export type MemberAssignmentKind = 'ics_position' | 'single_resource'
+
+export async function validateOrgChartReportsToPosition(
+  admin: SupabaseClient,
+  workspaceId: string,
+  reportsTo: string
+): Promise<string | null> {
+  const allowed = await fetchWorkspacePositionAllowlist(admin, workspaceId)
+  const normalized = reportsTo.trim()
+  if (!normalized) {
+    return 'Select a position to report to.'
+  }
+  if (!allowed.has(normalized)) {
+    return 'Reports-to position must be an existing position in this workspace.'
+  }
+  return null
+}
+
+export async function upsertWorkspaceMemberAsSingleResource(
+  admin: SupabaseClient,
+  params: {
+    workspaceId: string
+    email: string
+    orgChartReportsTo: string
+    status: 'invited' | 'active'
+    userId?: string | null
+    invitedBy: string
+    joinedAt?: string | null
+  }
+): Promise<{ memberId: string }> {
+  const reportsToError = await validateOrgChartReportsToPosition(
+    admin,
+    params.workspaceId,
+    params.orgChartReportsTo
+  )
+  if (reportsToError) {
+    throw new Error(reportsToError)
+  }
+
+  const { data: memberRow, error: memberError } = await admin
+    .from('workspace_members')
+    .upsert(
+      {
+        workspace_id: params.workspaceId,
+        email: params.email,
+        ics_position: SINGLE_RESOURCE_POSITION_LABEL,
+        assignment_kind: 'single_resource',
+        org_chart_reports_to: params.orgChartReportsTo.trim(),
+        org_chart_sort_order: 0,
+        status: params.status,
+        user_id: params.userId ?? null,
+        invited_by: params.invitedBy,
+        invited_at: new Date().toISOString(),
+        joined_at: params.joinedAt ?? null,
+      },
+      { onConflict: 'workspace_id,email' }
+    )
+    .select('id')
+    .single()
+
+  if (memberError || !memberRow) {
+    throw memberError ?? new Error('Could not upsert workspace member.')
+  }
+
+  const { error: deleteError } = await admin
+    .from('workspace_member_positions')
+    .delete()
+    .eq('member_id', memberRow.id)
+
+  if (deleteError) {
+    throw deleteError
+  }
+
+  return { memberId: memberRow.id }
+}
+
+export async function provisionWorkspaceSingleResourceMember(
+  admin: SupabaseClient,
+  params: {
+    workspaceId: string
+    email: string
+    orgChartReportsTo: string
+    password: string
+    invitedBy: string
+    confirmPasswordOverwrite: boolean
+  }
+): Promise<
+  | { ok: true; action: 'created' | 'updated'; memberId: string }
+  | { ok: false; code: 'password_too_short' | 'user_exists' }
+> {
+  if (params.password.length < MIN_AUTH_PASSWORD_LENGTH) {
+    return { ok: false, code: 'password_too_short' }
+  }
+
+  const authResult = await ensureAuthUser(admin, params.email, params.password, {
+    allowPasswordOverwrite: params.confirmPasswordOverwrite,
+  })
+
+  if (!authResult.ok) {
+    return authResult
+  }
+
+  await upsertMemberProfile(admin, authResult.userId, params.email)
+
+  const member = await upsertWorkspaceMemberAsSingleResource(admin, {
+    workspaceId: params.workspaceId,
+    email: params.email,
+    orgChartReportsTo: params.orgChartReportsTo,
+    status: 'active',
+    userId: authResult.userId,
+    invitedBy: params.invitedBy,
+    joinedAt: new Date().toISOString(),
+  })
+
+  return { ok: true, action: authResult.action, memberId: member.memberId }
+}
 
 export type EnsureAuthUserResult =
   | { ok: true; userId: string; action: 'created' | 'updated' }

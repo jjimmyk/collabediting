@@ -202,6 +202,8 @@ import {
   fetchWorkspaceRoster,
   findAccessibleWorkspaceUuid,
   inviteWorkspaceMember,
+  addExistingWorkspaceMember,
+  searchOrgMembersForWorkspace,
   removeWorkspaceRosterMember as removeWorkspaceRosterMemberFromDb,
   resolveWorkspaceId,
   setWorkspaceArchived,
@@ -547,12 +549,21 @@ import { getAssetMapKey } from '@/data/hub-asset-catalog'
 import { useWorkspaceAssetAssignments } from '@/hooks/useWorkspaceAssetAssignments'
 import { WorkspaceAssignedAssetsPanel } from '@/features/resources/WorkspaceAssignedAssetsPanel'
 import { AssetWorkspaceAssignmentSelect } from '@/features/resources/AssetWorkspaceAssignmentSelect'
+import {
+  SINGLE_RESOURCE_POSITION_LABEL,
+  type MemberAssignmentKind,
+  type WorkspaceMemberPersonSource,
+} from '@/lib/roster-member-assignment'
 import { isIncidentArchived } from '@/lib/incident-archive'
 import { WorkspacePositionRosterTable } from '@/features/roster/WorkspacePositionRosterTable'
 import { WorkspaceOrgChartRoster } from '@/features/roster/WorkspaceOrgChartRoster'
 import { RosterAddMemberToolbar } from '@/features/roster/RosterAddMemberToolbar'
 import { AddWorkspacePositionDialog } from '@/features/roster/AddWorkspacePositionDialog'
 import { AddAssetToOrgChartDialog } from '@/features/roster/AddAssetToOrgChartDialog'
+import {
+  AddWorkspaceMemberDialog,
+  type AddWorkspaceMemberSubmitInput,
+} from '@/features/roster/AddWorkspaceMemberDialog'
 import { buildDynamicOrgChart } from '@/features/roster/build-dynamic-org-chart'
 import { countAssetsReportingToPosition } from '@/features/roster/workspace-asset-org-chart'
 import { useWorkspaceCustomPositions } from '@/hooks/useWorkspaceCustomPositions'
@@ -8679,6 +8690,8 @@ function App() {
     position: string
     mode: RosterInviteAssignmentMode
   } | null>(null)
+  const [pendingAddWorkspaceMemberInput, setPendingAddWorkspaceMemberInput] =
+    useState<AddWorkspaceMemberSubmitInput | null>(null)
   const [activeWorkspacePositionPermissions, setActiveWorkspacePositionPermissions] =
     useState<PositionPermissionMap>(() => buildDefaultPositionPermissionMap())
   const [localPositionPermissionsByKey, setLocalPositionPermissionsByKey] = useState<
@@ -11780,8 +11793,17 @@ function App() {
     standardLifecycle,
   })
   const workspaceOrgChartLayout = useMemo(
-    () => buildDynamicOrgChart(workspacePositionCatalog, workspaceAssignedAssets),
-    [workspacePositionCatalog, workspaceAssignedAssets]
+    () =>
+      buildDynamicOrgChart(
+        workspacePositionCatalog,
+        workspaceAssignedAssets,
+        activeWorkspaceRoster
+      ),
+    [workspacePositionCatalog, workspaceAssignedAssets, activeWorkspaceRoster]
+  )
+  const workspaceRosterById = useMemo(
+    () => Object.fromEntries(activeWorkspaceRoster.map((member) => [member.id, member])),
+    [activeWorkspaceRoster]
   )
   const workspaceAssetsByKey = useMemo(
     () => Object.fromEntries(workspaceAssignedAssets.map((asset) => [asset.assetKey, asset])),
@@ -14630,22 +14652,32 @@ function App() {
     icsPositions: string[]
     mode: RosterInviteAssignmentMode
     positionPreset: string | null
+    personSource?: WorkspaceMemberPersonSource
+    assignmentKind?: MemberAssignmentKind
+    existingUserId?: string | null
+    orgChartReportsTo?: string
     confirmPasswordOverwrite?: boolean
     closeDialogOnSuccess?: boolean
   }): Promise<PositionRosterInviteSubmitResult> => {
     if (activeWorkspaceRosterKey === null) return 'error'
+    const personSource = input.personSource ?? 'invite_new'
+    const assignmentKind = input.assignmentKind ?? 'ics_position'
     const email = input.email.trim().toLowerCase()
     if (!isValidRosterEmail(email)) {
       toast.error('Enter a valid email address.')
       return 'error'
     }
     const icsPositions = [...input.icsPositions]
-    if (icsPositions.length === 0) {
+    if (assignmentKind === 'ics_position' && icsPositions.length === 0) {
       toast.error('Select at least one ICS position.')
       return 'error'
     }
+    if (assignmentKind === 'single_resource' && !input.orgChartReportsTo?.trim()) {
+      toast.error('Select a parent position on the org chart.')
+      return 'error'
+    }
     const password = input.password
-    if (password.length > 0 && password.length < 8) {
+    if (personSource === 'invite_new' && password.length > 0 && password.length < 8) {
       toast.error('Password must be at least 8 characters.')
       return 'error'
     }
@@ -14656,6 +14688,7 @@ function App() {
     }
 
     const scheduleOnOpAdvance =
+      assignmentKind === 'ics_position' &&
       input.mode === 'schedule_on_op_advance' &&
       input.positionPreset !== null &&
       icsPositions.length === 1
@@ -14663,6 +14696,17 @@ function App() {
     if (scheduleOnOpAdvance && !isSupabaseEnabled) {
       toast.error('Schedule invites require Supabase persistence.')
       return 'error'
+    }
+
+    if (personSource === 'add_existing') {
+      if (!isSupabaseEnabled) {
+        toast.error('Adding existing people requires Supabase persistence.')
+        return 'error'
+      }
+      if (!input.existingUserId) {
+        toast.error('Select an existing person to add.')
+        return 'error'
+      }
     }
 
     if (isSupabaseEnabled) {
@@ -14677,11 +14721,49 @@ function App() {
         toast.error('Sign in again to invite roster members.')
         return 'error'
       }
+
+      if (personSource === 'add_existing') {
+        const addResult = await addExistingWorkspaceMember({
+          accessToken,
+          workspaceId: activeWorkspaceSupabaseId,
+          userId: input.existingUserId!,
+          assignmentKind,
+          ...(assignmentKind === 'ics_position'
+            ? { icsPositions }
+            : { orgChartReportsTo: input.orgChartReportsTo?.trim() }),
+        })
+        setIsInvitingRosterMember(false)
+        if (!addResult.ok) {
+          toast.error(addResult.message)
+          return 'error'
+        }
+        const [roster, schedules] = await Promise.all([
+          fetchWorkspaceRoster(activeWorkspaceSupabaseId),
+          fetchWorkspaceMemberSchedules(activeWorkspaceSupabaseId),
+        ])
+        setSupabaseWorkspaceRoster(roster)
+        setWorkspaceMemberSchedules(schedules)
+        if (input.closeDialogOnSuccess) {
+          resetAddRosterMemberDraft()
+          setIsAddRosterMemberOpen(false)
+        }
+        toast.success(
+          assignmentKind === 'single_resource'
+            ? `${email} was added to the roster as a single resource under ${input.orgChartReportsTo}.`
+            : `Added ${email} to ${icsPositions.join(', ')}.`
+        )
+        return 'success'
+      }
+
       const result = await inviteWorkspaceMember({
         accessToken,
         workspaceId: activeWorkspaceSupabaseId,
         email,
         icsPositions,
+        assignmentKind,
+        ...(assignmentKind === 'single_resource' && input.orgChartReportsTo
+          ? { orgChartReportsTo: input.orgChartReportsTo.trim() }
+          : {}),
         ...(password.length > 0 ? { password } : {}),
         ...(input.confirmPasswordOverwrite ? { confirmPasswordOverwrite: true } : {}),
         ...(scheduleOnOpAdvance ? { scheduleOnOpAdvance: true } : {}),
@@ -14708,6 +14790,14 @@ function App() {
         toast.warning(result.warning)
         return 'success'
       }
+      if (assignmentKind === 'single_resource') {
+        toast.success(
+          password.length > 0
+            ? `${email} was added as a single resource under ${input.orgChartReportsTo}.`
+            : `Invitation sent to ${email}. They will appear as a single resource under ${input.orgChartReportsTo}.`
+        )
+        return 'success'
+      }
       const positionLabel = icsPositions.join(', ')
       if (result.method === 'direct_provision') {
         toast.success(
@@ -14728,22 +14818,44 @@ function App() {
     }
 
     const localMembers = localWorkspaceRostersByKey[activeWorkspaceRosterKey] ?? []
-    const nextMember: WorkspaceRosterMember = {
-      id: `local-${localMembers.length === 0 ? 1 : localMembers.length + 1}`,
-      email,
-      icsPosition: icsPositions[0],
-      icsPositions,
-      status: 'active',
-      checkInStatus: 'not_arrived',
-      userId: null,
-      addedAt: new Date().toLocaleString([], {
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-      }),
-    }
+    const nextMember: WorkspaceRosterMember =
+      assignmentKind === 'single_resource'
+        ? {
+            id: `local-${localMembers.length === 0 ? 1 : localMembers.length + 1}`,
+            email,
+            icsPosition: SINGLE_RESOURCE_POSITION_LABEL,
+            icsPositions: [],
+            assignmentKind: 'single_resource',
+            orgChartReportsTo: input.orgChartReportsTo?.trim() ?? null,
+            status: 'active',
+            checkInStatus: 'not_arrived',
+            userId: input.existingUserId ?? null,
+            addedAt: new Date().toLocaleString([], {
+              year: 'numeric',
+              month: '2-digit',
+              day: '2-digit',
+              hour: '2-digit',
+              minute: '2-digit',
+            }),
+          }
+        : {
+            id: `local-${localMembers.length === 0 ? 1 : localMembers.length + 1}`,
+            email,
+            icsPosition: icsPositions[0],
+            icsPositions,
+            assignmentKind: 'ics_position',
+            orgChartReportsTo: null,
+            status: 'active',
+            checkInStatus: 'not_arrived',
+            userId: null,
+            addedAt: new Date().toLocaleString([], {
+              year: 'numeric',
+              month: '2-digit',
+              day: '2-digit',
+              hour: '2-digit',
+              minute: '2-digit',
+            }),
+          }
     setLocalWorkspaceRostersByKey((previous) => ({
       ...previous,
       [activeWorkspaceRosterKey]: [...localMembers, nextMember],
@@ -14752,22 +14864,40 @@ function App() {
       resetAddRosterMemberDraft()
       setIsAddRosterMemberOpen(false)
     }
-    toast.success(`Added ${email} as ${icsPositions.join(', ')}.`)
+    toast.success(
+      assignmentKind === 'single_resource'
+        ? `Added ${email} as a single resource under ${input.orgChartReportsTo}.`
+        : `Added ${email} as ${icsPositions.join(', ')}.`
+    )
     return 'success'
   }
-  const addWorkspaceRosterMember = async (confirmPasswordOverwrite = false) => {
-    const result = await inviteRosterMemberCore({
-      email: rosterMemberEmailDraft,
-      password: rosterMemberPasswordDraft,
-      icsPositions: rosterMemberPositionsDraft,
-      mode: rosterInviteAssignmentMode,
-      positionPreset: rosterInvitePositionPreset,
+  const handleAddWorkspaceMemberSubmit = async (
+    input: AddWorkspaceMemberSubmitInput,
+    confirmPasswordOverwrite = false
+  ): Promise<PositionRosterInviteSubmitResult> => {
+    return inviteRosterMemberCore({
+      email: input.email,
+      password: input.password,
+      icsPositions: input.icsPositions,
+      mode: input.mode,
+      positionPreset: input.positionPreset,
+      personSource: input.personSource,
+      assignmentKind: input.assignmentKind,
+      existingUserId: input.existingUserId,
+      orgChartReportsTo: input.orgChartReportsTo,
       confirmPasswordOverwrite,
       closeDialogOnSuccess: true,
     })
+  }
+  const submitAddWorkspaceMemberDialog = async (
+    input: AddWorkspaceMemberSubmitInput
+  ): Promise<PositionRosterInviteSubmitResult> => {
+    const result = await handleAddWorkspaceMemberSubmit(input)
     if (result === 'password_overwrite_required') {
+      setPendingAddWorkspaceMemberInput(input)
       setIsRosterPasswordOverwriteConfirmOpen(true)
     }
+    return result
   }
   const submitInlinePositionInvite = async (
     params: {
@@ -15471,6 +15601,27 @@ function App() {
   }
   const handleRemoveAssetFromOrgChart = async (assetKey: string) => {
     await handleAssetOrgChartPlacementChange(assetKey, null)
+  }
+  const handleRemoveSingleResourceFromOrgChart = async (memberId: string) => {
+    const member = activeWorkspaceRoster.find((entry) => entry.id === memberId)
+    if (!member || member.assignmentKind !== 'single_resource') return
+
+    if (isSupabaseEnabled) {
+      await removeWorkspaceRosterMemberFromDb(memberId)
+      if (activeWorkspaceSupabaseId) {
+        const roster = await fetchWorkspaceRoster(activeWorkspaceSupabaseId)
+        setSupabaseWorkspaceRoster(roster)
+      }
+    } else if (activeWorkspaceRosterKey !== null) {
+      setLocalWorkspaceRostersByKey((previous) => ({
+        ...previous,
+        [activeWorkspaceRosterKey]: (previous[activeWorkspaceRosterKey] ?? []).filter(
+          (entry) => entry.id !== memberId
+        ),
+      }))
+    }
+
+    toast.success(`Removed ${member.email} from the org chart.`)
   }
   const removeWorkspaceRosterMember = async (memberId: string) => {
     if (activeWorkspaceRosterKey === null) return
@@ -27744,6 +27895,7 @@ function App() {
                       orgChartLayout={workspaceOrgChartLayout}
                       entriesByPosition={positionRosterEntriesByPosition}
                       assetsByKey={workspaceAssetsByKey}
+                      rosterById={workspaceRosterById}
                       visiblePositions={visibleRosterPositions}
                       assignableByPosition={assignableByPosition}
                       scheduleAssignableByPosition={scheduleAssignableByPosition}
@@ -27830,6 +27982,9 @@ function App() {
                       }}
                       onRemoveAssetFromOrgChart={(assetKey) => {
                         void handleRemoveAssetFromOrgChart(assetKey)
+                      }}
+                      onRemoveSingleResourceFromOrgChart={(memberId) => {
+                        void handleRemoveSingleResourceFromOrgChart(memberId)
                       }}
                     />
                       ) : (
@@ -37248,7 +37403,7 @@ function App() {
           moreMenuLabels={HUB_MORE_MENU.map((item) => item.label)}
         />
       )}
-      <Dialog
+      <AddWorkspaceMemberDialog
         open={isAddRosterMemberOpen}
         onOpenChange={(open) => {
           setIsAddRosterMemberOpen(open)
@@ -37256,162 +37411,24 @@ function App() {
             resetAddRosterMemberDraft()
           }
         }}
-      >
-        <DialogContent className="!w-[28rem] !max-w-[28rem] sm:!max-w-[28rem]">
-          <DialogHeader>
-            <DialogTitle>
-              {rosterInvitePositionPreset
-                ? rosterInviteAssignmentMode === 'schedule_on_op_advance'
-                  ? `Invite user for ${rosterInvitePositionPreset} (next OP)`
-                  : `Invite user to ${rosterInvitePositionPreset}`
-                : 'Add roster member'}
-            </DialogTitle>
-            <DialogDescription>
-              {rosterInvitePositionPreset
-                ? rosterInviteAssignmentMode === 'schedule_on_op_advance'
-                  ? `Send a workspace invitation. ${rosterInvitePositionPreset} will be scheduled on the next operational period after they join.`
-                  : `Add a team member to ${rosterInvitePositionPreset} on ${activeWorkspaceRosterLabel}.`
-                : isSupabaseEnabled
-                  ? `Add a team member to ${activeWorkspaceRosterLabel}. Leave password blank to email an invitation, or set a password so they can sign in immediately.`
-                  : `Invite a team member by email and assign their ICS position for ${activeWorkspaceRosterLabel}.`}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-3 py-1">
-            <div className="grid gap-2">
-              <Label htmlFor="roster-member-email">Email</Label>
-              <Input
-                id="roster-member-email"
-                type="email"
-                autoFocus
-                value={rosterMemberEmailDraft}
-                onChange={(event) => setRosterMemberEmailDraft(event.target.value)}
-                placeholder="name@agency.gov"
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter' && rosterMemberPasswordDraft.length === 0) {
-                    event.preventDefault()
-                    void addWorkspaceRosterMember()
-                  }
-                }}
-              />
-            </div>
-            {isSupabaseEnabled && (
-              <div className="grid gap-2">
-                <Label htmlFor="roster-member-password">Password (optional)</Label>
-                <div className="relative">
-                  <Input
-                    id="roster-member-password"
-                    type={rosterMemberPasswordVisible ? 'text' : 'password'}
-                    value={rosterMemberPasswordDraft}
-                    onChange={(event) => setRosterMemberPasswordDraft(event.target.value)}
-                    placeholder="Set a sign-in password"
-                    autoComplete="new-password"
-                    className="pr-9"
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter') {
-                        event.preventDefault()
-                        void addWorkspaceRosterMember()
-                      }
-                    }}
-                  />
-                  <Button
-                    type="button"
-                    size="icon"
-                    variant="ghost"
-                    className="absolute right-0 top-0 h-9 w-9 text-muted-foreground"
-                    aria-label={rosterMemberPasswordVisible ? 'Hide password' : 'Show password'}
-                    onClick={() => setRosterMemberPasswordVisible((previous) => !previous)}
-                  >
-                    {rosterMemberPasswordVisible ? (
-                      <EyeOff className="h-4 w-4" />
-                    ) : (
-                      <Eye className="h-4 w-4" />
-                    )}
-                  </Button>
-                </div>
-                <p className="text-[11px] text-muted-foreground">
-                  If set, an account is created immediately and no invite email is sent. Minimum 8
-                  characters.
-                </p>
-              </div>
-            )}
-            <div className="grid gap-2">
-              <Label>ICS Positions (select at least one)</Label>
-              {rosterInvitePositionPreset ? (
-                <div className="rounded-md border px-3 py-2 text-sm">
-                  {rosterInvitePositionPreset}
-                  {rosterInviteAssignmentMode === 'schedule_on_op_advance' ? (
-                    <p className="mt-1 text-[11px] text-muted-foreground">
-                      Scheduled for this position on the next operational period.
-                    </p>
-                  ) : null}
-                </div>
-              ) : (
-                <div className="max-h-48 space-y-2 overflow-y-auto rounded-md border p-3">
-                  {WORKSPACE_ROSTER_POSITIONS.map((position) => (
-                    <label
-                      key={position}
-                      htmlFor={`roster-add-position-${position}`}
-                      className="flex cursor-pointer items-center gap-2 text-sm"
-                    >
-                      <Checkbox
-                        id={`roster-add-position-${position}`}
-                        checked={rosterMemberPositionsDraft.includes(position)}
-                        onCheckedChange={() => toggleRosterMemberPositionsDraft(position)}
-                      />
-                      <span>{position}</span>
-                    </label>
-                  ))}
-                  {workspacePositionCatalog.customPositions.map((position) => (
-                    <label
-                      key={position.id}
-                      htmlFor={`roster-add-position-${position.id}`}
-                      className="flex cursor-pointer items-center gap-2 text-sm"
-                    >
-                      <Checkbox
-                        id={`roster-add-position-${position.id}`}
-                        checked={rosterMemberPositionsDraft.includes(position.name)}
-                        onCheckedChange={() => toggleRosterMemberPositionsDraft(position.name)}
-                      />
-                      <span>{position.name}</span>
-                    </label>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setIsAddRosterMemberOpen(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              disabled={
-                isInvitingRosterMember ||
-                !isValidRosterEmail(rosterMemberEmailDraft) ||
-                rosterMemberPositionsDraft.length === 0 ||
-                (rosterMemberPasswordDraft.length > 0 && rosterMemberPasswordDraft.length < 8)
-              }
-              onClick={() => {
-                void addWorkspaceRosterMember()
-              }}
-            >
-              {isInvitingRosterMember
-                ? rosterMemberPasswordDraft.length > 0
-                  ? 'Adding member…'
-                  : 'Sending invite…'
-                : isSupabaseEnabled
-                  ? rosterMemberPasswordDraft.length > 0
-                    ? 'Add member'
-                    : 'Send invite'
-                  : 'Add to roster'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        workspaceLabel={activeWorkspaceRosterLabel}
+        isSupabaseEnabled={isSupabaseEnabled}
+        catalog={workspacePositionCatalog}
+        positionPreset={rosterInvitePositionPreset}
+        inviteAssignmentMode={rosterInviteAssignmentMode}
+        isSubmitting={isInvitingRosterMember}
+        onSearchExistingPeople={async (query) => {
+          if (!activeWorkspaceSupabaseId) return []
+          const accessToken = await getAccessToken()
+          if (!accessToken) return []
+          return searchOrgMembersForWorkspace({
+            accessToken,
+            workspaceId: activeWorkspaceSupabaseId,
+            query,
+          })
+        }}
+        onSubmit={submitAddWorkspaceMemberDialog}
+      />
       <AddWorkspacePositionDialog
         open={isAddWorkspacePositionOpen}
         onOpenChange={setIsAddWorkspacePositionOpen}
@@ -37434,6 +37451,7 @@ function App() {
           setIsRosterPasswordOverwriteConfirmOpen(open)
           if (!open) {
             setPendingInlinePositionInvite(null)
+            setPendingAddWorkspaceMemberInput(null)
           }
         }}
       >
@@ -37470,7 +37488,17 @@ function App() {
                   )
                   return
                 }
-                void addWorkspaceRosterMember(true)
+                if (pendingAddWorkspaceMemberInput) {
+                  void handleAddWorkspaceMemberSubmit(pendingAddWorkspaceMemberInput, true).then(
+                    (result) => {
+                      if (result !== 'password_overwrite_required') {
+                        setPendingAddWorkspaceMemberInput(null)
+                        setIsRosterPasswordOverwriteConfirmOpen(false)
+                      }
+                    }
+                  )
+                  return
+                }
               }}
             >
               {isInvitingRosterMember ? 'Updating…' : 'Replace password and add'}

@@ -8,10 +8,13 @@ import {
 import {
   MIN_AUTH_PASSWORD_LENGTH,
   provisionWorkspaceRosterMember,
+  provisionWorkspaceSingleResourceMember,
   fetchWorkspacePositionAllowlist,
   parseIcsPositionsInput,
   resolveInvitePlaceholderPosition,
+  upsertWorkspaceMemberAsSingleResource,
   upsertWorkspaceMemberWithPositions,
+  type MemberAssignmentKind,
 } from './roster-shared.js'
 
 const supabaseUrl =
@@ -36,6 +39,8 @@ type InviteBody = {
   password?: string
   confirmPasswordOverwrite?: boolean
   scheduleOnOpAdvance?: boolean
+  assignmentKind?: MemberAssignmentKind
+  orgChartReportsTo?: string
 }
 
 function getAppUrl(): string {
@@ -258,21 +263,40 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const confirmPasswordOverwrite = body.confirmPasswordOverwrite === true
     const hasPassword = password.length > 0
     const scheduleOnOpAdvance = body.scheduleOnOpAdvance === true
+    const assignmentKind: MemberAssignmentKind =
+      body.assignmentKind === 'single_resource' ? 'single_resource' : 'ics_position'
+    const orgChartReportsTo =
+      typeof body.orgChartReportsTo === 'string' ? body.orgChartReportsTo.trim() : ''
 
     if (!workspaceId || !email) {
       return res.status(400).json({
-        error: 'workspaceId, email, and at least one icsPosition are required.',
+        error: 'workspaceId and email are required.',
       })
     }
 
     const admin = createClient(supabaseUrl, supabaseServiceRoleKey)
 
     const allowed = await fetchWorkspacePositionAllowlist(admin, workspaceId)
-    const icsPositions = parseIcsPositionsInput(body, icsPosition, allowed)
+    const icsPositions =
+      assignmentKind === 'ics_position'
+        ? parseIcsPositionsInput(body, icsPosition, allowed)
+        : []
 
-    if (icsPositions.length === 0) {
+    if (assignmentKind === 'ics_position' && icsPositions.length === 0) {
       return res.status(400).json({
         error: 'workspaceId, email, and at least one icsPosition are required.',
+      })
+    }
+
+    if (assignmentKind === 'single_resource' && !orgChartReportsTo) {
+      return res.status(400).json({
+        error: 'orgChartReportsTo is required when adding as a single resource.',
+      })
+    }
+
+    if (assignmentKind === 'single_resource' && scheduleOnOpAdvance) {
+      return res.status(400).json({
+        error: 'Schedule-on-op-advance is only available when assigning ICS positions.',
       })
     }
 
@@ -323,6 +347,38 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .maybeSingle()
 
     if (hasPassword) {
+      if (assignmentKind === 'single_resource') {
+        const provisioned = await provisionWorkspaceSingleResourceMember(admin, {
+          workspaceId,
+          email,
+          orgChartReportsTo,
+          password,
+          invitedBy: user.id,
+          confirmPasswordOverwrite,
+        })
+
+        if (!provisioned.ok) {
+          if (provisioned.code === 'user_exists') {
+            return res.status(409).json({
+              error:
+                'This email already has a Pratus account. Confirm to replace their password and add them to this workspace.',
+              code: 'user_exists',
+            })
+          }
+          return res.status(400).json({
+            error: `Password must be at least ${MIN_AUTH_PASSWORD_LENGTH} characters.`,
+            code: provisioned.code,
+          })
+        }
+
+        return res.status(200).json({
+          ok: true,
+          method: 'direct_provision',
+          action: provisioned.action,
+          assignmentKind: 'single_resource',
+        })
+      }
+
       const { activePositions } = await resolveInviteActivePositions(
         admin,
         workspaceId,
@@ -369,6 +425,49 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         action: provisioned.action,
         scheduleOnOpAdvance,
       })
+    }
+
+    if (assignmentKind === 'single_resource') {
+      await upsertWorkspaceMemberAsSingleResource(admin, {
+        workspaceId,
+        email,
+        orgChartReportsTo,
+        status: 'invited',
+        invitedBy: user.id,
+      })
+
+      const inviteRedirect = getAppCallbackUrl(workspaceId)
+
+      try {
+        const delivery = await sendInviteEmail({
+          admin,
+          email,
+          redirectTo: inviteRedirect,
+          workspaceLabel: workspace?.name,
+        })
+
+        if (delivery.warning) {
+          return res.status(200).json({
+            ok: true,
+            method: delivery.method,
+            emailWarning: delivery.warning,
+            assignmentKind: 'single_resource',
+          })
+        }
+
+        return res.status(200).json({
+          ok: true,
+          method: delivery.method,
+          assignmentKind: 'single_resource',
+        })
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Invitation email failed.'
+        return res.status(200).json({
+          ok: true,
+          emailWarning: `Roster updated, but the invitation email could not be sent: ${message}`,
+          assignmentKind: 'single_resource',
+        })
+      }
     }
 
     await upsertInvitedMemberWithOptionalSchedule(admin, {

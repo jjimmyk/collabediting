@@ -9,12 +9,16 @@ export type WorkspaceMemberCheckInStatus =
   | 'demobilizing'
   | 'demobilized'
 
+export type WorkspaceMemberAssignmentKind = 'ics_position' | 'single_resource'
+
 export type WorkspaceRosterMember = {
   id: string
   email: string
   /** Primary position label (first assigned position). */
   icsPosition: string
   icsPositions: string[]
+  assignmentKind: WorkspaceMemberAssignmentKind
+  orgChartReportsTo: string | null
   status: WorkspaceMemberStatus
   checkInStatus: WorkspaceMemberCheckInStatus
   addedAt: string
@@ -87,6 +91,9 @@ export type DbWorkspaceMember = {
   user_id: string | null
   email: string
   ics_position: string
+  assignment_kind?: WorkspaceMemberAssignmentKind | null
+  org_chart_reports_to?: string | null
+  org_chart_sort_order?: number | null
   status: WorkspaceMemberStatus
   invited_at: string
   joined_at: string | null

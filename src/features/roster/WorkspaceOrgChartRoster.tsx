@@ -12,6 +12,7 @@ import {
   type PositionRosterAssetHandlers,
 } from '@/features/roster/PositionRosterAssetSections'
 import { AssetOrgChartCard } from '@/features/roster/AssetOrgChartCard'
+import { SingleResourceOrgChartCard } from '@/features/roster/SingleResourceOrgChartCard'
 import type { WorkspaceOrgChartLayout, WorkspacePositionMeta } from '@/features/roster/workspace-positions'
 
 import {
@@ -30,6 +31,7 @@ type WorkspaceOrgChartRosterProps = {
   orgChartLayout: WorkspaceOrgChartLayout
   entriesByPosition: Record<string, PositionRosterEntry>
   assetsByKey: Record<string, ResourceListItemData>
+  rosterById: Record<string, WorkspaceRosterMember>
   visiblePositions: Set<string>
   assignableByPosition: Record<string, WorkspaceRosterMember[]>
   scheduleAssignableByPosition: Record<string, WorkspaceRosterMember[]>
@@ -57,6 +59,7 @@ type WorkspaceOrgChartRosterProps = {
   onOpAdvanceLabelChange?: (position: string, label: PositionOpAdvanceLabel) => void
   onFocusAsset?: (asset: ResourceListItemData) => void
   onRemoveAssetFromOrgChart?: (assetKey: string) => void
+  onRemoveSingleResourceFromOrgChart?: (memberId: string) => void
   showCheckInStatus?: boolean
   canEditCheckInStatus?: boolean
   updatingCheckInMemberId?: string | null
@@ -72,6 +75,7 @@ type OrgChartRenderProps = {
   layoutMode: RosterPanelLayoutMode
   entriesByPosition: Record<string, PositionRosterEntry>
   assetsByKey: Record<string, ResourceListItemData>
+  rosterById: Record<string, WorkspaceRosterMember>
   visiblePositions: Set<string>
   assignableByPosition: Record<string, WorkspaceRosterMember[]>
   scheduleAssignableByPosition: Record<string, WorkspaceRosterMember[]>
@@ -95,6 +99,7 @@ type OrgChartRenderProps = {
   onOpAdvanceLabelChange?: (position: string, label: PositionOpAdvanceLabel) => void
   onFocusAsset?: (asset: ResourceListItemData) => void
   onRemoveAssetFromOrgChart?: (assetKey: string) => void
+  onRemoveSingleResourceFromOrgChart?: (memberId: string) => void
   showCheckInStatus: boolean
   canEditCheckInStatus: boolean
   updatingCheckInMemberId: string | null
@@ -120,7 +125,7 @@ function filterVisibleOrgChartChildren(
   visiblePositions: Set<string>
 ): OrgChartNode[] {
   return children.filter((child) => {
-    if (child.kind === 'asset') return true
+    if (child.kind === 'asset' || child.kind === 'single_resource') return true
     if (child.kind === 'position') {
       return (
         visiblePositions.has(child.position) ||
@@ -152,9 +157,11 @@ function OrgChartChildren({
             key={
               child.kind === 'asset'
                 ? child.assetKey
-                : child.kind === 'position'
-                  ? child.position
-                  : child.label
+                : child.kind === 'single_resource'
+                  ? child.memberId
+                  : child.kind === 'position'
+                    ? child.position
+                    : child.label
             }
             className="flex w-full flex-col items-center"
           >
@@ -190,6 +197,19 @@ function OrgChartChildNode({
     )
   }
 
+  if (node.kind === 'single_resource') {
+    const member = renderProps.rosterById[node.memberId]
+    if (!member) return null
+    return (
+      <SingleResourceOrgChartCard
+        member={member}
+        color={node.color ?? parentColor}
+        canManage={renderProps.canManageRoster}
+        onRemoveFromOrgChart={renderProps.onRemoveSingleResourceFromOrgChart}
+      />
+    )
+  }
+
   if (node.kind !== 'position' || !renderProps.visiblePositions.has(node.position)) {
     return null
   }
@@ -211,6 +231,7 @@ function PositionNode({
   layoutMode,
   entriesByPosition,
   assetsByKey,
+  rosterById,
   visiblePositions,
   assignableByPosition,
   scheduleAssignableByPosition,
@@ -234,6 +255,7 @@ function PositionNode({
   onOpAdvanceLabelChange,
   onFocusAsset,
   onRemoveAssetFromOrgChart,
+  onRemoveSingleResourceFromOrgChart,
   showCheckInStatus,
   canEditCheckInStatus,
   updatingCheckInMemberId,
@@ -265,6 +287,7 @@ function PositionNode({
     layoutMode,
     entriesByPosition,
     assetsByKey,
+    rosterById,
     visiblePositions,
     assignableByPosition,
     scheduleAssignableByPosition,
@@ -288,6 +311,7 @@ function PositionNode({
     onOpAdvanceLabelChange,
     onFocusAsset,
     onRemoveAssetFromOrgChart,
+    onRemoveSingleResourceFromOrgChart,
     showCheckInStatus,
     canEditCheckInStatus,
     updatingCheckInMemberId,
@@ -475,6 +499,7 @@ export function WorkspaceOrgChartRoster({
   orgChartLayout,
   entriesByPosition,
   assetsByKey,
+  rosterById,
   visiblePositions,
   assignableByPosition,
   scheduleAssignableByPosition,
@@ -500,6 +525,7 @@ export function WorkspaceOrgChartRoster({
   onOpAdvanceLabelChange,
   onFocusAsset,
   onRemoveAssetFromOrgChart,
+  onRemoveSingleResourceFromOrgChart,
   showCheckInStatus = false,
   canEditCheckInStatus = false,
   updatingCheckInMemberId = null,
@@ -536,6 +562,7 @@ export function WorkspaceOrgChartRoster({
     layoutMode,
     entriesByPosition,
     assetsByKey,
+    rosterById,
     visiblePositions,
     assignableByPosition,
     scheduleAssignableByPosition,
@@ -559,6 +586,7 @@ export function WorkspaceOrgChartRoster({
     onOpAdvanceLabelChange,
     onFocusAsset,
     onRemoveAssetFromOrgChart,
+    onRemoveSingleResourceFromOrgChart,
     showCheckInStatus,
     canEditCheckInStatus,
     updatingCheckInMemberId,
