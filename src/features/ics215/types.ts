@@ -91,7 +91,6 @@ export type Ics215DocumentBundle = {
 export type Ics215SectionId =
   | 'incident-info'
   | 'work-assignments'
-  | 'resource-totals'
   | 'prepared-by'
 
 export type Ics215IncidentInfoDraft = Pick<
@@ -121,6 +120,5 @@ export type Ics215PreparedByDraft = Pick<
 export type Ics215FormSectionDrafts = {
   'incident-info'?: Ics215IncidentInfoDraft
   'work-assignments'?: Ics215WorkAssignmentsDraft
-  'resource-totals'?: Ics215ResourceTotalsDraft
   'prepared-by'?: Ics215PreparedByDraft
 }

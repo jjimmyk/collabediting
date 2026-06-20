@@ -275,10 +275,6 @@ export function normalizeIcs215FormState(form: Ics215FormState): Ics215FormState
       : createDefaultIcs215WorkAssignments(resourceColumns)
 
   const syncedTotals = computeIcs215ResourceTotals(resourceColumns, workAssignments)
-  const hasStoredTotals =
-    String(form.totalResourcesRequired ?? '').trim().length > 0 ||
-    String(form.totalResourcesHaveOnHand ?? '').trim().length > 0 ||
-    String(form.totalResourcesNeedToOrder ?? '').trim().length > 0
 
   return {
     ...form,
@@ -289,15 +285,7 @@ export function normalizeIcs215FormState(form: Ics215FormState): Ics215FormState
     operationalPeriodTimeTo: String(form.operationalPeriodTimeTo ?? ''),
     resourceColumns,
     workAssignments,
-    totalResourcesRequired: hasStoredTotals
-      ? String(form.totalResourcesRequired ?? '')
-      : syncedTotals.totalResourcesRequired,
-    totalResourcesHaveOnHand: hasStoredTotals
-      ? String(form.totalResourcesHaveOnHand ?? '')
-      : syncedTotals.totalResourcesHaveOnHand,
-    totalResourcesNeedToOrder: hasStoredTotals
-      ? String(form.totalResourcesNeedToOrder ?? '')
-      : syncedTotals.totalResourcesNeedToOrder,
+    ...syncedTotals,
     preparedByName: String(form.preparedByName ?? ''),
     preparedByPositionTitle: String(form.preparedByPositionTitle ?? ''),
     preparedBySignature: String(form.preparedBySignature ?? ''),
@@ -379,14 +367,6 @@ export function extractIcs215WorkAssignmentsDraft(form: Ics215FormState): Ics215
   }
 }
 
-export function extractIcs215ResourceTotalsDraft(form: Ics215FormState): Ics215ResourceTotalsDraft {
-  return {
-    totalResourcesRequired: form.totalResourcesRequired,
-    totalResourcesHaveOnHand: form.totalResourcesHaveOnHand,
-    totalResourcesNeedToOrder: form.totalResourcesNeedToOrder,
-  }
-}
-
 export function extractIcs215PreparedByDraft(form: Ics215FormState): Ics215PreparedByDraft {
   return {
     preparedByName: form.preparedByName,
@@ -405,8 +385,6 @@ export function extractIcs215SectionDraft(
       return extractIcs215IncidentInfoDraft(form)
     case 'work-assignments':
       return extractIcs215WorkAssignmentsDraft(form)
-    case 'resource-totals':
-      return extractIcs215ResourceTotalsDraft(form)
     case 'prepared-by':
       return extractIcs215PreparedByDraft(form)
     default:
@@ -440,11 +418,6 @@ export function applyIcs215SectionDraft(
         ...totals,
       }
     }
-    case 'resource-totals':
-      return {
-        ...form,
-        ...(draft as Ics215ResourceTotalsDraft),
-      }
     case 'prepared-by':
       return {
         ...form,

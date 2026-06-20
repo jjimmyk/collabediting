@@ -380,13 +380,6 @@ export function Ics215WorkAssignmentsTable({
           </Button>
         </div>
       ) : null}
-
-      {workAssignments.length > 0 ? (
-        <p className="text-[11px] text-muted-foreground">
-          Resource totals below the table sync to the Resource Totals section when you save work
-          assignments.
-        </p>
-      ) : null}
     </div>
   )
 }

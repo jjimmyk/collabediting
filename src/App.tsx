@@ -18693,13 +18693,6 @@ function App() {
               ],
             })
             break
-          case 'resource-totals':
-            patchIcs215SectionDraft(section, {
-              totalResourcesRequired: ics215Form.totalResourcesRequired || '6',
-              totalResourcesHaveOnHand: ics215Form.totalResourcesHaveOnHand || '3',
-              totalResourcesNeedToOrder: ics215Form.totalResourcesNeedToOrder || '3',
-            })
-            break
           case 'prepared-by':
             patchIcs215SectionDraft(section, {
               preparedByName: ics215Form.preparedByName || 'Planning Section Chief',

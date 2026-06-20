@@ -1,6 +1,6 @@
 import { ICS215_SECTION_LABELS } from '@/features/ics215/constants'
 import type { Ics215FormState } from '@/features/ics215/types'
-import { computeIcs215ColumnTotals } from '@/features/ics215/utils'
+import { computeIcs215ColumnTotals, computeIcs215ResourceTotals } from '@/features/ics215/utils'
 
 export type Ics215DocxBlock =
   | { kind: 'title'; text: string }
@@ -146,12 +146,15 @@ export function buildIcs215DocxBlocks(
         `${column.label}: Req ${value.required || '—'}, Have ${value.have || '—'}, Need ${value.need || '—'}`
       )
     }
-  }
 
-  pushHeading(ICS215_SECTION_LABELS['resource-totals'])
-  pushField('Total Resources Required', form.totalResourcesRequired)
-  pushField('Total Resources Have on Hand', form.totalResourcesHaveOnHand)
-  pushField('Total Resources Need To Order', form.totalResourcesNeedToOrder)
+    const resourceTotals = computeIcs215ResourceTotals(
+      form.resourceColumns,
+      form.workAssignments
+    )
+    pushField('Total Resources Required', resourceTotals.totalResourcesRequired)
+    pushField('Total Resources Have on Hand', resourceTotals.totalResourcesHaveOnHand)
+    pushField('Total Resources Need To Order', resourceTotals.totalResourcesNeedToOrder)
+  }
 
   pushHeading(ICS215_SECTION_LABELS['prepared-by'])
   pushField('Prepared By', form.preparedByName)

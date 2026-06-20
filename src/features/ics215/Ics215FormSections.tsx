@@ -13,15 +13,12 @@ import type {
   Ics215FormSectionDrafts,
   Ics215FormState,
   Ics215IncidentInfoDraft,
-  Ics215ResourceTotalsDraft,
   Ics215SectionId,
   Ics215WorkAssignmentsDraft,
 } from '@/features/ics215/types'
 import {
-  computeIcs215ResourceTotals,
   extractIcs215IncidentInfoDraft,
   extractIcs215PreparedByDraft,
-  extractIcs215ResourceTotalsDraft,
   extractIcs215WorkAssignmentsDraft,
   appendIcs215ResourceColumn,
 } from '@/features/ics215/utils'
@@ -77,14 +74,6 @@ export function Ics215FormSections({
     isSectionEditing(editingSections, 'work-assignments') && drafts['work-assignments']
       ? drafts['work-assignments']
       : extractIcs215WorkAssignmentsDraft(form)
-  const computedTotals = computeIcs215ResourceTotals(
-    workAssignmentsDraft.resourceColumns,
-    workAssignmentsDraft.workAssignments
-  )
-  const resourceTotals =
-    isSectionEditing(editingSections, 'resource-totals') && drafts['resource-totals']
-      ? drafts['resource-totals']
-      : extractIcs215ResourceTotalsDraft(form)
   const preparedBy =
     isSectionEditing(editingSections, 'prepared-by') && drafts['prepared-by']
       ? drafts['prepared-by']
@@ -92,10 +81,6 @@ export function Ics215FormSections({
 
   const patchIncidentInfo = (patch: Partial<Ics215IncidentInfoDraft>) => {
     onPatchDraft('incident-info', { ...incidentInfo, ...patch })
-  }
-
-  const patchResourceTotals = (patch: Partial<Ics215ResourceTotalsDraft>) => {
-    onPatchDraft('resource-totals', { ...resourceTotals, ...patch })
   }
 
   const patchPreparedBy = (patch: Partial<typeof preparedBy>) => {
@@ -212,47 +197,6 @@ export function Ics215FormSections({
             + Add Resource Requirement
           </Button>
         ) : null
-      )}
-
-      {renderSectionShell(
-        'resource-totals',
-        <div className="space-y-2">
-          {!isSectionEditing(editingSections, 'resource-totals') &&
-          !isSectionEditing(editingSections, 'work-assignments') ? (
-            <p className="text-[11px] text-muted-foreground">
-              Values reflect saved work assignment totals. Edit work assignments to recalculate
-              automatically on save.
-            </p>
-          ) : null}
-          <div className="grid grid-cols-1 gap-2 xl:grid-cols-3">
-            {(
-              [
-                ['Total Resources Required', 'totalResourcesRequired'],
-                ['Total Resources Have on Hand', 'totalResourcesHaveOnHand'],
-                ['Total Resources Need To Order', 'totalResourcesNeedToOrder'],
-              ] as const
-            ).map(([label, field]) => {
-              const displayValue = isSectionEditing(editingSections, 'work-assignments')
-                ? computedTotals[field]
-                : resourceTotals[field]
-
-              return (
-                <div key={field} className="space-y-1">
-                  <Ics202FieldLabel>{label}</Ics202FieldLabel>
-                  {isSectionEditing(editingSections, 'resource-totals') ? (
-                    <input
-                      value={resourceTotals[field]}
-                      onChange={(event) => patchResourceTotals({ [field]: event.target.value })}
-                      className="h-8 w-full rounded-md border bg-transparent px-2 text-xs outline-none"
-                    />
-                  ) : (
-                    <Ics202ReadOnlyField value={displayValue} />
-                  )}
-                </div>
-              )
-            })}
-          </div>
-        </div>
       )}
 
       {renderSectionShell(
