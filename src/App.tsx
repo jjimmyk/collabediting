@@ -567,9 +567,6 @@ import {
 import { buildDynamicOrgChart } from '@/features/roster/build-dynamic-org-chart'
 import { countAssetsReportingToPosition } from '@/features/roster/workspace-asset-org-chart'
 import { useWorkspaceCustomPositions } from '@/hooks/useWorkspaceCustomPositions'
-import { useWorkspaceOrgChartLayout } from '@/hooks/useWorkspaceOrgChartLayout'
-import { OrgChartLayoutToolbar } from '@/features/roster/org-chart-layout/OrgChartLayoutToolbar'
-import type { OrgChartPersistedLayout } from '@/features/roster/org-chart-layout/types'
 import { useWorkspacePositionLifecycle } from '@/hooks/useWorkspacePositionLifecycle'
 import { useOperationalPeriodRosterSnapshot } from '@/hooks/useOperationalPeriodRosterSnapshot'
 import {
@@ -8712,13 +8709,6 @@ function App() {
   const [rosterAssigningPosition, setRosterAssigningPosition] = useState<string | null>(null)
   const [updatingCheckInMemberId, setUpdatingCheckInMemberId] = useState<string | null>(null)
   const [rosterViewMode, setRosterViewMode] = useState<'table' | 'org-chart'>('table')
-  const [orgChartLayoutEditMode, setOrgChartLayoutEditMode] = useState(false)
-  const [orgChartLayoutDraft, setOrgChartLayoutDraft] = useState<OrgChartPersistedLayout | null>(
-    null
-  )
-  const [orgChartLayoutHasUnsavedChanges, setOrgChartLayoutHasUnsavedChanges] = useState(false)
-  const [isSavingOrgChartLayout, setIsSavingOrgChartLayout] = useState(false)
-  const [orgChartFitViewSignal, setOrgChartFitViewSignal] = useState(0)
   const [rosterMemberPositionDraft, setRosterMemberPositionDraft] = useState<string>(
     ICS_POSITIONS[0]
   )
@@ -11802,18 +11792,6 @@ function App() {
     userId: user?.id ?? null,
     standardLifecycle,
   })
-  const workspaceOrgChartLayoutStorageKey = activeWorkspaceSupabaseId ?? activeWorkspaceRosterKey
-  const {
-    savedLayout: workspaceOrgChartSavedLayout,
-    saveLayout: persistWorkspaceOrgChartLayout,
-    resetLayout: resetPersistedWorkspaceOrgChartLayout,
-  } = useWorkspaceOrgChartLayout({
-    enabled:
-      (isInIncidentWorkspace || isInExerciseWorkspace) &&
-      rosterViewMode === 'org-chart' &&
-      workspaceOrgChartLayoutStorageKey !== null,
-    workspaceId: workspaceOrgChartLayoutStorageKey,
-  })
   const workspaceOrgChartLayout = useMemo(
     () =>
       buildDynamicOrgChart(
@@ -13317,13 +13295,6 @@ function App() {
     (isInIncidentWorkspace || isInExerciseWorkspace) && !isViewingHistoricalRoster
   const showMemberCheckInStatus = isInIncidentWorkspace || isInExerciseWorkspace
   const canEditMemberCheckInStatus = showMemberCheckInStatus && !isViewingHistoricalRoster
-  useEffect(() => {
-    if (rosterViewMode !== 'org-chart' || isViewingHistoricalRoster) {
-      setOrgChartLayoutEditMode(false)
-      setOrgChartLayoutDraft(null)
-      setOrgChartLayoutHasUnsavedChanges(false)
-    }
-  }, [isViewingHistoricalRoster, rosterViewMode])
   const showAllowWorkAssignment = isInIncidentWorkspace || isInExerciseWorkspace
   const showPositionAssets = showAllowWorkAssignment
   const historicalRosterPeriodNumber =
@@ -15651,56 +15622,6 @@ function App() {
     }
 
     toast.success(`Removed ${member.email} from the org chart.`)
-  }
-  const handleOrgChartLayoutDraftChange = (layout: OrgChartPersistedLayout) => {
-    setOrgChartLayoutDraft(layout)
-    setOrgChartLayoutHasUnsavedChanges(true)
-  }
-  const handleSaveOrgChartLayout = async () => {
-    const accessToken = isSupabaseEnabled ? await getAccessToken() : ''
-    if (isSupabaseEnabled && !accessToken) {
-      toast.error('Sign in to save org chart layout.')
-      return
-    }
-    const layout = orgChartLayoutDraft ?? workspaceOrgChartSavedLayout
-    setIsSavingOrgChartLayout(true)
-    try {
-      await persistWorkspaceOrgChartLayout(accessToken as string, layout)
-      setOrgChartLayoutEditMode(false)
-      setOrgChartLayoutDraft(null)
-      setOrgChartLayoutHasUnsavedChanges(false)
-      toast.success('Org chart layout saved.')
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Could not save org chart layout.')
-    } finally {
-      setIsSavingOrgChartLayout(false)
-    }
-  }
-  const handleResetOrgChartLayout = async () => {
-    const accessToken = isSupabaseEnabled ? await getAccessToken() : ''
-    if (isSupabaseEnabled && !accessToken) {
-      toast.error('Sign in to reset org chart layout.')
-      return
-    }
-    setIsSavingOrgChartLayout(true)
-    try {
-      await resetPersistedWorkspaceOrgChartLayout(accessToken as string)
-      setOrgChartLayoutEditMode(false)
-      setOrgChartLayoutDraft(null)
-      setOrgChartLayoutHasUnsavedChanges(false)
-      setOrgChartFitViewSignal((current) => current + 1)
-      toast.success('Org chart layout reset to default.')
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Could not reset org chart layout.')
-    } finally {
-      setIsSavingOrgChartLayout(false)
-    }
-  }
-  const handleCancelOrgChartLayoutEdit = () => {
-    setOrgChartLayoutEditMode(false)
-    setOrgChartLayoutDraft(null)
-    setOrgChartLayoutHasUnsavedChanges(false)
-    setOrgChartFitViewSignal((current) => current + 1)
   }
   const removeWorkspaceRosterMember = async (memberId: string) => {
     if (activeWorkspaceRosterKey === null) return
@@ -24704,27 +24625,6 @@ function App() {
                         Org Chart
                       </ToggleGroupItem>
                     </ToggleGroup>
-                    {rosterViewMode === 'org-chart' ? (
-                      <OrgChartLayoutToolbar
-                        editMode={orgChartLayoutEditMode}
-                        canEdit={effectiveCanManageRoster}
-                        hasUnsavedChanges={orgChartLayoutHasUnsavedChanges}
-                        isSaving={isSavingOrgChartLayout}
-                        onEnterEdit={() => {
-                          setOrgChartLayoutEditMode(true)
-                          setOrgChartLayoutDraft(null)
-                          setOrgChartLayoutHasUnsavedChanges(false)
-                        }}
-                        onSave={() => {
-                          void handleSaveOrgChartLayout()
-                        }}
-                        onReset={() => {
-                          void handleResetOrgChartLayout()
-                        }}
-                        onCancel={handleCancelOrgChartLayoutEdit}
-                        onFitView={() => setOrgChartFitViewSignal((current) => current + 1)}
-                      />
-                    ) : null}
                     <RosterAddMemberToolbar
                       canManageRoster={effectiveCanManageRoster}
                       onAddMember={openAddRosterMemberDialog}
@@ -28086,11 +27986,6 @@ function App() {
                       onRemoveSingleResourceFromOrgChart={(memberId) => {
                         void handleRemoveSingleResourceFromOrgChart(memberId)
                       }}
-                      savedLayout={orgChartLayoutDraft ?? workspaceOrgChartSavedLayout}
-                      editMode={orgChartLayoutEditMode}
-                      readOnly={isViewingHistoricalRoster}
-                      fitViewSignal={orgChartFitViewSignal}
-                      onDraftChange={handleOrgChartLayoutDraftChange}
                     />
                       ) : (
                         <WorkspacePositionRosterTable
