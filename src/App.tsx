@@ -32847,6 +32847,9 @@ function App() {
                     incidentName={
                       activeIncidentWorkspace?.name ?? activeExerciseWorkspace?.name ?? ''
                     }
+                    incidentLocation={
+                      activeIncidentWorkspace?.region ?? activeExerciseWorkspace?.region ?? ''
+                    }
                     assigneeOptions={ics204AssignedUnitOptions}
                     editingSections={ics215EditingSections}
                     sectionDrafts={ics215SectionDrafts}
@@ -32857,8 +32860,6 @@ function App() {
                     onPatchSectionDraft={patchIcs215SectionDraft}
                     onAppendVersion={handleIcs215AppendVersion}
                     onSignReview={handleIcs215SignReview}
-                    downloadDocx={downloadDocx}
-                    downloadPdf={downloadPdf}
                   />
                   </OperationalPeriodHistoricalFormShell>
                 )}

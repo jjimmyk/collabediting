@@ -1,4 +1,5 @@
 import { ICS215_SECTION_LABELS } from '@/features/ics215/constants'
+import { type Ics215ExportContext } from '@/features/ics215/export-layout'
 import type { Ics215FormState } from '@/features/ics215/types'
 import { computeIcs215ColumnTotals, computeIcs215ResourceTotals } from '@/features/ics215/utils'
 
@@ -25,26 +26,19 @@ export type Ics215DocxOptions = {
   }
 }
 
-export type Ics215ExportContext = {
-  incidentName?: string
-}
-
-export function ics215ExportFilenameBase(form: Ics215FormState): string {
-  const name = form.incidentName.trim().replace(/[^a-zA-Z0-9-_]+/g, '_')
-  return name.length > 0 ? name : `ICS-215_${form.id.slice(0, 8)}`
-}
-
-function formatOperationalPeriod(form: Ics215FormState): string {
-  const fromParts = [form.operationalPeriodDateFrom, form.operationalPeriodTimeFrom]
-    .filter((part) => part.trim().length > 0)
-    .join(' ')
-  const toParts = [form.operationalPeriodDateTo, form.operationalPeriodTimeTo]
-    .filter((part) => part.trim().length > 0)
-    .join(' ')
-  if (fromParts.length === 0 && toParts.length === 0) return ''
-  if (fromParts.length > 0 && toParts.length > 0) return `${fromParts} – ${toParts}`
-  return fromParts || toParts
-}
+export {
+  buildIcs215ExportLayout,
+  ics215ExportFilenameBase,
+  ICS215_FORM_TITLE_LINES,
+  type Ics215ExportContext,
+} from '@/features/ics215/export-layout'
+export {
+  buildIcs215DocxXml,
+  downloadIcs215Docx,
+  downloadIcs215Pdf,
+  paginateIcs215Export,
+  type Ics215PhysicalPage,
+} from '@/features/ics215/export-download'
 
 export function buildIcs215ExportOptions(
   form: Ics215FormState,
@@ -54,12 +48,15 @@ export function buildIcs215ExportOptions(
     header: {
       topLines: [
         'DEPARTMENT OF HOMELAND SECURITY',
-        'MARATHON',
+        'U.S. COAST GUARD',
         'OPERATIONAL PLANNING WORKSHEET (ICS 215-CG)',
       ],
       cells: [
         { label: '1. Incident Name:', value: form.incidentName || context.incidentName || '' },
-        { label: '2. Operational Period:', value: formatOperationalPeriod(form) },
+        {
+          label: '2. Incident Location:',
+          value: context.incidentLocation?.trim() ?? '',
+        },
       ],
     },
     footer: {
@@ -74,6 +71,7 @@ export function buildIcs215ExportOptions(
   }
 }
 
+/** Legacy flat blocks for IAP bundle consumers. */
 export function buildIcs215DocxBlocks(
   form: Ics215FormState,
   context: Ics215ExportContext = {}
@@ -105,6 +103,7 @@ export function buildIcs215DocxBlocks(
 
   pushHeading(ICS215_SECTION_LABELS['incident-info'])
   pushField('Incident Name', form.incidentName || context.incidentName)
+  pushField('Incident Location', context.incidentLocation)
   pushField('Operational Period Date From', form.operationalPeriodDateFrom)
   pushField('Operational Period Date To', form.operationalPeriodDateTo)
   pushField('Operational Period Time From', form.operationalPeriodTimeFrom)

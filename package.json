@@ -11,6 +11,7 @@
     "verify:ics204-assignment": "npx vite-node scripts/verify-ics204-assignment.ts",
     "verify:ics204-export": "npx vite-node scripts/verify-ics204-export.ts",
     "verify:ics215-work-assignments": "npx vite-node scripts/verify-ics215-work-assignments.ts",
+    "verify:ics215-export": "npx vite-node scripts/verify-ics215-export.ts",
     "lint": "eslint .",
     "preview": "vite preview",
     "db:apply": "node scripts/apply-supabase-schema.mjs"

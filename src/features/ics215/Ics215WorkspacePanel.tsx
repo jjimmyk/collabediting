@@ -29,10 +29,12 @@ import type { Ics204AssignedUnitOption } from '@/features/ics204/ics204-assigned
 import { Ics215ExportPreviewDialog } from '@/features/ics215/Ics215ExportPreviewDialog'
 import { Ics215FormSections } from '@/features/ics215/Ics215FormSections'
 import {
-  buildIcs215DocxBlocks,
-  buildIcs215ExportOptions,
+  buildIcs215ExportLayout,
+  downloadIcs215Docx,
+  downloadIcs215Pdf,
   ics215ExportFilenameBase,
-  type Ics215DocxBlock,
+  paginateIcs215Export,
+  type Ics215PhysicalPage,
 } from '@/features/ics215/export'
 import type {
   Ics215FormSectionDrafts,
@@ -43,9 +45,6 @@ import type {
 import { cloneIcs215FormState, getIcs215FormForExport } from '@/features/ics215/utils'
 import { cn } from '@/lib/utils'
 
-type ExportBlock = Ics215DocxBlock
-type ExportOptions = ReturnType<typeof buildIcs215ExportOptions>
-
 type Ics215WorkspacePanelProps = {
   form: Ics215FormState | null
   setForm: React.Dispatch<React.SetStateAction<Ics215FormState | null>>
@@ -55,6 +54,7 @@ type Ics215WorkspacePanelProps = {
   isSaving: boolean
   glassItemBorderClasses: string
   incidentName: string
+  incidentLocation?: string
   assigneeOptions: Ics204AssignedUnitOption[]
   editingSections: Partial<Record<Ics215SectionId, boolean>>
   sectionDrafts: Ics215FormSectionDrafts
@@ -76,8 +76,6 @@ type Ics215WorkspacePanelProps = {
     latestVersion: Ics215Version,
     signature: Ics201VersionSignature
   ) => void
-  downloadDocx: (filename: string, blocks: ExportBlock[], options?: ExportOptions) => void
-  downloadPdf: (filename: string, blocks: ExportBlock[], options?: ExportOptions) => void
 }
 
 export function Ics215WorkspacePanel({
@@ -89,6 +87,7 @@ export function Ics215WorkspacePanel({
   isSaving,
   glassItemBorderClasses,
   incidentName,
+  incidentLocation = '',
   assigneeOptions,
   editingSections,
   sectionDrafts,
@@ -99,8 +98,6 @@ export function Ics215WorkspacePanel({
   onPatchSectionDraft,
   onAppendVersion,
   onSignReview,
-  downloadDocx,
-  downloadPdf,
 }: Ics215WorkspacePanelProps) {
   const liveFormRef = useRef<Ics215FormState | null>(null)
   const [viewingPastVersion, setViewingPastVersion] = useState<Ics215Version | null>(null)
@@ -112,7 +109,7 @@ export function Ics215WorkspacePanel({
   } | null>(null)
   const [signNameInput, setSignNameInput] = useState('You')
   const [isPreviewOpen, setIsPreviewOpen] = useState(false)
-  const [previewBlocks, setPreviewBlocks] = useState<Ics215DocxBlock[]>([])
+  const [previewPages, setPreviewPages] = useState<Ics215PhysicalPage[]>([])
 
   const latestVersion = versions[versions.length - 1] ?? null
   const isLatestSigned = !!latestVersion && latestVersion.signatures.length > 0
@@ -125,36 +122,34 @@ export function Ics215WorkspacePanel({
     return getIcs215FormForExport(form, sectionDrafts)
   }
 
-  const getExportContext = () => ({ incidentName })
+  const getExportContext = () => ({ incidentName, incidentLocation })
 
   const openPreview = () => {
     const exportForm = getExportForm()
     if (!exportForm) return
-    setPreviewBlocks(buildIcs215DocxBlocks(exportForm, getExportContext()))
+    setPreviewPages(
+      paginateIcs215Export(buildIcs215ExportLayout(exportForm, getExportContext()))
+    )
     setIsPreviewOpen(true)
   }
 
-  const exportWord = (blocks?: ExportBlock[]) => {
+  const exportWord = () => {
     const exportForm = getExportForm()
     if (!exportForm) return
-    const context = getExportContext()
     const stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-')
-    downloadDocx(
+    downloadIcs215Docx(
       `ICS-215_${ics215ExportFilenameBase(exportForm)}_${stamp}.docx`,
-      blocks ?? buildIcs215DocxBlocks(exportForm, context),
-      buildIcs215ExportOptions(exportForm, context)
+      buildIcs215ExportLayout(exportForm, getExportContext())
     )
   }
 
-  const exportPdf = (blocks?: ExportBlock[]) => {
+  const exportPdf = () => {
     const exportForm = getExportForm()
     if (!exportForm) return
-    const context = getExportContext()
     const stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-')
-    downloadPdf(
+    downloadIcs215Pdf(
       `ICS-215_${ics215ExportFilenameBase(exportForm)}_${stamp}.pdf`,
-      blocks ?? buildIcs215DocxBlocks(exportForm, context),
-      buildIcs215ExportOptions(exportForm, context)
+      buildIcs215ExportLayout(exportForm, getExportContext())
     )
   }
 
@@ -661,9 +656,9 @@ export function Ics215WorkspacePanel({
         open={isPreviewOpen}
         onOpenChange={setIsPreviewOpen}
         title={`ICS-215 Preview — ${form.incidentName || incidentName || 'Operational Planning Worksheet'}`}
-        blocks={previewBlocks}
-        onExportWord={() => exportWord(previewBlocks)}
-        onExportPdf={() => exportPdf(previewBlocks)}
+        pages={previewPages}
+        onExportWord={exportWord}
+        onExportPdf={exportPdf}
       />
     </>
   )

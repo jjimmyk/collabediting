@@ -1,5 +1,16 @@
 import type { Ics215ResourceColumn, Ics215SectionId } from '@/features/ics215/types'
 
+export const ICS215_FORM_TITLE_LINES = [
+  'DEPARTMENT OF HOMELAND SECURITY',
+  'U.S. COAST GUARD',
+  'OPERATIONAL PLANNING WORKSHEET (ICS 215-CG)',
+] as const
+
+export const ICS215_EXPORT_FOOTER_LEFT = 'ICS 215-CG (11/24)'
+
+/** Max resource kind columns (Req/Have/Need groups) per horizontal page slice. */
+export const ICS215_MAX_RESOURCE_COLUMNS_PER_PAGE = 2
+
 export const ICS215_DEFAULT_RESOURCE_COLUMNS: Ics215ResourceColumn[] = [
   { id: 'helicopter', label: 'Helicopter' },
   { id: 'small-boat', label: 'Small Boat' },
