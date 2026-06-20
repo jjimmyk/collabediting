@@ -28086,7 +28086,7 @@ function App() {
                       onRemoveSingleResourceFromOrgChart={(memberId) => {
                         void handleRemoveSingleResourceFromOrgChart(memberId)
                       }}
-                      savedLayout={orgChartLayoutDraft ?? workspaceOrgChartSavedLayout}
+                      savedLayout={workspaceOrgChartSavedLayout}
                       editMode={orgChartLayoutEditMode}
                       readOnly={isViewingHistoricalRoster}
                       fitViewSignal={orgChartFitViewSignal}

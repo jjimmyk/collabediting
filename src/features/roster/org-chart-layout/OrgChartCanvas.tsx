@@ -8,7 +8,6 @@ import {
   useEdgesState,
   useReactFlow,
   ReactFlowProvider,
-  type Node,
   type Viewport,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
@@ -53,11 +52,13 @@ function OrgChartCanvasInner({
   onViewportChange,
   fitViewSignal = 0,
 }: OrgChartCanvasProps) {
-  const { fitView, getViewport, setViewport } = useReactFlow()
+  const { fitView, getViewport, setViewport, getNodes } = useReactFlow()
   const nodeDefs = useMemo(
     () => collectOrgChartCanvasNodes(orgChartLayout, visiblePositions),
     [orgChartLayout, visiblePositions]
   )
+
+  const structureKey = useMemo(() => nodeDefs.map((def) => def.id).join('\0'), [nodeDefs])
 
   const { nodePositions, viewport: initialViewport } = useMemo(
     () => mergeOrgChartLayout(nodeDefs, savedLayout),
@@ -71,49 +72,56 @@ function OrgChartCanvasInner({
 
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes)
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges)
-  const skipNextDraftRef = useRef(true)
+  const editModeRef = useRef(editMode)
+  const readOnlyRef = useRef(readOnly)
+  editModeRef.current = editMode
+  readOnlyRef.current = readOnly
 
-  useEffect(() => {
-    skipNextDraftRef.current = true
-    setNodes(initialNodes.map((node) => ({ ...node, draggable: editMode && !readOnly })))
+  const resetFlowElements = useCallback(() => {
+    const draggable = editModeRef.current && !readOnlyRef.current
+    setNodes(initialNodes.map((node) => ({ ...node, draggable })))
     setEdges(initialEdges)
     setViewport(initialViewport)
-  }, [initialNodes, initialEdges, initialViewport, editMode, readOnly, setNodes, setEdges, setViewport])
+  }, [initialEdges, initialNodes, initialViewport, setEdges, setNodes, setViewport])
+
+  useEffect(() => {
+    resetFlowElements()
+  }, [structureKey, savedLayout, resetFlowElements])
+
+  useEffect(() => {
+    setNodes((current) =>
+      current.map((node) => ({ ...node, draggable: editMode && !readOnly }))
+    )
+  }, [editMode, readOnly, setNodes])
 
   useEffect(() => {
     if (fitViewSignal <= 0) return
+    resetFlowElements()
     void fitView({ padding: 0.2, duration: 250 })
-  }, [fitViewSignal, fitView])
+  }, [fitViewSignal, resetFlowElements, fitView])
 
-  const emitDraft = useCallback(
-    (nextNodes: Node[]) => {
-      if (!onDraftChange) return
-      const positions: Record<string, OrgChartNodePosition> = {}
-      for (const node of nextNodes) {
-        positions[node.id] = { x: node.position.x, y: node.position.y }
-      }
-      const currentViewport = getViewport()
-      onDraftChange({
-        version: 1,
-        nodes: positions,
-        viewport: {
-          x: currentViewport.x,
-          y: currentViewport.y,
-          zoom: currentViewport.zoom,
-        },
-      })
-    },
-    [getViewport, onDraftChange]
-  )
-
-  useEffect(() => {
-    if (skipNextDraftRef.current) {
-      skipNextDraftRef.current = false
-      return
+  const emitDraft = useCallback(() => {
+    if (!onDraftChange) return
+    const positions: Record<string, OrgChartNodePosition> = {}
+    for (const node of getNodes()) {
+      positions[node.id] = { x: node.position.x, y: node.position.y }
     }
+    const currentViewport = getViewport()
+    onDraftChange({
+      version: 1,
+      nodes: positions,
+      viewport: {
+        x: currentViewport.x,
+        y: currentViewport.y,
+        zoom: currentViewport.zoom,
+      },
+    })
+  }, [getNodes, getViewport, onDraftChange])
+
+  const handleNodeDragStop = useCallback(() => {
     if (!editMode || readOnly) return
-    emitDraft(nodes)
-  }, [nodes, editMode, readOnly, emitDraft])
+    emitDraft()
+  }, [editMode, emitDraft, readOnly])
 
   const handleMoveEnd = useCallback(
     (_event: unknown, nextViewport: Viewport) => {
@@ -123,10 +131,10 @@ function OrgChartCanvasInner({
         zoom: nextViewport.zoom,
       })
       if (editMode && !readOnly) {
-        emitDraft(nodes)
+        emitDraft()
       }
     },
-    [editMode, emitDraft, nodes, onViewportChange, readOnly]
+    [editMode, emitDraft, onViewportChange, readOnly]
   )
 
   if (nodeDefs.length === 0) {
@@ -145,6 +153,7 @@ function OrgChartCanvasInner({
         nodeTypes={nodeTypes}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
+        onNodeDragStop={handleNodeDragStop}
         onMoveEnd={handleMoveEnd}
         nodesDraggable={editMode && !readOnly}
         nodesConnectable={false}
