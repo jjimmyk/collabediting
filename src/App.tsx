@@ -214,6 +214,7 @@ import {
 import type {
   Ics204FormSectionDrafts,
   Ics204FormState,
+  Ics204Ics215ImportSnapshot,
   Ics204ResourceAssignedRow,
   Ics204ResourceRequirementRow,
   Ics204Version,
@@ -222,6 +223,14 @@ import type {
 } from '@/features/ics204/types'
 import { ICS204_SECTION_LABELS, ICS204_SECTION_PROMPTS } from '@/features/ics204/constants'
 import { Ics204FormSections } from '@/features/ics204/Ics204FormSections'
+import { Ics204CreateFromIcs215Dialog } from '@/features/ics204/Ics204CreateFromIcs215Dialog'
+import {
+  buildIcs204PartialFromIcs215,
+  canCreateIcs204FromIcs215,
+  listIcs215AssigneesWithWork,
+  mapIcs215RowsToIcs204WorkAssignments,
+  syncIcs204WorkAssignmentsFromIcs215Import,
+} from '@/features/ics204/create-from-ics215'
 import { Ics204ExportPreviewDialog } from '@/features/ics204/Ics204ExportPreviewDialog'
 import { Ics204aDocumentDialog } from '@/features/ics204a/Ics204aDocumentDialog'
 import {
@@ -334,6 +343,7 @@ import {
   createEmptyIcs215Form,
   createLocalIcs215DocumentId,
   extractIcs215SectionDraft,
+  getIcs215FormForExport,
   ics215AuthorColor,
 } from '@/features/ics215/utils'
 import { useIcs215WorkspaceForm } from '@/hooks/useIcs215WorkspaceForm'
@@ -494,6 +504,7 @@ import {
   applyIcs204SectionDraft,
   buildDemoIcs204ResourceSnapshot,
   cloneIcs204FormState,
+  cloneIcs204Ics215ImportSnapshot,
   createIcs204ResourceAssignedRow,
   createLocalIcs204DocumentId,
   extractIcs204SectionDraft,
@@ -8087,6 +8098,7 @@ function App() {
     formId: string
     label: string
   } | null>(null)
+  const [ics204CreateFrom215DialogOpen, setIcs204CreateFrom215DialogOpen] = useState(false)
   const [ics204EditingSectionsByFormId, setIcs204EditingSectionsByFormId] = useState<
     Record<string, Partial<Record<Ics204SectionId, boolean>>>
   >({})
@@ -13784,6 +13796,30 @@ function App() {
   const ics204AssignedUnitOptions = useMemo(
     () => buildIcs204AssignedUnitOptions(positionRosterEntries),
     [positionRosterEntries]
+  )
+  const ics215FormFor204Import = useMemo(() => {
+    if (!displayIcs215Form) return null
+    return getIcs215FormForExport(displayIcs215Form, ics215SectionDrafts)
+  }, [displayIcs215Form, ics215SectionDrafts])
+  const ics215AssigneesFor204Create = useMemo(
+    () =>
+      ics215FormFor204Import
+        ? listIcs215AssigneesWithWork(
+            ics215FormFor204Import,
+            ics204AssignedUnitOptions,
+            displayIcs204Forms
+          )
+        : [],
+    [displayIcs204Forms, ics204AssignedUnitOptions, ics215FormFor204Import]
+  )
+  const canCreateIcs204From215 = useMemo(
+    () =>
+      canCreateIcs204FromIcs215(
+        ics215FormFor204Import,
+        ics204AssignedUnitOptions,
+        displayIcs204Forms
+      ),
+    [displayIcs204Forms, ics204AssignedUnitOptions, ics215FormFor204Import]
   )
   const visibleRosterPositions = useMemo(
     () => new Set(positionRosterEntries.map((entry) => entry.position)),
@@ -20512,12 +20548,16 @@ function App() {
     form: Ics204FormState
   ) => {
     if (!canEditIcs201Form) return
+    const nextDrafts: Ics204FormSectionDrafts = {
+      ...ics204SectionDraftsByFormId[formId],
+      [section]: extractIcs204SectionDraft(form, section),
+    }
+    if (section === 'work-assignments' && form.ics215Import) {
+      nextDrafts['ics215-import'] = cloneIcs204Ics215ImportSnapshot(form.ics215Import)
+    }
     setIcs204SectionDraftsByFormId((previous) => ({
       ...previous,
-      [formId]: {
-        ...previous[formId],
-        [section]: extractIcs204SectionDraft(form, section),
-      },
+      [formId]: nextDrafts,
     }))
     setIcs204EditingSectionsByFormId((previous) => ({
       ...previous,
@@ -20542,10 +20582,29 @@ function App() {
       if (next[formId]) {
         const drafts = { ...next[formId] }
         delete drafts[section]
+        if (section === 'work-assignments') {
+          delete drafts['ics215-import']
+        }
         next[formId] = drafts
       }
       return next
     })
+  }
+  const patchIcs204Ics215ImportDraft = (
+    formId: string,
+    snapshot: Ics204Ics215ImportSnapshot
+  ) => {
+    setIcs204SectionDraftsByFormId((previous) => ({
+      ...previous,
+      [formId]: {
+        ...previous[formId],
+        'ics215-import': snapshot,
+        'work-assignments': mapIcs215RowsToIcs204WorkAssignments(
+          snapshot.workAssignments,
+          snapshot.resourceColumns
+        ),
+      },
+    }))
   }
   const patchIcs204SectionDraft = <S extends Ics204SectionId>(
     formId: string,
@@ -20569,7 +20628,16 @@ function App() {
     if (draft === undefined) return
     const currentForm = ics204Forms.find((entry) => entry.id === formId)
     if (!currentForm) return
-    const nextForm = applyIcs204SectionDraft(currentForm, section, draft)
+    let nextForm = applyIcs204SectionDraft(currentForm, section, draft)
+    if (section === 'work-assignments') {
+      const importDraft = ics204SectionDraftsByFormId[formId]?.['ics215-import']
+      if (importDraft) {
+        nextForm = syncIcs204WorkAssignmentsFromIcs215Import({
+          ...nextForm,
+          ics215Import: cloneIcs204Ics215ImportSnapshot(importDraft),
+        })
+      }
+    }
     setIcs204Forms((previous) =>
       previous.map((entry) => (entry.id === formId ? cloneIcs204FormState(nextForm) : entry))
     )
@@ -20590,6 +20658,32 @@ function App() {
       })
     }
     cancelIcs204SectionEdit(formId, section)
+  }
+  const createIcs204FromIcs215 = async (assignee: string) => {
+    if (!canEditIcs201Form) return
+    if (!ics215FormFor204Import) {
+      toast.error('No ICS-215 available to import from.')
+      return
+    }
+    const partial = buildIcs204PartialFromIcs215(ics215FormFor204Import, assignee)
+    const result = await createIcs204Form(partial)
+    if (!result) {
+      toast.error('Failed to create ICS-204 from ICS-215.')
+      return
+    }
+    const nextForm = cloneIcs204FormState(result.form)
+    setIcs204Forms((previous) => [...previous, nextForm])
+    setIcs204VersionsById((previous) => ({
+      ...previous,
+      [result.form.id]: result.versions.map((version) => ({
+        ...version,
+        snapshot: cloneIcs204FormState(version.snapshot),
+      })),
+    }))
+    setExpandedIcs204FormId(result.form.id)
+    setIcs204CreateFrom215DialogOpen(false)
+    toast.success(`Created ICS-204 for ${assignee}`)
+    startIcs204SectionEdit(result.form.id, 'work-assignments', nextForm)
   }
   const handleIcs204AssignedUnitChange = (
     formId: string,
@@ -33276,6 +33370,34 @@ function App() {
                       {isIcs204Loading ? (
                         <span className="text-xs text-muted-foreground">Loading ICS-204 forms…</span>
                       ) : null}
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="inline-flex">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              disabled={
+                                !effectiveCanEditWorkspaceForms ||
+                                isIcs204Saving ||
+                                !canCreateIcs204From215
+                              }
+                              onClick={() => setIcs204CreateFrom215DialogOpen(true)}
+                            >
+                              + Create from ICS 215
+                            </Button>
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          {!displayIcs215Form
+                            ? 'Complete ICS-215 first'
+                            : !canCreateIcs204From215
+                              ? 'No eligible work assignments on ICS-215'
+                              : ics215SectionDrafts['work-assignments']
+                                ? 'Uses current ICS-215 edits (including unsaved)'
+                                : 'Create a draft ICS-204 from ICS-215 work assignments'}
+                        </TooltipContent>
+                      </Tooltip>
                       <Button
                         type="button"
                         size="sm"
@@ -33741,6 +33863,10 @@ function App() {
                                       drafts={ics204SectionDraftsByFormId[form.id] ?? {}}
                                       expandedWorkAssignmentKey={expandedIcs204WorkAssignmentKey}
                                       onExpandedWorkAssignmentKeyChange={setExpandedIcs204WorkAssignmentKey}
+                                      assigneeOptions={assignedUnitOptions}
+                                      onPatchIcs215Import={(snapshot) =>
+                                        patchIcs204Ics215ImportDraft(form.id, snapshot)
+                                      }
                                       onStartSectionEdit={(section) =>
                                         startIcs204SectionEdit(form.id, section, form)
                                       }
@@ -39059,6 +39185,13 @@ function App() {
           })()}
         </DialogContent>
       </Dialog>
+      <Ics204CreateFromIcs215Dialog
+        open={ics204CreateFrom215DialogOpen}
+        onOpenChange={setIcs204CreateFrom215DialogOpen}
+        options={ics215AssigneesFor204Create}
+        hasUnsavedIcs215Edits={ics215SectionDrafts['work-assignments'] !== undefined}
+        onSelect={(assignee) => void createIcs204FromIcs215(assignee)}
+      />
       <Dialog
         open={ics204DeleteConfirmDialog !== null}
         onOpenChange={(open) => {

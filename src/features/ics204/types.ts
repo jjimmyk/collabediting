@@ -1,6 +1,16 @@
 import type { Ics201VersionSignature } from '@/features/ics201/types'
 import type { Ics204aFormState } from '@/features/ics204a/types'
+import type {
+  Ics215ResourceColumn,
+  Ics215WorkAssignmentRow,
+} from '@/features/ics215/types'
 import type { ResourceListItemData } from '@/features/resources/types'
+
+export type Ics204Ics215ImportSnapshot = {
+  assignee: string
+  resourceColumns: Ics215ResourceColumn[]
+  workAssignments: Ics215WorkAssignmentRow[]
+}
 
 export type Ics204ResourceSnapshot = ResourceListItemData
 
@@ -51,6 +61,8 @@ export type Ics204FormState = {
   specialInstructions: string
   communications: string
   emergencyCommunications: string
+  /** When set, work assignments render with ICS-215 spreadsheet layout. */
+  ics215Import?: Ics204Ics215ImportSnapshot
 }
 
 export type Ics204Version = {
@@ -120,6 +132,7 @@ export type Ics204FormSectionDrafts = {
   'assignment-info'?: Ics204AssignmentInfoDraft
   'resources-assigned'?: Ics204ResourceAssignedRow[]
   'work-assignments'?: Ics204WorkAssignmentRow[]
+  'ics215-import'?: Ics204Ics215ImportSnapshot
   'special-instructions'?: string
   communications?: Ics204CommunicationsDraft
 }

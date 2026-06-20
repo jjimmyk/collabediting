@@ -20,6 +20,7 @@ import type {
   Ics204CommunicationsDraft,
   Ics204FormSectionDrafts,
   Ics204FormState,
+  Ics204Ics215ImportSnapshot,
   Ics204ResourceAssignedRow,
   Ics204SectionId,
   Ics204WorkAssignmentRow,
@@ -30,6 +31,8 @@ import {
   extractIcs204SectionDraft,
   resolveIcs204ResourceSnapshot,
 } from '@/features/ics204/utils'
+import type { Ics204AssignedUnitOption } from '@/features/ics204/ics204-assigned-unit-options'
+import { Ics215WorkAssignmentsTable } from '@/features/ics215/Ics215WorkAssignmentsTable'
 import { cn } from '@/lib/utils'
 
 type Ics204FormSectionsProps = {
@@ -53,6 +56,8 @@ type Ics204FormSectionsProps = {
   onOpenResourcePicker: () => void
   onOpenIcs204a?: (rowId: number) => void
   onFocusResourceMap?: (resourceId: number, mapLocation: [number, number]) => void
+  assigneeOptions?: Ics204AssignedUnitOption[]
+  onPatchIcs215Import?: (snapshot: Ics204Ics215ImportSnapshot) => void
 }
 
 function isSectionEditing(
@@ -82,6 +87,8 @@ export function Ics204FormSections({
   onOpenResourcePicker,
   onOpenIcs204a,
   onFocusResourceMap,
+  assigneeOptions = [],
+  onPatchIcs215Import,
 }: Ics204FormSectionsProps) {
   const sectionDisabled = formIsLocked || !canEdit
   const assignmentInfo =
@@ -96,6 +103,10 @@ export function Ics204FormSections({
     isSectionEditing(editingSections, 'work-assignments') && drafts['work-assignments']
       ? drafts['work-assignments']
       : form.workAssignments
+  const ics215Import =
+    isSectionEditing(editingSections, 'work-assignments') && drafts['ics215-import']
+      ? drafts['ics215-import']
+      : form.ics215Import
   const specialInstructions =
     isSectionEditing(editingSections, 'special-instructions') &&
     drafts['special-instructions'] !== undefined
@@ -105,6 +116,21 @@ export function Ics204FormSections({
     isSectionEditing(editingSections, 'communications') && drafts.communications !== undefined
       ? drafts.communications
       : extractIcs204CommunicationsDraft(form)
+
+  const patchIcs215Import = (next: {
+    resourceColumns: Ics204Ics215ImportSnapshot['resourceColumns']
+    workAssignments: Ics204Ics215ImportSnapshot['workAssignments']
+  }) => {
+    if (!ics215Import || !onPatchIcs215Import) return
+    onPatchIcs215Import({
+      ...ics215Import,
+      resourceColumns: next.resourceColumns,
+      workAssignments: next.workAssignments.map((row) => ({
+        ...row,
+        assignee: ics215Import.assignee,
+      })),
+    })
+  }
 
   const patchAssignment = (patch: Partial<Ics204AssignmentInfoDraft>) => {
     onPatchDraft('assignment-info', { ...assignmentInfo, ...patch })
@@ -483,6 +509,21 @@ export function Ics204FormSections({
 
       {renderSectionShell(
         'work-assignments',
+        ics215Import ? (
+          <div className="space-y-2">
+            {ics215Import.workAssignments.length === 0 ? (
+              <p className="text-xs text-muted-foreground">No work assignments.</p>
+            ) : null}
+            <Ics215WorkAssignmentsTable
+              resourceColumns={ics215Import.resourceColumns}
+              workAssignments={ics215Import.workAssignments}
+              assigneeOptions={assigneeOptions}
+              lockedAssignee={ics215Import.assignee}
+              editing={isSectionEditing(editingSections, 'work-assignments')}
+              onChange={patchIcs215Import}
+            />
+          </div>
+        ) : (
         <div className="space-y-2">
           {workAssignments.length === 0 ? (
             <p className="text-xs text-muted-foreground">No work assignments.</p>
@@ -673,8 +714,11 @@ export function Ics204FormSections({
               )
             })
           )}
-        </div>,
-        isSectionEditing(editingSections, 'work-assignments') ? (
+        </div>
+        ),
+        ics215Import
+          ? null
+          : isSectionEditing(editingSections, 'work-assignments') ? (
           <Button type="button" size="sm" variant="outline" onClick={addWorkAssignment}>
             + Add Assignment
           </Button>

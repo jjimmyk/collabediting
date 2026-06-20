@@ -1,4 +1,8 @@
 import { ics201AuthorColorFromId } from '@/features/ics201/utils'
+import {
+  cloneIcs215ResourceColumns,
+  cloneIcs215WorkAssignmentRows,
+} from '@/features/ics215/utils'
 import type { Ics204aFormState } from '@/features/ics204a/types'
 import type { ResourceListItemData } from '@/features/resources/types'
 import type {
@@ -6,6 +10,7 @@ import type {
   Ics204CommunicationsDraft,
   Ics204FormSectionDrafts,
   Ics204FormState,
+  Ics204Ics215ImportSnapshot,
   Ics204ResourceAssignedRow,
   Ics204ResourceSnapshot,
   Ics204SectionId,
@@ -167,6 +172,18 @@ export function normalizeIcs204FormState(form: Ics204FormState): Ics204FormState
     ...form,
     resourcesAssigned: (form.resourcesAssigned ?? []).map(normalizeIcs204ResourceAssignedRow),
     emergencyCommunications: form.emergencyCommunications ?? '',
+    ics215Import: form.ics215Import ? cloneIcs204Ics215ImportSnapshot(form.ics215Import) : undefined,
+  }
+}
+
+export function cloneIcs204Ics215ImportSnapshot(
+  snapshot: Ics204Ics215ImportSnapshot
+): Ics204Ics215ImportSnapshot {
+  const resourceColumns = cloneIcs215ResourceColumns(snapshot.resourceColumns)
+  return {
+    assignee: snapshot.assignee,
+    resourceColumns,
+    workAssignments: cloneIcs215WorkAssignmentRows(snapshot.workAssignments, resourceColumns),
   }
 }
 
@@ -210,6 +227,9 @@ export function cloneIcs204FormState(form: Ics204FormState): Ics204FormState {
       ...row,
       resourceRequirements: row.resourceRequirements.map((entry) => ({ ...entry })),
     })),
+    ics215Import: normalized.ics215Import
+      ? cloneIcs204Ics215ImportSnapshot(normalized.ics215Import)
+      : undefined,
   }
 }
 

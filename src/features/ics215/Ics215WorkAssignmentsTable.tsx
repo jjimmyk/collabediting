@@ -21,6 +21,8 @@ type Ics215WorkAssignmentsTableProps = {
   resourceColumns: Ics215ResourceColumn[]
   workAssignments: Ics215WorkAssignmentRow[]
   assigneeOptions: Ics204AssignedUnitOption[]
+  /** When set, hides the assignee column and pins new rows to this unit. */
+  lockedAssignee?: string
   editing: boolean
   onChange: (next: {
     resourceColumns: Ics215ResourceColumn[]
@@ -80,9 +82,11 @@ export function Ics215WorkAssignmentsTable({
   resourceColumns,
   workAssignments,
   assigneeOptions,
+  lockedAssignee,
   editing,
   onChange,
 }: Ics215WorkAssignmentsTableProps) {
+  const hideAssigneeColumn = Boolean(lockedAssignee?.trim())
   const columnTotals = computeIcs215ColumnTotals(resourceColumns, workAssignments)
 
   const patchRows = (nextRows: Ics215WorkAssignmentRow[]) => {
@@ -129,7 +133,7 @@ export function Ics215WorkAssignmentsTable({
       ...workAssignments,
       {
         id: createNextIcs215WorkAssignmentId(workAssignments),
-        assignee: '',
+        assignee: lockedAssignee?.trim() ?? '',
         workAssignment: '',
         resourceValues: createEmptyResourceValues(resourceColumns),
         overheadPositions: '',
@@ -160,12 +164,13 @@ export function Ics215WorkAssignmentsTable({
   const overflowColumnClass = 'min-w-[9rem] align-top'
   const tableMinWidthPx = Math.max(
     960,
-    170 +
+    (hideAssigneeColumn ? 0 : 170) +
       170 +
       resourceColumns.length * 120 +
       OVERFLOW_COLUMNS.length * 144 +
       (editing ? 40 : 0)
   )
+  const leadingColumnCount = hideAssigneeColumn ? 1 : 2
 
   return (
     <div className="min-w-0 w-full max-w-full space-y-2">
@@ -181,9 +186,11 @@ export function Ics215WorkAssignmentsTable({
           >
             <thead>
               <tr className="border-b bg-muted/40 text-[10px] uppercase tracking-wide text-muted-foreground">
-                <th className={cn(fixedColumnClass, 'px-2 py-2 text-left font-semibold')}>
-                  Assignee
-                </th>
+                {!hideAssigneeColumn ? (
+                  <th className={cn(fixedColumnClass, 'px-2 py-2 text-left font-semibold')}>
+                    Assignee
+                  </th>
+                ) : null}
                 <th className={cn(fixedColumnClass, 'px-2 py-2 text-left font-semibold')}>
                   Work Assignment
                 </th>
@@ -239,7 +246,12 @@ export function Ics215WorkAssignmentsTable({
             {workAssignments.length === 0 ? (
               <tr>
                 <td
-                  colSpan={resourceColumns.length + OVERFLOW_COLUMNS.length + 2 + (editing ? 1 : 0)}
+                  colSpan={
+                    resourceColumns.length +
+                    OVERFLOW_COLUMNS.length +
+                    leadingColumnCount +
+                    (editing ? 1 : 0)
+                  }
                   className="px-3 py-6 text-center text-muted-foreground"
                 >
                   No work assignments.
@@ -254,23 +266,25 @@ export function Ics215WorkAssignmentsTable({
 
                 return (
                   <tr key={row.id} className="border-b align-top">
-                    <td className={cn(fixedColumnClass, 'px-2 py-2')}>
-                      {editing ? (
-                        <Ics204AssignedUnitField
-                          value={row.assignee}
-                          options={assigneeOptionsForRow}
-                          editable
-                          onChange={(value) => patchRow(row.id, { assignee: value })}
-                        />
-                      ) : (
-                        <Ics202ReadOnlyField
-                          value={
-                            assigneeOptionsForRow.find((option) => option.value === row.assignee)
-                              ?.label ?? row.assignee
-                          }
-                        />
-                      )}
-                    </td>
+                    {!hideAssigneeColumn ? (
+                      <td className={cn(fixedColumnClass, 'px-2 py-2')}>
+                        {editing ? (
+                          <Ics204AssignedUnitField
+                            value={row.assignee}
+                            options={assigneeOptionsForRow}
+                            editable
+                            onChange={(value) => patchRow(row.id, { assignee: value })}
+                          />
+                        ) : (
+                          <Ics202ReadOnlyField
+                            value={
+                              assigneeOptionsForRow.find((option) => option.value === row.assignee)
+                                ?.label ?? row.assignee
+                            }
+                          />
+                        )}
+                      </td>
+                    ) : null}
                     <td className={cn(fixedColumnClass, 'px-2 py-2')}>
                       {editing ? (
                         <Textarea
@@ -348,7 +362,7 @@ export function Ics215WorkAssignmentsTable({
           {workAssignments.length > 0 ? (
             <tfoot>
               <tr className="border-t bg-muted/20">
-                <td colSpan={2} className="px-2 py-2 text-[11px] font-semibold">
+                <td colSpan={leadingColumnCount} className="px-2 py-2 text-[11px] font-semibold">
                   Totals
                 </td>
                 {resourceColumns.map((column) => (
