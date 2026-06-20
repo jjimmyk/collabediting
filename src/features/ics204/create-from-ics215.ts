@@ -24,7 +24,7 @@ export type Ics215AssigneeWithWorkOption = {
   existingIcs204FormId?: string
 }
 
-function normalizeAssignee(value: string): string {
+export function normalizeIcs215Ics204Assignee(value: string): string {
   return value.trim().toLowerCase()
 }
 
@@ -47,9 +47,11 @@ export function getIcs215WorkRowsForAssignee(
   form: Ics215FormState,
   assignee: string
 ): Ics215WorkAssignmentRow[] {
-  const key = normalizeAssignee(assignee)
+  const key = normalizeIcs215Ics204Assignee(assignee)
   return form.workAssignments.filter(
-    (row) => normalizeAssignee(row.assignee) === key && isIcs215WorkAssignmentRowPopulated(row)
+    (row) =>
+      normalizeIcs215Ics204Assignee(row.assignee) === key &&
+      isIcs215WorkAssignmentRowPopulated(row)
   )
 }
 
@@ -165,19 +167,22 @@ export function listIcs215AssigneesWithWork(
   for (const row of ics215Form.workAssignments) {
     if (!row.assignee.trim() || !isIcs215WorkAssignmentRowPopulated(row)) continue
     const matchedOption = eligibleOptions.find(
-      (option) => normalizeAssignee(option.value) === normalizeAssignee(row.assignee)
+      (option) =>
+        normalizeIcs215Ics204Assignee(option.value) === normalizeIcs215Ics204Assignee(row.assignee)
     )
     if (!matchedOption) continue
-    const key = normalizeAssignee(matchedOption.value)
+    const key = normalizeIcs215Ics204Assignee(matchedOption.value)
     rowsByAssigneeKey.set(key, [...(rowsByAssigneeKey.get(key) ?? []), row])
   }
 
   return eligibleOptions
-    .filter((option) => rowsByAssigneeKey.has(normalizeAssignee(option.value)))
+    .filter((option) => rowsByAssigneeKey.has(normalizeIcs215Ics204Assignee(option.value)))
     .map((option) => {
-      const rows = rowsByAssigneeKey.get(normalizeAssignee(option.value)) ?? []
+      const rows = rowsByAssigneeKey.get(normalizeIcs215Ics204Assignee(option.value)) ?? []
       const existingForm = existingIcs204Forms.find(
-        (form) => normalizeAssignee(form.assignedUnit) === normalizeAssignee(option.value)
+        (form) =>
+          normalizeIcs215Ics204Assignee(form.assignedUnit) ===
+          normalizeIcs215Ics204Assignee(option.value)
       )
       const preview =
         rows

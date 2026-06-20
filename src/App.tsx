@@ -231,6 +231,13 @@ import {
   mapIcs215RowsToIcs204WorkAssignments,
   syncIcs204WorkAssignmentsFromIcs215Import,
 } from '@/features/ics204/create-from-ics215'
+import {
+  finalizeIcs204FormAfterWorkAssignmentsSave,
+  resolveIcs215WorkSyncTooltipFor215,
+  resolveIcs215WorkSyncTooltipFor204,
+  syncIcs204WorkAssignmentsToIcs215,
+  syncIcs215WorkAssignmentsToLinkedIcs204Forms,
+} from '@/features/ics204/sync-ics215-work-assignments'
 import { Ics204ExportPreviewDialog } from '@/features/ics204/Ics204ExportPreviewDialog'
 import { Ics204aDocumentDialog } from '@/features/ics204a/Ics204aDocumentDialog'
 import {
@@ -13821,6 +13828,21 @@ function App() {
       ),
     [displayIcs204Forms, ics204AssignedUnitOptions, ics215FormFor204Import]
   )
+  const ics215WorkAssignmentsSyncTooltip = useMemo(
+    () =>
+      resolveIcs215WorkSyncTooltipFor215(
+        displayIcs215Form,
+        displayIcs204Forms,
+        ics204AssignedUnitOptions,
+        ics204SectionDraftsByFormId
+      ),
+    [
+      displayIcs204Forms,
+      displayIcs215Form,
+      ics204AssignedUnitOptions,
+      ics204SectionDraftsByFormId,
+    ]
+  )
   const visibleRosterPositions = useMemo(
     () => new Set(positionRosterEntries.map((entry) => entry.position)),
     [positionRosterEntries]
@@ -20638,9 +20660,27 @@ function App() {
         })
       }
     }
+
+    let synced215Form: Ics215FormState | null = null
+    if (section === 'work-assignments' && ics215Form) {
+      synced215Form = syncIcs204WorkAssignmentsToIcs215(nextForm, ics215Form)
+      if (synced215Form) {
+        nextForm = finalizeIcs204FormAfterWorkAssignmentsSave(nextForm, synced215Form)
+      }
+    }
+
     setIcs204Forms((previous) =>
       previous.map((entry) => (entry.id === formId ? cloneIcs204FormState(nextForm) : entry))
     )
+
+    if (synced215Form) {
+      setIcs215Form(cloneIcs215FormState(synced215Form))
+      const latest215Version = ics215Versions[ics215Versions.length - 1]
+      if (latest215Version && latest215Version.signatures.length === 0) {
+        handleIcs215SaveDraft(synced215Form, latest215Version)
+      }
+      toast.success('Synced work assignments with ICS-215.')
+    }
     const latestVersion = ics204VersionsById[formId]?.[ics204VersionsById[formId].length - 1]
     if (latestVersion && latestVersion.signatures.length === 0) {
       handleIcs204SaveDraft(formId, nextForm, latestVersion)
@@ -21882,6 +21922,30 @@ function App() {
     if (draft === undefined || !ics215Form) return
     const nextForm = applyIcs215SectionDraft(ics215Form, section, draft)
     setIcs215Form(cloneIcs215FormState(nextForm))
+
+    if (section === 'work-assignments') {
+      const updated204Forms = syncIcs215WorkAssignmentsToLinkedIcs204Forms(nextForm, ics204Forms)
+      if (updated204Forms.length > 0) {
+        const updatedById = new Map(
+          updated204Forms.map((form) => [form.id, cloneIcs204FormState(form)])
+        )
+        setIcs204Forms((previous) =>
+          previous.map((entry) => updatedById.get(entry.id) ?? entry)
+        )
+        for (const updated of updated204Forms) {
+          const cloned = cloneIcs204FormState(updated)
+          const formVersions = ics204VersionsById[updated.id] ?? []
+          const latest204Version = formVersions[formVersions.length - 1]
+          if (latest204Version && latest204Version.signatures.length === 0) {
+            handleIcs204SaveDraft(updated.id, cloned, latest204Version)
+          }
+        }
+        toast.success(
+          `Synced work assignments to ${updated204Forms.length} ICS-204 list${updated204Forms.length === 1 ? '' : 's'}.`
+        )
+      }
+    }
+
     const latestVersion = ics215Versions[ics215Versions.length - 1]
     if (latestVersion && latestVersion.signatures.length === 0) {
       handleIcs215SaveDraft(nextForm, latestVersion)
@@ -32951,6 +33015,7 @@ function App() {
                     onSaveSection={saveIcs215Section}
                     onGenerateSection={openIcs215SectionGeneration}
                     onPatchSectionDraft={patchIcs215SectionDraft}
+                    workAssignmentsSyncTooltip={ics215WorkAssignmentsSyncTooltip}
                     onAppendVersion={handleIcs215AppendVersion}
                     onSignReview={handleIcs215SignReview}
                   />
@@ -33867,6 +33932,12 @@ function App() {
                                       onPatchIcs215Import={(snapshot) =>
                                         patchIcs204Ics215ImportDraft(form.id, snapshot)
                                       }
+                                      workAssignmentsSyncTooltip={resolveIcs215WorkSyncTooltipFor204(
+                                        form,
+                                        displayIcs215Form,
+                                        ics215SectionDrafts['work-assignments'] !== undefined,
+                                        assignedUnitOptions
+                                      )}
                                       onStartSectionEdit={(section) =>
                                         startIcs204SectionEdit(form.id, section, form)
                                       }

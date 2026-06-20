@@ -33,6 +33,8 @@ import {
 } from '@/features/ics204/utils'
 import type { Ics204AssignedUnitOption } from '@/features/ics204/ics204-assigned-unit-options'
 import { Ics215WorkAssignmentsTable } from '@/features/ics215/Ics215WorkAssignmentsTable'
+import { Ics215Ics204WorkAssignmentsSyncTooltip } from '@/features/ics204/Ics215Ics204WorkAssignmentsSyncTooltip'
+import type { Ics215Ics204WorkSyncTooltipState } from '@/features/ics204/sync-ics215-work-assignments'
 import { cn } from '@/lib/utils'
 
 type Ics204FormSectionsProps = {
@@ -58,6 +60,7 @@ type Ics204FormSectionsProps = {
   onFocusResourceMap?: (resourceId: number, mapLocation: [number, number]) => void
   assigneeOptions?: Ics204AssignedUnitOption[]
   onPatchIcs215Import?: (snapshot: Ics204Ics215ImportSnapshot) => void
+  workAssignmentsSyncTooltip?: Ics215Ics204WorkSyncTooltipState
 }
 
 function isSectionEditing(
@@ -89,6 +92,7 @@ export function Ics204FormSections({
   onFocusResourceMap,
   assigneeOptions = [],
   onPatchIcs215Import,
+  workAssignmentsSyncTooltip,
 }: Ics204FormSectionsProps) {
   const sectionDisabled = formIsLocked || !canEdit
   const assignmentInfo =
@@ -265,7 +269,8 @@ export function Ics204FormSections({
   const renderSectionShell = (
     section: Ics204SectionId,
     content: ReactNode,
-    extraActions?: React.ReactNode
+    extraActions?: React.ReactNode,
+    headerAccessory?: ReactNode
   ) => {
     const editing = isSectionEditing(editingSections, section)
     return (
@@ -275,13 +280,16 @@ export function Ics204FormSections({
       >
         <div className="min-w-0 space-y-2 px-3 py-2.5">
           <div className="flex items-center justify-between gap-2">
-            <Ics204SectionHeader
-              sectionId={section}
-              isEditing={editing}
-              canEdit={canEdit}
-              disabled={formIsLocked}
-              onStartEdit={() => onStartSectionEdit(section)}
-            />
+            <div className="flex min-w-0 items-center gap-1.5">
+              <Ics204SectionHeader
+                sectionId={section}
+                isEditing={editing}
+                canEdit={canEdit}
+                disabled={formIsLocked}
+                onStartEdit={() => onStartSectionEdit(section)}
+              />
+              {headerAccessory}
+            </div>
             {extraActions}
           </div>
           {content}
@@ -722,6 +730,12 @@ export function Ics204FormSections({
           <Button type="button" size="sm" variant="outline" onClick={addWorkAssignment}>
             + Add Assignment
           </Button>
+        ) : null,
+        workAssignmentsSyncTooltip ? (
+          <Ics215Ics204WorkAssignmentsSyncTooltip
+            context="ics204"
+            state={workAssignmentsSyncTooltip}
+          />
         ) : null
       )}
 

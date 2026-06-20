@@ -26,6 +26,7 @@ import {
 import { Input } from '@/components/ui/input'
 import type { Ics201VersionSignature } from '@/features/ics201/types'
 import type { Ics204AssignedUnitOption } from '@/features/ics204/ics204-assigned-unit-options'
+import type { Ics215Ics204WorkSyncTooltipState } from '@/features/ics204/sync-ics215-work-assignments'
 import { Ics215ExportPreviewDialog } from '@/features/ics215/Ics215ExportPreviewDialog'
 import { Ics215FormSections } from '@/features/ics215/Ics215FormSections'
 import {
@@ -66,6 +67,7 @@ type Ics215WorkspacePanelProps = {
     section: S,
     value: Ics215FormSectionDrafts[S]
   ) => void
+  workAssignmentsSyncTooltip?: Ics215Ics204WorkSyncTooltipState
   onAppendVersion: (
     form: Ics215FormState,
     signatures?: Ics201VersionSignature[],
@@ -96,6 +98,7 @@ export function Ics215WorkspacePanel({
   onSaveSection,
   onGenerateSection,
   onPatchSectionDraft,
+  workAssignmentsSyncTooltip,
   onAppendVersion,
   onSignReview,
 }: Ics215WorkspacePanelProps) {
@@ -471,6 +474,7 @@ export function Ics215WorkspacePanel({
             onSaveSection={onSaveSection}
             onGenerateSection={onGenerateSection}
             onPatchDraft={onPatchSectionDraft}
+            workAssignmentsSyncTooltip={workAssignmentsSyncTooltip}
           />
         </div>
 

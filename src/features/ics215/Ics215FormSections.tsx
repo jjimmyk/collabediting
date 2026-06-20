@@ -9,6 +9,8 @@ import {
 import type { Ics204AssignedUnitOption } from '@/features/ics204/ics204-assigned-unit-options'
 import { ICS215_SECTION_LABELS } from '@/features/ics215/constants'
 import { Ics215WorkAssignmentsTable } from '@/features/ics215/Ics215WorkAssignmentsTable'
+import { Ics215Ics204WorkAssignmentsSyncTooltip } from '@/features/ics204/Ics215Ics204WorkAssignmentsSyncTooltip'
+import type { Ics215Ics204WorkSyncTooltipState } from '@/features/ics204/sync-ics215-work-assignments'
 import type {
   Ics215FormSectionDrafts,
   Ics215FormState,
@@ -42,6 +44,7 @@ type Ics215FormSectionsProps = {
     section: S,
     value: Ics215FormSectionDrafts[S]
   ) => void
+  workAssignmentsSyncTooltip?: Ics215Ics204WorkSyncTooltipState
 }
 
 function isSectionEditing(
@@ -65,6 +68,7 @@ export function Ics215FormSections({
   onSaveSection,
   onGenerateSection,
   onPatchDraft,
+  workAssignmentsSyncTooltip,
 }: Ics215FormSectionsProps) {
   const incidentInfo =
     isSectionEditing(editingSections, 'incident-info') && drafts['incident-info']
@@ -91,7 +95,8 @@ export function Ics215FormSections({
     section: Ics215SectionId,
     content: ReactNode,
     headerActions?: ReactNode,
-    itemClassName?: string
+    itemClassName?: string,
+    headerAccessory?: ReactNode
   ) => {
     const editing = isSectionEditing(editingSections, section)
     return (
@@ -105,14 +110,17 @@ export function Ics215FormSections({
       >
         <div className="min-w-0 w-full max-w-full space-y-2 px-3 py-2.5">
           <div className="flex items-start justify-between gap-2">
-            <Ics202SectionHeader
-              sectionId="incident-info"
-              title={ICS215_SECTION_LABELS[section]}
-              isEditing={editing}
-              canEdit={canEdit}
-              disabled={formIsLocked}
-              onStartEdit={() => onStartSectionEdit(section)}
-            />
+            <div className="flex min-w-0 items-center gap-1.5">
+              <Ics202SectionHeader
+                sectionId="incident-info"
+                title={ICS215_SECTION_LABELS[section]}
+                isEditing={editing}
+                canEdit={canEdit}
+                disabled={formIsLocked}
+                onStartEdit={() => onStartSectionEdit(section)}
+              />
+              {headerAccessory}
+            </div>
             {headerActions}
           </div>
           {content}
@@ -196,6 +204,13 @@ export function Ics215FormSections({
           >
             + Add Resource Requirement
           </Button>
+        ) : null,
+        undefined,
+        workAssignmentsSyncTooltip ? (
+          <Ics215Ics204WorkAssignmentsSyncTooltip
+            context="ics215"
+            state={workAssignmentsSyncTooltip}
+          />
         ) : null
       )}
 
