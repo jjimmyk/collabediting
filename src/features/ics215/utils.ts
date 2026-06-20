@@ -371,7 +371,6 @@ export function extractIcs215PreparedByDraft(form: Ics215FormState): Ics215Prepa
   return {
     preparedByName: form.preparedByName,
     preparedByPositionTitle: form.preparedByPositionTitle,
-    preparedBySignature: form.preparedBySignature,
     preparedDateTime: form.preparedDateTime,
   }
 }

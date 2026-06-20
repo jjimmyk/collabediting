@@ -42,7 +42,6 @@ export type Ics215PreparedByFooter = {
   label: string
   name: string
   positionTitle: string
-  signature: string
   dateTime: string
 }
 
@@ -121,7 +120,6 @@ function buildPreparedByFooter(form: Ics215FormState): Ics215PreparedByFooter {
     label: '15. Prepared By:',
     name: form.preparedByName,
     positionTitle: form.preparedByPositionTitle,
-    signature: form.preparedBySignature,
     dateTime: form.preparedDateTime.trim(),
   }
 }

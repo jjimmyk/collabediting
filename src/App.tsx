@@ -18698,7 +18698,6 @@ function App() {
               preparedByName: ics215Form.preparedByName || 'Planning Section Chief',
               preparedByPositionTitle:
                 ics215Form.preparedByPositionTitle || 'Planning Section Chief',
-              preparedBySignature: ics215Form.preparedBySignature || 'Planning Section Chief',
               preparedDateTime:
                 ics215Form.preparedDateTime || new Date().toISOString().slice(0, 16),
             })

@@ -179,23 +179,20 @@ function renderWorkAssignmentsTable(segment: Ics215WorkAssignmentsTableSegment, 
 
 function renderPreparedByFooter(footer: Ics215PreparedByFooter) {
   return (
-    <div className="mt-4 grid grid-cols-4 gap-2 border border-zinc-900 text-[9px]">
+    <div className="mt-4 grid grid-cols-3 gap-2 border border-zinc-900 text-[9px]">
       <div className="border-r border-zinc-900 p-2">
         <p className="font-semibold">{footer.label}</p>
         <p className="mt-1 font-semibold">Name:</p>
         <p className="whitespace-pre-wrap">{footer.name.trim() || ' '}</p>
-        <p className="mt-1 font-semibold">Date/Time:</p>
-        <p className="whitespace-pre-wrap">{footer.dateTime.trim() || ' '}</p>
       </div>
       <div className="border-r border-zinc-900 p-2">
         <p className="font-semibold">Position/Title:</p>
         <p className="whitespace-pre-wrap">{footer.positionTitle.trim() || ' '}</p>
       </div>
-      <div className="border-r border-zinc-900 p-2">
-        <p className="font-semibold">Signature:</p>
-        <p className="whitespace-pre-wrap">{footer.signature.trim() || ' '}</p>
+      <div className="p-2">
+        <p className="font-semibold">Date/Time:</p>
+        <p className="whitespace-pre-wrap">{footer.dateTime.trim() || ' '}</p>
       </div>
-      <div className="p-2" />
     </div>
   )
 }

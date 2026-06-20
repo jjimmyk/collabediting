@@ -206,17 +206,15 @@ function renderHeaderContentDocx(
 }
 
 function renderPreparedByFooterTableDocx(footer: Ics215PreparedByFooter): string {
-  const col = ICS215_DOCX_CONTENT_WIDTH / 4
-  const cols = [col, col, col, col]
+  const col = ICS215_DOCX_CONTENT_WIDTH / 3
+  const cols = [col, col, col]
   const row =
     `<w:tr>` +
     docxCell(
       col,
       docxLabelParagraph(footer.label) +
         docxLabelParagraph('Name:') +
-        docxMultilineParagraphs(footer.name, 16) +
-        docxLabelParagraph('Date/Time:') +
-        docxMultilineParagraphs(footer.dateTime, 16),
+        docxMultilineParagraphs(footer.name, 16),
       { mar: 'tight' }
     ) +
     docxCell(
@@ -226,10 +224,9 @@ function renderPreparedByFooterTableDocx(footer: Ics215PreparedByFooter): string
     ) +
     docxCell(
       col,
-      docxLabelParagraph('Signature:') + docxMultilineParagraphs(footer.signature, 16),
+      docxLabelParagraph('Date/Time:') + docxMultilineParagraphs(footer.dateTime, 16),
       { mar: 'tight' }
     ) +
-    docxCell(col, docxParagraph(' ', { size: 16 }), { mar: 'tight' }) +
     `</w:tr>`
   return docxSectionSpacer() + docxFixedTable(cols, row) + docxSectionSpacer()
 }

@@ -229,18 +229,6 @@ export function Ics215FormSections({
             )}
           </div>
           <div className="space-y-1">
-            <Ics202FieldLabel>Signature</Ics202FieldLabel>
-            {isSectionEditing(editingSections, 'prepared-by') ? (
-              <input
-                value={preparedBy.preparedBySignature}
-                onChange={(event) => patchPreparedBy({ preparedBySignature: event.target.value })}
-                className="h-8 w-full rounded-md border bg-transparent px-2 text-xs outline-none"
-              />
-            ) : (
-              <Ics202ReadOnlyField value={preparedBy.preparedBySignature} />
-            )}
-          </div>
-          <div className="space-y-1">
             <Ics202FieldLabel>Date/Time Prepared</Ics202FieldLabel>
             {isSectionEditing(editingSections, 'prepared-by') ? (
               <input

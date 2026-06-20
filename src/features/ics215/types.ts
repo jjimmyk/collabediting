@@ -114,7 +114,7 @@ export type Ics215ResourceTotalsDraft = Pick<
 
 export type Ics215PreparedByDraft = Pick<
   Ics215FormState,
-  'preparedByName' | 'preparedByPositionTitle' | 'preparedBySignature' | 'preparedDateTime'
+  'preparedByName' | 'preparedByPositionTitle' | 'preparedDateTime'
 >
 
 export type Ics215FormSectionDrafts = {

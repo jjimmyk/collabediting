@@ -29,7 +29,7 @@ export const ICS215_SECTION_PROMPTS: Record<Ics215SectionId, string> = {
   'work-assignments':
     'Draft ICS-215 Work Assignments with assignee (roster position), work assignment, resource requirements per column (Req/Have/Need), overhead positions, special equipment, reporting location, requested arrival time, and status.',
   'prepared-by':
-    'Draft the Prepared By block with name, position/title, signature, and date/time prepared.',
+    'Draft the Prepared By block with name, position/title, and date/time prepared.',
 }
 
 export const ICS215_DEFAULT_WORK_ASSIGNMENT_COUNT = 6

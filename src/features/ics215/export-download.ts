@@ -815,30 +815,13 @@ function renderPdfPreparedByFooterCell(
       bold: true,
     },
     ...wrapPdfText(sanitizeForPdf(footer.name || ' '), cellW - 8, 7, false)
-      .slice(0, 1)
-      .map((line) => ({
+      .slice(0, 2)
+      .map((line, index) => ({
         text: line,
         font: 'F1' as const,
         size: 7,
         x: leftX + 4,
-        y: topY - 28,
-      })),
-    {
-      text: sanitizeForPdf('Date/Time:'),
-      font: 'F2',
-      size: 6.5,
-      x: leftX + 4,
-      y: topY - 38,
-      bold: true,
-    },
-    ...wrapPdfText(sanitizeForPdf(footer.dateTime || ' '), cellW - 8, 7, false)
-      .slice(0, 1)
-      .map((line) => ({
-        text: line,
-        font: 'F1' as const,
-        size: 7,
-        x: leftX + 4,
-        y: topY - 48,
+        y: topY - 28 - index * 9,
       })),
   ]
 }
@@ -849,13 +832,13 @@ function renderPdfPagePreparedByFooter(
   contentWidth: number,
   topY: number
 ): { ops: string; lines: PdfLine[] } {
-  const cellW = contentWidth / 4
+  const cellW = contentWidth / 3
   const height = ICS215_PDF_PREPARED_BY_FOOTER_HEIGHT_PT
   const y = topY
   const bottomY = y - height
   let ops = '0.75 w\n'
   ops += `${margin.toFixed(2)} ${bottomY.toFixed(2)} ${contentWidth.toFixed(2)} ${height.toFixed(2)} re S\n`
-  for (let i = 1; i < 4; i += 1) {
+  for (let i = 1; i < 3; i += 1) {
     const x = margin + cellW * i
     ops += `${x.toFixed(2)} ${bottomY.toFixed(2)} m ${x.toFixed(2)} ${y.toFixed(2)} l S\n`
   }
@@ -880,14 +863,14 @@ function renderPdfPagePreparedByFooter(
         y: y - 18 - index * 9,
       })),
     {
-      text: sanitizeForPdf('Signature:'),
+      text: sanitizeForPdf('Date/Time:'),
       font: 'F2',
       size: 6.5,
       x: margin + cellW * 2 + 4,
       y: y - 8,
       bold: true,
     },
-    ...wrapPdfText(sanitizeForPdf(preparedByFooter.signature || ' '), cellW - 8, 7, false)
+    ...wrapPdfText(sanitizeForPdf(preparedByFooter.dateTime || ' '), cellW - 8, 7, false)
       .slice(0, 2)
       .map((line, index) => ({
         text: line,

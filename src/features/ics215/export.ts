@@ -64,7 +64,6 @@ export function buildIcs215ExportOptions(
       cells: [
         { label: 'Name:', value: form.preparedByName },
         { label: 'Position/Title:', value: form.preparedByPositionTitle },
-        { label: 'Signature:', value: form.preparedBySignature },
         { label: 'Date/Time:', value: form.preparedDateTime || new Date().toLocaleString() },
       ],
     },
@@ -158,7 +157,6 @@ export function buildIcs215DocxBlocks(
   pushHeading(ICS215_SECTION_LABELS['prepared-by'])
   pushField('Prepared By', form.preparedByName)
   pushField('Position/Title', form.preparedByPositionTitle)
-  pushField('Signature', form.preparedBySignature)
   pushField('Date/Time Prepared', form.preparedDateTime)
 
   return blocks
