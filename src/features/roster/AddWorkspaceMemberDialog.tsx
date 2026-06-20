@@ -254,8 +254,8 @@ export function AddWorkspaceMemberDialog({
         if (!nextOpen) resetDraft()
       }}
     >
-      <DialogContent className="!w-[32rem] !max-w-[32rem] sm:!max-w-[32rem]">
-        <DialogHeader>
+      <DialogContent className="!w-[64rem] !max-w-[64rem] sm:!max-w-[64rem] flex max-h-[min(75vh,32rem)] flex-col overflow-hidden">
+        <DialogHeader className="shrink-0">
           <DialogTitle>
             {positionPreset ? `Add member to ${positionPreset}` : 'Add roster member'}
           </DialogTitle>
@@ -266,7 +266,8 @@ export function AddWorkspaceMemberDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="grid gap-4 py-1">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain py-1">
+          <div className="grid gap-4">
           <div className="grid gap-2">
             <Label>Person</Label>
             <RadioGroup
@@ -444,7 +445,7 @@ export function AddWorkspaceMemberDialog({
                 }}
                 placeholder="Search by name or email"
               />
-              <div className="max-h-40 space-y-1 overflow-y-auto rounded-md border p-2">
+              <div className="space-y-1 rounded-md border p-2">
                 {existingSearchQuery.trim().length < 2 ? (
                   <p className="px-1 py-2 text-[11px] text-muted-foreground">
                     Type at least 2 characters to search.
@@ -488,7 +489,7 @@ export function AddWorkspaceMemberDialog({
                   {positionPreset}
                 </div>
               ) : (
-                <div className="max-h-48 space-y-2 overflow-y-auto rounded-md border p-3">
+                <div className="space-y-2 rounded-md border p-3">
                   {WORKSPACE_ROSTER_POSITIONS.map((position) => (
                     <label
                       key={position}
@@ -544,9 +545,10 @@ export function AddWorkspaceMemberDialog({
               ) : null}
             </div>
           )}
+          </div>
         </div>
 
-        <DialogFooter>
+        <DialogFooter className="shrink-0">
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
