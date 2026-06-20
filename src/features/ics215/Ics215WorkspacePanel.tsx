@@ -27,6 +27,7 @@ import { Input } from '@/components/ui/input'
 import type { Ics201VersionSignature } from '@/features/ics201/types'
 import type { Ics204AssignedUnitOption } from '@/features/ics204/ics204-assigned-unit-options'
 import type { Ics215Ics204WorkSyncTooltipState } from '@/features/ics204/sync-ics215-work-assignments'
+import type { ResourceListItemData } from '@/features/resources/types'
 import { Ics215ExportPreviewDialog } from '@/features/ics215/Ics215ExportPreviewDialog'
 import { Ics215FormSections } from '@/features/ics215/Ics215FormSections'
 import {
@@ -68,6 +69,10 @@ type Ics215WorkspacePanelProps = {
     value: Ics215FormSectionDrafts[S]
   ) => void
   workAssignmentsSyncTooltip?: Ics215Ics204WorkSyncTooltipState
+  workspaceAssets?: ResourceListItemData[]
+  autoFillHaveFromAssets?: boolean
+  onAutoFillHaveFromAssetsChange?: (enabled: boolean) => void
+  onHaveFillComplete?: (filledCount: number) => void
   onAppendVersion: (
     form: Ics215FormState,
     signatures?: Ics201VersionSignature[],
@@ -99,6 +104,10 @@ export function Ics215WorkspacePanel({
   onGenerateSection,
   onPatchSectionDraft,
   workAssignmentsSyncTooltip,
+  workspaceAssets = [],
+  autoFillHaveFromAssets = false,
+  onAutoFillHaveFromAssetsChange,
+  onHaveFillComplete,
   onAppendVersion,
   onSignReview,
 }: Ics215WorkspacePanelProps) {
@@ -475,6 +484,10 @@ export function Ics215WorkspacePanel({
             onGenerateSection={onGenerateSection}
             onPatchDraft={onPatchSectionDraft}
             workAssignmentsSyncTooltip={workAssignmentsSyncTooltip}
+            workspaceAssets={workspaceAssets}
+            autoFillHaveFromAssets={autoFillHaveFromAssets}
+            onAutoFillHaveFromAssetsChange={onAutoFillHaveFromAssetsChange}
+            onHaveFillComplete={onHaveFillComplete}
           />
         </div>
 

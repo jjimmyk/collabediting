@@ -13843,6 +13843,15 @@ function App() {
       ics204SectionDraftsByFormId,
     ]
   )
+  const [autoFillHaveFromWorkspaceAssets, setAutoFillHaveFromWorkspaceAssets] = useState(false)
+  const handleHaveFillComplete = useCallback((filledCount: number) => {
+    if (filledCount <= 0) return
+    toast.success(
+      filledCount === 1
+        ? 'Filled Have for 1 resource from workspace assets.'
+        : `Filled Have for ${filledCount} resources from workspace assets.`
+    )
+  }, [])
   const visibleRosterPositions = useMemo(
     () => new Set(positionRosterEntries.map((entry) => entry.position)),
     [positionRosterEntries]
@@ -33016,6 +33025,10 @@ function App() {
                     onGenerateSection={openIcs215SectionGeneration}
                     onPatchSectionDraft={patchIcs215SectionDraft}
                     workAssignmentsSyncTooltip={ics215WorkAssignmentsSyncTooltip}
+                    workspaceAssets={workspaceAssignedAssets}
+                    autoFillHaveFromAssets={autoFillHaveFromWorkspaceAssets}
+                    onAutoFillHaveFromAssetsChange={setAutoFillHaveFromWorkspaceAssets}
+                    onHaveFillComplete={handleHaveFillComplete}
                     onAppendVersion={handleIcs215AppendVersion}
                     onSignReview={handleIcs215SignReview}
                   />
@@ -33956,6 +33969,10 @@ function App() {
                                       onFocusResourceMap={(resourceId, mapLocation) => {
                                         void focusMapItem(`resource-${resourceId}`, mapLocation, 30000)
                                       }}
+                                      workspaceAssets={workspaceAssignedAssets}
+                                      autoFillHaveFromAssets={autoFillHaveFromWorkspaceAssets}
+                                      onAutoFillHaveFromAssetsChange={setAutoFillHaveFromWorkspaceAssets}
+                                      onHaveFillComplete={handleHaveFillComplete}
                                     />
                                     </div>
                                     {!viewingPastFormVersion &&

@@ -5,6 +5,9 @@ import { Ics204AssignedUnitField } from '@/features/ics204/Ics204SectionToolbar'
 import type { Ics204AssignedUnitOption } from '@/features/ics204/ics204-assigned-unit-options'
 import { mergeLegacyIcs204AssignedUnitOption } from '@/features/ics204/ics204-assigned-unit-options'
 import { Ics202ReadOnlyField } from '@/features/ics202/Ics202SectionToolbar'
+import { ResourceHaveFillButton } from '@/features/resources/ResourceHaveFillButton'
+import { fillHaveForResourceValue } from '@/features/resources/workspace-asset-have-lookup'
+import type { ResourceListItemData } from '@/features/resources/types'
 import type {
   Ics215ResourceColumn,
   Ics215ResourceValue,
@@ -21,6 +24,8 @@ type Ics215WorkAssignmentsTableProps = {
   resourceColumns: Ics215ResourceColumn[]
   workAssignments: Ics215WorkAssignmentRow[]
   assigneeOptions: Ics204AssignedUnitOption[]
+  workspaceAssets?: ResourceListItemData[]
+  autoFillHaveFromAssets?: boolean
   /** When set, hides the assignee column and pins new rows to this unit. */
   lockedAssignee?: string
   editing: boolean
@@ -28,6 +33,7 @@ type Ics215WorkAssignmentsTableProps = {
     resourceColumns: Ics215ResourceColumn[]
     workAssignments: Ics215WorkAssignmentRow[]
   }) => void
+  onHaveFillComplete?: (filledCount: number) => void
 }
 
 const OVERFLOW_COLUMNS = [
@@ -37,6 +43,12 @@ const OVERFLOW_COLUMNS = [
   { key: 'requestedArrivalTime' as const, label: 'Arrival Time' },
   { key: 'status' as const, label: 'Status' },
 ]
+
+const EMPTY_RESOURCE_VALUE: Ics215ResourceValue = {
+  required: '',
+  have: '',
+  need: '',
+}
 
 function formatResourceValueDisplay(value: Ics215ResourceValue | undefined): string {
   if (!value) return '—'
@@ -82,9 +94,12 @@ export function Ics215WorkAssignmentsTable({
   resourceColumns,
   workAssignments,
   assigneeOptions,
+  workspaceAssets = [],
+  autoFillHaveFromAssets = false,
   lockedAssignee,
   editing,
   onChange,
+  onHaveFillComplete,
 }: Ics215WorkAssignmentsTableProps) {
   const hideAssigneeColumn = Boolean(lockedAssignee?.trim())
   const columnTotals = computeIcs215ColumnTotals(resourceColumns, workAssignments)
@@ -126,6 +141,50 @@ export function Ics215WorkAssignmentsTable({
           : row
       )
     )
+  }
+
+  const fillColumnHave = (columnId: string, resourceName: string, overwrite: boolean) => {
+    let filledCount = 0
+    const nextRows = workAssignments.map((row) => {
+      const current = row.resourceValues[columnId] ?? EMPTY_RESOURCE_VALUE
+      const result = fillHaveForResourceValue(current, resourceName, workspaceAssets, {
+        overwrite,
+        onlyIfHaveEmpty: !overwrite,
+      })
+      if (result.filled) filledCount += 1
+      return {
+        ...row,
+        resourceValues: {
+          ...row.resourceValues,
+          [columnId]: result.value,
+        },
+      }
+    })
+    patchRows(nextRows)
+    if (filledCount > 0) {
+      onHaveFillComplete?.(filledCount)
+    }
+  }
+
+  const fillAllColumnsHave = (overwrite: boolean) => {
+    let filledCount = 0
+    const nextRows = workAssignments.map((row) => {
+      const resourceValues = { ...row.resourceValues }
+      for (const column of resourceColumns) {
+        const current = resourceValues[column.id] ?? EMPTY_RESOURCE_VALUE
+        const result = fillHaveForResourceValue(current, column.label, workspaceAssets, {
+          overwrite,
+          onlyIfHaveEmpty: !overwrite,
+        })
+        if (result.filled) filledCount += 1
+        resourceValues[column.id] = result.value
+      }
+      return { ...row, resourceValues }
+    })
+    patchRows(nextRows)
+    if (filledCount > 0) {
+      onHaveFillComplete?.(filledCount)
+    }
   }
 
   const addAssignment = () => {
@@ -205,7 +264,17 @@ export function Ics215WorkAssignmentsTable({
                           <input
                             value={column.label}
                             onChange={(event) => patchColumnLabel(column.id, event.target.value)}
+                            onBlur={() => {
+                              if (autoFillHaveFromAssets) {
+                                fillColumnHave(column.id, column.label, false)
+                              }
+                            }}
                             className="h-7 min-w-[5.5rem] flex-1 rounded border bg-transparent px-1 text-[11px] font-semibold normal-case outline-none"
+                          />
+                          <ResourceHaveFillButton
+                            resourceName={column.label}
+                            workspaceAssets={workspaceAssets}
+                            onFill={() => fillColumnHave(column.id, column.label, true)}
                           />
                           {resourceColumns.length > 1 ? (
                             <Button
@@ -304,11 +373,7 @@ export function Ics215WorkAssignmentsTable({
                       <td key={column.id} className={cn(resourceColumnClass, 'px-2 py-2')}>
                         <ResourceValueCell
                           value={
-                            row.resourceValues[column.id] ?? {
-                              required: '',
-                              have: '',
-                              need: '',
-                            }
+                            row.resourceValues[column.id] ?? EMPTY_RESOURCE_VALUE
                           }
                           editing={editing}
                           onChange={(value) => patchResourceValue(row.id, column.id, value)}
@@ -369,7 +434,7 @@ export function Ics215WorkAssignmentsTable({
                   <td key={column.id} className={cn(resourceColumnClass, 'px-2 py-2')}>
                     <ResourceValueCell
                       value={
-                        columnTotals[column.id] ?? { required: '', have: '', need: '' }
+                        columnTotals[column.id] ?? EMPTY_RESOURCE_VALUE
                       }
                       editing={false}
                       onChange={() => undefined}
@@ -391,6 +456,14 @@ export function Ics215WorkAssignmentsTable({
         <div className="flex flex-wrap items-center gap-2">
           <Button type="button" size="sm" variant="outline" onClick={addAssignment}>
             + Add Assignment
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => fillAllColumnsHave(true)}
+          >
+            Fill all Have from assets
           </Button>
         </div>
       ) : null}

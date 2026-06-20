@@ -35,6 +35,9 @@ import type { Ics204AssignedUnitOption } from '@/features/ics204/ics204-assigned
 import { Ics215WorkAssignmentsTable } from '@/features/ics215/Ics215WorkAssignmentsTable'
 import { Ics215Ics204WorkAssignmentsSyncTooltip } from '@/features/ics204/Ics215Ics204WorkAssignmentsSyncTooltip'
 import type { Ics215Ics204WorkSyncTooltipState } from '@/features/ics204/sync-ics215-work-assignments'
+import { ResourceHaveFillButton } from '@/features/resources/ResourceHaveFillButton'
+import { fillHaveForResourceRequirementRow } from '@/features/resources/workspace-asset-have-lookup'
+import type { ResourceListItemData } from '@/features/resources/types'
 import { cn } from '@/lib/utils'
 
 type Ics204FormSectionsProps = {
@@ -61,6 +64,10 @@ type Ics204FormSectionsProps = {
   assigneeOptions?: Ics204AssignedUnitOption[]
   onPatchIcs215Import?: (snapshot: Ics204Ics215ImportSnapshot) => void
   workAssignmentsSyncTooltip?: Ics215Ics204WorkSyncTooltipState
+  workspaceAssets?: ResourceListItemData[]
+  autoFillHaveFromAssets?: boolean
+  onAutoFillHaveFromAssetsChange?: (enabled: boolean) => void
+  onHaveFillComplete?: (filledCount: number) => void
 }
 
 function isSectionEditing(
@@ -93,6 +100,10 @@ export function Ics204FormSections({
   assigneeOptions = [],
   onPatchIcs215Import,
   workAssignmentsSyncTooltip,
+  workspaceAssets = [],
+  autoFillHaveFromAssets = false,
+  onAutoFillHaveFromAssetsChange,
+  onHaveFillComplete,
 }: Ics204FormSectionsProps) {
   const sectionDisabled = formIsLocked || !canEdit
   const assignmentInfo =
@@ -265,6 +276,95 @@ export function Ics204FormSections({
       )
     )
   }
+
+  const fillRequirementHave = (
+    workAssignmentId: number,
+    requirementId: number,
+    overwrite: boolean
+  ) => {
+    let filledCount = 0
+    const next = workAssignments.map((workAssignment) => {
+      if (workAssignment.id !== workAssignmentId) return workAssignment
+      return {
+        ...workAssignment,
+        resourceRequirements: workAssignment.resourceRequirements.map((requirement) => {
+          if (requirement.id !== requirementId) return requirement
+          const result = fillHaveForResourceRequirementRow(requirement, workspaceAssets, {
+            overwrite,
+            onlyIfHaveEmpty: !overwrite,
+          })
+          if (result.filled) filledCount += 1
+          return result.requirement
+        }),
+      }
+    })
+    onPatchDraft('work-assignments', next)
+    if (filledCount > 0) {
+      onHaveFillComplete?.(filledCount)
+    }
+  }
+
+  const fillAllCardResourceRequirements = (overwrite: boolean) => {
+    let filledCount = 0
+    const next = workAssignments.map((workAssignment) => ({
+      ...workAssignment,
+      resourceRequirements: workAssignment.resourceRequirements.map((requirement) => {
+        const result = fillHaveForResourceRequirementRow(requirement, workspaceAssets, {
+          overwrite,
+          onlyIfHaveEmpty: !overwrite,
+        })
+        if (result.filled) filledCount += 1
+        return result.requirement
+      }),
+    }))
+    onPatchDraft('work-assignments', next)
+    if (filledCount > 0) {
+      onHaveFillComplete?.(filledCount)
+    }
+  }
+
+  const maybeAutoFillRequirementHave = (
+    workAssignmentId: number,
+    requirementId: number,
+    resourceName: string
+  ) => {
+    if (!autoFillHaveFromAssets || resourceName.trim().length < 2) return
+    fillRequirementHave(workAssignmentId, requirementId, false)
+  }
+
+  const workAssignmentsHeaderActions =
+    isSectionEditing(editingSections, 'work-assignments') && !ics215Import ? (
+      <div className="flex flex-wrap items-center gap-2">
+        <label className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+          <input
+            type="checkbox"
+            checked={autoFillHaveFromAssets}
+            onChange={(event) => onAutoFillHaveFromAssetsChange?.(event.target.checked)}
+          />
+          Auto-fill Have from assets
+        </label>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          onClick={() => fillAllCardResourceRequirements(true)}
+        >
+          Fill all Have from assets
+        </Button>
+        <Button type="button" size="sm" variant="outline" onClick={addWorkAssignment}>
+          + Add Assignment
+        </Button>
+      </div>
+    ) : isSectionEditing(editingSections, 'work-assignments') && ics215Import ? (
+      <label className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+        <input
+          type="checkbox"
+          checked={autoFillHaveFromAssets}
+          onChange={(event) => onAutoFillHaveFromAssetsChange?.(event.target.checked)}
+        />
+        Auto-fill Have from assets
+      </label>
+    ) : null
 
   const renderSectionShell = (
     section: Ics204SectionId,
@@ -527,8 +627,11 @@ export function Ics204FormSections({
               workAssignments={ics215Import.workAssignments}
               assigneeOptions={assigneeOptions}
               lockedAssignee={ics215Import.assignee}
+              workspaceAssets={workspaceAssets}
+              autoFillHaveFromAssets={autoFillHaveFromAssets}
               editing={isSectionEditing(editingSections, 'work-assignments')}
               onChange={patchIcs215Import}
+              onHaveFillComplete={onHaveFillComplete}
             />
           </div>
         ) : (
@@ -642,19 +745,50 @@ export function Ics204FormSections({
                               <div className="grid flex-1 grid-cols-4 gap-2">
                                 {(['resource', 'required', 'have', 'need'] as const).map((field) =>
                                   editingWork ? (
-                                    <input
-                                      key={field}
-                                      value={requirement[field]}
-                                      onChange={(event) =>
-                                        patchResourceRequirementCell(
-                                          row.id,
-                                          requirement.id,
-                                          field,
-                                          event.target.value
-                                        )
-                                      }
-                                      className="h-8 rounded-md border bg-transparent px-2 text-xs outline-none"
-                                    />
+                                    field === 'resource' ? (
+                                      <div key={field} className="flex items-center gap-1">
+                                        <input
+                                          value={requirement.resource}
+                                          onChange={(event) =>
+                                            patchResourceRequirementCell(
+                                              row.id,
+                                              requirement.id,
+                                              field,
+                                              event.target.value
+                                            )
+                                          }
+                                          onBlur={() =>
+                                            maybeAutoFillRequirementHave(
+                                              row.id,
+                                              requirement.id,
+                                              requirement.resource
+                                            )
+                                          }
+                                          className="h-8 min-w-0 flex-1 rounded-md border bg-transparent px-2 text-xs outline-none"
+                                        />
+                                        <ResourceHaveFillButton
+                                          resourceName={requirement.resource}
+                                          workspaceAssets={workspaceAssets}
+                                          onFill={() =>
+                                            fillRequirementHave(row.id, requirement.id, true)
+                                          }
+                                        />
+                                      </div>
+                                    ) : (
+                                      <input
+                                        key={field}
+                                        value={requirement[field]}
+                                        onChange={(event) =>
+                                          patchResourceRequirementCell(
+                                            row.id,
+                                            requirement.id,
+                                            field,
+                                            event.target.value
+                                          )
+                                        }
+                                        className="h-8 rounded-md border bg-transparent px-2 text-xs outline-none"
+                                      />
+                                    )
                                   ) : (
                                     <Ics204ReadOnlyField key={field} value={requirement[field]} />
                                   )
@@ -724,13 +858,7 @@ export function Ics204FormSections({
           )}
         </div>
         ),
-        ics215Import
-          ? null
-          : isSectionEditing(editingSections, 'work-assignments') ? (
-          <Button type="button" size="sm" variant="outline" onClick={addWorkAssignment}>
-            + Add Assignment
-          </Button>
-        ) : null,
+        ics215Import ? null : workAssignmentsHeaderActions,
         workAssignmentsSyncTooltip ? (
           <Ics215Ics204WorkAssignmentsSyncTooltip
             context="ics204"

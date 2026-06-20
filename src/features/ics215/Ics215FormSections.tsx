@@ -11,6 +11,7 @@ import { ICS215_SECTION_LABELS } from '@/features/ics215/constants'
 import { Ics215WorkAssignmentsTable } from '@/features/ics215/Ics215WorkAssignmentsTable'
 import { Ics215Ics204WorkAssignmentsSyncTooltip } from '@/features/ics204/Ics215Ics204WorkAssignmentsSyncTooltip'
 import type { Ics215Ics204WorkSyncTooltipState } from '@/features/ics204/sync-ics215-work-assignments'
+import type { ResourceListItemData } from '@/features/resources/types'
 import type {
   Ics215FormSectionDrafts,
   Ics215FormState,
@@ -34,6 +35,10 @@ type Ics215FormSectionsProps = {
   isSaving: boolean
   glassItemBorderClasses: string
   assigneeOptions: Ics204AssignedUnitOption[]
+  workspaceAssets?: ResourceListItemData[]
+  autoFillHaveFromAssets?: boolean
+  onAutoFillHaveFromAssetsChange?: (enabled: boolean) => void
+  onHaveFillComplete?: (filledCount: number) => void
   editingSections: Partial<Record<Ics215SectionId, boolean>>
   drafts: Ics215FormSectionDrafts
   onStartSectionEdit: (section: Ics215SectionId) => void
@@ -69,6 +74,10 @@ export function Ics215FormSections({
   onGenerateSection,
   onPatchDraft,
   workAssignmentsSyncTooltip,
+  workspaceAssets = [],
+  autoFillHaveFromAssets = false,
+  onAutoFillHaveFromAssetsChange,
+  onHaveFillComplete,
 }: Ics215FormSectionsProps) {
   const incidentInfo =
     isSectionEditing(editingSections, 'incident-info') && drafts['incident-info']
@@ -185,25 +194,40 @@ export function Ics215FormSections({
             resourceColumns={workAssignmentsDraft.resourceColumns}
             workAssignments={workAssignmentsDraft.workAssignments}
             assigneeOptions={assigneeOptions}
+            workspaceAssets={workspaceAssets}
+            autoFillHaveFromAssets={autoFillHaveFromAssets}
             editing={isSectionEditing(editingSections, 'work-assignments')}
             onChange={(next) => onPatchDraft('work-assignments', next)}
+            onHaveFillComplete={onHaveFillComplete}
           />
         </div>,
         isSectionEditing(editingSections, 'work-assignments') ? (
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            className="h-7 shrink-0 text-xs"
-            onClick={() =>
-              onPatchDraft(
-                'work-assignments',
-                appendIcs215ResourceColumn(workAssignmentsDraft)
-              )
-            }
-          >
-            + Add Resource Requirement
-          </Button>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <label className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+              <input
+                type="checkbox"
+                checked={autoFillHaveFromAssets}
+                onChange={(event) =>
+                  onAutoFillHaveFromAssetsChange?.(event.target.checked)
+                }
+              />
+              Auto-fill Have from assets
+            </label>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-7 shrink-0 text-xs"
+              onClick={() =>
+                onPatchDraft(
+                  'work-assignments',
+                  appendIcs215ResourceColumn(workAssignmentsDraft)
+                )
+              }
+            >
+              + Add Resource Requirement
+            </Button>
+          </div>
         ) : null,
         undefined,
         workAssignmentsSyncTooltip ? (
