@@ -1,10 +1,19 @@
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { buildDynamicOrgChart } from '../src/features/roster/build-dynamic-org-chart'
 import {
+  ICS_ORG_CHART_COMMAND_STAFF_POSITIONS,
   ICS_ORG_CHART_POSITIONS,
+  ICS_ORG_CHART_ROOT_POSITION,
   ICS_ORG_CHART_SECTION_BRANCHES,
   type OrgChartNode,
 } from '../src/features/roster/ics-org-chart-structure'
 import {
+  positionCanBeRemovedFromRoster,
+  positionRemovalBlockedReason,
+} from '../src/features/roster/position-roster-removal'
+import {
+  summarizeActiveDisplayFilters,
   DEFAULT_ROSTER_DISPLAY_FILTERS,
   resolveVisibleRosterPositions,
 } from '../src/features/roster/roster-display-filters'
@@ -387,6 +396,75 @@ assert(
 assert(
   orgChartSectionColumnClassName('Planning Section').includes('14rem'),
   'standard section columns should have readable min width'
+)
+
+assert(
+  ICS_ORG_CHART_COMMAND_STAFF_POSITIONS.join(',') ===
+    'Public Information Officer,Safety Officer,Liaison Officer,Legal Officer',
+  'command staff positions should be ordered PIO, Safety, Liaison, Legal'
+)
+assert(
+  ICS_ORG_CHART_ROOT_POSITION === 'Incident Commander',
+  'org chart root position should be Incident Commander'
+)
+
+const emptyPositionEntry: PositionRosterEntry = {
+  position: 'Staging Area Manager',
+  members: [],
+  scheduledAssignees: [],
+  scheduledUnassignees: [],
+  scheduledOrgChartMembers: [],
+  assets: [],
+  scheduledAssignAssets: [],
+  scheduledUnassignAssets: [],
+  scheduledOrgChartAssets: [],
+  memberSchedulePolicy: { allowScheduleAssign: true, allowScheduleUnassign: true },
+  editIcs201: true,
+  allowWorkAssignment: true,
+}
+assert(
+  positionCanBeRemovedFromRoster(emptyPositionEntry, catalog, roster, Object.values(assetsByKey)),
+  'empty positions without dependencies should be removable'
+)
+assert(
+  !positionCanBeRemovedFromRoster(icEntry, catalog, roster, Object.values(assetsByKey)),
+  'Incident Commander should not be removable'
+)
+assert(
+  positionRemovalBlockedReason(icEntry, catalog, roster, Object.values(assetsByKey))?.includes(
+    'Incident Commander'
+  ),
+  'Incident Commander removal should explain why it is blocked'
+)
+assert(
+  !positionCanBeRemovedFromRoster(opsEntry, catalog, roster, Object.values(assetsByKey)),
+  'positions with scheduled assignees should not be removable'
+)
+
+const defaultFilterSummary = summarizeActiveDisplayFilters(DEFAULT_ROSTER_DISPLAY_FILTERS)
+assert(defaultFilterSummary.isDefault, 'default display filters should report isDefault')
+assert(defaultFilterSummary.activeCount === 6, 'default display filters should have 6 active toggles')
+assert(
+  defaultFilterSummary.inactiveLabels.length === 0,
+  'default display filters should have no inactive labels'
+)
+const customFilterSummary = summarizeActiveDisplayFilters({
+  ...DEFAULT_ROSTER_DISPLAY_FILTERS,
+  showPositionsWithCurrentAssignees: false,
+})
+assert(!customFilterSummary.isDefault, 'partial display filters should not be default')
+assert(
+  customFilterSummary.inactiveLabels.includes('Positions with current assignees'),
+  'inactive display filter labels should include turned-off toggles'
+)
+
+const connectorSource = readFileSync(
+  join(process.cwd(), 'src/features/roster/OrgChartConnectors.tsx'),
+  'utf8'
+)
+assert(
+  connectorSource.includes('-translate-y-1/2') && connectorSource.includes('-mt-px'),
+  'org chart connectors should overlap horizontal and vertical junctions'
 )
 
 console.log('verify-roster-org-chart-display: all checks passed')

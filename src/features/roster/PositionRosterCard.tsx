@@ -78,6 +78,12 @@ type PositionRosterCardProps = {
   pocMembers?: WorkspaceRosterMember[]
   assetsByKey?: Record<string, ResourceListItemData>
   onFocusAsset?: (asset: ResourceListItemData) => void
+  onRemoveScheduledUnassignAsset?: (assetKey: string, position: string) => void
+  onUpdateAssetPointOfContact?: (assetKey: string, memberId: string | null) => void
+  canRemoveFromRoster?: boolean
+  removalBlockedReason?: string | null
+  isRemovingFromRoster?: boolean
+  onRemoveFromRoster?: () => void
 } & Partial<PositionRosterAssetHandlers>
 
 export function PositionRosterCard({
@@ -125,6 +131,10 @@ export function PositionRosterCard({
   onRemoveScheduledAssignAsset,
   onRemoveScheduledUnassignAsset,
   onUpdateAssetPointOfContact,
+  canRemoveFromRoster = false,
+  removalBlockedReason = null,
+  isRemovingFromRoster = false,
+  onRemoveFromRoster,
 }: PositionRosterCardProps) {
   const [orgModalOpen, setOrgModalOpen] = useState(false)
   const leaderEmail = entry.members[0]?.email ?? null
@@ -215,6 +225,10 @@ export function PositionRosterCard({
               positionMeta={positionMeta}
               isUpdatingOpAdvanceLabel={isUpdatingOpAdvanceLabel}
               onOpAdvanceLabelChange={onOpAdvanceLabelChange}
+              canRemoveFromRoster={canRemoveFromRoster}
+              removalBlockedReason={removalBlockedReason}
+              isRemovingFromRoster={isRemovingFromRoster}
+              onRemoveFromRoster={onRemoveFromRoster}
             />
           </DialogContent>
         </Dialog>

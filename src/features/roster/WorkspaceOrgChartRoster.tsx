@@ -31,15 +31,15 @@ import { SingleResourceOrgChartCard } from '@/features/roster/SingleResourceOrgC
 import type { WorkspaceOrgChartLayout, WorkspacePositionMeta } from '@/features/roster/workspace-positions'
 
 import {
-  type OrgChartColor,
-  type OrgChartNode,
-} from '@/features/roster/ics-org-chart-structure'
-
-import {
-  rosterOrgCommandStaffClassName,
+  rosterOrgCommandStaffCrossbarClassName,
   rosterOrgSectionColumnsClassName,
   type RosterPanelLayoutMode,
 } from '@/features/roster/roster-layout'
+import {
+  ICS_ORG_CHART_COMMAND_STAFF_POSITIONS,
+  type OrgChartColor,
+  type OrgChartNode,
+} from '@/features/roster/ics-org-chart-structure'
 
 type WorkspaceOrgChartRosterProps = {
   orgChartLayout: WorkspaceOrgChartLayout
@@ -84,6 +84,10 @@ type WorkspaceOrgChartRosterProps = {
   scheduleAssignableAssetsByPosition?: Record<string, ResourceListItemData[]>
   scheduleUnassignableAssetsByPosition?: Record<string, ResourceListItemData[]>
   pocMembers?: WorkspaceRosterMember[]
+  onRemovePositionFromRoster?: (position: string) => void
+  removingPositionFromRoster?: string | null
+  canRemovePositionFromRoster?: (entry: PositionRosterEntry) => boolean
+  positionRemovalBlockedReason?: (entry: PositionRosterEntry) => string | null
 } & Partial<PositionRosterAssetHandlers>
 
 type OrgChartRenderProps = {
@@ -134,6 +138,10 @@ type OrgChartRenderProps = {
   onRemoveScheduledAssignAsset?: (assetKey: string, position: string) => void
   onRemoveScheduledUnassignAsset?: (assetKey: string, position: string) => void
   onUpdateAssetPointOfContact?: (assetKey: string, memberId: string | null) => void
+  onRemovePositionFromRoster?: (position: string) => void
+  removingPositionFromRoster?: string | null
+  canRemovePositionFromRoster?: (entry: PositionRosterEntry) => boolean
+  positionRemovalBlockedReason?: (entry: PositionRosterEntry) => string | null
 }
 
 function filterVisibleOrgChartChildren(
@@ -369,6 +377,7 @@ function PositionNode({
   position,
   color,
   children = [],
+  suppressChildren = false,
   layoutMode,
   entriesByPosition,
   assetsByKey,
@@ -416,10 +425,15 @@ function PositionNode({
   onRemoveScheduledAssignAsset,
   onRemoveScheduledUnassignAsset,
   onUpdateAssetPointOfContact,
+  onRemovePositionFromRoster,
+  removingPositionFromRoster,
+  canRemovePositionFromRoster,
+  positionRemovalBlockedReason,
 }: {
   position: string
   color?: OrgChartColor
   children?: OrgChartNode[]
+  suppressChildren?: boolean
 } & OrgChartRenderProps) {
   if (
     !positionNodeIsVisible(position, children, visiblePositions, displayFilters)
@@ -477,7 +491,15 @@ function PositionNode({
     onRemoveScheduledAssignAsset,
     onRemoveScheduledUnassignAsset,
     onUpdateAssetPointOfContact,
+    onRemovePositionFromRoster,
+    removingPositionFromRoster,
+    canRemovePositionFromRoster,
+    positionRemovalBlockedReason,
   }
+
+  const canRemove =
+    canRemovePositionFromRoster?.(entry) ?? false
+  const removalBlockedReason = positionRemovalBlockedReason?.(entry) ?? null
 
   return (
     <div
@@ -535,8 +557,18 @@ function PositionNode({
         onRemoveScheduledAssignAsset={onRemoveScheduledAssignAsset}
         onRemoveScheduledUnassignAsset={onRemoveScheduledUnassignAsset}
         onUpdateAssetPointOfContact={onUpdateAssetPointOfContact}
+        canRemoveFromRoster={canRemove}
+        removalBlockedReason={removalBlockedReason}
+        isRemovingFromRoster={removingPositionFromRoster === position}
+        onRemoveFromRoster={
+          canManageRoster && onRemovePositionFromRoster
+            ? () => onRemovePositionFromRoster(position)
+            : undefined
+        }
       />
-      <OrgChartChildren children={children} parentColor={color} renderProps={renderProps} />
+      {!suppressChildren ? (
+        <OrgChartChildren children={children} parentColor={color} renderProps={renderProps} />
+      ) : null}
     </div>
   )
 }
@@ -578,34 +610,185 @@ function GroupBranch({
   )
 }
 
-function CommandStaffRow({
-  node,
+function getVisibleCommandStaffPositions(
+  commandStaffBranch: Extract<OrgChartNode, { kind: 'group' }>,
+  visiblePositions: Set<string>,
+  displayFilters: RosterDisplayFilters
+): string[] {
+  return ICS_ORG_CHART_COMMAND_STAFF_POSITIONS.filter((position) => {
+    const node = commandStaffBranch.children.find(
+      (child): child is Extract<OrgChartNode, { kind: 'position' }> =>
+        child.kind === 'position' && child.position === position
+    )
+    if (!node) return false
+    return positionBranchIsVisible(node, visiblePositions, displayFilters)
+  })
+}
+
+function IncidentCommanderSubtree({
+  orgChartLayout,
   renderProps,
+  visibleSectionBranches,
+  showCommandStaff,
+  visibleCommandStaff,
 }: {
-  node: Extract<OrgChartNode, { kind: 'group' }>
+  orgChartLayout: WorkspaceOrgChartLayout
   renderProps: OrgChartRenderProps
+  visibleSectionBranches: Extract<OrgChartNode, { kind: 'group' }>[]
+  showCommandStaff: boolean
+  visibleCommandStaff: string[]
 }) {
-  const visibleChildren = node.children.filter(
-    (child) =>
-      child.kind === 'position' &&
-      positionBranchIsVisible(child, renderProps.visiblePositions, renderProps.displayFilters)
+  const { layoutMode } = renderProps
+  const icVisible = positionNodeIsVisible(
+    orgChartLayout.rootPosition,
+    orgChartLayout.rootChildren,
+    renderProps.visiblePositions,
+    renderProps.displayFilters
   )
-  if (visibleChildren.length === 0) return null
+
+  if (!icVisible) {
+    return (
+      <>
+        {visibleCommandStaff.length > 0 ? (
+          <OrgChartCrossbarColumns
+            columnClassName={rosterOrgCommandStaffCrossbarClassName(layoutMode)}
+            columns={visibleCommandStaff.map((position) => (
+              <PositionNode
+                key={position}
+                position={position}
+                color="neutral"
+                suppressChildren
+                {...renderProps}
+              />
+            ))}
+            showInboundStem
+          />
+        ) : null}
+        <OrgChartChildren
+          children={orgChartLayout.rootChildren}
+          renderProps={renderProps}
+        />
+        {visibleSectionBranches.length > 0 ? (
+          layoutMode === 'wide' ? (
+            <OrgChartCrossbarColumns
+              columnClassName={rosterOrgSectionColumnsClassName(layoutMode)}
+              columns={visibleSectionBranches.map((branch) => (
+                <div
+                  key={branch.label}
+                  className={cn(
+                    'flex flex-col items-center',
+                    orgChartSectionColumnClassName(branch.label)
+                  )}
+                >
+                  <GroupBranch node={branch} renderProps={renderProps} />
+                </div>
+              ))}
+              showInboundStem={
+                visibleCommandStaff.length > 0 || orgChartLayout.rootChildren.length > 0
+              }
+            />
+          ) : (
+            <>
+              {(visibleCommandStaff.length > 0 || orgChartLayout.rootChildren.length > 0) && (
+                <OrgChartVerticalLine heightClassName="h-5" />
+              )}
+              <div
+                className={cn(
+                  'grid w-max min-w-full gap-x-4 gap-y-6',
+                  rosterOrgSectionColumnsClassName(layoutMode)
+                )}
+              >
+                {visibleSectionBranches.map((branch) => (
+                  <div
+                    key={branch.label}
+                    className={cn(
+                      'flex flex-col items-center',
+                      orgChartSectionColumnClassName(branch.label)
+                    )}
+                  >
+                    <GroupBranch node={branch} renderProps={renderProps} />
+                  </div>
+                ))}
+              </div>
+            </>
+          )
+        ) : null}
+      </>
+    )
+  }
 
   return (
-    <div className={rosterOrgCommandStaffClassName(renderProps.layoutMode)}>
-      {visibleChildren.map((child) => {
-        if (child.kind !== 'position') return null
-        return (
-          <PositionNode
-            key={child.position}
-            position={child.position}
-            color={child.color ?? node.color}
-            children={child.children ?? []}
-            {...renderProps}
+    <div
+      className={cn(
+        'flex w-full min-w-0 flex-col items-center',
+        layoutMode === 'wide' && 'max-w-full'
+      )}
+    >
+      <PositionNode
+        position={orgChartLayout.rootPosition}
+        children={orgChartLayout.rootChildren}
+        suppressChildren
+        {...renderProps}
+      />
+
+      {showCommandStaff && visibleCommandStaff.length > 0 ? (
+        <OrgChartCrossbarColumns
+          columnClassName={rosterOrgCommandStaffCrossbarClassName(layoutMode)}
+          columns={visibleCommandStaff.map((position) => (
+            <PositionNode
+              key={position}
+              position={position}
+              color="neutral"
+              suppressChildren
+              {...renderProps}
+            />
+          ))}
+          showInboundStem
+        />
+      ) : null}
+
+      <OrgChartChildren children={orgChartLayout.rootChildren} renderProps={renderProps} />
+
+      {visibleSectionBranches.length > 0 &&
+        (layoutMode === 'wide' ? (
+          <OrgChartCrossbarColumns
+            columnClassName={rosterOrgSectionColumnsClassName(layoutMode)}
+            columns={visibleSectionBranches.map((branch) => (
+              <div
+                key={branch.label}
+                className={cn(
+                  'flex flex-col items-center',
+                  orgChartSectionColumnClassName(branch.label)
+                )}
+              >
+                <GroupBranch node={branch} renderProps={renderProps} />
+              </div>
+            ))}
+            showInboundStem
           />
-        )
-      })}
+        ) : (
+          <>
+            <OrgChartVerticalLine heightClassName="h-5" />
+            <div
+              className={cn(
+                'grid w-max min-w-full gap-x-4 gap-y-6',
+                rosterOrgSectionColumnsClassName(layoutMode)
+              )}
+            >
+              {visibleSectionBranches.map((branch) => (
+                <div
+                  key={branch.label}
+                  className={cn(
+                    'flex flex-col items-center',
+                    orgChartSectionColumnClassName(branch.label)
+                  )}
+                >
+                  <GroupBranch node={branch} renderProps={renderProps} />
+                </div>
+              ))}
+            </div>
+          </>
+        ))}
     </div>
   )
 }
@@ -660,6 +843,10 @@ export function WorkspaceOrgChartRoster({
   onRemoveScheduledAssignAsset,
   onRemoveScheduledUnassignAsset,
   onUpdateAssetPointOfContact,
+  onRemovePositionFromRoster,
+  removingPositionFromRoster = null,
+  canRemovePositionFromRoster,
+  positionRemovalBlockedReason,
 }: WorkspaceOrgChartRosterProps) {
   const visibleSectionBranches = orgChartLayout.sectionBranches.filter((branch) =>
     branch.children.some(
@@ -673,9 +860,14 @@ export function WorkspaceOrgChartRoster({
       child.kind === 'position' &&
       positionBranchIsVisible(child, visiblePositions, displayFilters)
   )
-  const forceShowIc = showCommandStaff || visibleSectionBranches.length > 0
+  const visibleCommandStaff = getVisibleCommandStaffPositions(
+    orgChartLayout.commandStaffBranch,
+    visiblePositions,
+    displayFilters
+  )
   const renderIcPosition =
-    forceShowIc ||
+    showCommandStaff ||
+    visibleSectionBranches.length > 0 ||
     positionNodeIsVisible(
       orgChartLayout.rootPosition,
       orgChartLayout.rootChildren,
@@ -732,6 +924,10 @@ export function WorkspaceOrgChartRoster({
     onRemoveScheduledAssignAsset,
     onRemoveScheduledUnassignAsset,
     onUpdateAssetPointOfContact,
+    onRemovePositionFromRoster,
+    removingPositionFromRoster,
+    canRemovePositionFromRoster,
+    positionRemovalBlockedReason,
   }
 
   return (
@@ -750,36 +946,23 @@ export function WorkspaceOrgChartRoster({
             layoutMode === 'wide' && ORG_CHART_CANVAS_MIN_WIDTH
           )}
         >
-          {showIcCard && (
+          {showIcCard ? (
             <div
               className={cn(
                 'w-full min-w-0 max-w-full',
                 layoutMode === 'wide' && 'flex justify-center'
               )}
             >
-              {renderIcPosition ? (
-                <PositionNode
-                  position={orgChartLayout.rootPosition}
-                  children={orgChartLayout.rootChildren}
-                  {...renderProps}
-                />
-              ) : (
-                <OrgChartChildren
-                  children={orgChartLayout.rootChildren}
-                  renderProps={renderProps}
-                />
-              )}
+              <IncidentCommanderSubtree
+                orgChartLayout={orgChartLayout}
+                renderProps={renderProps}
+                visibleSectionBranches={visibleSectionBranches}
+                showCommandStaff={showCommandStaff}
+                visibleCommandStaff={visibleCommandStaff}
+              />
             </div>
-          )}
-
-          {showIcCard && showCommandStaff && <OrgChartVerticalLine heightClassName="h-5" />}
-
-          {showCommandStaff && (
-            <CommandStaffRow node={orgChartLayout.commandStaffBranch} renderProps={renderProps} />
-          )}
-
-          {visibleSectionBranches.length > 0 &&
-            (layoutMode === 'wide' ? (
+          ) : visibleSectionBranches.length > 0 ? (
+            layoutMode === 'wide' ? (
               <OrgChartCrossbarColumns
                 columnClassName={rosterOrgSectionColumnsClassName(layoutMode)}
                 columns={visibleSectionBranches.map((branch) => (
@@ -793,33 +976,29 @@ export function WorkspaceOrgChartRoster({
                     <GroupBranch node={branch} renderProps={renderProps} />
                   </div>
                 ))}
-                showInboundStem={showIcCard || showCommandStaff}
+                showInboundStem={false}
               />
             ) : (
-              <>
-                {(showIcCard || showCommandStaff) && (
-                  <OrgChartVerticalLine heightClassName="h-5" />
+              <div
+                className={cn(
+                  'grid w-max min-w-full gap-x-4 gap-y-6',
+                  rosterOrgSectionColumnsClassName(layoutMode)
                 )}
-                <div
-                  className={cn(
-                    'grid w-max min-w-full gap-x-4 gap-y-6',
-                    rosterOrgSectionColumnsClassName(layoutMode)
-                  )}
-                >
-                  {visibleSectionBranches.map((branch) => (
-                    <div
-                      key={branch.label}
-                      className={cn(
-                        'flex flex-col items-center',
-                        orgChartSectionColumnClassName(branch.label)
-                      )}
-                    >
-                      <GroupBranch node={branch} renderProps={renderProps} />
-                    </div>
-                  ))}
-                </div>
-              </>
-            ))}
+              >
+                {visibleSectionBranches.map((branch) => (
+                  <div
+                    key={branch.label}
+                    className={cn(
+                      'flex flex-col items-center',
+                      orgChartSectionColumnClassName(branch.label)
+                    )}
+                  >
+                    <GroupBranch node={branch} renderProps={renderProps} />
+                  </div>
+                ))}
+              </div>
+            )
+          ) : null}
         </div>
       </div>
     </div>

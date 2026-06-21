@@ -81,3 +81,32 @@ export async function setStandardPositionRetireOnOpAdvance(params: {
     throw error
   }
 }
+
+export async function archiveStandardPositionFromRoster(params: {
+  workspaceId: string
+  positionName: string
+}): Promise<void> {
+  if (!isSupabaseConfigured) {
+    throw new Error('Position lifecycle requires Supabase persistence.')
+  }
+
+  const supabase = getSupabaseClient()
+  if (!supabase) {
+    throw new Error('Supabase is not configured.')
+  }
+
+  const { error } = await supabase.from('workspace_standard_position_lifecycle').upsert(
+    {
+      workspace_id: params.workspaceId,
+      position_name: params.positionName,
+      op_advance_label: 'retire_on_op_advance',
+      archived_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: 'workspace_id,position_name' }
+  )
+
+  if (error) {
+    throw error
+  }
+}

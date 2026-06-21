@@ -1,4 +1,6 @@
 import { Label } from '@/components/ui/label'
+import { Button } from '@/components/ui/button'
+import { Trash2 } from 'lucide-react'
 import type { WorkspaceMemberCheckInStatus, WorkspaceRosterMember } from '@/lib/workspace-types'
 import type { PositionOpAdvanceLabel } from '@/lib/operational-period-roster-types'
 import type { PositionRosterEntry } from '@/features/roster/workspace-position-roster'
@@ -49,6 +51,10 @@ type PositionRosterDetailPanelProps = {
   pocMembers?: WorkspaceRosterMember[]
   assetsByKey?: Record<string, ResourceListItemData>
   onFocusAsset?: (asset: ResourceListItemData) => void
+  canRemoveFromRoster?: boolean
+  removalBlockedReason?: string | null
+  isRemovingFromRoster?: boolean
+  onRemoveFromRoster?: () => void
 } & Partial<PositionRosterAssetHandlers>
 
 export function PositionRosterDetailPanel({
@@ -93,6 +99,10 @@ export function PositionRosterDetailPanel({
   onRemoveScheduledAssignAsset,
   onRemoveScheduledUnassignAsset,
   onUpdateAssetPointOfContact,
+  canRemoveFromRoster = false,
+  removalBlockedReason = null,
+  isRemovingFromRoster = false,
+  onRemoveFromRoster,
 }: PositionRosterDetailPanelProps) {
   const assetsHandlersReady = Boolean(
     onAssignAsset &&
@@ -192,6 +202,37 @@ export function PositionRosterDetailPanel({
         onRemoveScheduledUnassignAsset={onRemoveScheduledUnassignAsset ?? (() => {})}
         onUpdateAssetPointOfContact={onUpdateAssetPointOfContact ?? (() => {})}
       />
+
+      {canManageRoster && onRemoveFromRoster ? (
+        <div className="rounded-md border border-destructive/30 bg-destructive/5 px-2.5 py-2">
+          <p className="text-xs font-medium text-destructive">Remove from roster</p>
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            {canRemoveFromRoster
+              ? 'This position has no current or scheduled assignees and can be removed from the roster.'
+              : (removalBlockedReason ??
+                'This position cannot be removed while it has assignees or dependencies.')}
+          </p>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="mt-2 h-7 gap-1 px-2 text-[11px] text-destructive hover:text-destructive"
+            disabled={!canRemoveFromRoster || isRemovingFromRoster}
+            onClick={() => {
+              if (
+                window.confirm(
+                  `Remove "${entry.position}" from this roster? This cannot be undone without re-adding the position.`
+                )
+              ) {
+                onRemoveFromRoster()
+              }
+            }}
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+            {isRemovingFromRoster ? 'Removing…' : 'Remove from roster'}
+          </Button>
+        </div>
+      ) : null}
     </div>
   )
 }

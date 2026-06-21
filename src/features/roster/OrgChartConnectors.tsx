@@ -43,16 +43,6 @@ export function OrgChartInboundStem({
   )
 }
 
-/** Vertical stem from a parent into a child column or node. */
-export function OrgChartColumnStem({ children }: { children: ReactNode }) {
-  return (
-    <div className="flex min-w-0 w-full flex-col items-center">
-      <OrgChartVerticalLine />
-      {children}
-    </div>
-  )
-}
-
 /** Connects a parent card wrapper to its child subtree. */
 export function OrgChartParentChildLink({ children }: { children: ReactNode }) {
   return <OrgChartInboundStem heightClassName="h-5">{children}</OrgChartInboundStem>
@@ -77,12 +67,14 @@ export function OrgChartCrossbarColumns({
   return (
     <div className={cn('relative flex w-full min-w-0 flex-col items-center', className)}>
       {showInboundStem ? <OrgChartVerticalLine heightClassName="h-5" /> : null}
-      <div className="relative flex w-full min-w-0 flex-col items-center pt-4">
-        <OrgChartHorizontalLine className={cn('absolute top-0', barInsetClassName)} />
+      <div className="relative flex w-full min-w-0 flex-col items-center">
+        <OrgChartHorizontalLine
+          className={cn('absolute top-0 -translate-y-1/2', barInsetClassName)}
+        />
         <div className={cn('grid w-max min-w-full gap-x-4', columnClassName)}>
           {columns.map((column, index) => (
             <div key={index} className="flex min-w-0 flex-col items-center">
-              <OrgChartVerticalLine heightClassName="h-4" />
+              <OrgChartVerticalLine heightClassName="h-4" className="-mt-px" />
               {column}
             </div>
           ))}

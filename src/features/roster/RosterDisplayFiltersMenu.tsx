@@ -1,4 +1,5 @@
 import { SlidersHorizontal } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
@@ -9,45 +10,43 @@ import {
 } from '@/components/ui/popover'
 import {
   DEFAULT_ROSTER_DISPLAY_FILTERS,
+  ROSTER_DISPLAY_FILTER_LABELS,
+  summarizeActiveDisplayFilters,
   type RosterDisplayFilters,
 } from '@/features/roster/roster-display-filters'
+import { cn } from '@/lib/utils'
 
 type RosterDisplayFiltersMenuProps = {
   filters: RosterDisplayFilters
   onChange: (filters: RosterDisplayFilters) => void
 }
 
-const FILTER_OPTIONS: Array<{
-  key: keyof RosterDisplayFilters
-  label: string
-}> = [
-  { key: 'showPositionsWithCurrentAssignees', label: 'Show Positions With Current Assignees' },
-  { key: 'showPositionsWithoutCurrentAssignees', label: 'Show Positions Without Current Assignees' },
-  { key: 'showPositionsWithScheduledAssignees', label: 'Show Positions With Scheduled Assignees' },
-  {
-    key: 'showPositionsWithoutScheduledAssignees',
-    label: 'Show Positions Without Scheduled Assignees',
-  },
-  { key: 'showCurrentSingleResources', label: 'Show Current Single Resources' },
-  { key: 'showScheduledSingleResources', label: 'Show Scheduled Single Resources' },
-]
-
-function filtersAreDefault(filters: RosterDisplayFilters): boolean {
-  return FILTER_OPTIONS.every(({ key }) => filters[key] === DEFAULT_ROSTER_DISPLAY_FILTERS[key])
-}
+const FILTER_OPTIONS = (
+  Object.keys(ROSTER_DISPLAY_FILTER_LABELS) as (keyof RosterDisplayFilters)[]
+).map((key) => ({
+  key,
+  label: ROSTER_DISPLAY_FILTER_LABELS[key],
+}))
 
 export function RosterDisplayFiltersMenu({ filters, onChange }: RosterDisplayFiltersMenuProps) {
+  const summary = summarizeActiveDisplayFilters(filters)
+
   return (
     <Popover>
       <PopoverTrigger asChild>
         <Button
           type="button"
-          variant={filtersAreDefault(filters) ? 'outline' : 'secondary'}
+          variant={summary.isDefault ? 'outline' : 'secondary'}
           size="sm"
           className="gap-1.5 text-xs"
         >
           <SlidersHorizontal className="h-3.5 w-3.5" />
           Display
+          {!summary.isDefault ? (
+            <Badge variant="secondary" className="h-4 px-1.5 text-[10px] font-normal">
+              {summary.activeCount}/{summary.totalCount}
+            </Badge>
+          ) : null}
         </Button>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-80 space-y-3 p-3">
@@ -56,6 +55,20 @@ export function RosterDisplayFiltersMenu({ filters, onChange }: RosterDisplayFil
           <p className="text-xs text-muted-foreground">
             Scheduled assignees are next operational period ICS position assignments.
           </p>
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          {FILTER_OPTIONS.map(({ key, label }) => (
+            <Badge
+              key={key}
+              variant={filters[key] ? 'default' : 'outline'}
+              className={cn(
+                'text-[10px] font-normal',
+                !filters[key] && 'text-muted-foreground line-through'
+              )}
+            >
+              {label}
+            </Badge>
+          ))}
         </div>
         <div className="space-y-2">
           {FILTER_OPTIONS.map(({ key, label }) => (
@@ -76,7 +89,7 @@ export function RosterDisplayFiltersMenu({ filters, onChange }: RosterDisplayFil
             </div>
           ))}
         </div>
-        {!filtersAreDefault(filters) ? (
+        {!summary.isDefault ? (
           <Button
             type="button"
             variant="ghost"
@@ -89,5 +102,20 @@ export function RosterDisplayFiltersMenu({ filters, onChange }: RosterDisplayFil
         ) : null}
       </PopoverContent>
     </Popover>
+  )
+}
+
+export function RosterDisplayFilterSummary({
+  filters,
+}: {
+  filters: RosterDisplayFilters
+}) {
+  const summary = summarizeActiveDisplayFilters(filters)
+  if (summary.isDefault) return null
+
+  return (
+    <p className="text-[11px] text-muted-foreground">
+      Hiding: {summary.inactiveLabels.join(', ')}
+    </p>
   )
 }

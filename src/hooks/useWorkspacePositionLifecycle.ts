@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { StandardPositionLifecycleRow } from '@/lib/operational-period-roster-types'
 import {
+  archiveStandardPositionFromRoster,
   fetchWorkspaceStandardPositionLifecycle,
   setStandardPositionRetireOnOpAdvance,
 } from '@/lib/workspace-roster-position-lifecycle-service'
@@ -60,11 +61,26 @@ export function useWorkspacePositionLifecycle({
     [reload, workspaceId]
   )
 
+  const archiveStandardPosition = useCallback(
+    async (positionName: string) => {
+      if (!workspaceId) {
+        throw new Error('Workspace is not available.')
+      }
+      await archiveStandardPositionFromRoster({
+        workspaceId,
+        positionName,
+      })
+      await reload()
+    },
+    [reload, workspaceId]
+  )
+
   return {
     standardLifecycle,
     isLoading,
     error,
     reload,
     setStandardRetireLabel,
+    archiveStandardPosition,
   }
 }

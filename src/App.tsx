@@ -560,12 +560,16 @@ import { isIncidentArchived } from '@/lib/incident-archive'
 import { WorkspacePositionRosterTable } from '@/features/roster/WorkspacePositionRosterTable'
 import { WorkspaceOrgChartRoster } from '@/features/roster/WorkspaceOrgChartRoster'
 import { RosterAddMemberToolbar } from '@/features/roster/RosterAddMemberToolbar'
-import { RosterDisplayFiltersMenu } from '@/features/roster/RosterDisplayFiltersMenu'
+import { RosterDisplayFiltersMenu, RosterDisplayFilterSummary } from '@/features/roster/RosterDisplayFiltersMenu'
 import {
   DEFAULT_ROSTER_DISPLAY_FILTERS,
   resolveVisibleRosterPositions,
   type RosterDisplayFilters,
 } from '@/features/roster/roster-display-filters'
+import {
+  positionCanBeRemovedFromRoster,
+  positionRemovalBlockedReason as getPositionRemovalBlockedReason,
+} from '@/features/roster/position-roster-removal'
 import { AddWorkspacePositionDialog } from '@/features/roster/AddWorkspacePositionDialog'
 import { AddAssetToOrgChartDialog } from '@/features/roster/AddAssetToOrgChartDialog'
 import {
@@ -11808,6 +11812,7 @@ function App() {
     standardLifecycle,
     reload: reloadPositionLifecycle,
     setStandardRetireLabel,
+    archiveStandardPosition,
   } = useWorkspacePositionLifecycle({
     enabled: (isInIncidentWorkspace || isInExerciseWorkspace) && activeWorkspaceSupabaseId !== null,
     workspaceId: activeWorkspaceSupabaseId,
@@ -13865,6 +13870,26 @@ function App() {
     () => Object.fromEntries(positionRosterEntries.map((entry) => [entry.position, entry])),
     [positionRosterEntries]
   )
+  const canRemovePositionFromRoster = useCallback(
+    (entry: (typeof positionRosterEntries)[number]) =>
+      positionCanBeRemovedFromRoster(
+        entry,
+        workspacePositionCatalog,
+        activeWorkspaceRoster,
+        workspaceAssignedAssetsWithPending
+      ),
+    [activeWorkspaceRoster, workspaceAssignedAssetsWithPending, workspacePositionCatalog]
+  )
+  const positionRemovalBlockedReason = useCallback(
+    (entry: (typeof positionRosterEntries)[number]) =>
+      getPositionRemovalBlockedReason(
+        entry,
+        workspacePositionCatalog,
+        activeWorkspaceRoster,
+        workspaceAssignedAssetsWithPending
+      ),
+    [activeWorkspaceRoster, workspaceAssignedAssetsWithPending, workspacePositionCatalog]
+  )
   const ics204AssignedUnitOptions = useMemo(
     () => buildIcs204AssignedUnitOptions(positionRosterEntries),
     [positionRosterEntries]
@@ -15744,23 +15769,34 @@ function App() {
       setUpdatingOpAdvanceLabelPosition(null)
     }
   }
-  const handleDeleteCustomPosition = async (positionName: string) => {
-    const customPosition = workspacePositionCatalog.customPositions.find(
-      (row) => row.name === positionName
-    )
-    if (!customPosition) return
+  const handleRemovePositionFromRoster = async (positionName: string) => {
+    const entry = positionRosterEntriesByPosition[positionName]
+    if (!entry) return
 
-    const assignedMemberCount = activeWorkspaceRoster.filter((member) =>
-      member.icsPositions.includes(positionName)
-    ).length
-    const reportingAssetCount = countAssetsReportingToPosition(
-      workspaceAssignedAssets,
-      positionName
-    )
+    const blockedReason = positionRemovalBlockedReason(entry)
+    if (blockedReason) {
+      toast.error(blockedReason)
+      return
+    }
 
+    const meta = workspacePositionCatalog.positionMetaByName[positionName]
     setDeletingCustomPosition(positionName)
     try {
-      await removeCustomPosition(customPosition.id, assignedMemberCount, reportingAssetCount)
+      if (meta?.source === 'custom' && meta.customPositionId) {
+        const assignedMemberCount = activeWorkspaceRoster.filter((member) =>
+          member.icsPositions.includes(positionName)
+        ).length
+        const reportingAssetCount = countAssetsReportingToPosition(
+          workspaceAssignedAssets,
+          positionName
+        )
+        await removeCustomPosition(meta.customPositionId, assignedMemberCount, reportingAssetCount)
+      } else if (meta?.source === 'standard' && activeWorkspaceSupabaseId) {
+        await archiveStandardPosition(positionName)
+      } else {
+        throw new Error('Position lifecycle requires Supabase persistence.')
+      }
+
       if (isSupabaseEnabled && activeWorkspaceSupabaseId) {
         const permissions = await fetchWorkspacePositionPermissions(activeWorkspaceSupabaseId)
         setActiveWorkspacePositionPermissions(permissions)
@@ -15773,12 +15809,15 @@ function App() {
           return { ...previous, [activeWorkspaceRosterKey]: next }
         })
       }
-      toast.success(`Removed position "${positionName}".`)
+      toast.success(`Removed "${positionName}" from roster.`)
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Could not delete custom position.')
+      toast.error(error instanceof Error ? error.message : 'Could not remove position from roster.')
     } finally {
       setDeletingCustomPosition(null)
     }
+  }
+  const handleDeleteCustomPosition = async (positionName: string) => {
+    await handleRemovePositionFromRoster(positionName)
   }
   const handleAssetOrgChartPlacementChange = async (
     assetKey: string,
@@ -24893,6 +24932,7 @@ function App() {
                       filters={rosterDisplayFilters}
                       onChange={setRosterDisplayFilters}
                     />
+                    <RosterDisplayFilterSummary filters={rosterDisplayFilters} />
                     <ToggleGroup
                       type="single"
                       value={rosterViewMode}
@@ -28286,6 +28326,12 @@ function App() {
                       onRemoveSingleResourceFromOrgChart={(memberId) => {
                         void handleRemoveSingleResourceFromOrgChart(memberId)
                       }}
+                      onRemovePositionFromRoster={(position) => {
+                        void handleRemovePositionFromRoster(position)
+                      }}
+                      removingPositionFromRoster={deletingCustomPosition}
+                      canRemovePositionFromRoster={canRemovePositionFromRoster}
+                      positionRemovalBlockedReason={positionRemovalBlockedReason}
                     />
                       ) : (
                         <WorkspacePositionRosterTable
@@ -28328,6 +28374,11 @@ function App() {
                       onUnassignMember={(memberId, position) => {
                         void unassignMemberFromPosition(memberId, position)
                       }}
+                      onRemovePositionFromRoster={(position) => {
+                        void handleRemovePositionFromRoster(position)
+                      }}
+                      canRemovePositionFromRoster={canRemovePositionFromRoster}
+                      positionRemovalBlockedReason={positionRemovalBlockedReason}
                       onDeleteCustomPosition={(position) => {
                         void handleDeleteCustomPosition(position)
                       }}

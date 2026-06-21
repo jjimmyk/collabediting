@@ -33,6 +33,17 @@ export function rosterOrgCommandStaffClassName(layoutMode: RosterPanelLayoutMode
   }
 }
 
+export function rosterOrgCommandStaffCrossbarClassName(layoutMode: RosterPanelLayoutMode): string {
+  switch (layoutMode) {
+    case 'compact':
+      return 'grid-cols-1'
+    case 'medium':
+      return 'grid-cols-2'
+    default:
+      return 'grid-cols-4'
+  }
+}
+
 /** @deprecated Use rosterOrgSectionColumnsClassName with OrgChartCrossbarColumns */
 export function rosterOrgBranchClassName(layoutMode: RosterPanelLayoutMode): string {
   switch (layoutMode) {

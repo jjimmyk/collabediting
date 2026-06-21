@@ -68,6 +68,9 @@ type WorkspacePositionRosterTableProps = {
   onRemoveScheduledUnassign: (memberId: string, position: string) => void
   onInviteToPosition: (position: string, mode: RosterInviteAssignmentMode) => void
   onUnassignMember: (memberId: string, position: string) => void
+  onRemovePositionFromRoster?: (position: string) => void
+  canRemovePositionFromRoster?: (entry: PositionRosterEntry) => boolean
+  positionRemovalBlockedReason?: (entry: PositionRosterEntry) => string | null
   onDeleteCustomPosition?: (position: string) => void
   onOpAdvanceLabelChange?: (position: string, label: PositionOpAdvanceLabel) => void
   showCheckInStatus?: boolean
@@ -195,6 +198,9 @@ export function WorkspacePositionRosterTable({
   onRemoveScheduledUnassign,
   onInviteToPosition,
   onUnassignMember,
+  onRemovePositionFromRoster,
+  canRemovePositionFromRoster,
+  positionRemovalBlockedReason,
   onDeleteCustomPosition,
   onOpAdvanceLabelChange,
   showCheckInStatus = false,
@@ -545,17 +551,27 @@ export function WorkspacePositionRosterTable({
                             />
                           </PopoverContent>
                         </Popover>
-                        {entry.isCustom && onDeleteCustomPosition ? (
+                        {onRemovePositionFromRoster &&
+                        canRemovePositionFromRoster?.(entry) ? (
                           <Button
                             type="button"
                             size="sm"
                             variant="outline"
                             className="h-7 gap-1 px-2 text-[11px] text-destructive hover:text-destructive"
                             disabled={isDeletingCustomPosition === entry.position}
-                            onClick={() => onDeleteCustomPosition(entry.position)}
+                            title={positionRemovalBlockedReason?.(entry) ?? undefined}
+                            onClick={() => {
+                              if (
+                                window.confirm(
+                                  `Remove "${entry.position}" from this roster? This cannot be undone without re-adding the position.`
+                                )
+                              ) {
+                                onRemovePositionFromRoster(entry.position)
+                              }
+                            }}
                           >
                             <Trash2 className="h-3.5 w-3.5" />
-                            Delete
+                            Remove
                           </Button>
                         ) : null}
                       </div>

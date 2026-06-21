@@ -18,6 +18,35 @@ export const DEFAULT_ROSTER_DISPLAY_FILTERS: RosterDisplayFilters = {
   showScheduledSingleResources: true,
 }
 
+export const ROSTER_DISPLAY_FILTER_LABELS: Record<keyof RosterDisplayFilters, string> = {
+  showPositionsWithCurrentAssignees: 'Positions with current assignees',
+  showPositionsWithoutCurrentAssignees: 'Positions without current assignees',
+  showPositionsWithScheduledAssignees: 'Positions with scheduled assignees',
+  showPositionsWithoutScheduledAssignees: 'Positions without scheduled assignees',
+  showCurrentSingleResources: 'Current single resources',
+  showScheduledSingleResources: 'Scheduled single resources',
+}
+
+export function summarizeActiveDisplayFilters(filters: RosterDisplayFilters): {
+  activeCount: number
+  totalCount: number
+  inactiveLabels: string[]
+  isDefault: boolean
+} {
+  const keys = Object.keys(DEFAULT_ROSTER_DISPLAY_FILTERS) as (keyof RosterDisplayFilters)[]
+  const activeCount = keys.filter((key) => filters[key]).length
+  const inactiveLabels = keys
+    .filter((key) => !filters[key])
+    .map((key) => ROSTER_DISPLAY_FILTER_LABELS[key])
+
+  return {
+    activeCount,
+    totalCount: keys.length,
+    inactiveLabels,
+    isDefault: activeCount === keys.length,
+  }
+}
+
 export function positionMatchesCurrentAssigneeFilters(
   entry: PositionRosterEntry,
   filters: RosterDisplayFilters

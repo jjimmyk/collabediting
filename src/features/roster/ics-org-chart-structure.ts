@@ -55,17 +55,23 @@ export const ICS_ORG_CHART_ROOT: OrgChartNode = {
   position: ICS_ORG_CHART_ROOT_POSITION,
 }
 
+export const ICS_ORG_CHART_COMMAND_STAFF_POSITIONS = [
+  'Public Information Officer',
+  'Safety Officer',
+  'Liaison Officer',
+  'Legal Officer',
+] as const
+
 export const ICS_ORG_CHART_COMMAND_STAFF_BRANCH: Extract<OrgChartNode, { kind: 'group' }> = {
   kind: 'group',
   label: 'Command Staff',
   type: 'Command Staff',
   color: 'neutral',
-  children: [
-    { kind: 'position', position: 'Public Information Officer', color: 'neutral' },
-    { kind: 'position', position: 'Liaison Officer', color: 'neutral' },
-    { kind: 'position', position: 'Safety Officer', color: 'neutral' },
-    { kind: 'position', position: 'Legal Officer', color: 'neutral' },
-  ],
+  children: ICS_ORG_CHART_COMMAND_STAFF_POSITIONS.map((position) => ({
+    kind: 'position' as const,
+    position,
+    color: 'neutral' as const,
+  })),
 }
 
 const PLANNING_UNIT_STACK: Extract<OrgChartNode, { kind: 'stack' }> = {
