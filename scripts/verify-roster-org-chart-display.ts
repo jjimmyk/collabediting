@@ -416,6 +416,37 @@ assert(
   'custom positions should inherit section color at render time, not hardcode neutral'
 )
 
+const liaisonCatalog = buildWorkspacePositionCatalog([
+  {
+    id: 'custom-under-liaison',
+    name: 'Field Liaison',
+    reportsTo: 'Liaison Officer',
+    sortOrder: 0,
+    lifecycleStatus: 'active',
+  },
+])
+const liaisonLayout = buildDynamicOrgChart(liaisonCatalog, [], [])
+const liaisonNode = liaisonLayout.commandStaffBranch.children.find(
+  (child): child is Extract<OrgChartNode, { kind: 'position' }> =>
+    child.kind === 'position' && child.position === 'Liaison Officer'
+)
+assert(liaisonNode, 'Liaison Officer should exist in command staff branch')
+const customUnderLiaison = findPositionNode(liaisonNode.children ?? [], 'Field Liaison')
+assert(
+  customUnderLiaison,
+  'custom position should attach under Liaison Officer in org chart layout'
+)
+
+const orgChartRosterSource = readFileSync(
+  join(process.cwd(), 'src/features/roster/WorkspaceOrgChartRoster.tsx'),
+  'utf8'
+)
+assert(
+  orgChartRosterSource.includes('CommandStaffPositionNode') &&
+    !orgChartRosterSource.includes('visibleCommandStaff.map((position) => (\n            <PositionNode\n              key={position}\n              position={position}\n              color="neutral"\n              suppressChildren'),
+  'command staff org chart nodes should render nested custom positions'
+)
+
 const allColorNodes = collectOrgChartNodes([
   ...colorLayout.rootChildren,
   ...colorLayout.commandStaffBranch.children,
@@ -559,8 +590,9 @@ assert(
   zoomContainerSource.includes('zoom') &&
     zoomContainerSource.includes('overflow-auto') &&
     zoomContainerSource.includes('justify-center') &&
-    zoomContainerSource.includes('recenterToken'),
-  'roster zoom container should scale content, center it, and preserve scroll'
+    zoomContainerSource.includes('recenterToken') &&
+    zoomContainerSource.includes("addEventListener('wheel', handleWheel, { passive: false })"),
+  'roster zoom container should scale content, center it, preserve scroll, and handle wheel zoom'
 )
 
 assert(

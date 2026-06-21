@@ -640,19 +640,50 @@ function GroupBranch({
   )
 }
 
+function getCommandStaffPositionNode(
+  commandStaffBranch: Extract<OrgChartNode, { kind: 'group' }>,
+  position: string
+): Extract<OrgChartNode, { kind: 'position' }> | null {
+  return (
+    commandStaffBranch.children.find(
+      (child): child is Extract<OrgChartNode, { kind: 'position' }> =>
+        child.kind === 'position' && child.position === position
+    ) ?? null
+  )
+}
+
 function getVisibleCommandStaffPositions(
   commandStaffBranch: Extract<OrgChartNode, { kind: 'group' }>,
   visiblePositions: Set<string>,
   displayFilters: RosterDisplayFilters
 ): string[] {
   return ICS_ORG_CHART_COMMAND_STAFF_POSITIONS.filter((position) => {
-    const node = commandStaffBranch.children.find(
-      (child): child is Extract<OrgChartNode, { kind: 'position' }> =>
-        child.kind === 'position' && child.position === position
-    )
+    const node = getCommandStaffPositionNode(commandStaffBranch, position)
     if (!node) return false
     return positionBranchIsVisible(node, visiblePositions, displayFilters)
   })
+}
+
+function CommandStaffPositionNode({
+  commandStaffBranch,
+  position,
+  renderProps,
+}: {
+  commandStaffBranch: Extract<OrgChartNode, { kind: 'group' }>
+  position: string
+  renderProps: OrgChartRenderProps
+}) {
+  const node = getCommandStaffPositionNode(commandStaffBranch, position)
+  if (!node) return null
+
+  return (
+    <PositionNode
+      position={position}
+      color="neutral"
+      children={node.children ?? []}
+      {...renderProps}
+    />
+  )
 }
 
 function IncidentCommanderSubtree({
@@ -685,12 +716,11 @@ function IncidentCommanderSubtree({
           <OrgChartCrossbarColumns
             columnClassName={rosterOrgCommandStaffCrossbarClassName(layoutMode)}
             columns={visibleCommandStaff.map((position) => (
-              <PositionNode
+              <CommandStaffPositionNode
                 key={position}
+                commandStaffBranch={orgChartLayout.commandStaffBranch}
                 position={position}
-                color="neutral"
-                suppressChildren
-                {...renderProps}
+                renderProps={renderProps}
               />
             ))}
             showInboundStem
@@ -767,12 +797,11 @@ function IncidentCommanderSubtree({
         <OrgChartCrossbarColumns
           columnClassName={rosterOrgCommandStaffCrossbarClassName(layoutMode)}
           columns={visibleCommandStaff.map((position) => (
-            <PositionNode
+            <CommandStaffPositionNode
               key={position}
+              commandStaffBranch={orgChartLayout.commandStaffBranch}
               position={position}
-              color="neutral"
-              suppressChildren
-              {...renderProps}
+              renderProps={renderProps}
             />
           ))}
           showInboundStem
