@@ -50,12 +50,14 @@ import {
 import type { PositionRosterInviteSubmitResult } from '@/features/roster/position-roster-messages'
 import type { WorkspacePositionType } from '@/features/roster/workspace-position-type'
 import type { OrgMemberSearchResult } from '@/lib/workspace-service'
+import { cn } from '@/lib/utils'
 
 type BuildTeamRosterStepProps = {
   workspaceLabel: string
   draft: BuildTeamRosterDraft
   onDraftChange: (draft: BuildTeamRosterDraft) => void
   glassItemBorderClasses?: string
+  layout?: 'page' | 'compact'
 }
 
 export function BuildTeamRosterStep({
@@ -63,7 +65,9 @@ export function BuildTeamRosterStep({
   draft,
   onDraftChange,
   glassItemBorderClasses = 'border-border/60',
+  layout = 'page',
 }: BuildTeamRosterStepProps) {
+  const isPageLayout = layout === 'page'
   const [rosterViewMode, setRosterViewMode] = useState<'table' | 'org-chart'>('table')
   const [rosterDisplayFilters, setRosterDisplayFilters] = useState<RosterDisplayFilters>(
     DEFAULT_ROSTER_DISPLAY_FILTERS
@@ -214,7 +218,7 @@ export function BuildTeamRosterStep({
   )
 
   return (
-    <div className="grid gap-4">
+    <div className={cn('gap-4', isPageLayout ? 'flex min-h-0 flex-1 flex-col' : 'grid')}>
       <div className="grid gap-3 md:grid-cols-2">
         <div className="grid gap-2">
           <Label htmlFor="build-team-roster-template">Roster template</Label>
@@ -313,7 +317,10 @@ export function BuildTeamRosterStep({
         onZoomChange={setRosterZoomLevel}
         centerScroll={rosterViewMode === 'org-chart'}
         recenterToken={rosterRecenterToken}
-        className="max-h-[28rem] min-h-[20rem] rounded-md border"
+        className={cn(
+          'rounded-md border',
+          isPageLayout ? 'min-h-0 flex-1' : 'max-h-[28rem] min-h-[20rem]'
+        )}
       >
         {rosterViewMode === 'org-chart' ? (
           <WorkspaceOrgChartRoster
@@ -331,7 +338,7 @@ export function BuildTeamRosterStep({
             isUpdatingPermission={null}
             isAssigningPosition={null}
             workspaceLabel={workspaceLabel}
-            layoutMode="compact"
+            layoutMode={isPageLayout ? 'wide' : 'compact'}
             showOpAdvanceLabels={false}
             positionMetaByName={catalog.positionMetaByName}
             onToggleEditIcs201={() => undefined}

@@ -89,8 +89,10 @@ assert(
     buildTeamSource.includes('Roster takes effect') &&
     buildTeamSource.includes('RosterDisplayFiltersMenu') &&
     buildTeamSource.includes('WorkspacePositionRosterTable') &&
-    buildTeamSource.includes('WorkspaceOrgChartRoster'),
-  'Build Team step should include template, timing, and roster controls'
+    buildTeamSource.includes('WorkspaceOrgChartRoster') &&
+    buildTeamSource.includes("layout?: 'page' | 'compact'") &&
+    buildTeamSource.includes("layoutMode={isPageLayout ? 'wide' : 'compact'}"),
+  'Build Team step should include template, timing, roster controls, and page layout'
 )
 
 const appSource = readFileSync(join(process.cwd(), 'src/App.tsx'), 'utf8')
@@ -98,8 +100,11 @@ assert(
   appSource.includes('BuildTeamRosterStep') &&
     appSource.includes('activationRosterDraft') &&
     appSource.includes('applyWorkspaceRosterPlan') &&
+    appSource.includes('CreateActivationPageLayout') &&
+    appSource.includes('navigateToCreateActivation') &&
+    !appSource.includes('open={isCreateActivationOpen}') &&
     !appSource.includes('Placeholder for roster configuration UI'),
-  'App should wire Build Team roster draft and remove placeholder'
+  'App should use full-page create activation flow with roster draft wiring'
 )
 
 assert(

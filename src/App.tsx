@@ -576,6 +576,14 @@ import {
 } from '@/features/roster/position-roster-removal'
 import { AddWorkspacePositionDialog } from '@/features/roster/AddWorkspacePositionDialog'
 import { BuildTeamRosterStep } from '@/features/roster/BuildTeamRosterStep'
+import { CreateActivationPageLayout } from '@/features/activation/CreateActivationPageLayout'
+import {
+  getCreateActivationKindFromPath,
+  isBuildTeamActivationStep,
+  navigateFromCreateActivation,
+  navigateToCreateActivation,
+  type CreateActivationKind,
+} from '@/lib/create-activation-navigation'
 import { createDefaultBuildTeamRosterDraft } from '@/features/roster/roster-draft-state'
 import type { BuildTeamRosterDraft } from '@/features/roster/roster-template-types'
 import {
@@ -6706,6 +6714,58 @@ function App() {
     setExerciseMselInjects(defaultExerciseMselInjects())
     setExpandedExerciseMselInjectId(1)
   }
+  const closeCreateActivation = () => {
+    resetCreateIncidentForm()
+    setIsCreateIncidentOpen(false)
+    setIsCreateExerciseOpen(false)
+    navigateFromCreateActivation()
+  }
+  const openCreateIncident = () => {
+    resetCreateIncidentForm()
+    setIsCreateExerciseOpen(false)
+    setIsCreateIncidentOpen(true)
+    navigateToCreateActivation('incident')
+  }
+  const openCreateExercise = () => {
+    resetCreateIncidentForm()
+    setIsCreateIncidentOpen(false)
+    setIsCreateExerciseOpen(true)
+    navigateToCreateActivation('exercise')
+  }
+  useEffect(() => {
+    const kind = getCreateActivationKindFromPath(window.location.pathname)
+    if (kind === 'incident') {
+      setIsCreateExerciseOpen(false)
+      setIsCreateIncidentOpen(true)
+      return
+    }
+    if (kind === 'exercise') {
+      setIsCreateIncidentOpen(false)
+      setIsCreateExerciseOpen(true)
+    }
+  }, [])
+  useEffect(() => {
+    const handlePopState = () => {
+      const kind = getCreateActivationKindFromPath(window.location.pathname)
+      if (!kind) {
+        if (isCreateIncidentOpen || isCreateExerciseOpen) {
+          resetCreateIncidentForm()
+          setIsCreateIncidentOpen(false)
+          setIsCreateExerciseOpen(false)
+        }
+        return
+      }
+      if (kind === 'incident') {
+        setIsCreateExerciseOpen(false)
+        setIsCreateIncidentOpen(true)
+        return
+      }
+      setIsCreateIncidentOpen(false)
+      setIsCreateExerciseOpen(true)
+    }
+    window.addEventListener('popstate', handlePopState)
+    return () => window.removeEventListener('popstate', handlePopState)
+  }, [isCreateIncidentOpen, isCreateExerciseOpen])
   const resetCreateEventForm = () => {
     setCreateEventReport(createDefaultInitialIncidentReport())
   }
@@ -6866,8 +6926,7 @@ function App() {
         setSupabaseWorkspaceRoster(roster)
         const planSummary = await fetchWorkspaceRosterPlan(result.workspace.workspaceId)
         setWorkspaceRosterPlanSummary(planSummary)
-        setIsCreateExerciseOpen(false)
-        resetCreateIncidentForm()
+        closeCreateActivation()
         toast.success(`${displayName} created. Exercise activation requests have been sent.`)
         enterExerciseWorkspace(persistedExercise)
       } finally {
@@ -6893,8 +6952,7 @@ function App() {
       }),
     }))
     toast.success(`${displayName} created. Exercise activation requests have been sent.`)
-    setIsCreateExerciseOpen(false)
-    resetCreateIncidentForm()
+    closeCreateActivation()
     enterExerciseWorkspace(newExercise)
   }
   const handleCreateIncidentSubmit = async () => {
@@ -7046,8 +7104,7 @@ function App() {
         setSupabaseWorkspaceRoster(roster)
         const planSummary = await fetchWorkspaceRosterPlan(result.workspace.workspaceId)
         setWorkspaceRosterPlanSummary(planSummary)
-        setIsCreateIncidentOpen(false)
-        resetCreateIncidentForm()
+        closeCreateActivation()
         toast.success(
           `${displayName} created. Activation requests have been sent.`
         )
@@ -7077,8 +7134,7 @@ function App() {
     toast.success(
       `${displayName} created. Activation requests have been sent.`
     )
-    setIsCreateIncidentOpen(false)
-    resetCreateIncidentForm()
+    closeCreateActivation()
     enterIncidentWorkspace(newIncident)
   }
   const restartIncidentGeometryDraw = () => {
@@ -10636,6 +10692,7 @@ function App() {
       : RESOURCE_REQUEST_FILTER_FIELD_OPTIONS
   const isCreateActivationOpen = isCreateIncidentOpen || isCreateExerciseOpen
   const isExerciseActivationWizard = isCreateExerciseOpen
+  const activationKind: CreateActivationKind = isExerciseActivationWizard ? 'exercise' : 'incident'
   const activationSteps = isExerciseActivationWizard ? createExerciseSteps : createIncidentSteps
   const activationStep = isExerciseActivationWizard ? createExerciseStep : createIncidentStep
   const setActivationStep = isExerciseActivationWizard
@@ -16658,6 +16715,7 @@ function App() {
     setExpandedMeetingItemId(null)
     setMeetingScheduleItems(defaultMeetingScheduleItems)
     setViewingEventModalId(null)
+    navigateToCreateActivation('incident')
     setIsCreateExerciseOpen(false)
     setIsCreateIncidentOpen(true)
   }
@@ -24380,8 +24438,746 @@ function App() {
   })
 
   return (
-    <main className="relative h-screen w-screen overflow-hidden">
+    <>
       <Toaster position="top-right" />
+      {isCreateActivationOpen ? (
+        <CreateActivationPageLayout
+          className="fixed inset-0 z-[200]"
+          title={isExerciseActivationWizard ? 'Create Exercise' : 'Create Incident'}
+          steps={activationSteps}
+          currentStep={activationStep}
+          onStepChange={setActivationStep}
+          onCancel={closeCreateActivation}
+          onBack={() => setActivationStep((step) => Math.max(0, step - 1))}
+          onNext={() =>
+            setActivationStep((step) => Math.min(activationSteps.length - 1, step + 1))
+          }
+          onSubmit={() => {
+            if (isExerciseActivationWizard) {
+              void handleCreateExerciseSubmit()
+              return
+            }
+            void handleCreateIncidentSubmit()
+          }}
+          isCreating={isCreatingWorkspace}
+          isLastStep={activationStep >= activationSteps.length - 1}
+          isBuildTeamStep={isBuildTeamActivationStep(activationKind, activationStep)}
+          submitLabel={isExerciseActivationWizard ? 'Create Exercise' : 'Create Incident'}
+        >
+          <div
+            className={cn(
+              'space-y-4',
+              isBuildTeamActivationStep(activationKind, activationStep) &&
+                'flex min-h-0 flex-1 flex-col'
+            )}
+          >
+        {activationStep === 0 && (
+          <div className="grid min-h-[560px] grid-cols-2 gap-4">
+            <div className="grid content-start gap-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="grid gap-2">
+                  <Label htmlFor="incident-name">{activationEntityLabel} Name</Label>
+                  <Input
+                    id="incident-name"
+                    placeholder="e.g. East Grid Transformer Fault"
+                    value={incidentName}
+                    onChange={(event) => setIncidentName(event.target.value)}
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="incident-category">{activationEntityLabel} Category</Label>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        id="incident-category"
+                        type="button"
+                        variant="outline"
+                        className="w-full justify-between font-normal"
+                      >
+                        <span className="truncate text-left">
+                          {incidentCategory || 'Select category'}
+                        </span>
+                        <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start">
+                      {incidentCategoryOptions.map((category) => (
+                        <DropdownMenuItem
+                          key={category}
+                          className="pr-2"
+                          onSelect={(event) => {
+                            event.preventDefault()
+                            setIncidentCategory(category)
+                          }}
+                        >
+                          <div className="flex items-center gap-2">
+                            <span
+                              className="inline-block h-2 w-2 shrink-0 rounded-full"
+                              style={{ backgroundColor: getIncidentCategoryColorHex(category) }}
+                              aria-hidden="true"
+                            />
+                            <Checkbox
+                              checked={incidentCategory === category}
+                              className="pointer-events-none"
+                              aria-hidden="true"
+                            />
+                            <span>{category}</span>
+                          </div>
+                        </DropdownMenuItem>
+                      ))}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+              </div>
+              {!isExerciseActivationWizard && (
+                <div className="grid gap-2">
+                  <Label htmlFor="incident-related-events">Related Events</Label>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        id="incident-related-events"
+                        type="button"
+                        variant="outline"
+                        className="w-full justify-between font-normal"
+                      >
+                        <span className="truncate text-left">
+                          {incidentRelatedEventIds.length > 0
+                            ? eventList
+                                .filter((event) => incidentRelatedEventIds.includes(event.id))
+                                .map((event) => event.name)
+                                .join(', ')
+                            : 'Select related events'}
+                        </span>
+                        <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start" className="max-h-72 overflow-y-auto">
+                      {eventList.length === 0 ? (
+                        <DropdownMenuItem disabled>No events available</DropdownMenuItem>
+                      ) : (
+                        eventList.map((event) => (
+                          <DropdownMenuItem
+                            key={event.id}
+                            className="pr-2"
+                            onSelect={(selectEvent) => {
+                              selectEvent.preventDefault()
+                              setIncidentRelatedEventIds((previous) => {
+                                if (previous.includes(event.id)) {
+                                  return previous.filter((item) => item !== event.id)
+                                }
+
+                                return [...previous, event.id]
+                              })
+                            }}
+                          >
+                            <div className="flex min-w-0 items-start gap-2">
+                              <Checkbox
+                                checked={incidentRelatedEventIds.includes(event.id)}
+                                className="pointer-events-none mt-0.5"
+                                aria-hidden="true"
+                              />
+                              <div className="min-w-0">
+                                <p className="truncate text-sm">{event.name}</p>
+                                <p className="truncate text-xs text-muted-foreground">
+                                  {event.type} · {event.region}
+                                </p>
+                              </div>
+                            </div>
+                          </DropdownMenuItem>
+                        ))
+                      )}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+              )}
+              <div className="grid gap-2">
+                <Label htmlFor="incident-workflow">Select Workspace Format</Label>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      id="incident-workflow"
+                      type="button"
+                      variant="outline"
+                      className="w-full justify-between font-normal"
+                    >
+                      <span className="truncate text-left">
+                        {incidentWorkflowOptions.find(
+                          (option) => option.value === incidentWorkflow
+                        )?.label ?? 'Select workspace format'}
+                      </span>
+                      <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start">
+                    {incidentWorkflowOptions.map((option) => (
+                      <DropdownMenuItem
+                        key={option.value}
+                        className="pr-2"
+                        onClick={() => {
+                          setIncidentWorkflow(option.value)
+                          setIncidentComplexity((previous) =>
+                            normalizeIncidentComplexityForWorkflow(option.value, previous)
+                          )
+                        }}
+                      >
+                        <div className="flex items-center gap-2">
+                          <Checkbox
+                            checked={incidentWorkflow === option.value}
+                            className="pointer-events-none"
+                            aria-hidden="true"
+                          />
+                          <span>{option.label}</span>
+                        </div>
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="incident-complexity">Select Incident Complexity</Label>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      id="incident-complexity"
+                      type="button"
+                      variant="outline"
+                      className="w-full justify-between font-normal"
+                    >
+                      <span className="truncate text-left">
+                        {effectiveIncidentComplexityOptions.find(
+                          (option) => option.value === incidentComplexity
+                        )?.label ?? 'Select incident complexity'}
+                      </span>
+                      <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start">
+                    {effectiveIncidentComplexityOptions.map((option) => (
+                      <DropdownMenuItem
+                        key={option.value}
+                        className="pr-2"
+                        onClick={() => setIncidentComplexity(option.value)}
+                      >
+                        <div className="flex items-center gap-2">
+                          <Checkbox
+                            checked={incidentComplexity === option.value}
+                            className="pointer-events-none"
+                            aria-hidden="true"
+                          />
+                          <span>{option.label}</span>
+                        </div>
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="incident-template">Select Template</Label>
+                <RadioGroup
+                  id="incident-template"
+                  value={incidentTemplate}
+                  onValueChange={setIncidentTemplate}
+                  className="gap-2"
+                >
+                  {incidentTemplateOptions.map((template) => {
+                    const isPreviewOpen = previewTemplateId === template.id
+                    return (
+                      <div key={template.id} className="rounded-md border p-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <RadioGroupItem
+                              id={`incident-template-${template.id}`}
+                              value={template.id}
+                            />
+                            <Label
+                              htmlFor={`incident-template-${template.id}`}
+                              className="cursor-pointer"
+                            >
+                              {template.label}
+                            </Label>
+                          </div>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() =>
+                              setPreviewTemplateId((previous) =>
+                                previous === template.id ? null : template.id
+                              )
+                            }
+                          >
+                            {isPreviewOpen ? 'Hide Preview' : 'Preview Template'}
+                          </Button>
+                        </div>
+                        {isPreviewOpen && (
+                          <div className="mt-2 space-y-1">
+                            {template.previewItems.map((previewItem) => (
+                              <Item
+                                key={`${template.id}-${previewItem}`}
+                                variant="muted"
+                                size="sm"
+                              >
+                                <ItemDescription className="text-xs text-foreground">
+                                  {previewItem}
+                                </ItemDescription>
+                              </Item>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </RadioGroup>
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="incident-start-time">Start Time</Label>
+                <Input
+                  id="incident-start-time"
+                  type="datetime-local"
+                  value={incidentStartTime}
+                  onChange={(event) => setIncidentStartTime(event.target.value)}
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="incident-location">Location</Label>
+                <NativeSelect
+                  id="incident-location"
+                  value={incidentLocation}
+                  onChange={(event) => {
+                    setIncidentLocation(event.target.value)
+                  }}
+                  className="w-full"
+                >
+                  <NativeSelectOption value="">Select location method</NativeSelectOption>
+                  <NativeSelectOption value="draw-point">Draw Point</NativeSelectOption>
+                  <NativeSelectOption value="draw-polygon">Draw Polygon</NativeSelectOption>
+                  <NativeSelectOption value="enter-address">Enter Address</NativeSelectOption>
+                </NativeSelect>
+                {incidentGeometrySummary &&
+                  (incidentLocation === 'draw-point' ||
+                    incidentLocation === 'draw-polygon') && (
+                    <div className="flex items-center gap-2">
+                      <p className="text-xs text-muted-foreground">
+                        {incidentGeometrySummary}
+                      </p>
+                      <Button
+                        type="button"
+                        variant="link"
+                        size="sm"
+                        className="h-auto p-0 text-xs"
+                        onClick={restartIncidentGeometryDraw}
+                      >
+                        Edit location
+                      </Button>
+                    </div>
+                  )}
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="incident-aors">AORs</Label>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      id="incident-aors"
+                      type="button"
+                      variant="outline"
+                      className="w-full justify-between font-normal"
+                    >
+                      <span className="truncate text-left">
+                        {incidentAors.length > 0
+                          ? incidentAors.join(', ')
+                          : 'Select AORs'}
+                      </span>
+                      <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start">
+                    {femaAors.map((aor) => (
+                      <DropdownMenuItem
+                        key={aor.id}
+                        className="pr-2"
+                        onSelect={(event) => {
+                          event.preventDefault()
+                          setIncidentAors((previous) => {
+                            if (previous.includes(aor.name)) {
+                              return previous.filter((item) => item !== aor.name)
+                            }
+
+                            return [...previous, aor.name]
+                          })
+                        }}
+                      >
+                        <div className="flex items-center gap-2">
+                          <Checkbox
+                            checked={incidentAors.includes(aor.name)}
+                            className="pointer-events-none"
+                            aria-hidden="true"
+                          />
+                          <span>{aor.name}</span>
+                        </div>
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="incident-situation-report">
+                  Initial {isExerciseActivationWizard ? 'Exercise' : 'Situation'} Report
+                </Label>
+                <Textarea
+                  id="incident-situation-report"
+                  placeholder="Describe current conditions, risks, and immediate priorities."
+                  value={incidentSituationReport}
+                  onChange={(event) => setIncidentSituationReport(event.target.value)}
+                  className="min-h-28"
+                />
+              </div>
+            </div>
+            <div className="relative h-[560px] overflow-hidden rounded-md border bg-muted/10">
+              <div ref={createIncidentMapContainerRef} className="absolute inset-0" />
+              {(incidentLocation === 'draw-point' ||
+                incidentLocation === 'draw-polygon') && (
+                <div className="pointer-events-none absolute top-2 left-2 rounded-md border bg-background/90 px-2 py-1 text-xs text-muted-foreground shadow-sm">
+                  {incidentLocation === 'draw-point'
+                    ? 'Click on the map to place a point'
+                    : 'Click to start polygon and double-click to finish'}
+                </div>
+              )}
+              {incidentGeometrySummary && (
+                <div className="pointer-events-none absolute right-2 bottom-2 rounded-md border bg-background/90 px-2 py-1 text-xs text-muted-foreground shadow-sm">
+                  {incidentGeometrySummary}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+        {activationStep === 1 && !isExerciseActivationWizard && (
+          <CcmerDutyNotificationForm
+            idPrefix="initial-report"
+            value={initialIncidentReport}
+            onChange={setInitialIncidentReport}
+          />
+        )}
+        {activationStep === 1 && isExerciseActivationWizard && renderExerciseObjectivesEditor()}
+        {activationStep === 2 && isExerciseActivationWizard && (
+          <CcmerDutyNotificationForm
+            idPrefix="initial-exercise-report"
+            value={initialIncidentReport}
+            onChange={setInitialIncidentReport}
+          />
+        )}
+        {activationStep === 2 && !isExerciseActivationWizard && (
+          <BuildTeamRosterStep
+            workspaceLabel={activationWorkspaceLabel}
+            draft={activationRosterDraft}
+            onDraftChange={setActivationRosterDraft}
+            glassItemBorderClasses={glassItemBorderClasses}
+          />
+        )}
+        {activationStep === 3 && isExerciseActivationWizard && (
+          <BuildTeamRosterStep
+            workspaceLabel={activationWorkspaceLabel}
+            draft={activationRosterDraft}
+            onDraftChange={setActivationRosterDraft}
+            glassItemBorderClasses={glassItemBorderClasses}
+          />
+        )}
+        {((activationStep === 3 && !isExerciseActivationWizard) ||
+          (activationStep === 4 && isExerciseActivationWizard)) && (
+          <div className="grid gap-3">
+            <div className="space-y-2">
+              <div className="flex justify-start">
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={() => {
+                    const nextId =
+                      meetingScheduleItems.length > 0
+                        ? Math.max(...meetingScheduleItems.map((meeting) => meeting.id)) + 1
+                        : 1
+
+                    setMeetingScheduleItems((previous) => [
+                      {
+                        id: nextId,
+                        start: '',
+                        end: '',
+                        meeting: 'New Meeting',
+                        attendees: '',
+                        agendaItems: ['New agenda item'],
+                        createTeamsMeeting: false,
+                      },
+                      ...previous,
+                    ])
+                    setExpandedMeetingItemId(nextId)
+                  }}
+                >
+                  <Plus className="mr-1 h-4 w-4" /> Create Meeting
+                </Button>
+              </div>
+              <div className="hidden grid-cols-[2.25rem_repeat(4,minmax(0,1fr))_minmax(0,1fr)] items-center gap-3 px-3 text-xs text-black dark:text-black md:grid">
+                <p className="invisible select-none" aria-hidden="true">
+                  Expand
+                </p>
+                <p className="pl-1">Start</p>
+                <p className="pl-1">End</p>
+                <p>Meeting</p>
+                <p>Attendees</p>
+                <div className="-ml-1 flex items-center gap-1">
+                  <p>Create Microsoft Teams Meeting</p>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-5 w-5"
+                          aria-label="Microsoft Teams meeting info"
+                        >
+                          <Info className="h-3.5 w-3.5" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="max-w-sm">
+                        If enabled, a Microsoft Teams calendar event will be created and all
+                        attendees will be emailed an invitation.
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </div>
+              </div>
+              {meetingScheduleItems.length === 0 && (
+                <div className="rounded-md border border-dashed bg-muted/20 p-4 text-sm text-muted-foreground">
+                  No scheduled meetings.
+                </div>
+              )}
+              {meetingScheduleItems.map((item) => {
+                const isMeetingOpen = expandedMeetingItemId === item.id
+                return (
+                  <Item key={item.id} variant="outline" className="flex-col items-stretch">
+                    <Collapsible
+                      open={isMeetingOpen}
+                      onOpenChange={(open) =>
+                        setExpandedMeetingItemId(open ? item.id : null)
+                      }
+                    >
+                      <div className="grid gap-3 p-3 md:grid-cols-[2.25rem_repeat(4,minmax(0,1fr))_minmax(0,1fr)]">
+                        <div className="flex items-center">
+                          <CollapsibleTrigger asChild>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              aria-label={`Toggle agenda for meeting row ${item.id}`}
+                            >
+                              <ChevronDown
+                                className={cn(
+                                  'h-4 w-4 transition-transform',
+                                  isMeetingOpen && 'rotate-180'
+                                )}
+                              />
+                            </Button>
+                          </CollapsibleTrigger>
+                        </div>
+                        <div>
+                          <Input
+                            type="datetime-local"
+                            value={item.start}
+                            onChange={(event) => {
+                              const value = event.target.value
+                              setMeetingScheduleItems((previous) =>
+                                previous.map((meetingItem) =>
+                                  meetingItem.id === item.id
+                                    ? { ...meetingItem, start: value }
+                                    : meetingItem
+                                )
+                              )
+                            }}
+                          />
+                        </div>
+                        <div>
+                          <Input
+                            type="datetime-local"
+                            value={item.end}
+                            onChange={(event) => {
+                              const value = event.target.value
+                              setMeetingScheduleItems((previous) =>
+                                previous.map((meetingItem) =>
+                                  meetingItem.id === item.id
+                                    ? { ...meetingItem, end: value }
+                                    : meetingItem
+                                )
+                              )
+                            }}
+                          />
+                        </div>
+                        <div>
+                          <Input
+                            value={item.meeting}
+                            onChange={(event) => {
+                              const value = event.target.value
+                              setMeetingScheduleItems((previous) =>
+                                previous.map((meetingItem) =>
+                                  meetingItem.id === item.id
+                                    ? { ...meetingItem, meeting: value }
+                                    : meetingItem
+                                )
+                              )
+                            }}
+                          />
+                        </div>
+                        <div>
+                          <Input
+                            value={item.attendees}
+                            onChange={(event) => {
+                              const value = event.target.value
+                              setMeetingScheduleItems((previous) =>
+                                previous.map((meetingItem) =>
+                                  meetingItem.id === item.id
+                                    ? { ...meetingItem, attendees: value }
+                                    : meetingItem
+                                )
+                              )
+                            }}
+                          />
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Switch
+                            id={`teams-meeting-${item.id}`}
+                            aria-label={`Create Microsoft Teams Meeting for row ${item.id}`}
+                            checked={item.createTeamsMeeting}
+                            onCheckedChange={(checked) => {
+                              setMeetingScheduleItems((previous) =>
+                                previous.map((meetingItem) =>
+                                  meetingItem.id === item.id
+                                    ? { ...meetingItem, createTeamsMeeting: checked }
+                                    : meetingItem
+                                )
+                              )
+                            }}
+                          />
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="ml-auto"
+                            aria-label={`Delete meeting row ${item.id}`}
+                            onClick={() => {
+                              setMeetingScheduleItems((previous) =>
+                                previous.filter((meetingItem) => meetingItem.id !== item.id)
+                              )
+                              setExpandedMeetingItemId((previous) =>
+                                previous === item.id ? null : previous
+                              )
+                            }}
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                      <CollapsibleContent>
+                        <div className="border-t px-3 py-3">
+                          <div className="mb-2 flex items-center justify-between">
+                            <Label className="text-xs text-muted-foreground">Agenda</Label>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                setMeetingScheduleItems((previous) =>
+                                  previous.map((meetingItem) =>
+                                    meetingItem.id === item.id
+                                      ? {
+                                          ...meetingItem,
+                                          agendaItems: [
+                                            ...meetingItem.agendaItems,
+                                            'New agenda item',
+                                          ],
+                                        }
+                                      : meetingItem
+                                  )
+                                )
+                              }}
+                            >
+                              <Plus className="mr-1 h-4 w-4" />
+                              Create Agenda Item
+                            </Button>
+                          </div>
+                          <div className="space-y-2">
+                            {item.agendaItems.length === 0 && (
+                              <div className="rounded-md border border-dashed bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
+                                No agenda items yet.
+                              </div>
+                            )}
+                            {item.agendaItems.map((agendaItem, agendaIndex) => (
+                              <Item
+                                key={`${item.id}-agenda-${agendaIndex}`}
+                                variant="muted"
+                                size="sm"
+                                className="flex-nowrap"
+                              >
+                                <Input
+                                  className="min-w-0 flex-1"
+                                  value={agendaItem}
+                                  onChange={(event) => {
+                                    const value = event.target.value
+                                    setMeetingScheduleItems((previous) =>
+                                      previous.map((meetingItem) => {
+                                        if (meetingItem.id !== item.id) {
+                                          return meetingItem
+                                        }
+
+                                        return {
+                                          ...meetingItem,
+                                          agendaItems: meetingItem.agendaItems.map(
+                                            (entry, entryIndex) =>
+                                              entryIndex === agendaIndex ? value : entry
+                                          ),
+                                        }
+                                      })
+                                    )
+                                  }}
+                                />
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  className="ml-auto"
+                                  aria-label={`Delete agenda item ${agendaIndex + 1} for meeting row ${item.id}`}
+                                  onClick={() => {
+                                    setMeetingScheduleItems((previous) =>
+                                      previous.map((meetingItem) => {
+                                        if (meetingItem.id !== item.id) {
+                                          return meetingItem
+                                        }
+
+                                        return {
+                                          ...meetingItem,
+                                          agendaItems: meetingItem.agendaItems.filter(
+                                            (_, entryIndex) => entryIndex !== agendaIndex
+                                          ),
+                                        }
+                                      })
+                                    )
+                                  }}
+                                >
+                                  <X className="h-4 w-4" />
+                                </Button>
+                              </Item>
+                            ))}
+                          </div>
+                        </div>
+                      </CollapsibleContent>
+                    </Collapsible>
+                  </Item>
+                )
+              })}
+            </div>
+          </div>
+        )}
+        {isExerciseActivationWizard && activationStep === 5 && renderExerciseMselInjectsEditor()}
+          </div>
+        </CreateActivationPageLayout>
+      ) : null}
+    <main className="relative h-screen w-screen overflow-hidden">
       <div
         className={cn(
           'absolute inset-x-0 top-0 z-50 h-14 border-b px-4 shadow-lg backdrop-blur transition-colors duration-200',
@@ -25550,10 +26346,7 @@ function App() {
                     <Button
                       type="button"
                       size="sm"
-                      onClick={() => {
-                        resetCreateIncidentForm()
-                        setIsCreateIncidentOpen(true)
-                      }}
+                      onClick={openCreateIncident}
                     >
                       + Create Incident
                     </Button>
@@ -25563,10 +26356,7 @@ function App() {
                   <Button
                     type="button"
                     size="sm"
-                    onClick={() => {
-                      resetCreateIncidentForm()
-                      setIsCreateExerciseOpen(true)
-                    }}
+                    onClick={openCreateExercise}
                   >
                     + Create Exercise
                   </Button>
@@ -26252,8 +27042,7 @@ function App() {
                                           openCreateIncidentFromEvent(relatedEvent)
                                           return
                                         }
-                                        resetCreateIncidentForm()
-                                        setIsCreateIncidentOpen(true)
+                                        openCreateIncident()
                                       }}
                                     >
                                       + Create Incident
@@ -40909,801 +41698,6 @@ function App() {
         </DialogContent>
       </Dialog>
       <Dialog
-        open={isCreateActivationOpen}
-        onOpenChange={(open) => {
-          if (!open) {
-            resetCreateIncidentForm()
-            setIsCreateIncidentOpen(false)
-            setIsCreateExerciseOpen(false)
-          }
-        }}
-      >
-        <DialogContent className="flex h-[80vh] w-[95vw] flex-col sm:max-w-[1344px]">
-          <DialogHeader>
-            <DialogTitle>
-              {isExerciseActivationWizard ? 'Create Exercise' : 'Create Incident'}
-            </DialogTitle>
-          </DialogHeader>
-          <div className="flex-1 space-y-4 overflow-y-auto pr-1">
-            <div
-              className={cn(
-                'grid gap-2',
-                activationSteps.length === 6
-                  ? 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-6'
-                  : 'grid-cols-2 sm:grid-cols-4'
-              )}
-            >
-              {activationSteps.map((stepLabel, index) => {
-                const isActive = activationStep === index
-                const isComplete = activationStep > index
-                return (
-                  <button
-                    type="button"
-                    key={stepLabel}
-                    onClick={() => setActivationStep(index)}
-                    className={cn(
-                      'rounded-md border px-2 py-2 text-center text-xs transition-colors hover:bg-muted/40',
-                      isActive && 'border-primary bg-primary/10 font-medium',
-                      isComplete && 'border-emerald-500 bg-emerald-500/10'
-                    )}
-                  >
-                    <p>{stepLabel}</p>
-                  </button>
-                )
-              })}
-            </div>
-            {activationStep === 0 && (
-              <div className="grid min-h-[560px] grid-cols-2 gap-4">
-                <div className="grid content-start gap-3">
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="grid gap-2">
-                      <Label htmlFor="incident-name">{activationEntityLabel} Name</Label>
-                      <Input
-                        id="incident-name"
-                        placeholder="e.g. East Grid Transformer Fault"
-                        value={incidentName}
-                        onChange={(event) => setIncidentName(event.target.value)}
-                      />
-                    </div>
-                    <div className="grid gap-2">
-                      <Label htmlFor="incident-category">{activationEntityLabel} Category</Label>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button
-                            id="incident-category"
-                            type="button"
-                            variant="outline"
-                            className="w-full justify-between font-normal"
-                          >
-                            <span className="truncate text-left">
-                              {incidentCategory || 'Select category'}
-                            </span>
-                            <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="start">
-                          {incidentCategoryOptions.map((category) => (
-                            <DropdownMenuItem
-                              key={category}
-                              className="pr-2"
-                              onSelect={(event) => {
-                                event.preventDefault()
-                                setIncidentCategory(category)
-                              }}
-                            >
-                              <div className="flex items-center gap-2">
-                                <span
-                                  className="inline-block h-2 w-2 shrink-0 rounded-full"
-                                  style={{ backgroundColor: getIncidentCategoryColorHex(category) }}
-                                  aria-hidden="true"
-                                />
-                                <Checkbox
-                                  checked={incidentCategory === category}
-                                  className="pointer-events-none"
-                                  aria-hidden="true"
-                                />
-                                <span>{category}</span>
-                              </div>
-                            </DropdownMenuItem>
-                          ))}
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </div>
-                  </div>
-                  {!isExerciseActivationWizard && (
-                    <div className="grid gap-2">
-                      <Label htmlFor="incident-related-events">Related Events</Label>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button
-                            id="incident-related-events"
-                            type="button"
-                            variant="outline"
-                            className="w-full justify-between font-normal"
-                          >
-                            <span className="truncate text-left">
-                              {incidentRelatedEventIds.length > 0
-                                ? eventList
-                                    .filter((event) => incidentRelatedEventIds.includes(event.id))
-                                    .map((event) => event.name)
-                                    .join(', ')
-                                : 'Select related events'}
-                            </span>
-                            <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="start" className="max-h-72 overflow-y-auto">
-                          {eventList.length === 0 ? (
-                            <DropdownMenuItem disabled>No events available</DropdownMenuItem>
-                          ) : (
-                            eventList.map((event) => (
-                              <DropdownMenuItem
-                                key={event.id}
-                                className="pr-2"
-                                onSelect={(selectEvent) => {
-                                  selectEvent.preventDefault()
-                                  setIncidentRelatedEventIds((previous) => {
-                                    if (previous.includes(event.id)) {
-                                      return previous.filter((item) => item !== event.id)
-                                    }
-
-                                    return [...previous, event.id]
-                                  })
-                                }}
-                              >
-                                <div className="flex min-w-0 items-start gap-2">
-                                  <Checkbox
-                                    checked={incidentRelatedEventIds.includes(event.id)}
-                                    className="pointer-events-none mt-0.5"
-                                    aria-hidden="true"
-                                  />
-                                  <div className="min-w-0">
-                                    <p className="truncate text-sm">{event.name}</p>
-                                    <p className="truncate text-xs text-muted-foreground">
-                                      {event.type} · {event.region}
-                                    </p>
-                                  </div>
-                                </div>
-                              </DropdownMenuItem>
-                            ))
-                          )}
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </div>
-                  )}
-                  <div className="grid gap-2">
-                    <Label htmlFor="incident-workflow">Select Workspace Format</Label>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          id="incident-workflow"
-                          type="button"
-                          variant="outline"
-                          className="w-full justify-between font-normal"
-                        >
-                          <span className="truncate text-left">
-                            {incidentWorkflowOptions.find(
-                              (option) => option.value === incidentWorkflow
-                            )?.label ?? 'Select workspace format'}
-                          </span>
-                          <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="start">
-                        {incidentWorkflowOptions.map((option) => (
-                          <DropdownMenuItem
-                            key={option.value}
-                            className="pr-2"
-                            onClick={() => {
-                              setIncidentWorkflow(option.value)
-                              setIncidentComplexity((previous) =>
-                                normalizeIncidentComplexityForWorkflow(option.value, previous)
-                              )
-                            }}
-                          >
-                            <div className="flex items-center gap-2">
-                              <Checkbox
-                                checked={incidentWorkflow === option.value}
-                                className="pointer-events-none"
-                                aria-hidden="true"
-                              />
-                              <span>{option.label}</span>
-                            </div>
-                          </DropdownMenuItem>
-                        ))}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="incident-complexity">Select Incident Complexity</Label>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          id="incident-complexity"
-                          type="button"
-                          variant="outline"
-                          className="w-full justify-between font-normal"
-                        >
-                          <span className="truncate text-left">
-                            {effectiveIncidentComplexityOptions.find(
-                              (option) => option.value === incidentComplexity
-                            )?.label ?? 'Select incident complexity'}
-                          </span>
-                          <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="start">
-                        {effectiveIncidentComplexityOptions.map((option) => (
-                          <DropdownMenuItem
-                            key={option.value}
-                            className="pr-2"
-                            onClick={() => setIncidentComplexity(option.value)}
-                          >
-                            <div className="flex items-center gap-2">
-                              <Checkbox
-                                checked={incidentComplexity === option.value}
-                                className="pointer-events-none"
-                                aria-hidden="true"
-                              />
-                              <span>{option.label}</span>
-                            </div>
-                          </DropdownMenuItem>
-                        ))}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="incident-template">Select Template</Label>
-                    <RadioGroup
-                      id="incident-template"
-                      value={incidentTemplate}
-                      onValueChange={setIncidentTemplate}
-                      className="gap-2"
-                    >
-                      {incidentTemplateOptions.map((template) => {
-                        const isPreviewOpen = previewTemplateId === template.id
-                        return (
-                          <div key={template.id} className="rounded-md border p-2">
-                            <div className="flex items-center justify-between gap-2">
-                              <div className="flex items-center gap-2">
-                                <RadioGroupItem
-                                  id={`incident-template-${template.id}`}
-                                  value={template.id}
-                                />
-                                <Label
-                                  htmlFor={`incident-template-${template.id}`}
-                                  className="cursor-pointer"
-                                >
-                                  {template.label}
-                                </Label>
-                              </div>
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                onClick={() =>
-                                  setPreviewTemplateId((previous) =>
-                                    previous === template.id ? null : template.id
-                                  )
-                                }
-                              >
-                                {isPreviewOpen ? 'Hide Preview' : 'Preview Template'}
-                              </Button>
-                            </div>
-                            {isPreviewOpen && (
-                              <div className="mt-2 space-y-1">
-                                {template.previewItems.map((previewItem) => (
-                                  <Item
-                                    key={`${template.id}-${previewItem}`}
-                                    variant="muted"
-                                    size="sm"
-                                  >
-                                    <ItemDescription className="text-xs text-foreground">
-                                      {previewItem}
-                                    </ItemDescription>
-                                  </Item>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        )
-                      })}
-                    </RadioGroup>
-                  </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="incident-start-time">Start Time</Label>
-                    <Input
-                      id="incident-start-time"
-                      type="datetime-local"
-                      value={incidentStartTime}
-                      onChange={(event) => setIncidentStartTime(event.target.value)}
-                    />
-                  </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="incident-location">Location</Label>
-                    <NativeSelect
-                      id="incident-location"
-                      value={incidentLocation}
-                      onChange={(event) => {
-                        setIncidentLocation(event.target.value)
-                      }}
-                      className="w-full"
-                    >
-                      <NativeSelectOption value="">Select location method</NativeSelectOption>
-                      <NativeSelectOption value="draw-point">Draw Point</NativeSelectOption>
-                      <NativeSelectOption value="draw-polygon">Draw Polygon</NativeSelectOption>
-                      <NativeSelectOption value="enter-address">Enter Address</NativeSelectOption>
-                    </NativeSelect>
-                    {incidentGeometrySummary &&
-                      (incidentLocation === 'draw-point' ||
-                        incidentLocation === 'draw-polygon') && (
-                        <div className="flex items-center gap-2">
-                          <p className="text-xs text-muted-foreground">
-                            {incidentGeometrySummary}
-                          </p>
-                          <Button
-                            type="button"
-                            variant="link"
-                            size="sm"
-                            className="h-auto p-0 text-xs"
-                            onClick={restartIncidentGeometryDraw}
-                          >
-                            Edit location
-                          </Button>
-                        </div>
-                      )}
-                  </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="incident-aors">AORs</Label>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          id="incident-aors"
-                          type="button"
-                          variant="outline"
-                          className="w-full justify-between font-normal"
-                        >
-                          <span className="truncate text-left">
-                            {incidentAors.length > 0
-                              ? incidentAors.join(', ')
-                              : 'Select AORs'}
-                          </span>
-                          <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="start">
-                        {femaAors.map((aor) => (
-                          <DropdownMenuItem
-                            key={aor.id}
-                            className="pr-2"
-                            onSelect={(event) => {
-                              event.preventDefault()
-                              setIncidentAors((previous) => {
-                                if (previous.includes(aor.name)) {
-                                  return previous.filter((item) => item !== aor.name)
-                                }
-
-                                return [...previous, aor.name]
-                              })
-                            }}
-                          >
-                            <div className="flex items-center gap-2">
-                              <Checkbox
-                                checked={incidentAors.includes(aor.name)}
-                                className="pointer-events-none"
-                                aria-hidden="true"
-                              />
-                              <span>{aor.name}</span>
-                            </div>
-                          </DropdownMenuItem>
-                        ))}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="incident-situation-report">
-                      Initial {isExerciseActivationWizard ? 'Exercise' : 'Situation'} Report
-                    </Label>
-                    <Textarea
-                      id="incident-situation-report"
-                      placeholder="Describe current conditions, risks, and immediate priorities."
-                      value={incidentSituationReport}
-                      onChange={(event) => setIncidentSituationReport(event.target.value)}
-                      className="min-h-28"
-                    />
-                  </div>
-                </div>
-                <div className="relative h-[560px] overflow-hidden rounded-md border bg-muted/10">
-                  <div ref={createIncidentMapContainerRef} className="absolute inset-0" />
-                  {(incidentLocation === 'draw-point' ||
-                    incidentLocation === 'draw-polygon') && (
-                    <div className="pointer-events-none absolute top-2 left-2 rounded-md border bg-background/90 px-2 py-1 text-xs text-muted-foreground shadow-sm">
-                      {incidentLocation === 'draw-point'
-                        ? 'Click on the map to place a point'
-                        : 'Click to start polygon and double-click to finish'}
-                    </div>
-                  )}
-                  {incidentGeometrySummary && (
-                    <div className="pointer-events-none absolute right-2 bottom-2 rounded-md border bg-background/90 px-2 py-1 text-xs text-muted-foreground shadow-sm">
-                      {incidentGeometrySummary}
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-            {activationStep === 1 && !isExerciseActivationWizard && (
-              <CcmerDutyNotificationForm
-                idPrefix="initial-report"
-                value={initialIncidentReport}
-                onChange={setInitialIncidentReport}
-              />
-            )}
-            {activationStep === 1 && isExerciseActivationWizard && renderExerciseObjectivesEditor()}
-            {activationStep === 2 && isExerciseActivationWizard && (
-              <CcmerDutyNotificationForm
-                idPrefix="initial-exercise-report"
-                value={initialIncidentReport}
-                onChange={setInitialIncidentReport}
-              />
-            )}
-            {activationStep === 2 && !isExerciseActivationWizard && (
-              <BuildTeamRosterStep
-                workspaceLabel={activationWorkspaceLabel}
-                draft={activationRosterDraft}
-                onDraftChange={setActivationRosterDraft}
-                glassItemBorderClasses={glassItemBorderClasses}
-              />
-            )}
-            {activationStep === 3 && isExerciseActivationWizard && (
-              <BuildTeamRosterStep
-                workspaceLabel={activationWorkspaceLabel}
-                draft={activationRosterDraft}
-                onDraftChange={setActivationRosterDraft}
-                glassItemBorderClasses={glassItemBorderClasses}
-              />
-            )}
-            {((activationStep === 3 && !isExerciseActivationWizard) ||
-              (activationStep === 4 && isExerciseActivationWizard)) && (
-              <div className="grid gap-3">
-                <div className="space-y-2">
-                  <div className="flex justify-start">
-                    <Button
-                      type="button"
-                      size="sm"
-                      onClick={() => {
-                        const nextId =
-                          meetingScheduleItems.length > 0
-                            ? Math.max(...meetingScheduleItems.map((meeting) => meeting.id)) + 1
-                            : 1
-
-                        setMeetingScheduleItems((previous) => [
-                          {
-                            id: nextId,
-                            start: '',
-                            end: '',
-                            meeting: 'New Meeting',
-                            attendees: '',
-                            agendaItems: ['New agenda item'],
-                            createTeamsMeeting: false,
-                          },
-                          ...previous,
-                        ])
-                        setExpandedMeetingItemId(nextId)
-                      }}
-                    >
-                      <Plus className="mr-1 h-4 w-4" /> Create Meeting
-                    </Button>
-                  </div>
-                  <div className="hidden grid-cols-[2.25rem_repeat(4,minmax(0,1fr))_minmax(0,1fr)] items-center gap-3 px-3 text-xs text-black dark:text-black md:grid">
-                    <p className="invisible select-none" aria-hidden="true">
-                      Expand
-                    </p>
-                    <p className="pl-1">Start</p>
-                    <p className="pl-1">End</p>
-                    <p>Meeting</p>
-                    <p>Attendees</p>
-                    <div className="-ml-1 flex items-center gap-1">
-                      <p>Create Microsoft Teams Meeting</p>
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon"
-                              className="h-5 w-5"
-                              aria-label="Microsoft Teams meeting info"
-                            >
-                              <Info className="h-3.5 w-3.5" />
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent side="top" className="max-w-sm">
-                            If enabled, a Microsoft Teams calendar event will be created and all
-                            attendees will be emailed an invitation.
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
-                    </div>
-                  </div>
-                  {meetingScheduleItems.length === 0 && (
-                    <div className="rounded-md border border-dashed bg-muted/20 p-4 text-sm text-muted-foreground">
-                      No scheduled meetings.
-                    </div>
-                  )}
-                  {meetingScheduleItems.map((item) => {
-                    const isMeetingOpen = expandedMeetingItemId === item.id
-                    return (
-                      <Item key={item.id} variant="outline" className="flex-col items-stretch">
-                        <Collapsible
-                          open={isMeetingOpen}
-                          onOpenChange={(open) =>
-                            setExpandedMeetingItemId(open ? item.id : null)
-                          }
-                        >
-                          <div className="grid gap-3 p-3 md:grid-cols-[2.25rem_repeat(4,minmax(0,1fr))_minmax(0,1fr)]">
-                            <div className="flex items-center">
-                              <CollapsibleTrigger asChild>
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="icon"
-                                  aria-label={`Toggle agenda for meeting row ${item.id}`}
-                                >
-                                  <ChevronDown
-                                    className={cn(
-                                      'h-4 w-4 transition-transform',
-                                      isMeetingOpen && 'rotate-180'
-                                    )}
-                                  />
-                                </Button>
-                              </CollapsibleTrigger>
-                            </div>
-                            <div>
-                              <Input
-                                type="datetime-local"
-                                value={item.start}
-                                onChange={(event) => {
-                                  const value = event.target.value
-                                  setMeetingScheduleItems((previous) =>
-                                    previous.map((meetingItem) =>
-                                      meetingItem.id === item.id
-                                        ? { ...meetingItem, start: value }
-                                        : meetingItem
-                                    )
-                                  )
-                                }}
-                              />
-                            </div>
-                            <div>
-                              <Input
-                                type="datetime-local"
-                                value={item.end}
-                                onChange={(event) => {
-                                  const value = event.target.value
-                                  setMeetingScheduleItems((previous) =>
-                                    previous.map((meetingItem) =>
-                                      meetingItem.id === item.id
-                                        ? { ...meetingItem, end: value }
-                                        : meetingItem
-                                    )
-                                  )
-                                }}
-                              />
-                            </div>
-                            <div>
-                              <Input
-                                value={item.meeting}
-                                onChange={(event) => {
-                                  const value = event.target.value
-                                  setMeetingScheduleItems((previous) =>
-                                    previous.map((meetingItem) =>
-                                      meetingItem.id === item.id
-                                        ? { ...meetingItem, meeting: value }
-                                        : meetingItem
-                                    )
-                                  )
-                                }}
-                              />
-                            </div>
-                            <div>
-                              <Input
-                                value={item.attendees}
-                                onChange={(event) => {
-                                  const value = event.target.value
-                                  setMeetingScheduleItems((previous) =>
-                                    previous.map((meetingItem) =>
-                                      meetingItem.id === item.id
-                                        ? { ...meetingItem, attendees: value }
-                                        : meetingItem
-                                    )
-                                  )
-                                }}
-                              />
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <Switch
-                                id={`teams-meeting-${item.id}`}
-                                aria-label={`Create Microsoft Teams Meeting for row ${item.id}`}
-                                checked={item.createTeamsMeeting}
-                                onCheckedChange={(checked) => {
-                                  setMeetingScheduleItems((previous) =>
-                                    previous.map((meetingItem) =>
-                                      meetingItem.id === item.id
-                                        ? { ...meetingItem, createTeamsMeeting: checked }
-                                        : meetingItem
-                                    )
-                                  )
-                                }}
-                              />
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon"
-                                className="ml-auto"
-                                aria-label={`Delete meeting row ${item.id}`}
-                                onClick={() => {
-                                  setMeetingScheduleItems((previous) =>
-                                    previous.filter((meetingItem) => meetingItem.id !== item.id)
-                                  )
-                                  setExpandedMeetingItemId((previous) =>
-                                    previous === item.id ? null : previous
-                                  )
-                                }}
-                              >
-                                <X className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          </div>
-                          <CollapsibleContent>
-                            <div className="border-t px-3 py-3">
-                              <div className="mb-2 flex items-center justify-between">
-                                <Label className="text-xs text-muted-foreground">Agenda</Label>
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => {
-                                    setMeetingScheduleItems((previous) =>
-                                      previous.map((meetingItem) =>
-                                        meetingItem.id === item.id
-                                          ? {
-                                              ...meetingItem,
-                                              agendaItems: [
-                                                ...meetingItem.agendaItems,
-                                                'New agenda item',
-                                              ],
-                                            }
-                                          : meetingItem
-                                      )
-                                    )
-                                  }}
-                                >
-                                  <Plus className="mr-1 h-4 w-4" />
-                                  Create Agenda Item
-                                </Button>
-                              </div>
-                              <div className="space-y-2">
-                                {item.agendaItems.length === 0 && (
-                                  <div className="rounded-md border border-dashed bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
-                                    No agenda items yet.
-                                  </div>
-                                )}
-                                {item.agendaItems.map((agendaItem, agendaIndex) => (
-                                  <Item
-                                    key={`${item.id}-agenda-${agendaIndex}`}
-                                    variant="muted"
-                                    size="sm"
-                                    className="flex-nowrap"
-                                  >
-                                    <Input
-                                      className="min-w-0 flex-1"
-                                      value={agendaItem}
-                                      onChange={(event) => {
-                                        const value = event.target.value
-                                        setMeetingScheduleItems((previous) =>
-                                          previous.map((meetingItem) => {
-                                            if (meetingItem.id !== item.id) {
-                                              return meetingItem
-                                            }
-
-                                            return {
-                                              ...meetingItem,
-                                              agendaItems: meetingItem.agendaItems.map(
-                                                (entry, entryIndex) =>
-                                                  entryIndex === agendaIndex ? value : entry
-                                              ),
-                                            }
-                                          })
-                                        )
-                                      }}
-                                    />
-                                    <Button
-                                      type="button"
-                                      variant="ghost"
-                                      size="icon"
-                                      className="ml-auto"
-                                      aria-label={`Delete agenda item ${agendaIndex + 1} for meeting row ${item.id}`}
-                                      onClick={() => {
-                                        setMeetingScheduleItems((previous) =>
-                                          previous.map((meetingItem) => {
-                                            if (meetingItem.id !== item.id) {
-                                              return meetingItem
-                                            }
-
-                                            return {
-                                              ...meetingItem,
-                                              agendaItems: meetingItem.agendaItems.filter(
-                                                (_, entryIndex) => entryIndex !== agendaIndex
-                                              ),
-                                            }
-                                          })
-                                        )
-                                      }}
-                                    >
-                                      <X className="h-4 w-4" />
-                                    </Button>
-                                  </Item>
-                                ))}
-                              </div>
-                            </div>
-                          </CollapsibleContent>
-                        </Collapsible>
-                      </Item>
-                    )
-                  })}
-                </div>
-              </div>
-            )}
-            {isExerciseActivationWizard && activationStep === 5 && renderExerciseMselInjectsEditor()}
-          </div>
-          <DialogFooter className="flex items-center justify-between gap-2 sm:justify-between">
-            <div>
-              {activationStep > 0 && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setActivationStep((step) => Math.max(0, step - 1))}
-                >
-                  <ChevronLeft className="mr-1 h-4 w-4" />
-                  Back
-                </Button>
-              )}
-            </div>
-            {activationStep < activationSteps.length - 1 ? (
-              <Button
-                type="button"
-                onClick={() =>
-                  setActivationStep((step) => Math.min(activationSteps.length - 1, step + 1))
-                }
-              >
-                Next
-                <ChevronUp className="ml-1 h-4 w-4 rotate-90" />
-              </Button>
-            ) : (
-              <Button
-                type="button"
-                disabled={isCreatingWorkspace}
-                onClick={
-                  isExerciseActivationWizard
-                    ? () => {
-                        void handleCreateExerciseSubmit()
-                      }
-                    : () => {
-                        void handleCreateIncidentSubmit()
-                      }
-                }
-              >
-                {isCreatingWorkspace
-                  ? 'Creating…'
-                  : isExerciseActivationWizard
-                    ? 'Create Exercise'
-                    : 'Create Incident'}
-              </Button>
-            )}
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-      <Dialog
         open={isCreateEventOpen}
         onOpenChange={(open) => {
           setIsCreateEventOpen(open)
@@ -41910,6 +41904,7 @@ function App() {
         onSend={handleSendHubNotification}
       />
     </main>
+    </>
   )
 }
 
