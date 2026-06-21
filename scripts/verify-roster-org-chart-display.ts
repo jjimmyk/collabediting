@@ -9,6 +9,12 @@ import {
   resolveVisibleRosterPositions,
 } from '../src/features/roster/roster-display-filters'
 import {
+  ORG_CHART_ASSET_CARD_MAX_WIDTH,
+  ORG_CHART_CANVAS_MIN_WIDTH,
+  orgChartSectionColumnClassName,
+  LOGISTICS_SECTION_LABEL,
+} from '../src/features/roster/org-chart-layout-tokens'
+import {
   buildWorkspacePositionCatalog,
   emptyWorkspacePositionCatalog,
 } from '../src/features/roster/workspace-positions'
@@ -364,6 +370,23 @@ assert(placedAssetNode?.kind === 'asset', 'org chart asset should attach under c
 assert(
   placedAssetNode.color !== 'neutral',
   'org chart assets should inherit parent section color at render time, not hardcode neutral'
+)
+
+assert(
+  ORG_CHART_ASSET_CARD_MAX_WIDTH.includes('36rem'),
+  'org chart asset cards should use 4x width (36rem max)'
+)
+assert(
+  ORG_CHART_CANVAS_MIN_WIDTH.includes('84rem'),
+  'org chart canvas should enforce horizontal scroll min width'
+)
+assert(
+  orgChartSectionColumnClassName(LOGISTICS_SECTION_LABEL).includes('28rem'),
+  'Logistics section column should be wider than standard sections'
+)
+assert(
+  orgChartSectionColumnClassName('Planning Section').includes('14rem'),
+  'standard section columns should have readable min width'
 )
 
 console.log('verify-roster-org-chart-display: all checks passed')

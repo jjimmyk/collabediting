@@ -357,7 +357,7 @@ export function ResourceListItemCard({
             )}
             onClick={(event) => event.stopPropagation()}
           >
-            <div className={cn('grid gap-2', isOrgChartVariant ? 'grid-cols-1' : 'grid-cols-2')}>
+            <div className="grid grid-cols-2 gap-2">
               <div className="space-y-1">
                 <ResourceFieldLabel>Current Location:</ResourceFieldLabel>
                 <AlmisLockedValue>

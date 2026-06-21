@@ -1,14 +1,11 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import type { ResourceListItemData } from '@/features/resources/types'
 import { RosterAssetResourceListItem } from '@/features/roster/RosterAssetResourceListItem'
 import {
   orgChartColorClasses,
   type OrgChartColor,
 } from '@/features/roster/ics-org-chart-structure'
-import {
-  ORG_CHART_ASSET_CARD_EXPANDED_MAX_WIDTH,
-  ORG_CHART_ASSET_CARD_WIDTH,
-} from '@/features/roster/org-chart-layout-tokens'
+import { ORG_CHART_ASSET_CARD_WIDTH } from '@/features/roster/org-chart-layout-tokens'
 import type { WorkspaceRosterMember } from '@/lib/workspace-types'
 import { cn } from '@/lib/utils'
 
@@ -38,15 +35,19 @@ export function OrgChartCollapsibleAssetCard({
   onUpdateAssetPointOfContact,
 }: OrgChartCollapsibleAssetCardProps) {
   const [open, setOpen] = useState(false)
+  const rootRef = useRef<HTMLDivElement>(null)
+
+  const handleOpenChange = (nextOpen: boolean) => {
+    setOpen(nextOpen)
+    if (nextOpen) {
+      requestAnimationFrame(() => {
+        rootRef.current?.scrollIntoView({ inline: 'nearest', block: 'nearest' })
+      })
+    }
+  }
 
   return (
-    <div
-      className={cn(
-        'w-full min-w-0 transition-[max-width]',
-        ORG_CHART_ASSET_CARD_WIDTH,
-        open && ORG_CHART_ASSET_CARD_EXPANDED_MAX_WIDTH
-      )}
-    >
+    <div ref={rootRef} className={cn('w-full min-w-0', ORG_CHART_ASSET_CARD_WIDTH)}>
       <RosterAssetResourceListItem
         asset={{
           assetKey: asset.assetKey,
@@ -73,7 +74,7 @@ export function OrgChartCollapsibleAssetCard({
         onUpdateAssetPointOfContact={onUpdateAssetPointOfContact}
         onFocusMap={onFocusMap}
         open={open}
-        onOpenChange={setOpen}
+        onOpenChange={handleOpenChange}
       />
     </div>
   )

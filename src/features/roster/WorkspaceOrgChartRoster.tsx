@@ -15,13 +15,15 @@ import { OrgChartCollapsibleAssetCard } from '@/features/roster/OrgChartCollapsi
 import {
   OrgChartCrossbarColumns,
   OrgChartFork,
-  OrgChartParentChildLink,
+  OrgChartInboundStem,
   OrgChartVerticalLine,
   OrgChartVerticalStack,
 } from '@/features/roster/OrgChartConnectors'
 import {
-  ORG_CHART_ASSET_CARD_WIDTH,
+  ORG_CHART_CANVAS_MIN_WIDTH,
   ORG_CHART_POSITION_CARD_MAX_WIDTH,
+  ORG_CHART_POSITION_CARD_WIDTH,
+  orgChartSectionColumnClassName,
 } from '@/features/roster/org-chart-layout-tokens'
 import type { RosterDisplayFilters } from '@/features/roster/roster-display-filters'
 import { singleResourceNodeVisible } from '@/features/roster/roster-display-filters'
@@ -217,7 +219,7 @@ function OrgChartLayoutNode({
     )
     if (visibleChildren.length === 0) return null
     return (
-      <OrgChartFork>
+      <OrgChartFork layout={renderProps.layoutMode === 'wide' ? 'horizontal' : 'vertical'}>
         {visibleChildren.map((child, index) => (
           <OrgChartLayoutNode
             key={orgChartNodeKey(child, index)}
@@ -251,33 +253,31 @@ function OrgChartChildren({
   )
   if (visibleChildren.length === 0) return null
 
-  if (visibleChildren.length === 1) {
-    const only = visibleChildren[0]
-    if (only.kind === 'stack' || only.kind === 'fork') {
-      return (
-        <OrgChartLayoutNode node={only} parentColor={parentColor} renderProps={renderProps} />
-      )
-    }
-    return (
-      <OrgChartParentChildLink>
-        <OrgChartLayoutNode node={only} parentColor={parentColor} renderProps={renderProps} />
-      </OrgChartParentChildLink>
-    )
-  }
-
   return (
-    <OrgChartParentChildLink>
-      <div className="flex w-full flex-col items-center gap-2">
-        {visibleChildren.map((child, index) => (
-          <OrgChartLayoutNode
-            key={orgChartNodeKey(child, index)}
-            node={child}
-            parentColor={parentColor}
-            renderProps={renderProps}
-          />
-        ))}
-      </div>
-    </OrgChartParentChildLink>
+    <div className="flex w-full min-w-0 flex-col items-center gap-2">
+      {visibleChildren.map((child, index) => {
+        if (child.kind === 'stack' || child.kind === 'fork') {
+          return (
+            <OrgChartLayoutNode
+              key={orgChartNodeKey(child, index)}
+              node={child}
+              parentColor={parentColor}
+              renderProps={renderProps}
+            />
+          )
+        }
+
+        return (
+          <OrgChartInboundStem key={orgChartNodeKey(child, index)} heightClassName="h-5">
+            <OrgChartLayoutNode
+              node={child}
+              parentColor={parentColor}
+              renderProps={renderProps}
+            />
+          </OrgChartInboundStem>
+        )
+      })}
+    </div>
   )
 }
 
@@ -331,7 +331,7 @@ function OrgChartChildNode({
     const member = renderProps.rosterById[node.memberId]
     if (!member) return null
     return (
-      <div className={cn('flex w-full justify-center', ORG_CHART_ASSET_CARD_WIDTH)}>
+      <div className={cn('flex w-full justify-center', ORG_CHART_POSITION_CARD_WIDTH)}>
         <SingleResourceOrgChartCard
           member={member}
           color={node.color ?? parentColor}
@@ -743,8 +743,13 @@ export function WorkspaceOrgChartRoster({
         </p>
       </div>
 
-      <div className="min-w-0 w-full max-w-full">
-        <div className="mx-auto flex w-full min-w-0 max-w-full flex-col items-center px-0">
+      <div className="min-w-0 w-full max-w-full overflow-x-auto overflow-y-visible scroll-smooth scroll-px-4">
+        <div
+          className={cn(
+            'inline-flex w-max min-w-full flex-col items-center px-4 pb-2',
+            layoutMode === 'wide' && ORG_CHART_CANVAS_MIN_WIDTH
+          )}
+        >
           {showIcCard && (
             <div
               className={cn(
@@ -773,12 +778,20 @@ export function WorkspaceOrgChartRoster({
             <CommandStaffRow node={orgChartLayout.commandStaffBranch} renderProps={renderProps} />
           )}
 
-          {visibleSectionBranches.length > 0 && (
-            layoutMode === 'wide' ? (
+          {visibleSectionBranches.length > 0 &&
+            (layoutMode === 'wide' ? (
               <OrgChartCrossbarColumns
                 columnClassName={rosterOrgSectionColumnsClassName(layoutMode)}
                 columns={visibleSectionBranches.map((branch) => (
-                  <GroupBranch key={branch.label} node={branch} renderProps={renderProps} />
+                  <div
+                    key={branch.label}
+                    className={cn(
+                      'flex flex-col items-center',
+                      orgChartSectionColumnClassName(branch.label)
+                    )}
+                  >
+                    <GroupBranch node={branch} renderProps={renderProps} />
+                  </div>
                 ))}
                 showInboundStem={showIcCard || showCommandStaff}
               />
@@ -789,17 +802,24 @@ export function WorkspaceOrgChartRoster({
                 )}
                 <div
                   className={cn(
-                    'grid w-full min-w-0 gap-6',
+                    'grid w-max min-w-full gap-x-4 gap-y-6',
                     rosterOrgSectionColumnsClassName(layoutMode)
                   )}
                 >
                   {visibleSectionBranches.map((branch) => (
-                    <GroupBranch key={branch.label} node={branch} renderProps={renderProps} />
+                    <div
+                      key={branch.label}
+                      className={cn(
+                        'flex flex-col items-center',
+                        orgChartSectionColumnClassName(branch.label)
+                      )}
+                    >
+                      <GroupBranch node={branch} renderProps={renderProps} />
+                    </div>
                   ))}
                 </div>
               </>
-            )
-          )}
+            ))}
         </div>
       </div>
     </div>
