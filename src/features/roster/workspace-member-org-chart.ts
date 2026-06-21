@@ -37,7 +37,10 @@ function attachOrgChartNodeToTree(
       }
       continue
     }
-    if (node.kind === 'group' && attachOrgChartNodeToTree(node.children, parentName, child)) {
+    if (
+      (node.kind === 'group' || node.kind === 'stack' || node.kind === 'fork') &&
+      attachOrgChartNodeToTree(node.children, parentName, child)
+    ) {
       return true
     }
   }

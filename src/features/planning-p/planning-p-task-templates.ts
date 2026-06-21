@@ -87,7 +87,7 @@ const CG_STAFF_MEETING_TASKS = phaseTasks('cg-staff-meeting', [
     label: 'Present logistics support status and anticipated shortfalls',
   },
   {
-    position: 'Finance/Admin Section Chief',
+    position: 'Finance Section Chief',
     slug: 'present-finance-update',
     label: 'Present cost summary and administrative constraints',
   },

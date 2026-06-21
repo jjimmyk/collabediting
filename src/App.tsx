@@ -18945,7 +18945,7 @@ function App() {
             break
           case 'finance-section':
             patchIcs203SectionDraft(section, {
-              financeChief: ics203Form.financeChief || 'Finance/Admin Section Chief',
+              financeChief: ics203Form.financeChief || 'Finance Section Chief',
               financeDeputy: ics203Form.financeDeputy || 'Deputy Finance Chief',
               timeUnit: ics203Form.timeUnit || 'Time Unit Leader',
               procurementUnit: ics203Form.procurementUnit || 'Procurement Unit Leader',
@@ -31125,7 +31125,7 @@ function App() {
                                     ['operationsSectionChief', 'Operations Section Chief'],
                                     ['planningSectionChief', 'Planning Section Chief'],
                                     ['logisticsSectionChief', 'Logistics Section Chief'],
-                                    ['financeSectionChief', 'Finance/Admin Section Chief'],
+                                    ['financeSectionChief', 'Finance Section Chief'],
                                     ['publicInformationOfficer', 'Public Information Officer'],
                                     ['safetyOfficer', 'Safety Officer'],
                                     ['liaisonOfficer', 'Liaison Officer'],
@@ -31201,7 +31201,7 @@ function App() {
                                     ics201Form.orgChart.logisticsSectionChief,
                                   ],
                                   [
-                                    'Finance/Admin Section Chief',
+                                    'Finance Section Chief',
                                     ics201Form.orgChart.financeSectionChief,
                                   ],
                                   [

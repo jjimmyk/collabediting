@@ -358,6 +358,12 @@ function cloneOrgChartNode(node: OrgChartNode): OrgChartNode {
   if (node.kind === 'single_resource') {
     return { ...node }
   }
+  if (node.kind === 'stack' || node.kind === 'fork') {
+    return {
+      ...node,
+      children: node.children.map(cloneOrgChartNode),
+    }
+  }
   return {
     ...node,
     children: node.children.map(cloneOrgChartNode),
@@ -383,8 +389,10 @@ function attachCustomPositionToTree(
       }
       continue
     }
-    if (attachCustomPositionToTree(node.children, parentName, child)) {
-      return true
+    if (node.kind === 'stack' || node.kind === 'fork' || node.kind === 'group') {
+      if (attachCustomPositionToTree(node.children, parentName, child)) {
+        return true
+      }
     }
   }
   return false

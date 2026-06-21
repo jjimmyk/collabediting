@@ -1,6 +1,11 @@
-import { WORKSPACE_ROSTER_POSITIONS } from '@/lib/ics-positions'
-
-export type OrgChartColor = 'red' | 'blue' | 'orange' | 'green' | 'neutral' | 'tan'
+export type OrgChartColor =
+  | 'red'
+  | 'blue'
+  | 'orange'
+  | 'green'
+  | 'neutral'
+  | 'tan'
+  | 'yellow'
 
 export type OrgChartNode =
   | {
@@ -8,6 +13,16 @@ export type OrgChartNode =
       position: string
       color?: OrgChartColor
       children?: OrgChartNode[]
+    }
+  | {
+      kind: 'stack'
+      color?: OrgChartColor
+      children: OrgChartNode[]
+    }
+  | {
+      kind: 'fork'
+      color?: OrgChartColor
+      children: OrgChartNode[]
     }
   | {
       kind: 'asset'
@@ -47,8 +62,85 @@ export const ICS_ORG_CHART_COMMAND_STAFF_BRANCH: Extract<OrgChartNode, { kind: '
   color: 'neutral',
   children: [
     { kind: 'position', position: 'Public Information Officer', color: 'neutral' },
-    { kind: 'position', position: 'Safety Officer', color: 'neutral' },
     { kind: 'position', position: 'Liaison Officer', color: 'neutral' },
+    { kind: 'position', position: 'Safety Officer', color: 'neutral' },
+    { kind: 'position', position: 'Legal Officer', color: 'neutral' },
+  ],
+}
+
+const PLANNING_UNIT_STACK: Extract<OrgChartNode, { kind: 'stack' }> = {
+  kind: 'stack',
+  color: 'blue',
+  children: [
+    { kind: 'position', position: 'Resources Unit Leader', color: 'blue' },
+    { kind: 'position', position: 'Situation Unit Leader', color: 'blue' },
+    { kind: 'position', position: 'Documentation Unit Leader', color: 'blue' },
+    { kind: 'position', position: 'Demobilization Unit Leader', color: 'blue' },
+    { kind: 'position', position: 'Technical Specialist', color: 'yellow' },
+  ],
+}
+
+const FINANCE_UNIT_STACK: Extract<OrgChartNode, { kind: 'stack' }> = {
+  kind: 'stack',
+  color: 'green',
+  children: [
+    { kind: 'position', position: 'Compensation Unit Leader', color: 'green' },
+    { kind: 'position', position: 'Cost Unit Leader', color: 'green' },
+    { kind: 'position', position: 'Procurement Unit Leader', color: 'green' },
+    { kind: 'position', position: 'Time Unit Leader', color: 'green' },
+  ],
+}
+
+const INTEL_UNIT_STACK: Extract<OrgChartNode, { kind: 'stack' }> = {
+  kind: 'stack',
+  color: 'tan',
+  children: [
+    { kind: 'position', position: 'Intelligence Group Supervisor', color: 'tan' },
+    {
+      kind: 'position',
+      position: 'Investigative Operations Group Supervisor',
+      color: 'tan',
+    },
+  ],
+}
+
+const LOGISTICS_BRANCH_FORK: Extract<OrgChartNode, { kind: 'fork' }> = {
+  kind: 'fork',
+  color: 'orange',
+  children: [
+    {
+      kind: 'position',
+      position: 'Service Branch Director',
+      color: 'orange',
+      children: [
+        {
+          kind: 'stack',
+          color: 'orange',
+          children: [
+            { kind: 'position', position: 'Communications Unit Leader', color: 'orange' },
+            { kind: 'position', position: 'Food Unit Leader', color: 'orange' },
+            { kind: 'position', position: 'Medical Unit Leader', color: 'orange' },
+          ],
+        },
+      ],
+    },
+    {
+      kind: 'position',
+      position: 'Support Branch Director',
+      color: 'orange',
+      children: [
+        {
+          kind: 'stack',
+          color: 'orange',
+          children: [
+            { kind: 'position', position: 'Facilities Unit Leader', color: 'orange' },
+            { kind: 'position', position: 'Ground Support Unit Leader', color: 'orange' },
+            { kind: 'position', position: 'Supply Unit Leader', color: 'orange' },
+            { kind: 'position', position: 'Vessel Support Unit Leader', color: 'orange' },
+          ],
+        },
+      ],
+    },
   ],
 }
 
@@ -58,7 +150,14 @@ export const ICS_ORG_CHART_SECTION_BRANCHES: Extract<OrgChartNode, { kind: 'grou
     label: 'Operations Section',
     type: 'Section',
     color: 'red',
-    children: [{ kind: 'position', position: 'Operations Section Chief', color: 'red' }],
+    children: [
+      {
+        kind: 'position',
+        position: 'Operations Section Chief',
+        color: 'red',
+        children: [{ kind: 'position', position: 'Staging Area Manager', color: 'red' }],
+      },
+    ],
   },
   {
     kind: 'group',
@@ -66,12 +165,12 @@ export const ICS_ORG_CHART_SECTION_BRANCHES: Extract<OrgChartNode, { kind: 'grou
     type: 'Section',
     color: 'blue',
     children: [
-      { kind: 'position', position: 'Planning Section Chief', color: 'blue' },
-      { kind: 'position', position: 'Resources Unit Leader', color: 'blue' },
-      { kind: 'position', position: 'Situation Unit Leader', color: 'blue' },
-      { kind: 'position', position: 'Documentation Unit Leader', color: 'blue' },
-      { kind: 'position', position: 'Display Unit Leader', color: 'blue' },
-      { kind: 'position', position: 'Demobilization Unit Leader', color: 'blue' },
+      {
+        kind: 'position',
+        position: 'Planning Section Chief',
+        color: 'blue',
+        children: [PLANNING_UNIT_STACK],
+      },
     ],
   },
   {
@@ -79,14 +178,28 @@ export const ICS_ORG_CHART_SECTION_BRANCHES: Extract<OrgChartNode, { kind: 'grou
     label: 'Logistics Section',
     type: 'Section',
     color: 'orange',
-    children: [{ kind: 'position', position: 'Logistics Section Chief', color: 'orange' }],
+    children: [
+      {
+        kind: 'position',
+        position: 'Logistics Section Chief',
+        color: 'orange',
+        children: [LOGISTICS_BRANCH_FORK],
+      },
+    ],
   },
   {
     kind: 'group',
-    label: 'Finance/Admin Section',
+    label: 'Finance Section',
     type: 'Section',
     color: 'green',
-    children: [{ kind: 'position', position: 'Finance/Admin Section Chief', color: 'green' }],
+    children: [
+      {
+        kind: 'position',
+        position: 'Finance Section Chief',
+        color: 'green',
+        children: [FINANCE_UNIT_STACK],
+      },
+    ],
   },
   {
     kind: 'group',
@@ -94,7 +207,12 @@ export const ICS_ORG_CHART_SECTION_BRANCHES: Extract<OrgChartNode, { kind: 'grou
     type: 'Section',
     color: 'tan',
     children: [
-      { kind: 'position', position: 'Intel/Investigations Section Chief', color: 'tan' },
+      {
+        kind: 'position',
+        position: 'Intel/Investigations Section Chief',
+        color: 'tan',
+        children: [INTEL_UNIT_STACK],
+      },
     ],
   },
 ]
@@ -112,7 +230,7 @@ export function collectOrgChartPositions(nodes: OrgChartNode[]): string[] {
       if (node.children) {
         positions.push(...collectOrgChartPositions(node.children))
       }
-    } else if (node.kind === 'group') {
+    } else if (node.kind === 'group' || node.kind === 'stack' || node.kind === 'fork') {
       positions.push(...collectOrgChartPositions(node.children))
     }
   }
@@ -138,6 +256,8 @@ export function orgChartColorClasses(color: OrgChartColor | undefined): string {
       return 'border-slate-400/70 bg-slate-500/5'
     case 'tan':
       return 'border-amber-700/60 bg-amber-100/30'
+    case 'yellow':
+      return 'border-yellow-500/70 bg-yellow-500/5'
     default:
       return 'border-primary/50 bg-primary/5'
   }

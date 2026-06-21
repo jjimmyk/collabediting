@@ -11,14 +11,14 @@ export function rosterGridClassName(layoutMode: RosterPanelLayoutMode): string {
   }
 }
 
-export function rosterOrgBranchClassName(layoutMode: RosterPanelLayoutMode): string {
+export function rosterOrgSectionColumnsClassName(layoutMode: RosterPanelLayoutMode): string {
   switch (layoutMode) {
     case 'compact':
-      return 'flex w-full min-w-0 flex-col items-stretch gap-4'
+      return 'grid-cols-1'
     case 'medium':
-      return 'grid w-full min-w-0 grid-cols-1 gap-4 sm:grid-cols-2'
+      return 'grid-cols-2'
     default:
-      return 'grid w-full min-w-0 grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5'
+      return 'grid-cols-5'
   }
 }
 
@@ -27,8 +27,20 @@ export function rosterOrgCommandStaffClassName(layoutMode: RosterPanelLayoutMode
     case 'compact':
       return 'flex w-full min-w-0 flex-col items-stretch gap-2'
     case 'medium':
-      return 'grid w-full min-w-0 grid-cols-1 gap-2 sm:grid-cols-3'
+      return 'grid w-full min-w-0 grid-cols-2 gap-x-6 gap-y-2 justify-items-center'
     default:
-      return 'flex w-full min-w-0 flex-wrap items-start justify-center gap-2'
+      return 'grid w-full min-w-0 grid-cols-2 gap-x-10 gap-y-2 justify-items-center'
+  }
+}
+
+/** @deprecated Use rosterOrgSectionColumnsClassName with OrgChartCrossbarColumns */
+export function rosterOrgBranchClassName(layoutMode: RosterPanelLayoutMode): string {
+  switch (layoutMode) {
+    case 'compact':
+      return 'flex w-full min-w-0 flex-col items-stretch gap-4'
+    case 'medium':
+      return 'grid w-full min-w-0 grid-cols-1 gap-4 sm:grid-cols-2'
+    default:
+      return 'grid w-full min-w-0 grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5'
   }
 }

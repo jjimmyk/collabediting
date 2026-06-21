@@ -174,5 +174,31 @@ const intelBranch = ICS_ORG_CHART_SECTION_BRANCHES.find(
   (branch) => branch.label === 'Intel/Investigations Section'
 )
 assert(intelBranch?.color === 'tan', 'Intel/Investigations section branch should use tan color')
+assert(
+  !ICS_ORG_CHART_POSITIONS.includes('Display Unit Leader'),
+  'Display Unit Leader should be removed from org chart positions'
+)
+assert(
+  ICS_ORG_CHART_POSITIONS.includes('Finance Section Chief'),
+  'Finance Section Chief should be in org chart positions'
+)
+assert(
+  ICS_ORG_CHART_POSITIONS.includes('Legal Officer'),
+  'Legal Officer should be in org chart positions'
+)
+assert(
+  ICS_ORG_CHART_POSITIONS.includes('Staging Area Manager'),
+  'Staging Area Manager should be in org chart positions'
+)
+
+const planningBranch = ICS_ORG_CHART_SECTION_BRANCHES.find(
+  (branch) => branch.label === 'Planning Section'
+)
+const planningChief = planningBranch?.children.find((child) => child.kind === 'position')
+assert(
+  planningChief?.kind === 'position' &&
+    planningChief.children?.some((child) => child.kind === 'stack'),
+  'Planning Section Chief should nest unit leaders in a stack'
+)
 
 console.log('verify-roster-org-chart-display: all checks passed')

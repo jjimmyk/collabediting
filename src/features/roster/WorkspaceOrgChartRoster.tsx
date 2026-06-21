@@ -21,8 +21,15 @@ import {
 } from '@/features/roster/ics-org-chart-structure'
 
 import {
-  rosterOrgBranchClassName,
+  OrgChartCrossbarColumns,
+  OrgChartFork,
+  OrgChartLeftRailStack,
+  OrgChartVerticalLine,
+} from '@/features/roster/OrgChartConnectors'
+
+import {
   rosterOrgCommandStaffClassName,
+  rosterOrgSectionColumnsClassName,
   type RosterPanelLayoutMode,
 } from '@/features/roster/roster-layout'
 
@@ -125,6 +132,9 @@ function filterVisibleOrgChartChildren(
 ): OrgChartNode[] {
   return children.filter((child) => {
     if (child.kind === 'asset' || child.kind === 'single_resource') return true
+    if (child.kind === 'stack' || child.kind === 'fork') {
+      return filterVisibleOrgChartChildren(child.children, visiblePositions).length > 0
+    }
     if (child.kind === 'position') {
       return (
         visiblePositions.has(child.position) ||
@@ -133,6 +143,63 @@ function filterVisibleOrgChartChildren(
     }
     return false
   })
+}
+
+function orgChartNodeKey(node: OrgChartNode, index: number): string {
+  if (node.kind === 'asset') return node.assetKey
+  if (node.kind === 'single_resource') return node.memberId
+  if (node.kind === 'position') return node.position
+  if (node.kind === 'stack') return `stack-${index}`
+  if (node.kind === 'fork') return `fork-${index}`
+  return node.label
+}
+
+function OrgChartLayoutNode({
+  node,
+  parentColor,
+  renderProps,
+}: {
+  node: OrgChartNode
+  parentColor?: OrgChartColor
+  renderProps: OrgChartRenderProps
+}) {
+  if (node.kind === 'stack') {
+    const visibleChildren = filterVisibleOrgChartChildren(node.children, renderProps.visiblePositions)
+    if (visibleChildren.length === 0) return null
+    return (
+      <OrgChartLeftRailStack>
+        {visibleChildren.map((child, index) => (
+          <OrgChartLayoutNode
+            key={orgChartNodeKey(child, index)}
+            node={child}
+            parentColor={node.color ?? parentColor}
+            renderProps={renderProps}
+          />
+        ))}
+      </OrgChartLeftRailStack>
+    )
+  }
+
+  if (node.kind === 'fork') {
+    const visibleChildren = filterVisibleOrgChartChildren(node.children, renderProps.visiblePositions)
+    if (visibleChildren.length === 0) return null
+    return (
+      <OrgChartFork>
+        {visibleChildren.map((child, index) => (
+          <OrgChartLayoutNode
+            key={orgChartNodeKey(child, index)}
+            node={child}
+            parentColor={node.color ?? parentColor}
+            renderProps={renderProps}
+          />
+        ))}
+      </OrgChartFork>
+    )
+  }
+
+  return (
+    <OrgChartChildNode node={node} parentColor={parentColor} renderProps={renderProps} />
+  )
 }
 
 function OrgChartChildren({
@@ -147,28 +214,32 @@ function OrgChartChildren({
   const visibleChildren = filterVisibleOrgChartChildren(children, renderProps.visiblePositions)
   if (visibleChildren.length === 0) return null
 
+  if (visibleChildren.length === 1) {
+    const only = visibleChildren[0]
+    if (only.kind === 'stack' || only.kind === 'fork') {
+      return (
+        <OrgChartLayoutNode node={only} parentColor={parentColor} renderProps={renderProps} />
+      )
+    }
+    return (
+      <>
+        <OrgChartVerticalLine />
+        <OrgChartLayoutNode node={only} parentColor={parentColor} renderProps={renderProps} />
+      </>
+    )
+  }
+
   return (
     <>
-      <div className="h-4 w-px bg-border" />
-      <div className="flex w-full flex-col items-center gap-2">
-        {visibleChildren.map((child, index) => (
-          <div
-            key={
-              child.kind === 'asset'
-                ? child.assetKey
-                : child.kind === 'single_resource'
-                  ? child.memberId
-                  : child.kind === 'position'
-                    ? child.position
-                    : child.label
-            }
-            className="flex w-full flex-col items-center"
-          >
-            {index > 0 && <div className="h-3 w-px bg-border" />}
-            <OrgChartChildNode node={child} parentColor={parentColor} renderProps={renderProps} />
-          </div>
-        ))}
-      </div>
+      {visibleChildren.map((child, index) => (
+        <div
+          key={orgChartNodeKey(child, index)}
+          className="flex w-full min-w-0 flex-col items-center"
+        >
+          {index === 0 ? <OrgChartVerticalLine /> : null}
+          <OrgChartLayoutNode node={child} parentColor={parentColor} renderProps={renderProps} />
+        </div>
+      ))}
     </>
   )
 }
@@ -431,28 +502,19 @@ function GroupBranch({
   node: Extract<OrgChartNode, { kind: 'group' }>
   renderProps: OrgChartRenderProps
 }) {
-  const visibleChildren = node.children.filter(
-    (child) => child.kind === 'position' && positionBranchIsVisible(child, renderProps.visiblePositions)
+  const chief = node.children.find(
+    (child): child is Extract<OrgChartNode, { kind: 'position' }> =>
+      child.kind === 'position' && positionBranchIsVisible(child, renderProps.visiblePositions)
   )
-  if (visibleChildren.length === 0) return null
+  if (!chief) return null
 
   return (
-    <div className="flex w-full min-w-0 flex-col items-center gap-2">
-      {visibleChildren.map((child, index) => {
-        if (child.kind !== 'position') return null
-        return (
-          <div key={child.position} className="flex w-full flex-col items-center">
-            {index > 0 && <div className="h-3 w-px bg-border" />}
-            <PositionNode
-              position={child.position}
-              color={child.color ?? node.color}
-              children={child.children ?? []}
-              {...renderProps}
-            />
-          </div>
-        )
-      })}
-    </div>
+    <PositionNode
+      position={chief.position}
+      color={chief.color ?? node.color}
+      children={chief.children ?? []}
+      {...renderProps}
+    />
   )
 }
 
@@ -547,7 +609,6 @@ export function WorkspaceOrgChartRoster({
   const showRoot =
     visiblePositions.has(orgChartLayout.rootPosition) ||
     filterVisibleOrgChartChildren(orgChartLayout.rootChildren, visiblePositions).length > 0
-  const showBelowRoot = showCommandStaff || visibleSectionBranches.length > 0
 
   const renderProps: OrgChartRenderProps = {
     layoutMode,
@@ -631,23 +692,35 @@ export function WorkspaceOrgChartRoster({
             </div>
           )}
 
-          {showRoot && showBelowRoot && <div className="h-5 w-px bg-border" />}
+          {showRoot && showCommandStaff && <OrgChartVerticalLine heightClassName="h-5" />}
 
-          {showCommandStaff && <CommandStaffRow node={orgChartLayout.commandStaffBranch} renderProps={renderProps} />}
-
-          {showCommandStaff && visibleSectionBranches.length > 0 && (
-            <div className="h-5 w-px bg-border" />
+          {showCommandStaff && (
+            <CommandStaffRow node={orgChartLayout.commandStaffBranch} renderProps={renderProps} />
           )}
 
           {visibleSectionBranches.length > 0 && (
-            <div className={rosterOrgBranchClassName(layoutMode)}>
-              {visibleSectionBranches.map((branch) => (
-                <div key={branch.label} className="flex min-w-0 w-full flex-col items-center">
-                  {(showRoot || showCommandStaff) && <div className="h-4 w-px bg-border" />}
-                  <GroupBranch node={branch} renderProps={renderProps} />
+            <>
+              {(showRoot || showCommandStaff) && <OrgChartVerticalLine heightClassName="h-5" />}
+              {layoutMode === 'wide' ? (
+                <OrgChartCrossbarColumns
+                  columnClassName={rosterOrgSectionColumnsClassName(layoutMode)}
+                  columns={visibleSectionBranches.map((branch) => (
+                    <GroupBranch key={branch.label} node={branch} renderProps={renderProps} />
+                  ))}
+                />
+              ) : (
+                <div
+                  className={cn(
+                    'grid w-full min-w-0 gap-6',
+                    rosterOrgSectionColumnsClassName(layoutMode)
+                  )}
+                >
+                  {visibleSectionBranches.map((branch) => (
+                    <GroupBranch key={branch.label} node={branch} renderProps={renderProps} />
+                  ))}
                 </div>
-              ))}
-            </div>
+              )}
+            </>
           )}
         </div>
       </div>
