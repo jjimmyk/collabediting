@@ -575,6 +575,17 @@ import {
   positionRemovalBlockedReason as getPositionRemovalBlockedReason,
 } from '@/features/roster/position-roster-removal'
 import { AddWorkspacePositionDialog } from '@/features/roster/AddWorkspacePositionDialog'
+import { BuildTeamRosterStep } from '@/features/roster/BuildTeamRosterStep'
+import { createDefaultBuildTeamRosterDraft } from '@/features/roster/roster-draft-state'
+import type { BuildTeamRosterDraft } from '@/features/roster/roster-template-types'
+import {
+  buildLocalPositionSettingsFromPlan,
+  buildLocalRosterMembersFromPlan,
+  buildLocalStandardLifecycleFromPlan,
+  isLocalRosterPlanPending,
+  type LocalRosterPlanRecord,
+} from '@/features/roster/local-roster-plan'
+import { applyWorkspaceRosterPlan, fetchWorkspaceRosterPlan } from '@/lib/workspace-roster-plan-service'
 import { AddAssetToOrgChartDialog } from '@/features/roster/AddAssetToOrgChartDialog'
 import {
   AddWorkspaceMemberDialog,
@@ -6531,6 +6542,17 @@ function App() {
   const [incidentRelatedEventIds, setIncidentRelatedEventIds] = useState<number[]>([])
   const [incidentStartTime, setIncidentStartTime] = useState('')
   const [incidentTeamTemplate, setIncidentTeamTemplate] = useState('')
+  const [activationRosterDraft, setActivationRosterDraft] = useState<BuildTeamRosterDraft>(() =>
+    createDefaultBuildTeamRosterDraft()
+  )
+  const [localRosterPlansByKey, setLocalRosterPlansByKey] = useState<
+    Record<string, LocalRosterPlanRecord>
+  >({})
+  const [workspaceRosterPlanSummary, setWorkspaceRosterPlanSummary] = useState<{
+    effectTiming: 'immediate' | 'op_period_1'
+    appliedAt: string | null
+    templateName: string
+  } | null>(null)
   const [incidentGeometrySummary, setIncidentGeometrySummary] = useState('')
   const [isCreateIncidentMapReady, setIsCreateIncidentMapReady] = useState(false)
   const [expandedMeetingItemId, setExpandedMeetingItemId] = useState<number | null>(null)
@@ -6668,6 +6690,7 @@ function App() {
     setIncidentRelatedEventIds([])
     setIncidentStartTime('')
     setIncidentTeamTemplate('')
+    setActivationRosterDraft(createDefaultBuildTeamRosterDraft())
     setIncidentGeometrySummary('')
     createIncidentSketchViewModelRef.current?.cancel()
     createIncidentDrawLayerRef.current?.removeAll()
@@ -6830,8 +6853,19 @@ function App() {
         setExerciseList((previous) => [persistedExercise, ...previous])
         await refreshAccess()
         setActiveWorkspaceSupabaseId(result.workspace.workspaceId)
+        const rosterPlanResult = await applyWorkspaceRosterPlan({
+          accessToken,
+          workspaceId: result.workspace.workspaceId,
+          draftPlan: activationRosterDraft,
+        })
+        if (!rosterPlanResult.ok) {
+          toast.error(rosterPlanResult.message)
+          return
+        }
         const roster = await fetchWorkspaceRoster(result.workspace.workspaceId)
         setSupabaseWorkspaceRoster(roster)
+        const planSummary = await fetchWorkspaceRosterPlan(result.workspace.workspaceId)
+        setWorkspaceRosterPlanSummary(planSummary)
         setIsCreateExerciseOpen(false)
         resetCreateIncidentForm()
         toast.success(`${displayName} created. Exercise activation requests have been sent.`)
@@ -6843,6 +6877,21 @@ function App() {
     }
 
     setExerciseList((previous) => [newExercise, ...previous])
+    const exerciseRosterKey = `exercise-${newExercise.id}`
+    setLocalRosterPlansByKey((previous) => ({
+      ...previous,
+      [exerciseRosterKey]: {
+        draft: activationRosterDraft,
+        applied: activationRosterDraft.effectTiming === 'immediate',
+      },
+    }))
+    setLocalPositionSettingsByKey((previous) => ({
+      ...previous,
+      [exerciseRosterKey]: buildLocalPositionSettingsFromPlan({
+        draft: activationRosterDraft,
+        applied: activationRosterDraft.effectTiming === 'immediate',
+      }),
+    }))
     toast.success(`${displayName} created. Exercise activation requests have been sent.`)
     setIsCreateExerciseOpen(false)
     resetCreateIncidentForm()
@@ -6984,8 +7033,19 @@ function App() {
         setIncidentList((previous) => [persistedIncident, ...previous])
         await refreshAccess()
         setActiveWorkspaceSupabaseId(result.workspace.workspaceId)
+        const rosterPlanResult = await applyWorkspaceRosterPlan({
+          accessToken,
+          workspaceId: result.workspace.workspaceId,
+          draftPlan: activationRosterDraft,
+        })
+        if (!rosterPlanResult.ok) {
+          toast.error(rosterPlanResult.message)
+          return
+        }
         const roster = await fetchWorkspaceRoster(result.workspace.workspaceId)
         setSupabaseWorkspaceRoster(roster)
+        const planSummary = await fetchWorkspaceRosterPlan(result.workspace.workspaceId)
+        setWorkspaceRosterPlanSummary(planSummary)
         setIsCreateIncidentOpen(false)
         resetCreateIncidentForm()
         toast.success(
@@ -6999,6 +7059,21 @@ function App() {
     }
 
     setIncidentList((previous) => [newIncident, ...previous])
+    const incidentRosterKey = `incident-${newIncident.id}`
+    setLocalRosterPlansByKey((previous) => ({
+      ...previous,
+      [incidentRosterKey]: {
+        draft: activationRosterDraft,
+        applied: activationRosterDraft.effectTiming === 'immediate',
+      },
+    }))
+    setLocalPositionSettingsByKey((previous) => ({
+      ...previous,
+      [incidentRosterKey]: buildLocalPositionSettingsFromPlan({
+        draft: activationRosterDraft,
+        applied: activationRosterDraft.effectTiming === 'immediate',
+      }),
+    }))
     toast.success(
       `${displayName} created. Activation requests have been sent.`
     )
@@ -10567,6 +10642,12 @@ function App() {
     ? setCreateExerciseStep
     : setCreateIncidentStep
   const activationEntityLabel = isExerciseActivationWizard ? 'Exercise' : 'Incident'
+  const activationWorkspaceLabel =
+    incidentName.trim().length > 0
+      ? incidentName.trim()
+      : isExerciseActivationWizard
+        ? 'New Exercise'
+        : 'New Incident'
   const actionAssigneeOptions: AssigneeOption[] = [
     {
       name: 'K. Simmons',
@@ -11809,17 +11890,23 @@ function App() {
       : activeExerciseWorkspace !== null
         ? `exercise-${activeExerciseWorkspace.id}`
         : null
-  const activeWorkspaceRoster = isSupabaseEnabled
-    ? supabaseWorkspaceRoster
-    : activeWorkspaceRosterKey !== null
-      ? (localWorkspaceRostersByKey[activeWorkspaceRosterKey] ?? [])
-      : []
+  const activeLocalRosterPlan =
+    activeWorkspaceRosterKey !== null
+      ? localRosterPlansByKey[activeWorkspaceRosterKey]
+      : undefined
   const activeWorkspaceRosterLabel =
     activeIncidentWorkspace?.name ?? activeExerciseWorkspace?.name ?? 'Workspace'
   useEffect(() => {
     setRosterZoomLevel(DEFAULT_ROSTER_ZOOM)
     setRosterRecenterToken((current) => current + 1)
   }, [activeWorkspaceSupabaseId, activeWorkspaceRosterKey])
+  useEffect(() => {
+    if (!activeWorkspaceSupabaseId) {
+      setWorkspaceRosterPlanSummary(null)
+      return
+    }
+    void fetchWorkspaceRosterPlan(activeWorkspaceSupabaseId).then(setWorkspaceRosterPlanSummary)
+  }, [activeWorkspaceSupabaseId])
   const {
     standardLifecycle,
     reload: reloadPositionLifecycle,
@@ -11829,6 +11916,9 @@ function App() {
     enabled: (isInIncidentWorkspace || isInExerciseWorkspace) && activeWorkspaceSupabaseId !== null,
     workspaceId: activeWorkspaceSupabaseId,
   })
+  const effectiveStandardLifecycle = isSupabaseEnabled
+    ? standardLifecycle
+    : buildLocalStandardLifecycleFromPlan(activeLocalRosterPlan)
   const {
     catalog: workspacePositionCatalog,
     isLoading: isCustomPositionsLoading,
@@ -11841,8 +11931,16 @@ function App() {
     workspaceId: activeWorkspaceSupabaseId,
     localWorkspaceKey: activeWorkspaceRosterKey,
     userId: user?.id ?? null,
-    standardLifecycle,
+    standardLifecycle: effectiveStandardLifecycle,
   })
+  const activeWorkspaceRoster = isSupabaseEnabled
+    ? supabaseWorkspaceRoster
+    : activeWorkspaceRosterKey !== null
+      ? buildLocalRosterMembersFromPlan(
+          localWorkspaceRostersByKey[activeWorkspaceRosterKey] ?? [],
+          activeLocalRosterPlan
+        )
+      : []
   const workspaceOrgChartLayout = useMemo(
     () =>
       buildDynamicOrgChart(
@@ -13344,6 +13442,22 @@ function App() {
         void fetchWorkspacePositionSettings(activeWorkspaceSupabaseId).then(
           setActiveWorkspacePositionSettings
         )
+        void fetchWorkspaceRosterPlan(activeWorkspaceSupabaseId).then(setWorkspaceRosterPlanSummary)
+      }
+      if (activeWorkspaceRosterKey) {
+        setLocalRosterPlansByKey((previous) => {
+          const current = previous[activeWorkspaceRosterKey]
+          if (!current || current.applied || current.draft.effectTiming !== 'op_period_1') {
+            return previous
+          }
+          return {
+            ...previous,
+            [activeWorkspaceRosterKey]: {
+              ...current,
+              applied: true,
+            },
+          }
+        })
       }
     },
   })
@@ -13842,7 +13956,10 @@ function App() {
   const activePositionSettings = isSupabaseEnabled
     ? activeWorkspacePositionSettings
     : activeWorkspaceRosterKey !== null
-      ? (localPositionSettingsByKey[activeWorkspaceRosterKey] ?? {})
+      ? {
+          ...(localPositionSettingsByKey[activeWorkspaceRosterKey] ?? {}),
+          ...buildLocalPositionSettingsFromPlan(activeLocalRosterPlan),
+        }
       : {}
   const positionRosterEntries = useMemo(() => {
     if (isViewingHistoricalRoster && historicalRosterSnapshot) {
@@ -25023,6 +25140,13 @@ function App() {
                 ) : null}
                 {activeTab === 'roster' && (isInIncidentWorkspace || isInExerciseWorkspace) && (
                   <div className="flex flex-wrap items-center justify-end gap-2">
+                    {(workspaceRosterPlanSummary?.effectTiming === 'op_period_1' &&
+                      !workspaceRosterPlanSummary.appliedAt) ||
+                    isLocalRosterPlanPending(activeLocalRosterPlan) ? (
+                      <Badge variant="outline" className="text-[10px] font-normal">
+                        Full roster activates at Operational Period 1
+                      </Badge>
+                    ) : null}
                     {isViewingHistoricalOperationalPeriod && operationalPeriodsEnabled ? (
                       <Button
                         type="button"
@@ -41223,60 +41347,20 @@ function App() {
               />
             )}
             {activationStep === 2 && !isExerciseActivationWizard && (
-              <div className="grid gap-3">
-                <div className="grid gap-2">
-                  <Label htmlFor="incident-team-template">Select Team Template</Label>
-                  <NativeSelect
-                    id="incident-team-template"
-                    value={incidentTeamTemplate}
-                    onChange={(event) => setIncidentTeamTemplate(event.target.value)}
-                    className="w-full"
-                  >
-                    <NativeSelectOption value="">Select a team template</NativeSelectOption>
-                    {incidentTeamTemplateOptions.map((template) => (
-                      <NativeSelectOption key={template} value={template}>
-                        {template}
-                      </NativeSelectOption>
-                    ))}
-                  </NativeSelect>
-                </div>
-                <div className="rounded-md border border-dashed bg-muted/20 p-4">
-                  <p className="text-sm font-medium">
-                    {activationEntityLabel} Roster Configuration
-                  </p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Placeholder for roster configuration UI (roles, assignments, and shifts).
-                  </p>
-                </div>
-              </div>
+              <BuildTeamRosterStep
+                workspaceLabel={activationWorkspaceLabel}
+                draft={activationRosterDraft}
+                onDraftChange={setActivationRosterDraft}
+                glassItemBorderClasses={glassItemBorderClasses}
+              />
             )}
             {activationStep === 3 && isExerciseActivationWizard && (
-              <div className="grid gap-3">
-                <div className="grid gap-2">
-                  <Label htmlFor="incident-team-template">Select Team Template</Label>
-                  <NativeSelect
-                    id="incident-team-template"
-                    value={incidentTeamTemplate}
-                    onChange={(event) => setIncidentTeamTemplate(event.target.value)}
-                    className="w-full"
-                  >
-                    <NativeSelectOption value="">Select a team template</NativeSelectOption>
-                    {incidentTeamTemplateOptions.map((template) => (
-                      <NativeSelectOption key={template} value={template}>
-                        {template}
-                      </NativeSelectOption>
-                    ))}
-                  </NativeSelect>
-                </div>
-                <div className="rounded-md border border-dashed bg-muted/20 p-4">
-                  <p className="text-sm font-medium">
-                    {activationEntityLabel} Roster Configuration
-                  </p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Placeholder for roster configuration UI (roles, assignments, and shifts).
-                  </p>
-                </div>
-              </div>
+              <BuildTeamRosterStep
+                workspaceLabel={activationWorkspaceLabel}
+                draft={activationRosterDraft}
+                onDraftChange={setActivationRosterDraft}
+                glassItemBorderClasses={glassItemBorderClasses}
+              />
             )}
             {((activationStep === 3 && !isExerciseActivationWizard) ||
               (activationStep === 4 && isExerciseActivationWizard)) && (
