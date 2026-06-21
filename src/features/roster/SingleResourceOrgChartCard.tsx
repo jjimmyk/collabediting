@@ -8,6 +8,7 @@ import { cn } from '@/lib/utils'
 type SingleResourceOrgChartCardProps = {
   member: WorkspaceRosterMember
   color?: OrgChartColor
+  scheduled?: boolean
   canManage?: boolean
   onRemoveFromOrgChart?: (memberId: string) => void
 }
@@ -15,13 +16,16 @@ type SingleResourceOrgChartCardProps = {
 export function SingleResourceOrgChartCard({
   member,
   color,
+  scheduled = false,
   canManage = false,
   onRemoveFromOrgChart,
 }: SingleResourceOrgChartCardProps) {
+  const reportsTo = member.orgChartReportsTo ?? member.pendingOrgChartReportsTo
   return (
     <div
       className={cn(
-        'w-full min-w-0 rounded-md border border-dashed px-2 py-2 shadow-sm',
+        'w-full min-w-0 rounded-md border px-2 py-2 shadow-sm',
+        scheduled ? 'border-dashed opacity-90' : 'border-dashed',
         orgChartColorClasses(color ?? 'neutral')
       )}
     >
@@ -32,10 +36,15 @@ export function SingleResourceOrgChartCard({
             <Badge variant="outline" className="h-4 px-1 text-[9px]">
               Single resource
             </Badge>
+            {scheduled ? (
+              <Badge variant="secondary" className="h-4 px-1 text-[9px]">
+                Next OP
+              </Badge>
+            ) : null}
           </div>
-          {member.orgChartReportsTo ? (
+          {reportsTo ? (
             <p className="truncate text-[10px] text-muted-foreground">
-              Reports to {member.orgChartReportsTo}
+              Reports to {reportsTo}
             </p>
           ) : null}
         </div>

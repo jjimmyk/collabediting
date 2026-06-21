@@ -3,8 +3,11 @@ import {
   ICS_ORG_CHART_ROOT_POSITION,
   ICS_ORG_CHART_SECTION_BRANCHES,
 } from '@/features/roster/ics-org-chart-structure'
-import { attachOrgChartAssetsToLayout } from '@/features/roster/workspace-asset-org-chart'
-import { attachOrgChartSingleResourcesToLayout } from '@/features/roster/workspace-member-org-chart'
+import { attachOrgChartAssetsToLayout, attachPendingOrgChartAssetsToLayout } from '@/features/roster/workspace-asset-org-chart'
+import {
+  attachOrgChartSingleResourcesToLayout,
+  attachPendingOrgChartMembersToLayout,
+} from '@/features/roster/workspace-member-org-chart'
 import {
   buildWorkspaceOrgChartLayout,
   type WorkspaceOrgChartLayout,
@@ -24,5 +27,7 @@ export function buildDynamicOrgChart(
     sectionBranches: ICS_ORG_CHART_SECTION_BRANCHES,
   })
   attachOrgChartAssetsToLayout(layout, orgChartAssets)
-  return attachOrgChartSingleResourcesToLayout(layout, singleResourceMembers)
+  attachPendingOrgChartAssetsToLayout(layout, orgChartAssets)
+  attachOrgChartSingleResourcesToLayout(layout, singleResourceMembers)
+  return attachPendingOrgChartMembersToLayout(layout, singleResourceMembers)
 }

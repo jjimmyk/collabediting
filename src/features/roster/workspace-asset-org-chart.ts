@@ -122,3 +122,45 @@ export function attachOrgChartAssetsToLayout(
 
   return layout
 }
+
+export function attachPendingOrgChartAssetsToLayout(
+  layout: WorkspaceOrgChartLayout,
+  assets: ResourceListItemData[]
+): WorkspaceOrgChartLayout {
+  const pendingAssets = assets
+    .filter((asset) => !asset.orgChartReportsTo && asset.pendingOrgChartReportsTo)
+    .sort((a, b) => {
+      if (a.orgChartSortOrder !== b.orgChartSortOrder) {
+        return a.orgChartSortOrder - b.orgChartSortOrder
+      }
+      return a.name.localeCompare(b.name)
+    })
+
+  for (const asset of pendingAssets) {
+    const reportsTo = asset.pendingOrgChartReportsTo
+    if (!reportsTo) continue
+
+    const childNode: OrgChartNode = {
+      kind: 'asset',
+      assetKey: asset.assetKey,
+      label: asset.name,
+      assetType: asset.type,
+      color: 'neutral',
+      scheduled: true,
+    }
+
+    if (reportsTo === layout.rootPosition) {
+      layout.rootChildren.push(childNode)
+      continue
+    }
+
+    const allBranches: OrgChartNode[] = [
+      ...layout.rootChildren,
+      ...layout.commandStaffBranch.children,
+      ...layout.sectionBranches.flatMap((branch) => branch.children),
+    ]
+    attachOrgChartNodeToTree(allBranches, reportsTo, childNode)
+  }
+
+  return layout
+}

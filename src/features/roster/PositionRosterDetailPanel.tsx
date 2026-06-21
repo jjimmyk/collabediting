@@ -22,6 +22,7 @@ type PositionRosterDetailPanelProps = {
   canManageRoster: boolean
   isPermissionBusy: boolean
   isAssignBusy: boolean
+  glassItemBorderClasses?: string
   showOpAdvanceLabels?: boolean
   positionMeta?: WorkspacePositionMeta
   isUpdatingOpAdvanceLabel?: boolean
@@ -46,6 +47,8 @@ type PositionRosterDetailPanelProps = {
   scheduleAssignableAssets?: ResourceListItemData[]
   scheduleUnassignableAssets?: ResourceListItemData[]
   pocMembers?: WorkspaceRosterMember[]
+  assetsByKey?: Record<string, ResourceListItemData>
+  onFocusAsset?: (asset: ResourceListItemData) => void
 } & Partial<PositionRosterAssetHandlers>
 
 export function PositionRosterDetailPanel({
@@ -56,6 +59,7 @@ export function PositionRosterDetailPanel({
   canManageRoster,
   isPermissionBusy,
   isAssignBusy,
+  glassItemBorderClasses = '',
   showOpAdvanceLabels = false,
   positionMeta,
   isUpdatingOpAdvanceLabel = false,
@@ -80,6 +84,8 @@ export function PositionRosterDetailPanel({
   scheduleAssignableAssets = [],
   scheduleUnassignableAssets = [],
   pocMembers = [],
+  assetsByKey = {},
+  onFocusAsset,
   onAssignAsset,
   onUnassignAsset,
   onScheduleAssignAsset,
@@ -160,6 +166,9 @@ export function PositionRosterDetailPanel({
         scheduleAssignableAssets={scheduleAssignableAssets}
         scheduleUnassignableAssets={scheduleUnassignableAssets}
         pocMembers={pocMembers}
+        assetsByKey={assetsByKey}
+        glassItemBorderClasses={glassItemBorderClasses}
+        onFocusAsset={onFocusAsset}
         canManageRoster={canManageRoster}
         isBusy={isAssignBusy}
         showPositionAssets={showPositionAssets && assetsHandlersReady}

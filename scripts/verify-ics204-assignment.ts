@@ -23,9 +23,11 @@ function rosterEntry(overrides: Partial<PositionRosterEntry> & Pick<PositionRost
     members: [],
     scheduledAssignees: [],
     scheduledUnassignees: [],
+    scheduledOrgChartMembers: [],
     assets: [],
     scheduledAssignAssets: [],
     scheduledUnassignAssets: [],
+    scheduledOrgChartAssets: [],
     memberSchedulePolicy: {
       allowActiveAssignment: true,
       allowScheduleAssign: true,

@@ -44,6 +44,10 @@ type ResourceListItemCardProps = {
   onAssignmentChange?: (workspaceId: string | null) => void
   showInlineAssignment?: boolean
   assignmentDisabled?: boolean
+  headerAddon?: ReactNode
+  footerAddon?: ReactNode
+  showEditButton?: boolean
+  headerActions?: ReactNode
 }
 
 const COST_UNIT_TYPE_OPTIONS: ResourceCostUnitType[] = ['per day', 'per hour', 'to purchase']
@@ -102,6 +106,10 @@ export function ResourceListItemCard({
   onAssignmentChange,
   showInlineAssignment,
   assignmentDisabled = false,
+  headerAddon,
+  footerAddon,
+  showEditButton = true,
+  headerActions,
 }: ResourceListItemCardProps) {
   const [internalOpen, setInternalOpen] = useState(defaultOpen)
   const [isEditing, setIsEditing] = useState(false)
@@ -227,6 +235,7 @@ export function ResourceListItemCard({
                 <AlmisDataSourceIcon />
               </span>
             </div>
+            {headerAddon}
           </ItemContent>
           <ItemActions>
             {isEditing ? (
@@ -250,7 +259,8 @@ export function ResourceListItemCard({
               </>
             ) : (
               <>
-                {editable ? (
+                {headerActions}
+                {editable && showEditButton ? (
                   <Button
                     variant="ghost"
                     size="icon"
@@ -510,6 +520,7 @@ export function ResourceListItemCard({
             </div>
           </div>
         </CollapsibleContent>
+        {footerAddon}
       </Collapsible>
     </Item>
   )

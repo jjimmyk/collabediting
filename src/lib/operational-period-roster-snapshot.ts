@@ -45,9 +45,11 @@ export function buildPositionRosterEntriesFromSnapshot(
       ),
       scheduledAssignees: [],
       scheduledUnassignees: [],
+      scheduledOrgChartMembers: [],
       assets: snapshotAssetsToRosterEntries(position.assets),
       scheduledAssignAssets: [],
       scheduledUnassignAssets: [],
+      scheduledOrgChartAssets: [],
       memberSchedulePolicy: getPositionMemberSchedulePolicy({
         name: position.name,
         source: position.source,
@@ -71,6 +73,7 @@ export function buildPositionRosterEntriesFromSnapshot(
         ...entry.assets,
         ...entry.scheduledAssignAssets,
         ...entry.scheduledUnassignAssets,
+        ...entry.scheduledOrgChartAssets,
       ]
       if (
         searchableAssets.some((asset) =>

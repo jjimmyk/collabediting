@@ -72,6 +72,8 @@ type PositionRosterCardProps = {
   scheduleAssignableAssets?: ResourceListItemData[]
   scheduleUnassignableAssets?: ResourceListItemData[]
   pocMembers?: WorkspaceRosterMember[]
+  assetsByKey?: Record<string, ResourceListItemData>
+  onFocusAsset?: (asset: ResourceListItemData) => void
 } & Partial<PositionRosterAssetHandlers>
 
 export function PositionRosterCard({
@@ -110,6 +112,8 @@ export function PositionRosterCard({
   scheduleAssignableAssets = [],
   scheduleUnassignableAssets = [],
   pocMembers = [],
+  assetsByKey = {},
+  onFocusAsset,
   onAssignAsset,
   onUnassignAsset,
   onScheduleAssignAsset,
@@ -150,6 +154,8 @@ export function PositionRosterCard({
     scheduleAssignableAssets,
     scheduleUnassignableAssets,
     pocMembers,
+    assetsByKey,
+    onFocusAsset,
     onAssignAsset,
     onUnassignAsset,
     onScheduleAssignAsset,
@@ -198,6 +204,7 @@ export function PositionRosterCard({
             <DialogTitle className="sr-only">{entry.position}</DialogTitle>
             <PositionRosterDetailPanel
               {...panelProps}
+              glassItemBorderClasses={glassItemBorderClasses}
               showOpAdvanceLabels={showOpAdvanceLabels}
               positionMeta={positionMeta}
               isUpdatingOpAdvanceLabel={isUpdatingOpAdvanceLabel}
@@ -317,7 +324,7 @@ export function PositionRosterCard({
               collisionPadding={12}
               className="w-72 max-w-[calc(100vw-2rem)] p-3"
             >
-              <PositionRosterDetailPanel {...panelProps} />
+              <PositionRosterDetailPanel {...panelProps} glassItemBorderClasses={glassItemBorderClasses} />
             </PopoverContent>
           </Popover>
         </div>

@@ -79,3 +79,46 @@ export function attachOrgChartSingleResourcesToLayout(
 
   return layout
 }
+
+export function attachPendingOrgChartMembersToLayout(
+  layout: WorkspaceOrgChartLayout,
+  roster: WorkspaceRosterMember[]
+): WorkspaceOrgChartLayout {
+  const members = roster
+    .filter(
+      (member) =>
+        member.status !== 'removed' &&
+        member.assignmentKind === 'single_resource' &&
+        !member.orgChartReportsTo &&
+        member.pendingOrgChartReportsTo
+    )
+    .sort((a, b) => a.email.localeCompare(b.email))
+
+  for (const member of members) {
+    const reportsTo = member.pendingOrgChartReportsTo
+    if (!reportsTo) continue
+
+    const childNode: OrgChartNode = {
+      kind: 'single_resource',
+      memberId: member.id,
+      label: member.email.split('@')[0] || member.email,
+      email: member.email,
+      color: 'neutral',
+      scheduled: true,
+    }
+
+    if (reportsTo === layout.rootPosition) {
+      layout.rootChildren.push(childNode)
+      continue
+    }
+
+    const allBranches: OrgChartNode[] = [
+      ...layout.rootChildren,
+      ...layout.commandStaffBranch.children,
+      ...layout.sectionBranches.flatMap((branch) => branch.children),
+    ]
+    attachOrgChartNodeToTree(allBranches, reportsTo, childNode)
+  }
+
+  return layout
+}

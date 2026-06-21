@@ -15,6 +15,7 @@ export type OrgChartNode =
       label: string
       assetType?: string
       color?: OrgChartColor
+      scheduled?: boolean
     }
   | {
       kind: 'single_resource'
@@ -22,6 +23,7 @@ export type OrgChartNode =
       label: string
       email: string
       color?: OrgChartColor
+      scheduled?: boolean
     }
   | {
       kind: 'group'

@@ -15775,11 +15775,21 @@ function App() {
     }
   }
   const handleRemoveAssetFromOrgChart = async (assetKey: string) => {
+    const asset = workspaceAssetsByKey[assetKey]
+    if (asset?.pendingOrgChartReportsTo) {
+      await removeScheduledAssignAssetFromPosition(assetKey, asset.pendingOrgChartReportsTo)
+      return
+    }
     await handleAssetOrgChartPlacementChange(assetKey, null)
   }
   const handleRemoveSingleResourceFromOrgChart = async (memberId: string) => {
     const member = activeWorkspaceRoster.find((entry) => entry.id === memberId)
     if (!member || member.assignmentKind !== 'single_resource') return
+
+    if (member.pendingOrgChartReportsTo) {
+      await removeScheduledAssignFromPosition(memberId, member.pendingOrgChartReportsTo)
+      return
+    }
 
     if (isSupabaseEnabled) {
       await removeWorkspaceRosterMemberFromDb(memberId)
@@ -28219,6 +28229,12 @@ function App() {
                       scheduleAssignableAssetsByPosition={scheduleAssignableAssetsByPosition}
                       scheduleUnassignableAssetsByPosition={scheduleUnassignableAssetsByPosition}
                       pocMembers={rosterPocMembers}
+                      assetsByKey={workspaceAssetsByKey}
+                      onFocusAsset={(asset) => {
+                        const mapKey = getAssetMapKey(asset.assetKey)
+                        setSelectedPanelItemId(mapKey)
+                        void focusMapItem(mapKey, asset.mapLocation, 30000)
+                      }}
                       onAssignAsset={(assetKey, position, pointOfContactMemberId) => {
                         void assignAssetToPosition(assetKey, position, pointOfContactMemberId)
                       }}

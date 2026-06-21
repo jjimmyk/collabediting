@@ -29,9 +29,11 @@ export type PositionRosterEntry = {
   members: WorkspaceRosterMember[]
   scheduledAssignees: WorkspaceRosterMember[]
   scheduledUnassignees: WorkspaceRosterMember[]
+  scheduledOrgChartMembers: WorkspaceRosterMember[]
   assets: PositionAssetRosterEntry[]
   scheduledAssignAssets: PositionAssetRosterEntry[]
   scheduledUnassignAssets: PositionAssetRosterEntry[]
+  scheduledOrgChartAssets: PositionAssetRosterEntry[]
   memberSchedulePolicy: PositionMemberSchedulePolicy
   editIcs201: boolean
   allowWorkAssignment: boolean
@@ -122,18 +124,13 @@ export function buildPositionRosterEntries(
         assignMemberIds: [],
         unassignMemberIds: [],
       }
-      const scheduledAssignees = [
-        ...schedule.assignMemberIds
-          .map((memberId) => memberById.get(memberId))
-          .filter((member): member is WorkspaceRosterMember => Boolean(member)),
-        ...roster.filter(
-          (member) =>
-            member.status !== 'removed' &&
-            member.pendingOrgChartReportsTo === position
-        ),
-      ].filter(
-        (member, index, list) => list.findIndex((entry) => entry.id === member.id) === index
+      const scheduledOrgChartMembers = roster.filter(
+        (member) =>
+          member.status !== 'removed' && member.pendingOrgChartReportsTo === position
       )
+      const scheduledAssignees = schedule.assignMemberIds
+        .map((memberId) => memberById.get(memberId))
+        .filter((member): member is WorkspaceRosterMember => Boolean(member))
       const scheduledUnassignees = schedule.unassignMemberIds
         .map((memberId) => memberById.get(memberId))
         .filter((member): member is WorkspaceRosterMember => Boolean(member))
@@ -142,22 +139,19 @@ export function buildPositionRosterEntries(
         unassignAssetKeys: [],
       }
       const assets = assetsByPosition[position] ?? []
-      const scheduledAssignAssets = [
-        ...resolveScheduledPositionAssets(
-          assetSchedule.assignAssetKeys,
-          assetsByKey,
-          workspaceMetaByAssetKey
-        ),
-        ...Object.values(assetsByKey)
-          .filter(
-            (asset) =>
-              !asset.orgChartReportsTo &&
-              asset.pendingOrgChartReportsTo === position
-          )
-          .map((asset) => resolvePositionAssetEntry(asset.assetKey, assetsByKey, workspaceMetaByAssetKey))
-          .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry)),
-      ].filter(
-        (asset, index, list) => list.findIndex((entry) => entry.assetKey === asset.assetKey) === index
+      const scheduledOrgChartAssets = Object.values(assetsByKey)
+        .filter(
+          (asset) =>
+            !asset.orgChartReportsTo && asset.pendingOrgChartReportsTo === position
+        )
+        .map((asset) =>
+          resolvePositionAssetEntry(asset.assetKey, assetsByKey, workspaceMetaByAssetKey)
+        )
+        .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry))
+      const scheduledAssignAssets = resolveScheduledPositionAssets(
+        assetSchedule.assignAssetKeys,
+        assetsByKey,
+        workspaceMetaByAssetKey
       )
       const scheduledUnassignAssets = resolveScheduledPositionAssets(
         assetSchedule.unassignAssetKeys,
@@ -172,9 +166,11 @@ export function buildPositionRosterEntries(
         ),
         scheduledAssignees,
         scheduledUnassignees,
+        scheduledOrgChartMembers,
         assets,
         scheduledAssignAssets,
         scheduledUnassignAssets,
+        scheduledOrgChartAssets,
         memberSchedulePolicy: getPositionMemberSchedulePolicy(meta),
         editIcs201: permissions[position]?.editIcs201 ?? !catalog.customPositionNames.has(position),
         allowWorkAssignment: resolveAllowWorkAssignment(position, settings, catalog),
@@ -190,11 +186,13 @@ export function buildPositionRosterEntries(
         ...entry.members,
         ...entry.scheduledAssignees,
         ...entry.scheduledUnassignees,
+        ...entry.scheduledOrgChartMembers,
       ]
       const searchableAssets = [
         ...entry.assets,
         ...entry.scheduledAssignAssets,
         ...entry.scheduledUnassignAssets,
+        ...entry.scheduledOrgChartAssets,
       ]
       if (
         searchableAssets.some((asset) =>

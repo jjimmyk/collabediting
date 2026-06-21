@@ -82,6 +82,8 @@ type WorkspacePositionRosterTableProps = {
   scheduleAssignableAssetsByPosition?: Record<string, ResourceListItemData[]>
   scheduleUnassignableAssetsByPosition?: Record<string, ResourceListItemData[]>
   pocMembers?: WorkspaceRosterMember[]
+  assetsByKey?: Record<string, ResourceListItemData>
+  onFocusAsset?: (asset: ResourceListItemData) => void
 } & Partial<PositionRosterAssetHandlers>
 
 function AssignedMembersList({
@@ -208,6 +210,8 @@ export function WorkspacePositionRosterTable({
   scheduleAssignableAssetsByPosition = {},
   scheduleUnassignableAssetsByPosition = {},
   pocMembers = [],
+  assetsByKey = {},
+  onFocusAsset,
   onAssignAsset,
   onUnassignAsset,
   onScheduleAssignAsset,
@@ -353,10 +357,13 @@ export function WorkspacePositionRosterTable({
               const assetCount =
                 entry.assets.length +
                 entry.scheduledAssignAssets.length +
-                entry.scheduledUnassignAssets.length
+                entry.scheduledUnassignAssets.length +
+                entry.scheduledOrgChartAssets.length
               const assetSummary = formatPositionAssetAssignmentCount(entry.assets.length)
               const scheduledCount =
-                entry.scheduledAssignees.length + entry.scheduledUnassignees.length
+                entry.scheduledAssignees.length +
+                entry.scheduledUnassignees.length +
+                entry.scheduledOrgChartMembers.length
               const assignmentSummary =
                 scheduledCount > 0
                   ? `${formatPositionAssignmentCount(entry.members.length).replace('Unassigned', '0 assigned')} · ${scheduledCount} scheduled next OP`
@@ -542,6 +549,9 @@ export function WorkspacePositionRosterTable({
                               scheduleAssignableAssets={scheduleAssignableAssets}
                               scheduleUnassignableAssets={scheduleUnassignableAssets}
                               pocMembers={pocMembers}
+                              assetsByKey={assetsByKey}
+                              glassItemBorderClasses={glassItemBorderClasses}
+                              onFocusAsset={onFocusAsset}
                               onAssignAsset={onAssignAsset}
                               onUnassignAsset={onUnassignAsset}
                               onScheduleAssignAsset={onScheduleAssignAsset}

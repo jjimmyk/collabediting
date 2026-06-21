@@ -11,7 +11,7 @@ import { PositionRosterCard } from '@/features/roster/PositionRosterCard'
 import {
   type PositionRosterAssetHandlers,
 } from '@/features/roster/PositionRosterAssetSections'
-import { AssetOrgChartCard } from '@/features/roster/AssetOrgChartCard'
+import { RosterAssetResourceListItem } from '@/features/roster/RosterAssetResourceListItem'
 import { SingleResourceOrgChartCard } from '@/features/roster/SingleResourceOrgChartCard'
 import type { WorkspaceOrgChartLayout, WorkspacePositionMeta } from '@/features/roster/workspace-positions'
 
@@ -186,13 +186,38 @@ function OrgChartChildNode({
   if (node.kind === 'asset') {
     const asset = renderProps.assetsByKey[node.assetKey]
     if (!asset) return null
+
+    const assetEntry = {
+      assetKey: asset.assetKey,
+      name: asset.name,
+      type: asset.type,
+      pointOfContactMemberId: asset.pointOfContactMemberId ?? null,
+      pointOfContactEmail: null,
+    }
+    const scheduled = node.scheduled ?? false
+
     return (
-      <AssetOrgChartCard
-        asset={asset}
-        color={node.color ?? parentColor}
+      <RosterAssetResourceListItem
+        asset={assetEntry}
+        resource={asset}
+        glassItemBorderClasses={renderProps.glassItemBorderClasses}
+        badgeLabel={scheduled ? 'Org chart · Next OP' : 'Org chart'}
+        showPoc={false}
         canManage={renderProps.canManageRoster}
-        onFocusMap={renderProps.onFocusAsset}
-        onRemoveFromOrgChart={renderProps.onRemoveAssetFromOrgChart}
+        isBusy={false}
+        removeLabel={
+          scheduled
+            ? `Remove ${asset.name} from next OP org chart schedule`
+            : `Remove ${asset.name} from org chart`
+        }
+        onRemove={
+          renderProps.canManageRoster && renderProps.onRemoveAssetFromOrgChart
+            ? () => renderProps.onRemoveAssetFromOrgChart!(asset.assetKey)
+            : undefined
+        }
+        onFocusMap={
+          renderProps.onFocusAsset ? () => renderProps.onFocusAsset!(asset) : undefined
+        }
       />
     )
   }
@@ -204,6 +229,7 @@ function OrgChartChildNode({
       <SingleResourceOrgChartCard
         member={member}
         color={node.color ?? parentColor}
+        scheduled={node.scheduled}
         canManage={renderProps.canManageRoster}
         onRemoveFromOrgChart={renderProps.onRemoveSingleResourceFromOrgChart}
       />
@@ -374,6 +400,8 @@ function PositionNode({
         scheduleAssignableAssets={scheduleAssignableAssetsByPosition[position] ?? []}
         scheduleUnassignableAssets={scheduleUnassignableAssetsByPosition[position] ?? []}
         pocMembers={pocMembers}
+        assetsByKey={assetsByKey}
+        onFocusAsset={onFocusAsset}
         onAssignAsset={onAssignAsset}
         onUnassignAsset={onUnassignAsset}
         onScheduleAssignAsset={onScheduleAssignAsset}

@@ -14,6 +14,7 @@ import {
   assignNowCombinedEmptyMessage,
   scheduleAssignCombinedEmptyMessage,
   scheduleAssignMembersEmptyMessage,
+  scheduleOrgChartCombinedEmptyMessage,
   scheduleUnassignAssetsEmptyMessage,
   scheduleUnassignCombinedEmptyMessage,
   scheduleUnassignMembersEmptyMessage,
@@ -23,9 +24,9 @@ import {
 import { PositionRosterInviteForm } from '@/features/roster/PositionRosterInviteForm'
 import {
   PositionAssetPickerPopover,
-  PositionAssetRow,
   type PositionRosterAssetHandlers,
 } from '@/features/roster/PositionRosterAssetSections'
+import { RosterAssetResourceListItem } from '@/features/roster/RosterAssetResourceListItem'
 import type { PositionRosterEntry } from '@/features/roster/workspace-position-roster'
 import { RosterMemberCheckInStatusSelect } from '@/features/roster/RosterMemberCheckInStatusSelect'
 import type { WorkspaceMemberCheckInStatus, WorkspaceRosterMember } from '@/lib/workspace-types'
@@ -333,6 +334,9 @@ export type PositionRosterUnifiedAssignmentSectionsProps = {
   scheduleAssignableAssets: ResourceListItemData[]
   scheduleUnassignableAssets: ResourceListItemData[]
   pocMembers: WorkspaceRosterMember[]
+  assetsByKey?: Record<string, ResourceListItemData>
+  glassItemBorderClasses?: string
+  onFocusAsset?: (asset: ResourceListItemData) => void
   canManageRoster: boolean
   isBusy: boolean
   showPositionAssets: boolean
@@ -359,6 +363,9 @@ export function PositionRosterUnifiedAssignmentSections({
   scheduleAssignableAssets,
   scheduleUnassignableAssets,
   pocMembers,
+  assetsByKey = {},
+  glassItemBorderClasses = '',
+  onFocusAsset,
   canManageRoster,
   isBusy,
   showPositionAssets,
@@ -382,6 +389,7 @@ export function PositionRosterUnifiedAssignmentSections({
   onRemoveScheduledUnassignAsset,
   onUpdateAssetPointOfContact,
 }: PositionRosterUnifiedAssignmentSectionsProps) {
+  const [expandedAssetKey, setExpandedAssetKey] = useState<string | null>(null)
   const [expandedInviteMode, setExpandedInviteMode] = useState<RosterInviteAssignmentMode | null>(
     null
   )
@@ -404,15 +412,56 @@ export function PositionRosterUnifiedAssignmentSections({
 
   const assignNowEmpty = assignNowCombinedEmptyMessage(entry, assetsEnabled)
   const scheduleAssignEmpty = scheduleAssignCombinedEmptyMessage(entry, assetsEnabled)
+  const scheduleOrgChartEmpty = scheduleOrgChartCombinedEmptyMessage(entry, assetsEnabled)
   const scheduleUnassignEmpty = scheduleUnassignCombinedEmptyMessage(entry, assetsEnabled)
 
   const assignNowHasRows = entry.members.length > 0 || (assetsEnabled && entry.assets.length > 0)
   const scheduleAssignHasRows =
     entry.scheduledAssignees.length > 0 ||
     (assetsEnabled && entry.scheduledAssignAssets.length > 0)
+  const scheduleOrgChartHasRows =
+    entry.scheduledOrgChartMembers.length > 0 ||
+    (assetsEnabled && entry.scheduledOrgChartAssets.length > 0)
   const scheduleUnassignHasRows =
     entry.scheduledUnassignees.length > 0 ||
     (assetsEnabled && entry.scheduledUnassignAssets.length > 0)
+
+  const renderAssetListItem = (
+    asset: (typeof entry.assets)[number],
+    config: {
+      badgeLabel: string
+      secondaryBadgeLabel?: string
+      showPoc: boolean
+      canEditPoc: boolean
+      canManageRow: boolean
+      removeLabel: string
+      onRemove: () => void
+    }
+  ) => (
+    <RosterAssetResourceListItem
+      key={`${config.badgeLabel}-asset-${entry.position}-${asset.assetKey}`}
+      asset={asset}
+      resource={assetsByKey[asset.assetKey]}
+      glassItemBorderClasses={glassItemBorderClasses}
+      badgeLabel={config.badgeLabel}
+      secondaryBadgeLabel={config.secondaryBadgeLabel}
+      showPoc={config.showPoc}
+      pocMembers={pocMembers}
+      canManage={config.canManageRow}
+      canEditPoc={config.canEditPoc}
+      isBusy={isBusy}
+      removeLabel={config.removeLabel}
+      onRemove={config.onRemove}
+      onUpdateAssetPointOfContact={onUpdateAssetPointOfContact}
+      onFocusMap={
+        onFocusAsset && assetsByKey[asset.assetKey]
+          ? () => onFocusAsset(assetsByKey[asset.assetKey]!)
+          : undefined
+      }
+      open={expandedAssetKey === asset.assetKey}
+      onOpenChange={(open) => setExpandedAssetKey(open ? asset.assetKey : null)}
+    />
+  )
 
   return (
     <>
@@ -462,20 +511,16 @@ export function PositionRosterUnifiedAssignmentSections({
           />
         ))}
         {assetsEnabled
-          ? entry.assets.map((asset) => (
-              <PositionAssetRow
-                key={`assign-now-asset-${entry.position}-${asset.assetKey}`}
-                asset={asset}
-                badgeLabel="Assigned"
-                pocMembers={pocMembers}
-                canManage={canManageRoster && canAssignNow}
-                canEditPoc={canManageRoster}
-                isBusy={isBusy}
-                removeLabel={`Remove ${asset.name} from ${entry.position}`}
-                onRemove={() => onUnassignAsset(asset.assetKey, entry.position)}
-                onUpdateAssetPointOfContact={onUpdateAssetPointOfContact}
-              />
-            ))
+          ? entry.assets.map((asset) =>
+              renderAssetListItem(asset, {
+                badgeLabel: 'Assigned',
+                showPoc: true,
+                canEditPoc: canManageRoster,
+                canManageRow: canManageRoster && canAssignNow,
+                removeLabel: `Remove ${asset.name} from ${entry.position}`,
+                onRemove: () => onUnassignAsset(asset.assetKey, entry.position),
+              })
+            )
           : null}
       </PositionAssignmentLifecycleSection>
 
@@ -525,20 +570,48 @@ export function PositionRosterUnifiedAssignmentSections({
           />
         ))}
         {assetsEnabled
-          ? entry.scheduledAssignAssets.map((asset) => (
-              <PositionAssetRow
-                key={`sched-assign-asset-${entry.position}-${asset.assetKey}`}
-                asset={asset}
-                badgeLabel="Next OP"
-                pocMembers={pocMembers}
-                canManage={canManageRoster}
-                canEditPoc={canManageRoster}
-                isBusy={isBusy}
-                removeLabel={`Remove ${asset.name} from next OP assign schedule`}
-                onRemove={() => onRemoveScheduledAssignAsset(asset.assetKey, entry.position)}
-                onUpdateAssetPointOfContact={onUpdateAssetPointOfContact}
-              />
-            ))
+          ? entry.scheduledAssignAssets.map((asset) =>
+              renderAssetListItem(asset, {
+                badgeLabel: 'Next OP',
+                showPoc: true,
+                canEditPoc: canManageRoster,
+                canManageRow: canManageRoster,
+                removeLabel: `Remove ${asset.name} from next OP assign schedule`,
+                onRemove: () => onRemoveScheduledAssignAsset(asset.assetKey, entry.position),
+              })
+            )
+          : null}
+      </PositionAssignmentLifecycleSection>
+
+      <PositionAssignmentLifecycleSection
+        title="Scheduled org chart (next OP)"
+        icon={<CalendarClock className="h-3.5 w-3.5" />}
+        emptyMessage={scheduleOrgChartHasRows ? '' : scheduleOrgChartEmpty}
+        visible={scheduleOrgChartHasRows}
+      >
+        {entry.scheduledOrgChartMembers.map((member) => (
+          <PositionMemberRow
+            key={`sched-org-chart-member-${entry.position}-${member.id}`}
+            member={member}
+            badgeLabel="Org chart · Next OP"
+            canManage={canManageRoster}
+            isBusy={isBusy}
+            removeLabel={`Remove ${member.email} from next OP org chart schedule`}
+            onRemove={() => onRemoveScheduledAssign(member.id, entry.position)}
+            {...memberRowCheckInProps}
+          />
+        ))}
+        {assetsEnabled
+          ? entry.scheduledOrgChartAssets.map((asset) =>
+              renderAssetListItem(asset, {
+                badgeLabel: 'Org chart · Next OP',
+                showPoc: false,
+                canEditPoc: false,
+                canManageRow: canManageRoster,
+                removeLabel: `Remove ${asset.name} from next OP org chart schedule`,
+                onRemove: () => onRemoveScheduledAssignAsset(asset.assetKey, entry.position),
+              })
+            )
           : null}
       </PositionAssignmentLifecycleSection>
 
@@ -588,20 +661,16 @@ export function PositionRosterUnifiedAssignmentSections({
           />
         ))}
         {assetsEnabled
-          ? entry.scheduledUnassignAssets.map((asset) => (
-              <PositionAssetRow
-                key={`sched-unassign-asset-${entry.position}-${asset.assetKey}`}
-                asset={asset}
-                badgeLabel="Next OP"
-                pocMembers={pocMembers}
-                canManage={canManageRoster}
-                canEditPoc={canManageRoster}
-                isBusy={isBusy}
-                removeLabel={`Remove ${asset.name} from next OP unassign schedule`}
-                onRemove={() => onRemoveScheduledUnassignAsset(asset.assetKey, entry.position)}
-                onUpdateAssetPointOfContact={onUpdateAssetPointOfContact}
-              />
-            ))
+          ? entry.scheduledUnassignAssets.map((asset) =>
+              renderAssetListItem(asset, {
+                badgeLabel: 'Next OP',
+                showPoc: true,
+                canEditPoc: canManageRoster,
+                canManageRow: canManageRoster,
+                removeLabel: `Remove ${asset.name} from next OP unassign schedule`,
+                onRemove: () => onRemoveScheduledUnassignAsset(asset.assetKey, entry.position),
+              })
+            )
           : null}
       </PositionAssignmentLifecycleSection>
     </>

@@ -69,6 +69,21 @@ export function assignNowCombinedEmptyMessage(
     : 'No users assigned yet.'
 }
 
+export function scheduleOrgChartCombinedEmptyMessage(
+  entry: PositionRosterEntry,
+  showAssets: boolean
+): string {
+  if (
+    entry.scheduledOrgChartMembers.length > 0 ||
+    (showAssets && entry.scheduledOrgChartAssets.length > 0)
+  ) {
+    return ''
+  }
+  return showAssets
+    ? 'No org chart users or assets scheduled for next OP.'
+    : 'No org chart users scheduled for next OP.'
+}
+
 export function scheduleAssignCombinedEmptyMessage(
   entry: PositionRosterEntry,
   showAssets: boolean
