@@ -7,6 +7,7 @@ export const ICS_POSITIONS = [
   'Planning Section Chief',
   'Logistics Section Chief',
   'Finance/Admin Section Chief',
+  'Intel/Investigations Section Chief',
   'Situation Unit Leader',
   'Resources Unit Leader',
   'Documentation Unit Leader',

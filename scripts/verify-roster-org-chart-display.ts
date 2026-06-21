@@ -1,4 +1,8 @@
 import { buildDynamicOrgChart } from '../src/features/roster/build-dynamic-org-chart'
+import {
+  ICS_ORG_CHART_POSITIONS,
+  ICS_ORG_CHART_SECTION_BRANCHES,
+} from '../src/features/roster/ics-org-chart-structure'
 import { emptyWorkspacePositionCatalog } from '../src/features/roster/workspace-positions'
 import { buildPositionRosterEntries } from '../src/features/roster/workspace-position-roster'
 import type { ResourceListItemData } from '../src/features/resources/types'
@@ -157,5 +161,18 @@ assert(
   ),
   'pending single resource should appear on org chart with scheduled flag'
 )
+
+assert(
+  ICS_ORG_CHART_SECTION_BRANCHES.length === 5,
+  'org chart should include five section branches'
+)
+assert(
+  ICS_ORG_CHART_POSITIONS.includes('Intel/Investigations Section Chief'),
+  'Intel/Investigations Section Chief should be in org chart positions'
+)
+const intelBranch = ICS_ORG_CHART_SECTION_BRANCHES.find(
+  (branch) => branch.label === 'Intel/Investigations Section'
+)
+assert(intelBranch?.color === 'tan', 'Intel/Investigations section branch should use tan color')
 
 console.log('verify-roster-org-chart-display: all checks passed')

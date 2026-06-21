@@ -16,7 +16,6 @@ import { SingleResourceOrgChartCard } from '@/features/roster/SingleResourceOrgC
 import type { WorkspaceOrgChartLayout, WorkspacePositionMeta } from '@/features/roster/workspace-positions'
 
 import {
-  orgChartColorClasses,
   type OrgChartColor,
   type OrgChartNode,
 } from '@/features/roster/ics-org-chart-structure'
@@ -437,47 +436,22 @@ function GroupBranch({
   )
   if (visibleChildren.length === 0) return null
 
-  const leaderChild = node.children.find((child) => child.kind === 'position')
-  const leaderEntry =
-    leaderChild?.kind === 'position' ? renderProps.entriesByPosition[leaderChild.position] : undefined
-  const leaderEmail = leaderEntry?.members[0]?.email
-
   return (
-    <div className="flex w-full min-w-0 flex-col items-center">
-      <div
-        className={cn(
-          'w-full rounded-md border px-2.5 py-2 text-center shadow-sm',
-          orgChartColorClasses(node.color)
-        )}
-      >
-        <p className="text-xs font-semibold leading-snug">{node.label}</p>
-        <p className="mt-0.5 text-[9px] uppercase tracking-wide text-muted-foreground">
-          Work team
-        </p>
-        {leaderEmail && (
-          <p className="mt-1 truncate text-[10px] text-muted-foreground">Leader: {leaderEmail}</p>
-        )}
-        <p className="mt-0.5 text-[10px] text-muted-foreground">Type: {node.type}</p>
-      </div>
-
-      <div className="h-4 w-px bg-border" />
-
-      <div className="flex w-full flex-col items-center gap-2">
-        {visibleChildren.map((child, index) => {
-          if (child.kind !== 'position') return null
-          return (
-            <div key={child.position} className="flex w-full flex-col items-center">
-              {index > 0 && <div className="h-3 w-px bg-border" />}
-              <PositionNode
-                position={child.position}
-                color={child.color ?? node.color}
-                children={child.children ?? []}
-                {...renderProps}
-              />
-            </div>
-          )
-        })}
-      </div>
+    <div className="flex w-full min-w-0 flex-col items-center gap-2">
+      {visibleChildren.map((child, index) => {
+        if (child.kind !== 'position') return null
+        return (
+          <div key={child.position} className="flex w-full flex-col items-center">
+            {index > 0 && <div className="h-3 w-px bg-border" />}
+            <PositionNode
+              position={child.position}
+              color={child.color ?? node.color}
+              children={child.children ?? []}
+              {...renderProps}
+            />
+          </div>
+        )
+      })}
     </div>
   )
 }
@@ -495,30 +469,19 @@ function CommandStaffRow({
   if (visibleChildren.length === 0) return null
 
   return (
-    <div className="flex w-full min-w-0 flex-col items-center">
-      <div
-        className={cn(
-          'rounded-md border px-3 py-1.5 text-center shadow-sm',
-          orgChartColorClasses(node.color)
-        )}
-      >
-        <p className="text-[11px] font-semibold uppercase tracking-wide">{node.label}</p>
-      </div>
-      <div className="h-4 w-px bg-border" />
-      <div className={rosterOrgCommandStaffClassName(renderProps.layoutMode)}>
-        {visibleChildren.map((child) => {
-          if (child.kind !== 'position') return null
-          return (
-            <PositionNode
-              key={child.position}
-              position={child.position}
-              color={child.color ?? node.color}
-              children={child.children ?? []}
-              {...renderProps}
-            />
-          )
-        })}
-      </div>
+    <div className={rosterOrgCommandStaffClassName(renderProps.layoutMode)}>
+      {visibleChildren.map((child) => {
+        if (child.kind !== 'position') return null
+        return (
+          <PositionNode
+            key={child.position}
+            position={child.position}
+            color={child.color ?? node.color}
+            children={child.children ?? []}
+            {...renderProps}
+          />
+        )
+      })}
     </div>
   )
 }

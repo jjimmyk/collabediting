@@ -1,6 +1,6 @@
 import { WORKSPACE_ROSTER_POSITIONS } from '@/lib/ics-positions'
 
-export type OrgChartColor = 'red' | 'blue' | 'orange' | 'green' | 'neutral'
+export type OrgChartColor = 'red' | 'blue' | 'orange' | 'green' | 'neutral' | 'tan'
 
 export type OrgChartNode =
   | {
@@ -88,6 +88,15 @@ export const ICS_ORG_CHART_SECTION_BRANCHES: Extract<OrgChartNode, { kind: 'grou
     color: 'green',
     children: [{ kind: 'position', position: 'Finance/Admin Section Chief', color: 'green' }],
   },
+  {
+    kind: 'group',
+    label: 'Intel/Investigations Section',
+    type: 'Section',
+    color: 'tan',
+    children: [
+      { kind: 'position', position: 'Intel/Investigations Section Chief', color: 'tan' },
+    ],
+  },
 ]
 
 export const ICS_ORG_CHART_BRANCHES: Extract<OrgChartNode, { kind: 'group' }>[] = [
@@ -127,6 +136,8 @@ export function orgChartColorClasses(color: OrgChartColor | undefined): string {
       return 'border-green-600/70 bg-green-600/5'
     case 'neutral':
       return 'border-slate-400/70 bg-slate-500/5'
+    case 'tan':
+      return 'border-amber-700/60 bg-amber-100/30'
     default:
       return 'border-primary/50 bg-primary/5'
   }
