@@ -560,12 +560,15 @@ import { isIncidentArchived } from '@/lib/incident-archive'
 import { WorkspacePositionRosterTable } from '@/features/roster/WorkspacePositionRosterTable'
 import { WorkspaceOrgChartRoster } from '@/features/roster/WorkspaceOrgChartRoster'
 import { RosterAddMemberToolbar } from '@/features/roster/RosterAddMemberToolbar'
-import { RosterDisplayFiltersMenu, RosterDisplayFilterSummary } from '@/features/roster/RosterDisplayFiltersMenu'
+import { RosterDisplayFiltersMenu } from '@/features/roster/RosterDisplayFiltersMenu'
+import { RosterZoomControls } from '@/features/roster/RosterZoomControls'
+import { RosterZoomContainer } from '@/features/roster/RosterZoomContainer'
 import {
   DEFAULT_ROSTER_DISPLAY_FILTERS,
   resolveVisibleRosterPositions,
   type RosterDisplayFilters,
 } from '@/features/roster/roster-display-filters'
+import { DEFAULT_ROSTER_ZOOM } from '@/features/roster/roster-zoom'
 import {
   positionCanBeRemovedFromRoster,
   positionRemovalBlockedReason as getPositionRemovalBlockedReason,
@@ -8747,6 +8750,7 @@ function App() {
   const [rosterDisplayFilters, setRosterDisplayFilters] = useState<RosterDisplayFilters>(
     DEFAULT_ROSTER_DISPLAY_FILTERS
   )
+  const [rosterZoomLevel, setRosterZoomLevel] = useState<number>(DEFAULT_ROSTER_ZOOM)
   const [rosterMemberPositionDraft, setRosterMemberPositionDraft] = useState<string>(
     ICS_POSITIONS[0]
   )
@@ -24932,7 +24936,7 @@ function App() {
                       filters={rosterDisplayFilters}
                       onChange={setRosterDisplayFilters}
                     />
-                    <RosterDisplayFilterSummary filters={rosterDisplayFilters} />
+                    <RosterZoomControls zoom={rosterZoomLevel} onZoomChange={setRosterZoomLevel} />
                     <ToggleGroup
                       type="single"
                       value={rosterViewMode}
@@ -28228,7 +28232,11 @@ function App() {
                         </ItemContent>
                       </Item>
                     ) : (
-                      <div className="min-w-0 w-full max-w-full space-y-2 overflow-hidden">
+                      <RosterZoomContainer
+                        zoom={rosterZoomLevel}
+                        onZoomChange={setRosterZoomLevel}
+                        className="max-h-[calc(100vh-16rem)]"
+                      >
                       {rosterViewMode === 'org-chart' ? (
                         <WorkspaceOrgChartRoster
                       orgChartLayout={workspaceOrgChartLayout}
@@ -28425,7 +28433,7 @@ function App() {
                       }}
                     />
                       )}
-                      </div>
+                      </RosterZoomContainer>
                     )}
                   </OperationalPeriodHistoricalRosterShell>
                 )}

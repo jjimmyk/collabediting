@@ -18,6 +18,14 @@ import {
   resolveVisibleRosterPositions,
 } from '../src/features/roster/roster-display-filters'
 import {
+  DEFAULT_ROSTER_ZOOM,
+  formatRosterZoomLabel,
+  ROSTER_ZOOM_PRESETS,
+  rosterZoomAtMax,
+  rosterZoomAtMin,
+  stepRosterZoom,
+} from '../src/features/roster/roster-zoom'
+import {
   ORG_CHART_ASSET_CARD_MAX_WIDTH,
   ORG_CHART_CANVAS_MIN_WIDTH,
   orgChartSectionColumnClassName,
@@ -465,6 +473,35 @@ const connectorSource = readFileSync(
 assert(
   connectorSource.includes('-translate-y-1/2') && connectorSource.includes('-mt-px'),
   'org chart connectors should overlap horizontal and vertical junctions'
+)
+
+assert(
+  ROSTER_ZOOM_PRESETS.join(',') === '0.5,0.75,1,1.25,1.5,2',
+  'roster zoom presets should match expected steps'
+)
+assert(DEFAULT_ROSTER_ZOOM === 1, 'default roster zoom should be 100%')
+assert(formatRosterZoomLabel(1.25) === '125%', 'roster zoom label should format as percent')
+assert(stepRosterZoom(1, 'in') === 1.25, 'roster zoom in should step to next preset')
+assert(stepRosterZoom(1, 'out') === 0.75, 'roster zoom out should step to previous preset')
+assert(rosterZoomAtMin(0.5), 'minimum roster zoom should be at lower bound')
+assert(rosterZoomAtMax(2), 'maximum roster zoom should be at upper bound')
+
+const displayFiltersMenuSource = readFileSync(
+  join(process.cwd(), 'src/features/roster/RosterDisplayFiltersMenu.tsx'),
+  'utf8'
+)
+assert(
+  !displayFiltersMenuSource.includes('Hiding:'),
+  'roster toolbar should not show inline hiding labels'
+)
+
+const zoomContainerSource = readFileSync(
+  join(process.cwd(), 'src/features/roster/RosterZoomContainer.tsx'),
+  'utf8'
+)
+assert(
+  zoomContainerSource.includes('zoom') && zoomContainerSource.includes('overflow-auto'),
+  'roster zoom container should scale content while preserving scroll'
 )
 
 console.log('verify-roster-org-chart-display: all checks passed')

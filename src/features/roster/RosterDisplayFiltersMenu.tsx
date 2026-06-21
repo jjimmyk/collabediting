@@ -30,6 +30,7 @@ const FILTER_OPTIONS = (
 
 export function RosterDisplayFiltersMenu({ filters, onChange }: RosterDisplayFiltersMenuProps) {
   const summary = summarizeActiveDisplayFilters(filters)
+  const filterStatusLabel = `${summary.activeCount} of ${summary.totalCount} display filters active`
 
   return (
     <Popover>
@@ -39,6 +40,7 @@ export function RosterDisplayFiltersMenu({ filters, onChange }: RosterDisplayFil
           variant={summary.isDefault ? 'outline' : 'secondary'}
           size="sm"
           className="gap-1.5 text-xs"
+          aria-label={summary.isDefault ? 'Roster display filters' : filterStatusLabel}
         >
           <SlidersHorizontal className="h-3.5 w-3.5" />
           Display
@@ -102,20 +104,5 @@ export function RosterDisplayFiltersMenu({ filters, onChange }: RosterDisplayFil
         ) : null}
       </PopoverContent>
     </Popover>
-  )
-}
-
-export function RosterDisplayFilterSummary({
-  filters,
-}: {
-  filters: RosterDisplayFilters
-}) {
-  const summary = summarizeActiveDisplayFilters(filters)
-  if (summary.isDefault) return null
-
-  return (
-    <p className="text-[11px] text-muted-foreground">
-      Hiding: {summary.inactiveLabels.join(', ')}
-    </p>
   )
 }

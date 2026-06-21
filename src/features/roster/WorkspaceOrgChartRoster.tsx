@@ -939,7 +939,7 @@ export function WorkspaceOrgChartRoster({
         </p>
       </div>
 
-      <div className="min-w-0 w-full max-w-full overflow-x-auto overflow-y-visible scroll-smooth scroll-px-4">
+      <div className="min-w-0 w-full max-w-full">
         <div
           className={cn(
             'inline-flex w-max min-w-full flex-col items-center px-4 pb-2',
