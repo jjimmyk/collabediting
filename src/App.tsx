@@ -560,6 +560,12 @@ import { isIncidentArchived } from '@/lib/incident-archive'
 import { WorkspacePositionRosterTable } from '@/features/roster/WorkspacePositionRosterTable'
 import { WorkspaceOrgChartRoster } from '@/features/roster/WorkspaceOrgChartRoster'
 import { RosterAddMemberToolbar } from '@/features/roster/RosterAddMemberToolbar'
+import { RosterDisplayFiltersMenu } from '@/features/roster/RosterDisplayFiltersMenu'
+import {
+  DEFAULT_ROSTER_DISPLAY_FILTERS,
+  resolveVisibleRosterPositions,
+  type RosterDisplayFilters,
+} from '@/features/roster/roster-display-filters'
 import { AddWorkspacePositionDialog } from '@/features/roster/AddWorkspacePositionDialog'
 import { AddAssetToOrgChartDialog } from '@/features/roster/AddAssetToOrgChartDialog'
 import {
@@ -8734,6 +8740,9 @@ function App() {
   const [rosterAssigningPosition, setRosterAssigningPosition] = useState<string | null>(null)
   const [updatingCheckInMemberId, setUpdatingCheckInMemberId] = useState<string | null>(null)
   const [rosterViewMode, setRosterViewMode] = useState<'table' | 'org-chart'>('table')
+  const [rosterDisplayFilters, setRosterDisplayFilters] = useState<RosterDisplayFilters>(
+    DEFAULT_ROSTER_DISPLAY_FILTERS
+  )
   const [rosterMemberPositionDraft, setRosterMemberPositionDraft] = useState<string>(
     ICS_POSITIONS[0]
   )
@@ -13956,8 +13965,8 @@ function App() {
     )
   }, [])
   const visibleRosterPositions = useMemo(
-    () => new Set(positionRosterEntries.map((entry) => entry.position)),
-    [positionRosterEntries]
+    () => resolveVisibleRosterPositions(positionRosterEntries, rosterDisplayFilters),
+    [positionRosterEntries, rosterDisplayFilters]
   )
   const assignableByPosition = useMemo(() => {
     const map: Record<string, WorkspaceRosterMember[]> = {}
@@ -24880,6 +24889,10 @@ function App() {
                         {rosterAlwaysShowWorking ? 'Showing working roster' : 'Show working roster'}
                       </Button>
                     ) : null}
+                    <RosterDisplayFiltersMenu
+                      filters={rosterDisplayFilters}
+                      onChange={setRosterDisplayFilters}
+                    />
                     <ToggleGroup
                       type="single"
                       value={rosterViewMode}
@@ -28183,6 +28196,7 @@ function App() {
                       assetsByKey={workspaceAssetsByKey}
                       rosterById={workspaceRosterById}
                       visiblePositions={visibleRosterPositions}
+                      displayFilters={rosterDisplayFilters}
                       assignableByPosition={assignableByPosition}
                       scheduleAssignableByPosition={scheduleAssignableByPosition}
                       scheduleUnassignableByPosition={scheduleUnassignableByPosition}
@@ -28276,6 +28290,7 @@ function App() {
                       ) : (
                         <WorkspacePositionRosterTable
                       entries={positionRosterEntries}
+                      displayFilters={rosterDisplayFilters}
                       assignableByPosition={assignableByPosition}
                       scheduleAssignableByPosition={scheduleAssignableByPosition}
                       scheduleUnassignableByPosition={scheduleUnassignableByPosition}

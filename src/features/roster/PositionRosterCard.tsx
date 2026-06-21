@@ -31,6 +31,10 @@ import type { ResourceListItemData } from '@/features/resources/types'
 import type { PositionRosterAssetHandlers } from '@/features/roster/PositionRosterAssetSections'
 import type { WorkspacePositionMeta } from '@/features/roster/workspace-positions'
 import {
+  ORG_CHART_POSITION_CARD_MAX_WIDTH,
+  ORG_CHART_POSITION_CARD_MIN_WIDTH,
+} from '@/features/roster/org-chart-layout-tokens'
+import {
   orgChartColorClasses,
   type OrgChartColor,
 } from '@/features/roster/ics-org-chart-structure'
@@ -178,7 +182,9 @@ export function PositionRosterCard({
             'flex min-w-0 flex-col items-stretch rounded-lg border p-0 text-left shadow-sm outline-none transition',
             'hover:ring-2 hover:ring-ring/40 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50',
             'w-full max-w-full min-w-0 overflow-hidden',
-            layoutMode === 'wide' ? 'min-w-[10rem] max-w-[12rem]' : 'min-w-0',
+            layoutMode === 'wide'
+              ? cn(ORG_CHART_POSITION_CARD_MIN_WIDTH, ORG_CHART_POSITION_CARD_MAX_WIDTH)
+              : 'min-w-0',
             orgChartColorClasses(color)
           )}
         >

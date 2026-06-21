@@ -11,7 +11,20 @@ import { PositionRosterCard } from '@/features/roster/PositionRosterCard'
 import {
   type PositionRosterAssetHandlers,
 } from '@/features/roster/PositionRosterAssetSections'
-import { RosterAssetResourceListItem } from '@/features/roster/RosterAssetResourceListItem'
+import { OrgChartAssetCard } from '@/features/roster/OrgChartAssetCard'
+import {
+  OrgChartCrossbarColumns,
+  OrgChartFork,
+  OrgChartLeftRailStack,
+  OrgChartParentChildLink,
+  OrgChartVerticalLine,
+} from '@/features/roster/OrgChartConnectors'
+import {
+  ORG_CHART_ASSET_CARD_WIDTH,
+  ORG_CHART_POSITION_CARD_MAX_WIDTH,
+} from '@/features/roster/org-chart-layout-tokens'
+import type { RosterDisplayFilters } from '@/features/roster/roster-display-filters'
+import { singleResourceNodeVisible } from '@/features/roster/roster-display-filters'
 import { SingleResourceOrgChartCard } from '@/features/roster/SingleResourceOrgChartCard'
 import type { WorkspaceOrgChartLayout, WorkspacePositionMeta } from '@/features/roster/workspace-positions'
 
@@ -19,13 +32,6 @@ import {
   type OrgChartColor,
   type OrgChartNode,
 } from '@/features/roster/ics-org-chart-structure'
-
-import {
-  OrgChartCrossbarColumns,
-  OrgChartFork,
-  OrgChartLeftRailStack,
-  OrgChartVerticalLine,
-} from '@/features/roster/OrgChartConnectors'
 
 import {
   rosterOrgCommandStaffClassName,
@@ -39,6 +45,7 @@ type WorkspaceOrgChartRosterProps = {
   assetsByKey: Record<string, ResourceListItemData>
   rosterById: Record<string, WorkspaceRosterMember>
   visiblePositions: Set<string>
+  displayFilters: RosterDisplayFilters
   assignableByPosition: Record<string, WorkspaceRosterMember[]>
   scheduleAssignableByPosition: Record<string, WorkspaceRosterMember[]>
   scheduleUnassignableByPosition: Record<string, WorkspaceRosterMember[]>
@@ -83,6 +90,7 @@ type OrgChartRenderProps = {
   assetsByKey: Record<string, ResourceListItemData>
   rosterById: Record<string, WorkspaceRosterMember>
   visiblePositions: Set<string>
+  displayFilters: RosterDisplayFilters
   assignableByPosition: Record<string, WorkspaceRosterMember[]>
   scheduleAssignableByPosition: Record<string, WorkspaceRosterMember[]>
   scheduleUnassignableByPosition: Record<string, WorkspaceRosterMember[]>
@@ -128,21 +136,38 @@ type OrgChartRenderProps = {
 
 function filterVisibleOrgChartChildren(
   children: OrgChartNode[],
-  visiblePositions: Set<string>
+  visiblePositions: Set<string>,
+  displayFilters: RosterDisplayFilters
 ): OrgChartNode[] {
   return children.filter((child) => {
-    if (child.kind === 'asset' || child.kind === 'single_resource') return true
+    if (child.kind === 'asset') return true
+    if (child.kind === 'single_resource') {
+      return singleResourceNodeVisible(child.scheduled, displayFilters)
+    }
     if (child.kind === 'stack' || child.kind === 'fork') {
-      return filterVisibleOrgChartChildren(child.children, visiblePositions).length > 0
+      return (
+        filterVisibleOrgChartChildren(child.children, visiblePositions, displayFilters).length > 0
+      )
     }
     if (child.kind === 'position') {
       return (
         visiblePositions.has(child.position) ||
-        filterVisibleOrgChartChildren(child.children ?? [], visiblePositions).length > 0
+        filterVisibleOrgChartChildren(child.children ?? [], visiblePositions, displayFilters)
+          .length > 0
       )
     }
     return false
   })
+}
+
+function positionNodeIsVisible(
+  position: string,
+  children: OrgChartNode[],
+  visiblePositions: Set<string>,
+  displayFilters: RosterDisplayFilters
+): boolean {
+  if (visiblePositions.has(position)) return true
+  return filterVisibleOrgChartChildren(children, visiblePositions, displayFilters).length > 0
 }
 
 function orgChartNodeKey(node: OrgChartNode, index: number): string {
@@ -164,7 +189,11 @@ function OrgChartLayoutNode({
   renderProps: OrgChartRenderProps
 }) {
   if (node.kind === 'stack') {
-    const visibleChildren = filterVisibleOrgChartChildren(node.children, renderProps.visiblePositions)
+    const visibleChildren = filterVisibleOrgChartChildren(
+      node.children,
+      renderProps.visiblePositions,
+      renderProps.displayFilters
+    )
     if (visibleChildren.length === 0) return null
     return (
       <OrgChartLeftRailStack>
@@ -181,7 +210,11 @@ function OrgChartLayoutNode({
   }
 
   if (node.kind === 'fork') {
-    const visibleChildren = filterVisibleOrgChartChildren(node.children, renderProps.visiblePositions)
+    const visibleChildren = filterVisibleOrgChartChildren(
+      node.children,
+      renderProps.visiblePositions,
+      renderProps.displayFilters
+    )
     if (visibleChildren.length === 0) return null
     return (
       <OrgChartFork>
@@ -211,7 +244,11 @@ function OrgChartChildren({
   parentColor?: OrgChartColor
   renderProps: OrgChartRenderProps
 }) {
-  const visibleChildren = filterVisibleOrgChartChildren(children, renderProps.visiblePositions)
+  const visibleChildren = filterVisibleOrgChartChildren(
+    children,
+    renderProps.visiblePositions,
+    renderProps.displayFilters
+  )
   if (visibleChildren.length === 0) return null
 
   if (visibleChildren.length === 1) {
@@ -222,25 +259,25 @@ function OrgChartChildren({
       )
     }
     return (
-      <>
-        <OrgChartVerticalLine />
+      <OrgChartParentChildLink>
         <OrgChartLayoutNode node={only} parentColor={parentColor} renderProps={renderProps} />
-      </>
+      </OrgChartParentChildLink>
     )
   }
 
   return (
-    <>
-      {visibleChildren.map((child, index) => (
-        <div
-          key={orgChartNodeKey(child, index)}
-          className="flex w-full min-w-0 flex-col items-center"
-        >
-          {index === 0 ? <OrgChartVerticalLine /> : null}
-          <OrgChartLayoutNode node={child} parentColor={parentColor} renderProps={renderProps} />
-        </div>
-      ))}
-    </>
+    <OrgChartParentChildLink>
+      <div className="flex w-full flex-col items-center gap-2">
+        {visibleChildren.map((child, index) => (
+          <OrgChartLayoutNode
+            key={orgChartNodeKey(child, index)}
+            node={child}
+            parentColor={parentColor}
+            renderProps={renderProps}
+          />
+        ))}
+      </div>
+    </OrgChartParentChildLink>
   )
 }
 
@@ -257,56 +294,60 @@ function OrgChartChildNode({
     const asset = renderProps.assetsByKey[node.assetKey]
     if (!asset) return null
 
-    const assetEntry = {
-      assetKey: asset.assetKey,
-      name: asset.name,
-      type: asset.type,
-      pointOfContactMemberId: asset.pointOfContactMemberId ?? null,
-      pointOfContactEmail: null,
-    }
     const scheduled = node.scheduled ?? false
 
     return (
-      <RosterAssetResourceListItem
-        asset={assetEntry}
-        resource={asset}
-        glassItemBorderClasses={renderProps.glassItemBorderClasses}
-        badgeLabel={scheduled ? 'Org chart · Next OP' : 'Org chart'}
-        showPoc={false}
-        canManage={renderProps.canManageRoster}
-        isBusy={false}
-        removeLabel={
-          scheduled
-            ? `Remove ${asset.name} from next OP org chart schedule`
-            : `Remove ${asset.name} from org chart`
-        }
-        onRemove={
-          renderProps.canManageRoster && renderProps.onRemoveAssetFromOrgChart
-            ? () => renderProps.onRemoveAssetFromOrgChart!(asset.assetKey)
-            : undefined
-        }
-        onFocusMap={
-          renderProps.onFocusAsset ? () => renderProps.onFocusAsset!(asset) : undefined
-        }
-      />
+      <div className={cn('flex w-full justify-center', ORG_CHART_ASSET_CARD_WIDTH)}>
+        <OrgChartAssetCard
+          name={asset.name}
+          scheduled={scheduled}
+          canManage={renderProps.canManageRoster}
+          removeLabel={
+            scheduled
+              ? `Remove ${asset.name} from next OP org chart schedule`
+              : `Remove ${asset.name} from org chart`
+          }
+          onRemove={
+            renderProps.canManageRoster && renderProps.onRemoveAssetFromOrgChart
+              ? () => renderProps.onRemoveAssetFromOrgChart!(asset.assetKey)
+              : undefined
+          }
+          onFocusMap={
+            renderProps.onFocusAsset ? () => renderProps.onFocusAsset!(asset) : undefined
+          }
+        />
+      </div>
     )
   }
 
   if (node.kind === 'single_resource') {
+    if (!singleResourceNodeVisible(node.scheduled, renderProps.displayFilters)) {
+      return null
+    }
     const member = renderProps.rosterById[node.memberId]
     if (!member) return null
     return (
-      <SingleResourceOrgChartCard
-        member={member}
-        color={node.color ?? parentColor}
-        scheduled={node.scheduled}
-        canManage={renderProps.canManageRoster}
-        onRemoveFromOrgChart={renderProps.onRemoveSingleResourceFromOrgChart}
-      />
+      <div className={cn('flex w-full justify-center', ORG_CHART_ASSET_CARD_WIDTH)}>
+        <SingleResourceOrgChartCard
+          member={member}
+          color={node.color ?? parentColor}
+          scheduled={node.scheduled}
+          canManage={renderProps.canManageRoster}
+          onRemoveFromOrgChart={renderProps.onRemoveSingleResourceFromOrgChart}
+        />
+      </div>
     )
   }
 
-  if (node.kind !== 'position' || !renderProps.visiblePositions.has(node.position)) {
+  if (
+    node.kind !== 'position' ||
+    !positionNodeIsVisible(
+      node.position,
+      node.children ?? [],
+      renderProps.visiblePositions,
+      renderProps.displayFilters
+    )
+  ) {
     return null
   }
 
@@ -329,6 +370,7 @@ function PositionNode({
   assetsByKey,
   rosterById,
   visiblePositions,
+  displayFilters,
   assignableByPosition,
   scheduleAssignableByPosition,
   scheduleUnassignableByPosition,
@@ -375,7 +417,11 @@ function PositionNode({
   color?: OrgChartColor
   children?: OrgChartNode[]
 } & OrgChartRenderProps) {
-  if (!visiblePositions.has(position)) return null
+  if (
+    !positionNodeIsVisible(position, children, visiblePositions, displayFilters)
+  ) {
+    return null
+  }
   const entry = entriesByPosition[position]
   if (!entry) return null
 
@@ -385,6 +431,7 @@ function PositionNode({
     assetsByKey,
     rosterById,
     visiblePositions,
+    displayFilters,
     assignableByPosition,
     scheduleAssignableByPosition,
     scheduleUnassignableByPosition,
@@ -429,7 +476,12 @@ function PositionNode({
   }
 
   return (
-    <div className="flex w-full min-w-0 flex-col items-center">
+    <div
+      className={cn(
+        'flex w-full min-w-0 flex-col items-center',
+        layoutMode === 'wide' && ORG_CHART_POSITION_CARD_MAX_WIDTH
+      )}
+    >
       <PositionRosterCard
         entry={entry}
         assignable={assignableByPosition[position] ?? []}
@@ -487,11 +539,14 @@ function PositionNode({
 
 function positionBranchIsVisible(
   node: Extract<OrgChartNode, { kind: 'position' }>,
-  visiblePositions: Set<string>
+  visiblePositions: Set<string>,
+  displayFilters: RosterDisplayFilters
 ): boolean {
-  return (
-    visiblePositions.has(node.position) ||
-    filterVisibleOrgChartChildren(node.children ?? [], visiblePositions).length > 0
+  return positionNodeIsVisible(
+    node.position,
+    node.children ?? [],
+    visiblePositions,
+    displayFilters
   )
 }
 
@@ -504,7 +559,8 @@ function GroupBranch({
 }) {
   const chief = node.children.find(
     (child): child is Extract<OrgChartNode, { kind: 'position' }> =>
-      child.kind === 'position' && positionBranchIsVisible(child, renderProps.visiblePositions)
+      child.kind === 'position' &&
+      positionBranchIsVisible(child, renderProps.visiblePositions, renderProps.displayFilters)
   )
   if (!chief) return null
 
@@ -526,7 +582,9 @@ function CommandStaffRow({
   renderProps: OrgChartRenderProps
 }) {
   const visibleChildren = node.children.filter(
-    (child) => child.kind === 'position' && positionBranchIsVisible(child, renderProps.visiblePositions)
+    (child) =>
+      child.kind === 'position' &&
+      positionBranchIsVisible(child, renderProps.visiblePositions, renderProps.displayFilters)
   )
   if (visibleChildren.length === 0) return null
 
@@ -554,6 +612,7 @@ export function WorkspaceOrgChartRoster({
   assetsByKey,
   rosterById,
   visiblePositions,
+  displayFilters,
   assignableByPosition,
   scheduleAssignableByPosition,
   scheduleUnassignableByPosition,
@@ -600,15 +659,26 @@ export function WorkspaceOrgChartRoster({
 }: WorkspaceOrgChartRosterProps) {
   const visibleSectionBranches = orgChartLayout.sectionBranches.filter((branch) =>
     branch.children.some(
-      (child) => child.kind === 'position' && positionBranchIsVisible(child, visiblePositions)
+      (child) =>
+        child.kind === 'position' &&
+        positionBranchIsVisible(child, visiblePositions, displayFilters)
     )
   )
   const showCommandStaff = orgChartLayout.commandStaffBranch.children.some(
-    (child) => child.kind === 'position' && positionBranchIsVisible(child, visiblePositions)
+    (child) =>
+      child.kind === 'position' &&
+      positionBranchIsVisible(child, visiblePositions, displayFilters)
   )
-  const showRoot =
-    visiblePositions.has(orgChartLayout.rootPosition) ||
-    filterVisibleOrgChartChildren(orgChartLayout.rootChildren, visiblePositions).length > 0
+  const forceShowIc = showCommandStaff || visibleSectionBranches.length > 0
+  const renderIcPosition =
+    forceShowIc ||
+    positionNodeIsVisible(
+      orgChartLayout.rootPosition,
+      orgChartLayout.rootChildren,
+      visiblePositions,
+      displayFilters
+    )
+  const showIcCard = renderIcPosition
 
   const renderProps: OrgChartRenderProps = {
     layoutMode,
@@ -616,6 +686,7 @@ export function WorkspaceOrgChartRoster({
     assetsByKey,
     rosterById,
     visiblePositions,
+    displayFilters,
     assignableByPosition,
     scheduleAssignableByPosition,
     scheduleUnassignableByPosition,
@@ -670,14 +741,14 @@ export function WorkspaceOrgChartRoster({
 
       <div className="min-w-0 w-full max-w-full">
         <div className="mx-auto flex w-full min-w-0 max-w-full flex-col items-center px-0">
-          {showRoot && (
+          {showIcCard && (
             <div
               className={cn(
                 'w-full min-w-0 max-w-full',
                 layoutMode === 'wide' && 'flex justify-center'
               )}
             >
-              {visiblePositions.has(orgChartLayout.rootPosition) ? (
+              {renderIcPosition ? (
                 <PositionNode
                   position={orgChartLayout.rootPosition}
                   children={orgChartLayout.rootChildren}
@@ -692,23 +763,26 @@ export function WorkspaceOrgChartRoster({
             </div>
           )}
 
-          {showRoot && showCommandStaff && <OrgChartVerticalLine heightClassName="h-5" />}
+          {showIcCard && showCommandStaff && <OrgChartVerticalLine heightClassName="h-5" />}
 
           {showCommandStaff && (
             <CommandStaffRow node={orgChartLayout.commandStaffBranch} renderProps={renderProps} />
           )}
 
           {visibleSectionBranches.length > 0 && (
-            <>
-              {(showRoot || showCommandStaff) && <OrgChartVerticalLine heightClassName="h-5" />}
-              {layoutMode === 'wide' ? (
-                <OrgChartCrossbarColumns
-                  columnClassName={rosterOrgSectionColumnsClassName(layoutMode)}
-                  columns={visibleSectionBranches.map((branch) => (
-                    <GroupBranch key={branch.label} node={branch} renderProps={renderProps} />
-                  ))}
-                />
-              ) : (
+            layoutMode === 'wide' ? (
+              <OrgChartCrossbarColumns
+                columnClassName={rosterOrgSectionColumnsClassName(layoutMode)}
+                columns={visibleSectionBranches.map((branch) => (
+                  <GroupBranch key={branch.label} node={branch} renderProps={renderProps} />
+                ))}
+                showInboundStem={showIcCard || showCommandStaff}
+              />
+            ) : (
+              <>
+                {(showIcCard || showCommandStaff) && (
+                  <OrgChartVerticalLine heightClassName="h-5" />
+                )}
                 <div
                   className={cn(
                     'grid w-full min-w-0 gap-6',
@@ -719,8 +793,8 @@ export function WorkspaceOrgChartRoster({
                     <GroupBranch key={branch.label} node={branch} renderProps={renderProps} />
                   ))}
                 </div>
-              )}
-            </>
+              </>
+            )
           )}
         </div>
       </div>

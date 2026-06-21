@@ -10,13 +10,6 @@ import {
   PopoverTrigger,
 } from '@/components/ui/popover'
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
-import {
   Table,
   TableBody,
   TableCell,
@@ -28,10 +21,13 @@ import type { WorkspaceMemberCheckInStatus, WorkspaceRosterMember } from '@/lib/
 import type { RosterInviteAssignmentMode } from '@/features/roster/position-roster-messages'
 import type { PositionRosterEntry } from '@/features/roster/workspace-position-roster'
 import {
-  filterPositionRosterEntriesByAssignment,
   filterPositionRosterMembers,
   formatPositionAssignmentCount,
 } from '@/features/roster/workspace-position-roster'
+import {
+  positionMatchesRosterDisplayFilters,
+  type RosterDisplayFilters,
+} from '@/features/roster/roster-display-filters'
 import {
   type PositionRosterAssetHandlers,
 } from '@/features/roster/PositionRosterAssetSections'
@@ -50,6 +46,7 @@ import { cn } from '@/lib/utils'
 
 type WorkspacePositionRosterTableProps = {
   entries: PositionRosterEntry[]
+  displayFilters: RosterDisplayFilters
   assignableByPosition: Record<string, WorkspaceRosterMember[]>
   scheduleAssignableByPosition: Record<string, WorkspaceRosterMember[]>
   scheduleUnassignableByPosition: Record<string, WorkspaceRosterMember[]>
@@ -178,6 +175,7 @@ function AssignedMembersList({
 
 export function WorkspacePositionRosterTable({
   entries,
+  displayFilters,
   assignableByPosition,
   scheduleAssignableByPosition,
   scheduleUnassignableByPosition,
@@ -228,25 +226,25 @@ export function WorkspacePositionRosterTable({
     (canManageRoster ? 1 : 0)
   const [expandedPositions, setExpandedPositions] = useState<Set<string>>(() => new Set())
   const [assignedSearchQuery, setAssignedSearchQuery] = useState('')
-  const [assignedStatusFilter, setAssignedStatusFilter] = useState<'all' | 'assigned' | 'unassigned'>(
-    'all'
-  )
 
-  const filteredEntries = useMemo(
-    () =>
-      filterPositionRosterEntriesByAssignment(entries, {
-        searchQuery: assignedSearchQuery,
-        status: assignedStatusFilter,
-      }),
-    [assignedSearchQuery, assignedStatusFilter, entries]
-  )
+  const filteredEntries = useMemo(() => {
+    const normalizedQuery = assignedSearchQuery.trim().toLowerCase()
+    return entries.filter((entry) => {
+      if (!positionMatchesRosterDisplayFilters(entry, displayFilters)) {
+        return false
+      }
+      if (!normalizedQuery) return true
+      if (entry.position.toLowerCase().includes(normalizedQuery)) return true
+      return [...entry.members, ...entry.scheduledAssignees].some((member) =>
+        [member.email, member.status, member.addedAt].join(' ').toLowerCase().includes(normalizedQuery)
+      )
+    })
+  }, [assignedSearchQuery, displayFilters, entries])
 
-  const hasActiveAssignedFilters =
-    assignedSearchQuery.trim().length > 0 || assignedStatusFilter !== 'all'
+  const hasActiveAssignedFilters = assignedSearchQuery.trim().length > 0
 
   const clearAssignedFilters = () => {
     setAssignedSearchQuery('')
-    setAssignedStatusFilter('all')
   }
 
   const toggleExpanded = (position: string) => {
@@ -270,7 +268,7 @@ export function WorkspacePositionRosterTable({
             <TableHead className="min-w-[16rem] align-bottom">
               <div className="space-y-2">
                 <span>Assigned</span>
-                <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-[minmax(0,1fr)_8.5rem]">
+                <div className="grid grid-cols-1 gap-1.5">
                   <div className="space-y-1">
                     <Label htmlFor="roster-assigned-search" className="sr-only">
                       Search assigned members
@@ -283,21 +281,6 @@ export function WorkspacePositionRosterTable({
                       className="h-8 text-xs"
                     />
                   </div>
-                  <Select
-                    value={assignedStatusFilter}
-                    onValueChange={(value: 'all' | 'assigned' | 'unassigned') =>
-                      setAssignedStatusFilter(value)
-                    }
-                  >
-                    <SelectTrigger className="h-8 text-xs">
-                      <SelectValue placeholder="All" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All positions</SelectItem>
-                      <SelectItem value="assigned">Assigned only</SelectItem>
-                      <SelectItem value="unassigned">Unassigned only</SelectItem>
-                    </SelectContent>
-                  </Select>
                 </div>
                 {hasActiveAssignedFilters ? (
                   <div className="flex items-center justify-between gap-2 text-[11px] text-muted-foreground">

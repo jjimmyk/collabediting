@@ -3,8 +3,12 @@ import {
   ICS_ORG_CHART_POSITIONS,
   ICS_ORG_CHART_SECTION_BRANCHES,
 } from '../src/features/roster/ics-org-chart-structure'
+import {
+  DEFAULT_ROSTER_DISPLAY_FILTERS,
+  resolveVisibleRosterPositions,
+} from '../src/features/roster/roster-display-filters'
 import { emptyWorkspacePositionCatalog } from '../src/features/roster/workspace-positions'
-import { buildPositionRosterEntries } from '../src/features/roster/workspace-position-roster'
+import { buildPositionRosterEntries, type PositionRosterEntry } from '../src/features/roster/workspace-position-roster'
 import type { ResourceListItemData } from '../src/features/resources/types'
 import type { WorkspaceRosterMember } from '../src/lib/workspace-types'
 
@@ -199,6 +203,62 @@ assert(
   planningChief?.kind === 'position' &&
     planningChief.children?.some((child) => child.kind === 'stack'),
   'Planning Section Chief should nest unit leaders in a stack'
+)
+
+const filterEntries: PositionRosterEntry[] = [
+  {
+    position: 'Incident Commander',
+    members: [{ id: 'm1' } as WorkspaceRosterMember],
+    scheduledAssignees: [],
+    scheduledUnassignees: [],
+    scheduledOrgChartMembers: [],
+    assets: [],
+    scheduledAssignAssets: [],
+    scheduledUnassignAssets: [],
+    scheduledOrgChartAssets: [],
+    memberSchedulePolicy: { allowScheduleAssign: true, allowScheduleUnassign: true },
+    editIcs201: true,
+    allowWorkAssignment: true,
+  },
+  {
+    position: 'Operations Section Chief',
+    members: [],
+    scheduledAssignees: [{ id: 'm2' } as WorkspaceRosterMember],
+    scheduledUnassignees: [],
+    scheduledOrgChartMembers: [],
+    assets: [],
+    scheduledAssignAssets: [],
+    scheduledUnassignAssets: [],
+    scheduledOrgChartAssets: [],
+    memberSchedulePolicy: { allowScheduleAssign: true, allowScheduleUnassign: true },
+    editIcs201: true,
+    allowWorkAssignment: true,
+  },
+]
+
+assert(
+  resolveVisibleRosterPositions(filterEntries, DEFAULT_ROSTER_DISPLAY_FILTERS).size === 2,
+  'default display filters should show all positions'
+)
+assert(
+  resolveVisibleRosterPositions(filterEntries, {
+    ...DEFAULT_ROSTER_DISPLAY_FILTERS,
+    showPositionsWithCurrentAssignees: false,
+    showPositionsWithoutCurrentAssignees: true,
+    showPositionsWithScheduledAssignees: true,
+    showPositionsWithoutScheduledAssignees: false,
+  }).has('Operations Section Chief'),
+  'scheduled-only positions should remain visible when scheduled filter allows them'
+)
+assert(
+  !resolveVisibleRosterPositions(filterEntries, {
+    ...DEFAULT_ROSTER_DISPLAY_FILTERS,
+    showPositionsWithCurrentAssignees: false,
+    showPositionsWithoutCurrentAssignees: true,
+    showPositionsWithScheduledAssignees: false,
+    showPositionsWithoutScheduledAssignees: false,
+  }).has('Operations Section Chief'),
+  'positions should hide when both scheduled toggles are off'
 )
 
 console.log('verify-roster-org-chart-display: all checks passed')
