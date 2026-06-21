@@ -58,6 +58,7 @@ const assets: ResourceListItemData[] = [
     orgChartReportsTo: null,
     orgChartSortOrder: 0,
     ics204DocumentId: null,
+    assetCheckInStatus: null,
     pointOfContactMemberId: null,
   },
   {
@@ -104,6 +105,7 @@ const assets: ResourceListItemData[] = [
     orgChartReportsTo: null,
     orgChartSortOrder: 0,
     ics204DocumentId: null,
+    assetCheckInStatus: null,
     pointOfContactMemberId: null,
   },
   {
@@ -150,6 +152,7 @@ const assets: ResourceListItemData[] = [
     orgChartReportsTo: null,
     orgChartSortOrder: 0,
     ics204DocumentId: null,
+    assetCheckInStatus: null,
     pointOfContactMemberId: null,
   },
 ]

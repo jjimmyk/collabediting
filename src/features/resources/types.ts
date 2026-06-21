@@ -1,5 +1,5 @@
 import type { UscgCoastGuardAreaKey } from '@/data/uscg-coast-guard-area-geometries'
-import type { WorkspaceKind } from '@/lib/workspace-types'
+import type { WorkspaceKind, WorkspaceMemberCheckInStatus } from '@/lib/workspace-types'
 
 export type ResourceCostUnitType = 'per day' | 'per hour' | 'to purchase'
 
@@ -62,6 +62,8 @@ export type ResourceListItemData = HubAssetCatalogRecord & {
   pointOfContactMemberId: string | null
   /** Deferred org chart placement target when scheduled for next OP. */
   pendingOrgChartReportsTo?: string | null
+  /** Workspace-scoped asset check-in status (stored on assignment). */
+  assetCheckInStatus: WorkspaceMemberCheckInStatus | null
 }
 
 export type AssetWorkspaceOption = {
@@ -77,4 +79,5 @@ export type WorkspaceAssetAssignment = {
   orgChartSortOrder?: number
   ics204DocumentId?: string | null
   pointOfContactMemberId?: string | null
+  checkInStatus?: WorkspaceMemberCheckInStatus
 }

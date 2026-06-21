@@ -722,6 +722,46 @@ export async function updateRosterMemberCheckInStatus(params: {
   }
 }
 
+export async function updateWorkspaceAssetCheckInStatusRemote(params: {
+  accessToken: string
+  workspaceId: string
+  assetKey: string
+  checkInStatus: WorkspaceMemberCheckInStatus
+}): Promise<
+  { ok: true; checkInStatus: WorkspaceMemberCheckInStatus } | { ok: false; message: string }
+> {
+  if (!isSupabaseConfigured) {
+    return { ok: false, message: 'Supabase is not configured.' }
+  }
+
+  const response = await fetch('/api/update-workspace-asset-check-in-status', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${params.accessToken}`,
+    },
+    body: JSON.stringify({
+      workspaceId: params.workspaceId,
+      assetKey: params.assetKey,
+      checkInStatus: params.checkInStatus,
+    }),
+  })
+
+  const payload = (await response.json().catch(() => ({}))) as {
+    error?: string
+    checkInStatus?: WorkspaceMemberCheckInStatus
+  }
+
+  if (!response.ok) {
+    return { ok: false, message: payload.error ?? 'Could not update asset check-in status.' }
+  }
+
+  return {
+    ok: true,
+    checkInStatus: payload.checkInStatus ?? params.checkInStatus,
+  }
+}
+
 export async function fetchWorkspacePositionPermissions(
   workspaceId: string
 ): Promise<PositionPermissionMap> {

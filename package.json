@@ -16,6 +16,7 @@
     "verify:add-workspace-member": "npx vite-node scripts/verify-add-workspace-member.ts",
     "verify:add-asset-effective-when": "npx vite-node scripts/verify-add-asset-effective-when.ts",
     "verify:roster-org-chart-display": "npx vite-node scripts/verify-roster-org-chart-display.ts",
+    "verify:asset-workspace-assignment-display": "npx vite-node scripts/verify-asset-workspace-assignment-display.ts",
     "verify:ics215-work-assignments": "npx vite-node scripts/verify-ics215-work-assignments.ts",
     "verify:ics215-export": "npx vite-node scripts/verify-ics215-export.ts",
     "lint": "eslint .",

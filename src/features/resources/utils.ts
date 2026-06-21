@@ -6,6 +6,7 @@ import type {
   ResourceListItemData,
   WorkspaceAssetAssignment,
 } from '@/features/resources/types'
+import { UNASSIGNED_WORKSPACE_FIELD } from '@/features/resources/asset-workspace-assignment-display'
 import { isIncidentArchived } from '@/lib/incident-archive'
 
 export const getResourceIncidentAssignmentLabel = (resource: ResourceListItemData) =>
@@ -79,6 +80,12 @@ export function applyAssignmentsToHubAssets(
         orgChartSortOrder: 0,
         ics204DocumentId: null,
         pointOfContactMemberId: null,
+        assetCheckInStatus: null,
+        currentOpPeriod: UNASSIGNED_WORKSPACE_FIELD,
+        nextOpPeriod: UNASSIGNED_WORKSPACE_FIELD,
+        currentOpPeriodAssignment: UNASSIGNED_WORKSPACE_FIELD,
+        nextOpPeriodAssignment: UNASSIGNED_WORKSPACE_FIELD,
+        checkInStatus: UNASSIGNED_WORKSPACE_FIELD,
       }
     }
 
@@ -93,6 +100,7 @@ export function applyAssignmentsToHubAssets(
       orgChartSortOrder: assignment?.orgChartSortOrder ?? 0,
       ics204DocumentId: assignment?.ics204DocumentId ?? null,
       pointOfContactMemberId: assignment?.pointOfContactMemberId ?? null,
+      assetCheckInStatus: assignment?.checkInStatus ?? 'not_arrived',
     }
   })
 }

@@ -211,6 +211,7 @@ import {
   setWorkspacePositionAllowWorkAssignment,
   setWorkspacePositionEditIcs201,
   updateRosterMemberCheckInStatus,
+  updateWorkspaceAssetCheckInStatusRemote,
   updateRosterMemberPositions,
   updateWorkspace,
 } from '@/lib/workspace-service'
@@ -701,6 +702,9 @@ import {
   resolveHistoricalIcs234View,
   resolveHistoricalIapView,
 } from '@/lib/operational-period-snapshot-view'
+import { fetchOperationalPeriodSnapshotBundle } from '@/lib/operational-period-service'
+import type { ActiveWorkspaceAssetDisplayContext } from '@/features/resources/asset-workspace-assignment-display'
+import { UNASSIGNED_WORKSPACE_FIELD } from '@/features/resources/asset-workspace-assignment-display'
 import {
   formatOperationalPeriodLabel,
   formatWorkingOperationalPeriodLabel,
@@ -8622,6 +8626,9 @@ function App() {
     {}
   )
   const [activeWorkspaceSupabaseId, setActiveWorkspaceSupabaseId] = useState<string | null>(null)
+  const [assetAssignmentDisplayContext, setAssetAssignmentDisplayContext] =
+    useState<ActiveWorkspaceAssetDisplayContext | null>(null)
+  const [updatingAssetCheckInKey, setUpdatingAssetCheckInKey] = useState<string | null>(null)
   const {
     hubAssets,
     isLoading: isAssetAssignmentsLoading,
@@ -8631,10 +8638,12 @@ function App() {
     syncIcs204AttachmentsForDocument,
     getAssetsForWorkspace,
     refreshAssignments,
+    updateAssetCheckInStatus,
   } = useWorkspaceAssetAssignments({
     enabled: true,
     accessibleWorkspaces,
     userId: user?.id ?? null,
+    displayContext: assetAssignmentDisplayContext,
   })
   const assetWorkspaceOptions = useMemo(
     () => buildAssetWorkspaceOptions(accessibleWorkspaces),
@@ -13851,6 +13860,53 @@ function App() {
     () => buildIcs204AssignedUnitOptions(positionRosterEntries),
     [positionRosterEntries]
   )
+  useEffect(() => {
+    if (!activeWorkspaceSupabaseId || !operationalPeriodsEnabled) {
+      setAssetAssignmentDisplayContext(null)
+      return
+    }
+
+    let cancelled = false
+
+    void (async () => {
+      let currentOpIcs204Forms: Ics204FormState[] = []
+      if (startedOperationalPeriodCount > 0) {
+        try {
+          const bundle = await fetchOperationalPeriodSnapshotBundle(
+            activeWorkspaceSupabaseId,
+            startedOperationalPeriodCount
+          )
+          currentOpIcs204Forms = resolveHistoricalIcs204View(bundle)?.forms ?? []
+        } catch {
+          currentOpIcs204Forms = []
+        }
+      }
+
+      if (cancelled) return
+
+      setAssetAssignmentDisplayContext({
+        workspaceId: activeWorkspaceSupabaseId,
+        operationalPeriodsEnabled,
+        startedOperationalPeriodCount,
+        workingOperationalPeriodNumber,
+        workingIcs204Forms: ics204Forms,
+        currentOpIcs204Forms,
+        ics204AssigneeOptions: ics204AssignedUnitOptions,
+      })
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [
+    activeWorkspaceSupabaseId,
+    operationalPeriodsEnabled,
+    startedOperationalPeriodCount,
+    workingOperationalPeriodNumber,
+    ics204Forms,
+    ics204AssignedUnitOptions,
+    workspaceFormsReloadKey,
+  ])
   const ics215FormFor204Import = useMemo(() => {
     if (!displayIcs215Form) return null
     return getIcs215FormForExport(displayIcs215Form, ics215SectionDrafts)
@@ -15122,6 +15178,41 @@ function App() {
       }))
     } finally {
       setUpdatingCheckInMemberId(null)
+    }
+  }
+  const handleAssetCheckInStatusChange = async (
+    assetKey: string,
+    checkInStatus: WorkspaceMemberCheckInStatus
+  ) => {
+    setUpdatingAssetCheckInKey(assetKey)
+    try {
+      if (isSupabaseEnabled) {
+        if (!activeWorkspaceSupabaseId) {
+          toast.error('This workspace is not synced to Supabase yet.')
+          return
+        }
+        const accessToken = await getAccessToken()
+        if (!accessToken) {
+          toast.error('Sign in again to update check-in status.')
+          return
+        }
+        const result = await updateWorkspaceAssetCheckInStatusRemote({
+          accessToken,
+          workspaceId: activeWorkspaceSupabaseId,
+          assetKey,
+          checkInStatus,
+        })
+        if (!result.ok) {
+          toast.error(result.message)
+          return
+        }
+        await refreshAssignments()
+        return
+      }
+
+      await updateAssetCheckInStatus(assetKey, checkInStatus)
+    } finally {
+      setUpdatingAssetCheckInKey(null)
     }
   }
   const reloadWorkspaceMemberSchedules = async () => {
@@ -23987,11 +24078,11 @@ function App() {
   const normalizedIcs204ResourceQuery = ics204ResourceNameFilter.trim().toLowerCase()
   const filteredIcs204AttachableResources = ics204AttachableResources.filter((resource) => {
     const isScheduledCurrentOp =
-      resource.currentOpPeriodAssignment.trim().length > 0 &&
-      resource.currentOpPeriodAssignment !== '---'
+      resource.currentOpPeriodAssignment !== UNASSIGNED_WORKSPACE_FIELD &&
+      resource.currentOpPeriodAssignment.trim().length > 0
     const isScheduledNextOp =
-      resource.nextOpPeriodAssignment.trim().length > 0 &&
-      resource.nextOpPeriodAssignment !== '---'
+      resource.nextOpPeriodAssignment !== UNASSIGNED_WORKSPACE_FIELD &&
+      resource.nextOpPeriodAssignment.trim().length > 0
     const haystack = [
       resource.name,
       resource.owner,
@@ -26087,6 +26178,16 @@ function App() {
                             editable
                             workspaceOptions={assetWorkspaceOptions}
                             assignmentDisabled={isAssetAssignmentsLoading}
+                            canEditAssetCheckInStatus={
+                              Boolean(
+                                resource.assignedWorkspaceId &&
+                                  resource.assignedWorkspaceId === activeWorkspaceSupabaseId
+                              )
+                            }
+                            isUpdatingAssetCheckInStatus={updatingAssetCheckInKey === resource.assetKey}
+                            onAssetCheckInStatusChange={(status) => {
+                              void handleAssetCheckInStatusChange(resource.assetKey, status)
+                            }}
                             onAssignmentChange={(workspaceId) =>
                               handleAssetAssignmentChange(resource.assetKey, workspaceId)
                             }
@@ -36653,11 +36754,11 @@ function App() {
               )}
               {filteredIcs204AttachableResources.map((resource) => {
                 const isScheduledCurrentOp =
-                  resource.currentOpPeriodAssignment.trim().length > 0 &&
-                  resource.currentOpPeriodAssignment !== '---'
+                  resource.currentOpPeriodAssignment !== UNASSIGNED_WORKSPACE_FIELD &&
+                  resource.currentOpPeriodAssignment.trim().length > 0
                 const isScheduledNextOp =
-                  resource.nextOpPeriodAssignment.trim().length > 0 &&
-                  resource.nextOpPeriodAssignment !== '---'
+                  resource.nextOpPeriodAssignment !== UNASSIGNED_WORKSPACE_FIELD &&
+                  resource.nextOpPeriodAssignment.trim().length > 0
                 return (
                   <Item
                     key={`ics204-resource-option-${resource.assetKey}`}

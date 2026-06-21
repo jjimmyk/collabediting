@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { getAllHubAssets } from '@/data/hub-asset-catalog'
+import type { ActiveWorkspaceAssetDisplayContext } from '@/features/resources/asset-workspace-assignment-display'
+import { enrichAssetsWithWorkspaceAssignmentDisplay } from '@/features/resources/asset-workspace-assignment-display'
 import type { ResourceListItemData, WorkspaceAssetAssignment } from '@/features/resources/types'
 import {
   applyAssignmentsToHubAssets,
@@ -14,6 +16,7 @@ import {
   setAssetOrgChartPlacement,
   syncIcs204ResourceAttachmentsForDocument,
   unassignAsset,
+  updateWorkspaceAssetCheckInStatus,
 } from '@/lib/workspace-asset-service'
 import type { AccessibleWorkspace } from '@/lib/workspace-types'
 
@@ -21,12 +24,14 @@ type UseWorkspaceAssetAssignmentsOptions = {
   enabled: boolean
   accessibleWorkspaces: AccessibleWorkspace[]
   userId: string | null
+  displayContext?: ActiveWorkspaceAssetDisplayContext | null
 }
 
 export function useWorkspaceAssetAssignments({
   enabled,
   accessibleWorkspaces,
   userId,
+  displayContext = null,
 }: UseWorkspaceAssetAssignmentsOptions) {
   const [assignmentRows, setAssignmentRows] = useState<WorkspaceAssetAssignment[]>([])
   const [isLoading, setIsLoading] = useState(false)
@@ -48,8 +53,13 @@ export function useWorkspaceAssetAssignments({
   )
 
   const hubAssets = useMemo(
-    () => applyAssignmentsToHubAssets(getAllHubAssets(), assignmentRows, workspacesById),
-    [assignmentRows, workspacesById]
+    () =>
+      enrichAssetsWithWorkspaceAssignmentDisplay(
+        applyAssignmentsToHubAssets(getAllHubAssets(), assignmentRows, workspacesById),
+        workspacesById,
+        displayContext
+      ),
+    [assignmentRows, displayContext, workspacesById]
   )
 
   useEffect(() => {
@@ -144,6 +154,15 @@ export function useWorkspaceAssetAssignments({
     setAssignmentRows(rows)
   }, [])
 
+  const updateAssetCheckInStatus = useCallback(
+    async (assetKey: string, checkInStatus: NonNullable<WorkspaceAssetAssignment['checkInStatus']>) => {
+      await updateWorkspaceAssetCheckInStatus(assetKey, checkInStatus)
+      const rows = await fetchAllAssetAssignments()
+      setAssignmentRows(rows)
+    },
+    []
+  )
+
   return {
     hubAssets,
     assignmentRows,
@@ -158,5 +177,6 @@ export function useWorkspaceAssetAssignments({
     getAssetsForWorkspace,
     getAssetsForWorkspaceNotOnOrgChart,
     refreshAssignments,
+    updateAssetCheckInStatus,
   }
 }

@@ -21,6 +21,9 @@ import { AssetStatusIndicator } from '@/features/resources/AssetStatusIndicator'
 import { AlmisDataSourceIcon } from '@/features/resources/AlmisDataSourceIcon'
 import type { AssetWorkspaceOption, ResourceCostUnitType, ResourceListItemData } from '@/features/resources/types'
 import { AssetWorkspaceAssignmentSelect } from '@/features/resources/AssetWorkspaceAssignmentSelect'
+import { UNASSIGNED_WORKSPACE_FIELD } from '@/features/resources/asset-workspace-assignment-display'
+import { RosterMemberCheckInStatusSelect } from '@/features/roster/RosterMemberCheckInStatusSelect'
+import type { WorkspaceMemberCheckInStatus } from '@/lib/workspace-types'
 import {
   formatResourceCostPerUnit,
   formatResourceCostUnitType,
@@ -48,6 +51,10 @@ type ResourceListItemCardProps = {
   footerAddon?: ReactNode
   showEditButton?: boolean
   headerActions?: ReactNode
+  readOnlyWorkspaceAssignmentFields?: boolean
+  canEditAssetCheckInStatus?: boolean
+  isUpdatingAssetCheckInStatus?: boolean
+  onAssetCheckInStatusChange?: (status: WorkspaceMemberCheckInStatus) => void
 }
 
 const COST_UNIT_TYPE_OPTIONS: ResourceCostUnitType[] = ['per day', 'per hour', 'to purchase']
@@ -110,6 +117,10 @@ export function ResourceListItemCard({
   footerAddon,
   showEditButton = true,
   headerActions,
+  readOnlyWorkspaceAssignmentFields = true,
+  canEditAssetCheckInStatus = false,
+  isUpdatingAssetCheckInStatus = false,
+  onAssetCheckInStatusChange,
 }: ResourceListItemCardProps) {
   const [internalOpen, setInternalOpen] = useState(defaultOpen)
   const [isEditing, setIsEditing] = useState(false)
@@ -482,39 +493,53 @@ export function ResourceListItemCard({
                   ) : null}
                   <IncidentAssignmentSubfield
                     label="Current Op Period:"
-                    isEditing={isEditing}
-                    value={activeResource.currentOpPeriod}
+                    isEditing={isEditing && !readOnlyWorkspaceAssignmentFields}
+                    value={resource.currentOpPeriod}
                     field="currentOpPeriod"
                     onRenderInput={renderEditableInput}
                   />
                   <IncidentAssignmentSubfield
                     label="Next Op Period:"
-                    isEditing={isEditing}
-                    value={activeResource.nextOpPeriod}
+                    isEditing={isEditing && !readOnlyWorkspaceAssignmentFields}
+                    value={resource.nextOpPeriod}
                     field="nextOpPeriod"
                     onRenderInput={renderEditableInput}
                   />
                   <IncidentAssignmentSubfield
                     label="Current Op Period Assignment:"
-                    isEditing={isEditing}
-                    value={activeResource.currentOpPeriodAssignment}
+                    isEditing={isEditing && !readOnlyWorkspaceAssignmentFields}
+                    value={resource.currentOpPeriodAssignment}
                     field="currentOpPeriodAssignment"
                     onRenderInput={renderEditableInput}
                   />
                   <IncidentAssignmentSubfield
                     label="Next Op Period Assignment:"
-                    isEditing={isEditing}
-                    value={activeResource.nextOpPeriodAssignment}
+                    isEditing={isEditing && !readOnlyWorkspaceAssignmentFields}
+                    value={resource.nextOpPeriodAssignment}
                     field="nextOpPeriodAssignment"
                     onRenderInput={renderEditableInput}
                   />
-                  <IncidentAssignmentSubfield
-                    label="Check-in Status:"
-                    isEditing={isEditing}
-                    value={activeResource.checkInStatus}
-                    field="checkInStatus"
-                    onRenderInput={renderEditableInput}
-                  />
+                  <div className="space-y-1">
+                    <ResourceFieldLabel>Check-in Status:</ResourceFieldLabel>
+                    {canEditAssetCheckInStatus &&
+                    onAssetCheckInStatusChange &&
+                    resource.assignedWorkspaceId ? (
+                      <RosterMemberCheckInStatusSelect
+                        memberId={resource.assetKey}
+                        value={resource.assetCheckInStatus ?? 'not_arrived'}
+                        canEdit
+                        isUpdating={isUpdatingAssetCheckInStatus}
+                        onChange={(_memberId, status) => onAssetCheckInStatusChange(status)}
+                      />
+                    ) : (
+                      <p>
+                        {resource.checkInStatus &&
+                        resource.checkInStatus !== UNASSIGNED_WORKSPACE_FIELD
+                          ? resource.checkInStatus
+                          : UNASSIGNED_WORKSPACE_FIELD}
+                      </p>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
