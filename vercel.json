@@ -1,7 +1,7 @@
 {
   "functions": {
     "api/migrate.ts": {
-      "includeFiles": "scripts/migration-runner.mjs"
+      "includeFiles": "{scripts/migration-runner.mjs,supabase/migrations/**}"
     }
   },
   "rewrites": [
