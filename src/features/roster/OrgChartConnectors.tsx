@@ -1,9 +1,6 @@
 import type { ReactNode } from 'react'
 import { cn } from '@/lib/utils'
-import {
-  ORG_CHART_CARD_HALF_WIDTH_REM,
-  ORG_CHART_CONNECTOR_CLASS,
-} from '@/features/roster/org-chart-layout-tokens'
+import { ORG_CHART_CONNECTOR_CLASS } from '@/features/roster/org-chart-layout-tokens'
 
 export function OrgChartVerticalLine({
   className,
@@ -80,34 +77,15 @@ export function OrgChartCrossbarColumns({
   )
 }
 
-/** Vertical stack with a left rail and horizontal elbows to each child. */
-export function OrgChartLeftRailStack({ children }: { children: ReactNode[] }) {
+/** Vertical stack of child nodes under a single inbound stem (no left-rail elbows). */
+export function OrgChartVerticalStack({ children }: { children: ReactNode[] }) {
   if (children.length === 0) return null
 
   return (
     <div className="flex w-full min-w-0 flex-col items-center">
       <OrgChartVerticalLine heightClassName="h-5" />
       <div className="flex w-full min-w-0 flex-col items-center gap-2 pt-1">
-        {children.map((child, index) => (
-          <div key={index} className="relative flex w-full min-w-0 items-center justify-center">
-            <div
-              className="pointer-events-none absolute top-1/2 flex -translate-y-1/2 items-center"
-              style={{ right: `calc(50% + ${ORG_CHART_CARD_HALF_WIDTH_REM}rem)` }}
-              aria-hidden
-            >
-              <OrgChartHorizontalLine className="w-6" />
-              {index < children.length - 1 ? (
-                <div
-                  className={cn(
-                    'absolute left-0 top-1/2 h-[calc(100%+0.5rem)] w-0.5',
-                    ORG_CHART_CONNECTOR_CLASS
-                  )}
-                />
-              ) : null}
-            </div>
-            {child}
-          </div>
-        ))}
+        {children}
       </div>
     </div>
   )
@@ -119,10 +97,14 @@ export function OrgChartFork({ children }: { children: ReactNode[] }) {
 
   return (
     <OrgChartCrossbarColumns
-      columns={children}
+      columns={children.map((child, index) => (
+        <div key={index} className="flex min-w-[10rem] shrink-0 flex-col items-center">
+          {child}
+        </div>
+      ))}
       className="w-full"
-      barInsetClassName="left-[10%] right-[10%]"
-      columnClassName="grid-cols-2 gap-3"
+      barInsetClassName="left-[6%] right-[6%]"
+      columnClassName="grid-cols-2 gap-x-6 gap-y-2"
       showInboundStem
     />
   )

@@ -107,7 +107,6 @@ export function attachOrgChartAssetsToLayout(
       assetKey: asset.assetKey,
       label: asset.name,
       assetType: asset.type,
-      color: 'neutral',
     }
 
     if (reportsTo === layout.rootPosition) {
@@ -148,7 +147,6 @@ export function attachPendingOrgChartAssetsToLayout(
       assetKey: asset.assetKey,
       label: asset.name,
       assetType: asset.type,
-      color: 'neutral',
       scheduled: true,
     }
 

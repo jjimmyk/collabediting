@@ -424,7 +424,6 @@ export function buildWorkspaceOrgChartLayout(
     const childNode: OrgChartNode = {
       kind: 'position',
       position: custom.name,
-      color: 'neutral',
     }
     if (custom.reportsTo === base.rootPosition) {
       rootChildren.push(childNode)

@@ -55,6 +55,7 @@ type ResourceListItemCardProps = {
   canEditAssetCheckInStatus?: boolean
   isUpdatingAssetCheckInStatus?: boolean
   onAssetCheckInStatusChange?: (status: WorkspaceMemberCheckInStatus) => void
+  variant?: 'default' | 'orgChart'
 }
 
 const COST_UNIT_TYPE_OPTIONS: ResourceCostUnitType[] = ['per day', 'per hour', 'to purchase']
@@ -121,6 +122,7 @@ export function ResourceListItemCard({
   canEditAssetCheckInStatus = false,
   isUpdatingAssetCheckInStatus = false,
   onAssetCheckInStatusChange,
+  variant = 'default',
 }: ResourceListItemCardProps) {
   const [internalOpen, setInternalOpen] = useState(defaultOpen)
   const [isEditing, setIsEditing] = useState(false)
@@ -128,6 +130,7 @@ export function ResourceListItemCard({
   const isOpen = open ?? internalOpen
   const activeResource = isEditing && draft ? draft : resource
   const showAssignmentInline = showInlineAssignment ?? Boolean(onAssignmentChange)
+  const isOrgChartVariant = variant === 'orgChart'
 
   useEffect(() => {
     if (!isEditing) {
@@ -217,35 +220,54 @@ export function ResourceListItemCard({
       <Collapsible open={isOpen} onOpenChange={handleOpenChange}>
         <div
           className={cn(
-            'flex items-center gap-2 px-3 py-2.5',
+            'flex items-center gap-2',
+            isOrgChartVariant ? 'px-2 py-1.5' : 'px-3 py-2.5',
             onHeaderClick && !isEditing && 'cursor-pointer'
           )}
           onClick={isEditing ? undefined : onHeaderClick}
         >
           <ItemContent className="min-w-0">
-            <div
-              className={ASSET_LIST_ROW_GRID_CLASS}
-              aria-label={`Asset status: ${resource.assetStatus}, last updated ${resource.assetStatusUpdatedAt}`}
-            >
-              <div className="min-w-0">
+            {isOrgChartVariant ? (
+              <div
+                className="flex min-w-0 items-center gap-1.5"
+                aria-label={`Asset status: ${resource.assetStatus}, last updated ${resource.assetStatusUpdatedAt}`}
+              >
+                <AssetStatusIndicator status={resource.assetStatus} showLabel={false} />
                 {isEditing ? (
-                  renderEditableInput('name', activeResource.name, { className: 'font-medium' })
+                  renderEditableInput('name', activeResource.name, {
+                    className: 'text-[11px] font-medium',
+                  })
                 ) : (
-                  <ItemTitle className="truncate">{resource.name}</ItemTitle>
+                  <ItemTitle className="truncate text-[11px] font-semibold leading-snug">
+                    {resource.name}
+                  </ItemTitle>
                 )}
               </div>
-              <AssetStatusIndicator
-                status={resource.assetStatus}
-                showLabel={false}
-                className="justify-self-center"
-              />
-              <span className="text-xs font-normal tabular-nums text-muted-foreground whitespace-nowrap">
-                {resource.assetStatusUpdatedAt}
-              </span>
-              <span className="justify-self-center">
-                <AlmisDataSourceIcon />
-              </span>
-            </div>
+            ) : (
+              <div
+                className={ASSET_LIST_ROW_GRID_CLASS}
+                aria-label={`Asset status: ${resource.assetStatus}, last updated ${resource.assetStatusUpdatedAt}`}
+              >
+                <div className="min-w-0">
+                  {isEditing ? (
+                    renderEditableInput('name', activeResource.name, { className: 'font-medium' })
+                  ) : (
+                    <ItemTitle className="truncate">{resource.name}</ItemTitle>
+                  )}
+                </div>
+                <AssetStatusIndicator
+                  status={resource.assetStatus}
+                  showLabel={false}
+                  className="justify-self-center"
+                />
+                <span className="text-xs font-normal tabular-nums text-muted-foreground whitespace-nowrap">
+                  {resource.assetStatusUpdatedAt}
+                </span>
+                <span className="justify-self-center">
+                  <AlmisDataSourceIcon />
+                </span>
+              </div>
+            )}
             {headerAddon}
           </ItemContent>
           <ItemActions>
@@ -328,8 +350,14 @@ export function ResourceListItemCard({
           </div>
         ) : null}
         <CollapsibleContent>
-          <div className="border-t px-3 py-2 text-sm" onClick={(event) => event.stopPropagation()}>
-            <div className="grid grid-cols-2 gap-2">
+          <div
+            className={cn(
+              'border-t py-2',
+              isOrgChartVariant ? 'px-2 text-xs' : 'px-3 text-sm'
+            )}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className={cn('grid gap-2', isOrgChartVariant ? 'grid-cols-1' : 'grid-cols-2')}>
               <div className="space-y-1">
                 <ResourceFieldLabel>Current Location:</ResourceFieldLabel>
                 <AlmisLockedValue>

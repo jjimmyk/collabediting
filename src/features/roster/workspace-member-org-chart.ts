@@ -64,7 +64,6 @@ export function attachOrgChartSingleResourcesToLayout(
       memberId: member.id,
       label: member.email.split('@')[0] || member.email,
       email: member.email,
-      color: 'neutral',
     }
 
     if (reportsTo === layout.rootPosition) {
@@ -106,7 +105,6 @@ export function attachPendingOrgChartMembersToLayout(
       memberId: member.id,
       label: member.email.split('@')[0] || member.email,
       email: member.email,
-      color: 'neutral',
       scheduled: true,
     }
 

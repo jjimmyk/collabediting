@@ -11,5 +11,5 @@ export const ORG_CHART_ASSET_CARD_MAX_WIDTH = 'max-w-[9rem]'
 export const ORG_CHART_ASSET_CARD_WIDTH =
   `${ORG_CHART_ASSET_CARD_MIN_WIDTH} ${ORG_CHART_ASSET_CARD_MAX_WIDTH}`
 
-/** Half of max position card width — used for left-rail elbow offset. */
-export const ORG_CHART_CARD_HALF_WIDTH_REM = 6
+/** Expanded org-chart asset detail panel — still column-local, not full screen. */
+export const ORG_CHART_ASSET_CARD_EXPANDED_MAX_WIDTH = 'max-w-[18rem]'

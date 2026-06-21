@@ -11,13 +11,13 @@ import { PositionRosterCard } from '@/features/roster/PositionRosterCard'
 import {
   type PositionRosterAssetHandlers,
 } from '@/features/roster/PositionRosterAssetSections'
-import { OrgChartAssetCard } from '@/features/roster/OrgChartAssetCard'
+import { OrgChartCollapsibleAssetCard } from '@/features/roster/OrgChartCollapsibleAssetCard'
 import {
   OrgChartCrossbarColumns,
   OrgChartFork,
-  OrgChartLeftRailStack,
   OrgChartParentChildLink,
   OrgChartVerticalLine,
+  OrgChartVerticalStack,
 } from '@/features/roster/OrgChartConnectors'
 import {
   ORG_CHART_ASSET_CARD_WIDTH,
@@ -196,7 +196,7 @@ function OrgChartLayoutNode({
     )
     if (visibleChildren.length === 0) return null
     return (
-      <OrgChartLeftRailStack>
+      <OrgChartVerticalStack>
         {visibleChildren.map((child, index) => (
           <OrgChartLayoutNode
             key={orgChartNodeKey(child, index)}
@@ -205,7 +205,7 @@ function OrgChartLayoutNode({
             renderProps={renderProps}
           />
         ))}
-      </OrgChartLeftRailStack>
+      </OrgChartVerticalStack>
     )
   }
 
@@ -297,11 +297,14 @@ function OrgChartChildNode({
     const scheduled = node.scheduled ?? false
 
     return (
-      <div className={cn('flex w-full justify-center', ORG_CHART_ASSET_CARD_WIDTH)}>
-        <OrgChartAssetCard
-          name={asset.name}
+      <div className="flex w-full justify-center">
+        <OrgChartCollapsibleAssetCard
+          asset={asset}
+          color={node.color ?? parentColor}
           scheduled={scheduled}
+          glassItemBorderClasses={renderProps.glassItemBorderClasses}
           canManage={renderProps.canManageRoster}
+          pocMembers={renderProps.pocMembers}
           removeLabel={
             scheduled
               ? `Remove ${asset.name} from next OP org chart schedule`
@@ -315,6 +318,7 @@ function OrgChartChildNode({
           onFocusMap={
             renderProps.onFocusAsset ? () => renderProps.onFocusAsset!(asset) : undefined
           }
+          onUpdateAssetPointOfContact={renderProps.onUpdateAssetPointOfContact}
         />
       </div>
     )

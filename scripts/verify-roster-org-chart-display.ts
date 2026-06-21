@@ -2,12 +2,16 @@ import { buildDynamicOrgChart } from '../src/features/roster/build-dynamic-org-c
 import {
   ICS_ORG_CHART_POSITIONS,
   ICS_ORG_CHART_SECTION_BRANCHES,
+  type OrgChartNode,
 } from '../src/features/roster/ics-org-chart-structure'
 import {
   DEFAULT_ROSTER_DISPLAY_FILTERS,
   resolveVisibleRosterPositions,
 } from '../src/features/roster/roster-display-filters'
-import { emptyWorkspacePositionCatalog } from '../src/features/roster/workspace-positions'
+import {
+  buildWorkspacePositionCatalog,
+  emptyWorkspacePositionCatalog,
+} from '../src/features/roster/workspace-positions'
 import { buildPositionRosterEntries, type PositionRosterEntry } from '../src/features/roster/workspace-position-roster'
 import type { ResourceListItemData } from '../src/features/resources/types'
 import type { WorkspaceRosterMember } from '../src/lib/workspace-types'
@@ -259,6 +263,107 @@ assert(
     showPositionsWithoutScheduledAssignees: false,
   }).has('Operations Section Chief'),
   'positions should hide when both scheduled toggles are off'
+)
+
+function findPositionNode(
+  nodes: OrgChartNode[],
+  position: string
+): Extract<OrgChartNode, { kind: 'position' }> | null {
+  for (const node of nodes) {
+    if (node.kind === 'position') {
+      if (node.position === position) {
+        return node
+      }
+      if (node.children) {
+        const found = findPositionNode(node.children, position)
+        if (found) return found
+      }
+      continue
+    }
+    if (node.kind === 'group' || node.kind === 'stack' || node.kind === 'fork') {
+      const found = findPositionNode(node.children, position)
+      if (found) return found
+    }
+  }
+  return null
+}
+
+function collectOrgChartNodes(nodes: OrgChartNode[]): OrgChartNode[] {
+  const collected: OrgChartNode[] = []
+  for (const node of nodes) {
+    collected.push(node)
+    if (node.kind === 'position' && node.children) {
+      collected.push(...collectOrgChartNodes(node.children))
+    } else if (node.kind === 'group' || node.kind === 'stack' || node.kind === 'fork') {
+      collected.push(...collectOrgChartNodes(node.children))
+    }
+  }
+  return collected
+}
+
+const colorCatalog = buildWorkspacePositionCatalog([
+  {
+    id: 'custom-division-alpha',
+    name: 'division alpha',
+    reportsTo: 'Operations Section Chief',
+    sortOrder: 0,
+    lifecycleStatus: 'active',
+  },
+])
+
+const colorLayout = buildDynamicOrgChart(colorCatalog, [
+  {
+    assetKey: 'asset-under-custom',
+    name: 'a test item',
+    type: 'Equipment',
+    assetStatus: 'available',
+    assetStatusUpdatedAt: '2026-01-01',
+    mapLocation: [0, 0],
+    currentLocation: '',
+    opcon: '',
+    unitType: '',
+    unitName: '',
+    quantity: 1,
+    costPerUnit: 0,
+    costUnitType: 'per day',
+    assignedWorkspaceId: null,
+    orgChartReportsTo: 'division alpha',
+    pendingOrgChartReportsTo: null,
+    orgChartSortOrder: 0,
+    pointOfContactMemberId: null,
+    assetCheckInStatus: 'not_arrived',
+    currentOpPeriodAssignment: '',
+    nextOpPeriodAssignment: '',
+    checkInStatus: '',
+  },
+])
+
+const opsBranch = colorLayout.sectionBranches.find(
+  (branch) => branch.label === 'Operations Section'
+)
+const opsChief =
+  opsBranch?.children.find((child) => child.kind === 'position') ?? null
+assert(opsChief?.kind === 'position', 'Operations Section Chief should exist in color layout')
+
+const customPositionNode = findPositionNode(opsChief.children ?? [], 'division alpha')
+assert(customPositionNode, 'custom position should attach under Operations Section Chief')
+assert(
+  customPositionNode.color !== 'neutral',
+  'custom positions should inherit section color at render time, not hardcode neutral'
+)
+
+const allColorNodes = collectOrgChartNodes([
+  ...colorLayout.rootChildren,
+  ...colorLayout.commandStaffBranch.children,
+  ...colorLayout.sectionBranches.flatMap((branch) => branch.children),
+])
+const placedAssetNode = allColorNodes.find(
+  (node) => node.kind === 'asset' && node.assetKey === 'asset-under-custom'
+)
+assert(placedAssetNode?.kind === 'asset', 'org chart asset should attach under custom position')
+assert(
+  placedAssetNode.color !== 'neutral',
+  'org chart assets should inherit parent section color at render time, not hardcode neutral'
 )
 
 console.log('verify-roster-org-chart-display: all checks passed')

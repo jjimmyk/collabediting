@@ -27,6 +27,7 @@ type RosterAssetResourceListItemProps = {
   onFocusMap?: () => void
   open?: boolean
   onOpenChange?: (open: boolean) => void
+  variant?: 'default' | 'orgChart'
 }
 
 export function RosterAssetResourceListItem({
@@ -46,6 +47,7 @@ export function RosterAssetResourceListItem({
   onFocusMap,
   open,
   onOpenChange,
+  variant = 'default',
 }: RosterAssetResourceListItemProps) {
   if (!resource) {
     if (!onUpdateAssetPointOfContact) {
@@ -70,6 +72,7 @@ export function RosterAssetResourceListItem({
   return (
     <ResourceListItemCard
       resource={resource}
+      variant={variant}
       glassItemBorderClasses={glassItemBorderClasses}
       editable={false}
       showEditButton={false}
