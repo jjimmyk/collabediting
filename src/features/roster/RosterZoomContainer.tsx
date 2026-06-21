@@ -1,10 +1,12 @@
-import { type ReactNode, useCallback } from 'react'
+import { type ReactNode, useCallback, useLayoutEffect, useRef } from 'react'
 import { cn } from '@/lib/utils'
-import { stepRosterZoom } from '@/features/roster/roster-zoom'
+import { scrollToHorizontalCenter, stepRosterZoom } from '@/features/roster/roster-zoom'
 
 type RosterZoomContainerProps = {
   zoom: number
   onZoomChange?: (zoom: number) => void
+  centerScroll?: boolean
+  recenterToken?: number
   children: ReactNode
   className?: string
 }
@@ -12,9 +14,26 @@ type RosterZoomContainerProps = {
 export function RosterZoomContainer({
   zoom,
   onZoomChange,
+  centerScroll = false,
+  recenterToken = 0,
   children,
   className,
 }: RosterZoomContainerProps) {
+  const scrollRef = useRef<HTMLDivElement>(null)
+
+  useLayoutEffect(() => {
+    if (!centerScroll) return
+
+    const container = scrollRef.current
+    if (!container) return
+
+    const center = () => scrollToHorizontalCenter(container)
+    center()
+
+    const frame = requestAnimationFrame(center)
+    return () => cancelAnimationFrame(frame)
+  }, [centerScroll, recenterToken])
+
   const handleWheel = useCallback(
     (event: React.WheelEvent<HTMLDivElement>) => {
       if (!onZoomChange || !(event.ctrlKey || event.metaKey)) return
@@ -27,11 +46,14 @@ export function RosterZoomContainer({
 
   return (
     <div
+      ref={scrollRef}
       className={cn('min-w-0 w-full max-w-full overflow-auto scroll-smooth', className)}
       onWheel={handleWheel}
     >
-      <div style={{ zoom }} className="min-w-0 w-max min-w-full">
-        {children}
+      <div className="flex min-w-full justify-center">
+        <div style={{ zoom }} className="w-max">
+          {children}
+        </div>
       </div>
     </div>
   )

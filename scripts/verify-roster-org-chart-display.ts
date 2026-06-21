@@ -18,9 +18,13 @@ import {
   resolveVisibleRosterPositions,
 } from '../src/features/roster/roster-display-filters'
 import {
+  clampRosterZoom,
   DEFAULT_ROSTER_ZOOM,
   formatRosterZoomLabel,
-  ROSTER_ZOOM_PRESETS,
+  parseRosterZoomPercent,
+  ROSTER_ZOOM_MAX,
+  ROSTER_ZOOM_MIN,
+  ROSTER_ZOOM_STEP,
   rosterZoomAtMax,
   rosterZoomAtMin,
   stepRosterZoom,
@@ -476,15 +480,26 @@ assert(
 )
 
 assert(
-  ROSTER_ZOOM_PRESETS.join(',') === '0.5,0.75,1,1.25,1.5,2',
-  'roster zoom presets should match expected steps'
+  ROSTER_ZOOM_MIN === 0.5 &&
+    ROSTER_ZOOM_MAX === 2 &&
+    ROSTER_ZOOM_STEP === 0.05,
+  'roster zoom bounds should be 50%–200% in 5% steps'
 )
 assert(DEFAULT_ROSTER_ZOOM === 1, 'default roster zoom should be 100%')
-assert(formatRosterZoomLabel(1.25) === '125%', 'roster zoom label should format as percent')
-assert(stepRosterZoom(1, 'in') === 1.25, 'roster zoom in should step to next preset')
-assert(stepRosterZoom(1, 'out') === 0.75, 'roster zoom out should step to previous preset')
+assert(formatRosterZoomLabel(1.05) === '105%', 'roster zoom label should format as percent')
+assert(stepRosterZoom(1, 'in') === 1.05, 'roster zoom in should step by 5%')
+assert(stepRosterZoom(1, 'out') === 0.95, 'roster zoom out should step by 5%')
+assert(stepRosterZoom(0.5, 'out') === 0.5, 'roster zoom out should clamp at minimum')
+assert(stepRosterZoom(2, 'in') === 2, 'roster zoom in should clamp at maximum')
+assert(clampRosterZoom(1.234) === 1.23, 'roster zoom should round to two decimals')
+assert(parseRosterZoomPercent('115') === 1.15, 'roster zoom input should parse custom percents')
+assert(parseRosterZoomPercent('250') === 2, 'roster zoom input should clamp to max')
 assert(rosterZoomAtMin(0.5), 'minimum roster zoom should be at lower bound')
 assert(rosterZoomAtMax(2), 'maximum roster zoom should be at upper bound')
+assert(
+  Math.max(0, (1000 - 400) / 2) === 300,
+  'roster scroll center should use midpoint'
+)
 
 const displayFiltersMenuSource = readFileSync(
   join(process.cwd(), 'src/features/roster/RosterDisplayFiltersMenu.tsx'),
@@ -500,8 +515,11 @@ const zoomContainerSource = readFileSync(
   'utf8'
 )
 assert(
-  zoomContainerSource.includes('zoom') && zoomContainerSource.includes('overflow-auto'),
-  'roster zoom container should scale content while preserving scroll'
+  zoomContainerSource.includes('zoom') &&
+    zoomContainerSource.includes('overflow-auto') &&
+    zoomContainerSource.includes('justify-center') &&
+    zoomContainerSource.includes('recenterToken'),
+  'roster zoom container should scale content, center it, and preserve scroll'
 )
 
 console.log('verify-roster-org-chart-display: all checks passed')

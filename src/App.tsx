@@ -8751,6 +8751,7 @@ function App() {
     DEFAULT_ROSTER_DISPLAY_FILTERS
   )
   const [rosterZoomLevel, setRosterZoomLevel] = useState<number>(DEFAULT_ROSTER_ZOOM)
+  const [rosterRecenterToken, setRosterRecenterToken] = useState(0)
   const [rosterMemberPositionDraft, setRosterMemberPositionDraft] = useState<string>(
     ICS_POSITIONS[0]
   )
@@ -11812,6 +11813,10 @@ function App() {
       : []
   const activeWorkspaceRosterLabel =
     activeIncidentWorkspace?.name ?? activeExerciseWorkspace?.name ?? 'Workspace'
+  useEffect(() => {
+    setRosterZoomLevel(DEFAULT_ROSTER_ZOOM)
+    setRosterRecenterToken((current) => current + 1)
+  }, [activeWorkspaceSupabaseId, activeWorkspaceRosterKey])
   const {
     standardLifecycle,
     reload: reloadPositionLifecycle,
@@ -13894,6 +13899,23 @@ function App() {
       ),
     [activeWorkspaceRoster, workspaceAssignedAssetsWithPending, workspacePositionCatalog]
   )
+  const handleRosterZoomChange = useCallback((zoom: number) => {
+    setRosterZoomLevel(zoom)
+    if (zoom === DEFAULT_ROSTER_ZOOM) {
+      setRosterRecenterToken((current) => current + 1)
+    }
+  }, [])
+  useEffect(() => {
+    if (rosterViewMode !== 'org-chart') return
+    if (isRosterLoading || isCustomPositionsLoading) return
+    if (positionRosterEntries.length === 0) return
+    setRosterRecenterToken((current) => current + 1)
+  }, [
+    rosterViewMode,
+    isRosterLoading,
+    isCustomPositionsLoading,
+    positionRosterEntries.length,
+  ])
   const ics204AssignedUnitOptions = useMemo(
     () => buildIcs204AssignedUnitOptions(positionRosterEntries),
     [positionRosterEntries]
@@ -24936,7 +24958,7 @@ function App() {
                       filters={rosterDisplayFilters}
                       onChange={setRosterDisplayFilters}
                     />
-                    <RosterZoomControls zoom={rosterZoomLevel} onZoomChange={setRosterZoomLevel} />
+                    <RosterZoomControls zoom={rosterZoomLevel} onZoomChange={handleRosterZoomChange} />
                     <ToggleGroup
                       type="single"
                       value={rosterViewMode}
@@ -28234,7 +28256,9 @@ function App() {
                     ) : (
                       <RosterZoomContainer
                         zoom={rosterZoomLevel}
-                        onZoomChange={setRosterZoomLevel}
+                        onZoomChange={handleRosterZoomChange}
+                        centerScroll={rosterViewMode === 'org-chart'}
+                        recenterToken={rosterRecenterToken}
                         className="max-h-[calc(100vh-16rem)]"
                       >
                       {rosterViewMode === 'org-chart' ? (

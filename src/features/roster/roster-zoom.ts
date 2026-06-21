@@ -1,29 +1,40 @@
-export const ROSTER_ZOOM_PRESETS = [0.5, 0.75, 1, 1.25, 1.5, 2] as const
+export const ROSTER_ZOOM_MIN = 0.5
+export const ROSTER_ZOOM_MAX = 2
+export const ROSTER_ZOOM_STEP = 0.05
+export const DEFAULT_ROSTER_ZOOM = 1
 
-export type RosterZoomLevel = (typeof ROSTER_ZOOM_PRESETS)[number]
-
-export const DEFAULT_ROSTER_ZOOM: RosterZoomLevel = 1
+export function clampRosterZoom(zoom: number): number {
+  const rounded = Math.round(zoom * 100) / 100
+  return Math.min(ROSTER_ZOOM_MAX, Math.max(ROSTER_ZOOM_MIN, rounded))
+}
 
 export function formatRosterZoomLabel(zoom: number): string {
   return `${Math.round(zoom * 100)}%`
 }
 
-export function stepRosterZoom(current: number, direction: 'in' | 'out'): RosterZoomLevel {
-  const presets = ROSTER_ZOOM_PRESETS
-  const currentIndex = presets.findIndex((preset) => preset === current)
-  const resolvedIndex = currentIndex === -1 ? presets.indexOf(DEFAULT_ROSTER_ZOOM) : currentIndex
+export function parseRosterZoomPercent(value: string): number | null {
+  const normalized = value.trim().replace(/%/g, '')
+  if (!normalized) return null
 
-  if (direction === 'in') {
-    return presets[Math.min(resolvedIndex + 1, presets.length - 1)]
-  }
+  const parsed = Number.parseInt(normalized, 10)
+  if (!Number.isFinite(parsed)) return null
 
-  return presets[Math.max(resolvedIndex - 1, 0)]
+  return clampRosterZoom(parsed / 100)
+}
+
+export function stepRosterZoom(current: number, direction: 'in' | 'out'): number {
+  const delta = direction === 'in' ? ROSTER_ZOOM_STEP : -ROSTER_ZOOM_STEP
+  return clampRosterZoom(current + delta)
 }
 
 export function rosterZoomAtMin(zoom: number): boolean {
-  return zoom <= ROSTER_ZOOM_PRESETS[0]
+  return zoom <= ROSTER_ZOOM_MIN
 }
 
 export function rosterZoomAtMax(zoom: number): boolean {
-  return zoom >= ROSTER_ZOOM_PRESETS[ROSTER_ZOOM_PRESETS.length - 1]
+  return zoom >= ROSTER_ZOOM_MAX
+}
+
+export function scrollToHorizontalCenter(container: HTMLElement): void {
+  container.scrollLeft = Math.max(0, (container.scrollWidth - container.clientWidth) / 2)
 }
