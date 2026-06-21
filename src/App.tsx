@@ -15787,7 +15787,9 @@ function App() {
   const handleCreateCustomPosition = async (
     name: string,
     reportsTo: string,
-    createOnOpAdvance = false
+    createOnOpAdvance = false,
+    positionType: WorkspacePositionType,
+    customTypeLabel: string | null
   ) => {
     setIsSavingCustomPosition(true)
     try {
@@ -15799,6 +15801,20 @@ function App() {
       if (isSupabaseEnabled && activeWorkspaceSupabaseId) {
         const permissions = await fetchWorkspacePositionPermissions(activeWorkspaceSupabaseId)
         setActiveWorkspacePositionPermissions(permissions)
+
+        const typeResult = await setWorkspacePositionType(
+          activeWorkspaceSupabaseId,
+          created.name,
+          positionType,
+          customTypeLabel,
+          false
+        )
+        if (!typeResult.ok) {
+          toast.error(typeResult.message)
+          return
+        }
+        const settings = await fetchWorkspacePositionSettings(activeWorkspaceSupabaseId)
+        setActiveWorkspacePositionSettings(settings)
       } else if (activeWorkspaceRosterKey) {
         setLocalPositionPermissionsByKey((previous) => ({
           ...previous,
@@ -15812,7 +15828,11 @@ function App() {
           ...previous,
           [activeWorkspaceRosterKey]: {
             ...(previous[activeWorkspaceRosterKey] ?? {}),
-            [created.name]: { allowWorkAssignment: false },
+            [created.name]: {
+              allowWorkAssignment: false,
+              positionType,
+              customTypeLabel,
+            },
           },
         }))
       }

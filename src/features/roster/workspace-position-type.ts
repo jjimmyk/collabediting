@@ -6,7 +6,6 @@ export type WorkspacePositionType =
   | 'group'
   | 'strike_team'
   | 'task_force'
-  | 'single_resource'
   | 'custom_type'
 
 export const WORKSPACE_POSITION_TYPES: WorkspacePositionType[] = [
@@ -15,7 +14,6 @@ export const WORKSPACE_POSITION_TYPES: WorkspacePositionType[] = [
   'group',
   'strike_team',
   'task_force',
-  'single_resource',
   'custom_type',
 ]
 
@@ -25,9 +23,10 @@ export const WORKSPACE_POSITION_TYPE_LABELS: Record<WorkspacePositionType, strin
   group: 'Group',
   strike_team: 'Strike Team',
   task_force: 'Task Force',
-  single_resource: 'Single Resource',
   custom_type: 'Custom Type',
 }
+
+export const DEFAULT_NEW_CUSTOM_POSITION_TYPE: WorkspacePositionType = 'group'
 
 const DEFAULT_STANDARD_POSITION_TYPES: Record<string, WorkspacePositionType> = {
   'Incident Commander': 'branch',
@@ -41,6 +40,10 @@ const DEFAULT_STANDARD_POSITION_TYPES: Record<string, WorkspacePositionType> = {
   'Logistics Section Chief': 'branch',
   'Finance Section Chief': 'branch',
   'Intel/Investigations Section Chief': 'branch',
+}
+
+export function isAssignablePositionType(value: string): value is WorkspacePositionType {
+  return WORKSPACE_POSITION_TYPES.includes(value as WorkspacePositionType)
 }
 
 export function inferDefaultPositionType(
@@ -71,7 +74,15 @@ export function formatPositionTypeLabel(
 }
 
 export function parseWorkspacePositionType(value: string): WorkspacePositionType | null {
-  return WORKSPACE_POSITION_TYPES.includes(value as WorkspacePositionType)
-    ? (value as WorkspacePositionType)
-    : null
+  return isAssignablePositionType(value) ? value : null
+}
+
+export function validatePositionTypeSelection(
+  positionType: WorkspacePositionType,
+  customTypeLabel: string | null | undefined
+): string | null {
+  if (positionType === 'custom_type' && !customTypeLabel?.trim()) {
+    return 'Enter a custom type label.'
+  }
+  return null
 }

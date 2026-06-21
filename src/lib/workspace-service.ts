@@ -5,7 +5,7 @@ import {
   type PositionPermissionMap,
 } from '@/features/roster/workspace-position-roster'
 import { buildWorkspacePositionCatalog } from '@/features/roster/workspace-positions'
-import type { WorkspacePositionType } from '@/features/roster/workspace-position-type'
+import { isAssignablePositionType, type WorkspacePositionType } from '@/features/roster/workspace-position-type'
 import { getAcceptInviteUrl } from '@/lib/app-url'
 import {
   hasDefaultFullWorkspaceAccess,
@@ -904,6 +904,14 @@ export async function setWorkspacePositionType(
   const supabase = getSupabaseClient()
   if (!supabase) {
     return { ok: false, message: 'Supabase is not configured.' }
+  }
+
+  if (positionType !== null && !isAssignablePositionType(positionType)) {
+    return {
+      ok: false,
+      message:
+        'Positions cannot use Single Resource as a type. Add people or assets as single resources instead.',
+    }
   }
 
   const { error } = await supabase.from('workspace_position_settings').upsert(

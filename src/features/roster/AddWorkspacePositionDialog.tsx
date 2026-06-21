@@ -24,6 +24,13 @@ import {
   type WorkspacePositionCatalog,
 } from '@/features/roster/workspace-positions'
 import { ICS_ORG_CHART_ROOT_POSITION } from '@/features/roster/ics-org-chart-structure'
+import {
+  DEFAULT_NEW_CUSTOM_POSITION_TYPE,
+  validatePositionTypeSelection,
+  WORKSPACE_POSITION_TYPE_LABELS,
+  WORKSPACE_POSITION_TYPES,
+  type WorkspacePositionType,
+} from '@/features/roster/workspace-position-type'
 
 type AddWorkspacePositionDialogProps = {
   open: boolean
@@ -31,7 +38,13 @@ type AddWorkspacePositionDialogProps = {
   catalog: WorkspacePositionCatalog
   isSaving?: boolean
   showPlannedCreateOption?: boolean
-  onSubmit: (name: string, reportsTo: string, createOnOpAdvance: boolean) => Promise<void>
+  onSubmit: (
+    name: string,
+    reportsTo: string,
+    createOnOpAdvance: boolean,
+    positionType: WorkspacePositionType,
+    customTypeLabel: string | null
+  ) => Promise<void>
 }
 
 export function AddWorkspacePositionDialog({
@@ -44,6 +57,10 @@ export function AddWorkspacePositionDialog({
 }: AddWorkspacePositionDialogProps) {
   const [nameDraft, setNameDraft] = useState('')
   const [reportsToDraft, setReportsToDraft] = useState<string>(ICS_ORG_CHART_ROOT_POSITION)
+  const [typeDraft, setTypeDraft] = useState<WorkspacePositionType>(
+    DEFAULT_NEW_CUSTOM_POSITION_TYPE
+  )
+  const [customTypeLabelDraft, setCustomTypeLabelDraft] = useState('')
   const [createOnOpAdvance, setCreateOnOpAdvance] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -52,6 +69,8 @@ export function AddWorkspacePositionDialog({
   const resetDraft = () => {
     setNameDraft('')
     setReportsToDraft(ICS_ORG_CHART_ROOT_POSITION)
+    setTypeDraft(DEFAULT_NEW_CUSTOM_POSITION_TYPE)
+    setCustomTypeLabelDraft('')
     setCreateOnOpAdvance(false)
     setError(null)
   }
@@ -67,10 +86,21 @@ export function AddWorkspacePositionDialog({
       setError(reportsToError)
       return
     }
+    const typeError = validatePositionTypeSelection(typeDraft, customTypeLabelDraft)
+    if (typeError) {
+      setError(typeError)
+      return
+    }
 
     setError(null)
     try {
-      await onSubmit(nameDraft, reportsToDraft, createOnOpAdvance)
+      await onSubmit(
+        nameDraft,
+        reportsToDraft,
+        createOnOpAdvance,
+        typeDraft,
+        typeDraft === 'custom_type' ? customTypeLabelDraft.trim() : null
+      )
       resetDraft()
       onOpenChange(false)
     } catch (submitError) {
@@ -131,6 +161,44 @@ export function AddWorkspacePositionDialog({
               </SelectContent>
             </Select>
           </div>
+          <div className="grid gap-2">
+            <Label htmlFor="custom-position-type">Type</Label>
+            <Select
+              value={typeDraft}
+              onValueChange={(value) => {
+                setTypeDraft(value as WorkspacePositionType)
+                setError(null)
+              }}
+            >
+              <SelectTrigger id="custom-position-type">
+                <SelectValue placeholder="Select type" />
+              </SelectTrigger>
+              <SelectContent>
+                {WORKSPACE_POSITION_TYPES.map((type) => (
+                  <SelectItem key={type} value={type}>
+                    {WORKSPACE_POSITION_TYPE_LABELS[type]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-[11px] text-muted-foreground">
+              Single resources are people or assets added separately—not position types.
+            </p>
+          </div>
+          {typeDraft === 'custom_type' ? (
+            <div className="grid gap-2">
+              <Label htmlFor="custom-position-custom-type-label">Custom type label</Label>
+              <Input
+                id="custom-position-custom-type-label"
+                value={customTypeLabelDraft}
+                onChange={(event) => {
+                  setCustomTypeLabelDraft(event.target.value)
+                  setError(null)
+                }}
+                placeholder="Enter custom type"
+              />
+            </div>
+          ) : null}
           {showPlannedCreateOption ? (
             <div className="grid gap-2">
               <Label htmlFor="custom-position-create-timing">When to create</Label>

@@ -37,6 +37,12 @@ import {
   stepRosterZoom,
 } from '../src/features/roster/roster-zoom'
 import {
+  DEFAULT_NEW_CUSTOM_POSITION_TYPE,
+  parseWorkspacePositionType,
+  validatePositionTypeSelection,
+  WORKSPACE_POSITION_TYPES,
+} from '../src/features/roster/workspace-position-type'
+import {
   ORG_CHART_ASSET_CARD_MAX_WIDTH,
   ORG_CHART_CANVAS_MIN_WIDTH,
   orgChartSectionColumnClassName,
@@ -555,6 +561,35 @@ assert(
     zoomContainerSource.includes('justify-center') &&
     zoomContainerSource.includes('recenterToken'),
   'roster zoom container should scale content, center it, and preserve scroll'
+)
+
+assert(
+  !WORKSPACE_POSITION_TYPES.includes('single_resource' as never),
+  'position types should not include single_resource'
+)
+assert(parseWorkspacePositionType('single_resource') === null, 'single_resource is not a position type')
+assert(
+  validatePositionTypeSelection('custom_type', '') === 'Enter a custom type label.',
+  'custom type requires a label'
+)
+assert(
+  validatePositionTypeSelection('group', null) === null,
+  'group type should validate without a custom label'
+)
+assert(
+  DEFAULT_NEW_CUSTOM_POSITION_TYPE === 'group',
+  'new custom positions should default to group type'
+)
+
+const addPositionDialogSource = readFileSync(
+  join(process.cwd(), 'src/features/roster/AddWorkspacePositionDialog.tsx'),
+  'utf8'
+)
+assert(
+  addPositionDialogSource.includes('custom-position-type') &&
+    addPositionDialogSource.includes('WORKSPACE_POSITION_TYPES') &&
+    addPositionDialogSource.includes('Single resources are people or assets'),
+  'add position dialog should include type selection without single resource'
 )
 
 console.log('verify-roster-org-chart-display: all checks passed')

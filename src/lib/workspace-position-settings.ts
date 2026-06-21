@@ -2,6 +2,7 @@ import type { WorkspacePositionCatalog } from '@/features/roster/workspace-posit
 import {
   formatPositionTypeLabel,
   inferDefaultPositionType,
+  parseWorkspacePositionType,
   type WorkspacePositionType,
 } from '@/features/roster/workspace-position-type'
 
@@ -64,7 +65,9 @@ export function settingsFromRows(
   for (const row of rows) {
     map[row.position_name] = {
       allowWorkAssignment: row.allow_work_assignment,
-      positionType: (row.position_type as WorkspacePositionType | null | undefined) ?? null,
+      positionType: row.position_type
+        ? parseWorkspacePositionType(row.position_type)
+        : null,
       customTypeLabel: row.custom_type_label ?? null,
     }
   }
