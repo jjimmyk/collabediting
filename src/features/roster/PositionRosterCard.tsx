@@ -39,6 +39,7 @@ import {
   type OrgChartColor,
 } from '@/features/roster/ics-org-chart-structure'
 import type { RosterPanelLayoutMode } from '@/features/roster/roster-layout'
+import type { WorkspacePositionType } from '@/features/roster/workspace-position-type'
 
 type PositionRosterCardProps = {
   entry: PositionRosterEntry
@@ -59,6 +60,11 @@ type PositionRosterCardProps = {
   onToggleEditIcs201: (position: string, enabled: boolean) => void
   showAllowWorkAssignment?: boolean
   onToggleAllowWorkAssignment?: (position: string, enabled: boolean) => void
+  onPositionTypeChange?: (
+    position: string,
+    positionType: WorkspacePositionType | null,
+    customTypeLabel: string | null
+  ) => void
   onAssignExistingMember: (memberId: string, position: string) => void
   onScheduleAssignMember: (memberId: string, position: string) => void
   onScheduleUnassignMember: (memberId: string, position: string) => void
@@ -105,6 +111,7 @@ export function PositionRosterCard({
   onToggleEditIcs201,
   showAllowWorkAssignment = false,
   onToggleAllowWorkAssignment,
+  onPositionTypeChange,
   onAssignExistingMember,
   onScheduleAssignMember,
   onScheduleUnassignMember,
@@ -151,6 +158,7 @@ export function PositionRosterCard({
     onToggleEditIcs201,
     showAllowWorkAssignment,
     onToggleAllowWorkAssignment,
+    onPositionTypeChange,
     onAssignExistingMember,
     onScheduleAssignMember,
     onScheduleUnassignMember,
@@ -212,6 +220,11 @@ export function PositionRosterCard({
                   Leader: {leaderEmail}
                 </p>
               ) : null}
+              {entry.positionTypeLabel ? (
+                <p className="truncate text-[10px] text-muted-foreground">
+                  Type: {entry.positionTypeLabel}
+                </p>
+              ) : null}
             </div>
           </div>
         </button>
@@ -260,6 +273,7 @@ export function PositionRosterCard({
         isBusy={isPermissionBusy}
         showAllowWorkAssignment={showAllowWorkAssignment}
         onToggleAllowWorkAssignment={onToggleAllowWorkAssignment}
+        onPositionTypeChange={onPositionTypeChange}
       />
 
       <div className="space-y-1.5">

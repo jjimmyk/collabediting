@@ -15,8 +15,10 @@ import {
 } from '@/features/roster/workspace-positions'
 import {
   resolveAllowWorkAssignment,
+  resolvePositionType,
   type WorkspacePositionSettingsMap,
 } from '@/lib/workspace-position-settings'
+import type { WorkspacePositionType } from '@/features/roster/workspace-position-type'
 import {
   resolvePositionAssetEntry,
   resolveScheduledPositionAssets,
@@ -37,6 +39,9 @@ export type PositionRosterEntry = {
   memberSchedulePolicy: PositionMemberSchedulePolicy
   editIcs201: boolean
   allowWorkAssignment: boolean
+  positionType: WorkspacePositionType | null
+  customTypeLabel: string | null
+  positionTypeLabel: string | null
   isCustom?: boolean
   opAdvanceLabel?: PositionOpAdvanceLabel
   isPlanned?: boolean
@@ -158,6 +163,7 @@ export function buildPositionRosterEntries(
         assetsByKey,
         workspaceMetaByAssetKey
       )
+      const resolvedType = resolvePositionType(position, settings, catalog)
 
       return {
         position,
@@ -174,6 +180,9 @@ export function buildPositionRosterEntries(
         memberSchedulePolicy: getPositionMemberSchedulePolicy(meta),
         editIcs201: permissions[position]?.editIcs201 ?? !catalog.customPositionNames.has(position),
         allowWorkAssignment: resolveAllowWorkAssignment(position, settings, catalog),
+        positionType: resolvedType.positionType,
+        customTypeLabel: resolvedType.customTypeLabel,
+        positionTypeLabel: resolvedType.displayLabel,
         isCustom: isCustomWorkspacePosition(position, catalog),
         opAdvanceLabel: meta?.opAdvanceLabel ?? null,
         isPlanned: meta?.isPlanned ?? false,

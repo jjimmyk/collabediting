@@ -41,12 +41,14 @@ import {
 } from '@/features/roster/PositionRosterPropertySections'
 import { RosterMemberCheckInStatusSelect } from '@/features/roster/RosterMemberCheckInStatusSelect'
 import type { PositionOpAdvanceLabel } from '@/lib/operational-period-roster-types'
-import type { WorkspacePositionMeta } from '@/features/roster/workspace-positions'
+import type { WorkspacePositionCatalog, WorkspacePositionMeta } from '@/features/roster/workspace-positions'
+import type { WorkspacePositionType } from '@/features/roster/workspace-position-type'
 import { cn } from '@/lib/utils'
 
 type WorkspacePositionRosterTableProps = {
   entries: PositionRosterEntry[]
   displayFilters: RosterDisplayFilters
+  positionCatalog: WorkspacePositionCatalog
   assignableByPosition: Record<string, WorkspaceRosterMember[]>
   scheduleAssignableByPosition: Record<string, WorkspaceRosterMember[]>
   scheduleUnassignableByPosition: Record<string, WorkspaceRosterMember[]>
@@ -61,6 +63,11 @@ type WorkspacePositionRosterTableProps = {
   onToggleEditIcs201: (position: string, enabled: boolean) => void
   showAllowWorkAssignment?: boolean
   onToggleAllowWorkAssignment?: (position: string, enabled: boolean) => void
+  onPositionTypeChange?: (
+    position: string,
+    positionType: WorkspacePositionType | null,
+    customTypeLabel: string | null
+  ) => void
   onAssignExistingMember: (memberId: string, position: string) => void
   onScheduleAssignMember: (memberId: string, position: string) => void
   onScheduleUnassignMember: (memberId: string, position: string) => void
@@ -179,6 +186,7 @@ function AssignedMembersList({
 export function WorkspacePositionRosterTable({
   entries,
   displayFilters,
+  positionCatalog,
   assignableByPosition,
   scheduleAssignableByPosition,
   scheduleUnassignableByPosition,
@@ -209,6 +217,7 @@ export function WorkspacePositionRosterTable({
   onCheckInStatusChange,
   showAllowWorkAssignment = false,
   onToggleAllowWorkAssignment,
+  onPositionTypeChange,
   showPositionAssets = false,
   assignableAssetsByPosition = {},
   scheduleAssignableAssetsByPosition = {},
@@ -227,7 +236,7 @@ export function WorkspacePositionRosterTable({
   const tableColumnCount =
     3 +
     (showPositionAssets ? 1 : 0) +
-    (showAllowWorkAssignment ? 1 : 0) +
+    (showAllowWorkAssignment || onPositionTypeChange ? 1 : 0) +
     (showOpAdvanceLabels ? 1 : 0) +
     (canManageRoster ? 1 : 0)
   const [expandedPositions, setExpandedPositions] = useState<Set<string>>(() => new Set())
@@ -236,7 +245,7 @@ export function WorkspacePositionRosterTable({
   const filteredEntries = useMemo(() => {
     const normalizedQuery = assignedSearchQuery.trim().toLowerCase()
     return entries.filter((entry) => {
-      if (!positionMatchesRosterDisplayFilters(entry, displayFilters)) {
+      if (!positionMatchesRosterDisplayFilters(entry, displayFilters, positionCatalog)) {
         return false
       }
       if (!normalizedQuery) return true
@@ -245,7 +254,7 @@ export function WorkspacePositionRosterTable({
         [member.email, member.status, member.addedAt].join(' ').toLowerCase().includes(normalizedQuery)
       )
     })
-  }, [assignedSearchQuery, displayFilters, entries])
+  }, [assignedSearchQuery, displayFilters, entries, positionCatalog])
 
   const hasActiveAssignedFilters = assignedSearchQuery.trim().length > 0
 
@@ -311,7 +320,7 @@ export function WorkspacePositionRosterTable({
             {showPositionAssets ? (
               <TableHead className="min-w-[8rem] align-bottom">Assets</TableHead>
             ) : null}
-            {showAllowWorkAssignment ? (
+            {showAllowWorkAssignment || onPositionTypeChange ? (
               <TableHead className="min-w-[11rem] align-bottom">Position Properties</TableHead>
             ) : null}
             {showOpAdvanceLabels ? (
@@ -443,7 +452,7 @@ export function WorkspacePositionRosterTable({
                       </div>
                     </TableCell>
                   ) : null}
-                  {showAllowWorkAssignment && onToggleAllowWorkAssignment ? (
+                  {showAllowWorkAssignment || onPositionTypeChange ? (
                     <TableCell className="align-top">
                       <PositionPropertiesSection
                         entry={entry}
@@ -451,6 +460,7 @@ export function WorkspacePositionRosterTable({
                         isBusy={isUpdatingPermission === entry.position}
                         showAllowWorkAssignment={showAllowWorkAssignment}
                         onToggleAllowWorkAssignment={onToggleAllowWorkAssignment}
+                        onPositionTypeChange={onPositionTypeChange}
                         variant="table"
                       />
                     </TableCell>
@@ -522,6 +532,7 @@ export function WorkspacePositionRosterTable({
                               onToggleEditIcs201={onToggleEditIcs201}
                               showAllowWorkAssignment={showAllowWorkAssignment}
                               onToggleAllowWorkAssignment={onToggleAllowWorkAssignment}
+                              onPositionTypeChange={onPositionTypeChange}
                               onAssignExistingMember={onAssignExistingMember}
                               onScheduleAssignMember={onScheduleAssignMember}
                               onScheduleUnassignMember={onScheduleUnassignMember}

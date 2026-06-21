@@ -1,4 +1,3 @@
-import { useRef, useState } from 'react'
 import type { ResourceListItemData } from '@/features/resources/types'
 import { RosterAssetResourceListItem } from '@/features/roster/RosterAssetResourceListItem'
 import {
@@ -17,6 +16,7 @@ type OrgChartCollapsibleAssetCardProps = {
   canManage?: boolean
   pocMembers?: WorkspaceRosterMember[]
   removeLabel: string
+  onOpenDetail?: () => void
   onRemove?: () => void
   onFocusMap?: () => void
   onUpdateAssetPointOfContact?: (assetKey: string, memberId: string | null) => void
@@ -30,24 +30,20 @@ export function OrgChartCollapsibleAssetCard({
   canManage = false,
   pocMembers = [],
   removeLabel,
+  onOpenDetail,
   onRemove,
   onFocusMap,
   onUpdateAssetPointOfContact,
 }: OrgChartCollapsibleAssetCardProps) {
-  const [open, setOpen] = useState(false)
-  const rootRef = useRef<HTMLDivElement>(null)
-
-  const handleOpenChange = (nextOpen: boolean) => {
-    setOpen(nextOpen)
-    if (nextOpen) {
-      requestAnimationFrame(() => {
-        rootRef.current?.scrollIntoView({ inline: 'nearest', block: 'nearest' })
-      })
-    }
-  }
-
   return (
-    <div ref={rootRef} className={cn('w-full min-w-0', ORG_CHART_ASSET_CARD_WIDTH)}>
+    <button
+      type="button"
+      className={cn(
+        'block w-full min-w-0 text-left outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+        ORG_CHART_ASSET_CARD_WIDTH
+      )}
+      onClick={onOpenDetail}
+    >
       <RosterAssetResourceListItem
         asset={{
           assetKey: asset.assetKey,
@@ -64,18 +60,16 @@ export function OrgChartCollapsibleAssetCard({
           orgChartColorClasses(color)
         )}
         badgeLabel={scheduled ? 'Org chart · Next OP' : 'Org chart'}
-        showPoc={Boolean(onUpdateAssetPointOfContact)}
+        showPoc={false}
         pocMembers={pocMembers}
         canManage={canManage}
-        canEditPoc={canManage}
+        canEditPoc={false}
         isBusy={false}
         removeLabel={removeLabel}
         onRemove={onRemove}
         onUpdateAssetPointOfContact={onUpdateAssetPointOfContact}
         onFocusMap={onFocusMap}
-        open={open}
-        onOpenChange={handleOpenChange}
       />
-    </div>
+    </button>
   )
 }

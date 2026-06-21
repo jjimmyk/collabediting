@@ -5,6 +5,7 @@ import {
   type PositionPermissionMap,
 } from '@/features/roster/workspace-position-roster'
 import { buildWorkspacePositionCatalog } from '@/features/roster/workspace-positions'
+import type { WorkspacePositionType } from '@/features/roster/workspace-position-type'
 import { getAcceptInviteUrl } from '@/lib/app-url'
 import {
   hasDefaultFullWorkspaceAccess,
@@ -807,7 +808,7 @@ export async function fetchWorkspacePositionSettings(
 
   const { data, error } = await supabase
     .from('workspace_position_settings')
-    .select('position_name, allow_work_assignment')
+    .select('position_name, allow_work_assignment, position_type, custom_type_label')
     .eq('workspace_id', workspaceId)
 
   if (error || !data) {
@@ -815,7 +816,12 @@ export async function fetchWorkspacePositionSettings(
   }
 
   return settingsFromRows(
-    data as Array<{ position_name: string; allow_work_assignment: boolean }>
+    data as Array<{
+      position_name: string
+      allow_work_assignment: boolean
+      position_type?: string | null
+      custom_type_label?: string | null
+    }>
   )
 }
 
@@ -867,11 +873,47 @@ export async function setWorkspacePositionAllowWorkAssignment(
     return { ok: false, message: 'Supabase is not configured.' }
   }
 
+  const currentSettings = await fetchWorkspacePositionSettings(workspaceId)
+  const existing = currentSettings[icsPosition]
+
   const { error } = await supabase.from('workspace_position_settings').upsert(
     {
       workspace_id: workspaceId,
       position_name: icsPosition,
       allow_work_assignment: enabled,
+      position_type: existing?.positionType ?? null,
+      custom_type_label: existing?.customTypeLabel ?? null,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: 'workspace_id,position_name' }
+  )
+
+  if (error) {
+    return { ok: false, message: error.message }
+  }
+  return { ok: true }
+}
+
+export async function setWorkspacePositionType(
+  workspaceId: string,
+  positionName: string,
+  positionType: WorkspacePositionType | null,
+  customTypeLabel: string | null,
+  allowWorkAssignment: boolean
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  const supabase = getSupabaseClient()
+  if (!supabase) {
+    return { ok: false, message: 'Supabase is not configured.' }
+  }
+
+  const { error } = await supabase.from('workspace_position_settings').upsert(
+    {
+      workspace_id: workspaceId,
+      position_name: positionName,
+      allow_work_assignment: allowWorkAssignment,
+      position_type: positionType,
+      custom_type_label:
+        positionType === 'custom_type' ? customTypeLabel?.trim() || null : null,
       updated_at: new Date().toISOString(),
     },
     { onConflict: 'workspace_id,position_name' }

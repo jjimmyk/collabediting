@@ -10,6 +10,7 @@ type SingleResourceOrgChartCardProps = {
   color?: OrgChartColor
   scheduled?: boolean
   canManage?: boolean
+  onOpenDetail?: () => void
   onRemoveFromOrgChart?: (memberId: string) => void
 }
 
@@ -18,6 +19,7 @@ export function SingleResourceOrgChartCard({
   color,
   scheduled = false,
   canManage = false,
+  onOpenDetail,
   onRemoveFromOrgChart,
 }: SingleResourceOrgChartCardProps) {
   const reportsTo = member.orgChartReportsTo ?? member.pendingOrgChartReportsTo
@@ -30,7 +32,11 @@ export function SingleResourceOrgChartCard({
       )}
     >
       <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0 space-y-1">
+        <button
+          type="button"
+          className="min-w-0 flex-1 space-y-1 text-left outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+          onClick={onOpenDetail}
+        >
           <div className="flex flex-wrap items-center gap-1.5">
             <p className="truncate text-xs font-semibold leading-snug">{member.email}</p>
             <Badge variant="outline" className="h-4 px-1 text-[9px]">
@@ -47,7 +53,7 @@ export function SingleResourceOrgChartCard({
               Reports to {reportsTo}
             </p>
           ) : null}
-        </div>
+        </button>
         {canManage && onRemoveFromOrgChart ? (
           <Button
             type="button"

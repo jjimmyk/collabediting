@@ -35,6 +35,9 @@ function rosterEntry(overrides: Partial<PositionRosterEntry> & Pick<PositionRost
     },
     editIcs201: true,
     allowWorkAssignment: true,
+    positionType: null,
+    customTypeLabel: null,
+    positionTypeLabel: null,
     ...overrides,
   }
 }

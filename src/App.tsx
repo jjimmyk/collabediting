@@ -210,6 +210,7 @@ import {
   setWorkspaceArchived,
   setWorkspacePositionAllowWorkAssignment,
   setWorkspacePositionEditIcs201,
+  setWorkspacePositionType,
   updateRosterMemberCheckInStatus,
   updateWorkspaceAssetCheckInStatusRemote,
   updateRosterMemberPositions,
@@ -593,6 +594,8 @@ import {
 } from '@/features/roster/workspace-position-roster'
 import { buildPositionRosterEntriesFromSnapshot } from '@/lib/operational-period-roster-snapshot'
 import type { WorkspacePositionSettingsMap } from '@/lib/workspace-position-settings'
+import { resolveAllowWorkAssignment } from '@/lib/workspace-position-settings'
+import type { WorkspacePositionType } from '@/features/roster/workspace-position-type'
 import {
   buildMemberScheduleSummaryFromRows,
   fetchWorkspaceMemberSchedules,
@@ -14016,8 +14019,13 @@ function App() {
     )
   }, [])
   const visibleRosterPositions = useMemo(
-    () => resolveVisibleRosterPositions(positionRosterEntries, rosterDisplayFilters),
-    [positionRosterEntries, rosterDisplayFilters]
+    () =>
+      resolveVisibleRosterPositions(
+        positionRosterEntries,
+        rosterDisplayFilters,
+        workspacePositionCatalog
+      ),
+    [positionRosterEntries, rosterDisplayFilters, workspacePositionCatalog]
   )
   const assignableByPosition = useMemo(() => {
     const map: Record<string, WorkspaceRosterMember[]> = {}
@@ -15721,6 +15729,57 @@ function App() {
       [activeWorkspaceRosterKey]: {
         ...(previous[activeWorkspaceRosterKey] ?? {}),
         [position]: { allowWorkAssignment: enabled },
+      },
+    }))
+    setRosterPermissionUpdatingPosition(null)
+  }
+  const handleUpdatePositionType = async (
+    position: string,
+    positionType: WorkspacePositionType | null,
+    customTypeLabel: string | null
+  ) => {
+    if (!canManageWorkspaceRoster || isViewingHistoricalRoster) return
+
+    setRosterPermissionUpdatingPosition(position)
+    const allowWorkAssignment = resolveAllowWorkAssignment(
+      position,
+      activePositionSettings,
+      workspacePositionCatalog
+    )
+
+    if (isSupabaseEnabled && activeWorkspaceSupabaseId) {
+      const result = await setWorkspacePositionType(
+        activeWorkspaceSupabaseId,
+        position,
+        positionType,
+        customTypeLabel,
+        allowWorkAssignment
+      )
+      if (!result.ok) {
+        setRosterPermissionUpdatingPosition(null)
+        toast.error(result.message)
+        return
+      }
+      const settings = await fetchWorkspacePositionSettings(activeWorkspaceSupabaseId)
+      setActiveWorkspacePositionSettings(settings)
+      setRosterPermissionUpdatingPosition(null)
+      return
+    }
+
+    if (activeWorkspaceRosterKey === null) {
+      setRosterPermissionUpdatingPosition(null)
+      return
+    }
+
+    setLocalPositionSettingsByKey((previous) => ({
+      ...previous,
+      [activeWorkspaceRosterKey]: {
+        ...(previous[activeWorkspaceRosterKey] ?? {}),
+        [position]: {
+          allowWorkAssignment,
+          positionType,
+          customTypeLabel,
+        },
       },
     }))
     setRosterPermissionUpdatingPosition(null)
@@ -28364,11 +28423,15 @@ function App() {
                       removingPositionFromRoster={deletingCustomPosition}
                       canRemovePositionFromRoster={canRemovePositionFromRoster}
                       positionRemovalBlockedReason={positionRemovalBlockedReason}
+                      onPositionTypeChange={(position, positionType, customTypeLabel) => {
+                        void handleUpdatePositionType(position, positionType, customTypeLabel)
+                      }}
                     />
                       ) : (
                         <WorkspacePositionRosterTable
                       entries={positionRosterEntries}
                       displayFilters={rosterDisplayFilters}
+                      positionCatalog={workspacePositionCatalog}
                       assignableByPosition={assignableByPosition}
                       scheduleAssignableByPosition={scheduleAssignableByPosition}
                       scheduleUnassignableByPosition={scheduleUnassignableByPosition}
@@ -28411,6 +28474,9 @@ function App() {
                       }}
                       canRemovePositionFromRoster={canRemovePositionFromRoster}
                       positionRemovalBlockedReason={positionRemovalBlockedReason}
+                      onPositionTypeChange={(position, positionType, customTypeLabel) => {
+                        void handleUpdatePositionType(position, positionType, customTypeLabel)
+                      }}
                       onDeleteCustomPosition={(position) => {
                         void handleDeleteCustomPosition(position)
                       }}

@@ -32,6 +32,11 @@ type PositionRosterDetailPanelProps = {
   onToggleEditIcs201: (position: string, enabled: boolean) => void
   showAllowWorkAssignment?: boolean
   onToggleAllowWorkAssignment?: (position: string, enabled: boolean) => void
+  onPositionTypeChange?: (
+    position: string,
+    positionType: import('@/features/roster/workspace-position-type').WorkspacePositionType | null,
+    customTypeLabel: string | null
+  ) => void
   onAssignExistingMember: (memberId: string, position: string) => void
   onScheduleAssignMember: (memberId: string, position: string) => void
   onScheduleUnassignMember: (memberId: string, position: string) => void
@@ -73,6 +78,7 @@ export function PositionRosterDetailPanel({
   onToggleEditIcs201,
   showAllowWorkAssignment = false,
   onToggleAllowWorkAssignment,
+  onPositionTypeChange,
   onAssignExistingMember,
   onScheduleAssignMember,
   onScheduleUnassignMember,
@@ -150,6 +156,7 @@ export function PositionRosterDetailPanel({
         isBusy={isPermissionBusy}
         showAllowWorkAssignment={showAllowWorkAssignment}
         onToggleAllowWorkAssignment={onToggleAllowWorkAssignment}
+        onPositionTypeChange={onPositionTypeChange}
       />
 
       {showOpAdvanceLabels && onOpAdvanceLabelChange ? (

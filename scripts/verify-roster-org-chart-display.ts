@@ -18,6 +18,13 @@ import {
   resolveVisibleRosterPositions,
 } from '../src/features/roster/roster-display-filters'
 import {
+  positionMatchesSectionFilters,
+  resolvePositionOrgChartSection,
+} from '../src/features/roster/roster-org-chart-sections'
+import {
+  emptyWorkspacePositionCatalog,
+} from '../src/features/roster/workspace-positions'
+import {
   clampRosterZoom,
   DEFAULT_ROSTER_ZOOM,
   formatRosterZoomLabel,
@@ -250,6 +257,9 @@ const filterEntries: PositionRosterEntry[] = [
     memberSchedulePolicy: { allowScheduleAssign: true, allowScheduleUnassign: true },
     editIcs201: true,
     allowWorkAssignment: true,
+    positionType: null,
+    customTypeLabel: null,
+    positionTypeLabel: null,
   },
   {
     position: 'Operations Section Chief',
@@ -264,11 +274,17 @@ const filterEntries: PositionRosterEntry[] = [
     memberSchedulePolicy: { allowScheduleAssign: true, allowScheduleUnassign: true },
     editIcs201: true,
     allowWorkAssignment: true,
+    positionType: null,
+    customTypeLabel: null,
+    positionTypeLabel: null,
   },
 ]
 
+const filterCatalog = emptyWorkspacePositionCatalog()
+
 assert(
-  resolveVisibleRosterPositions(filterEntries, DEFAULT_ROSTER_DISPLAY_FILTERS).size === 2,
+  resolveVisibleRosterPositions(filterEntries, DEFAULT_ROSTER_DISPLAY_FILTERS, filterCatalog)
+    .size === 2,
   'default display filters should show all positions'
 )
 assert(
@@ -278,7 +294,7 @@ assert(
     showPositionsWithoutCurrentAssignees: true,
     showPositionsWithScheduledAssignees: true,
     showPositionsWithoutScheduledAssignees: false,
-  }).has('Operations Section Chief'),
+  }, filterCatalog).has('Operations Section Chief'),
   'scheduled-only positions should remain visible when scheduled filter allows them'
 )
 assert(
@@ -288,8 +304,23 @@ assert(
     showPositionsWithoutCurrentAssignees: true,
     showPositionsWithScheduledAssignees: false,
     showPositionsWithoutScheduledAssignees: false,
-  }).has('Operations Section Chief'),
+  }, filterCatalog).has('Operations Section Chief'),
   'positions should hide when both scheduled toggles are off'
+)
+assert(
+  summarizeActiveDisplayFilters(DEFAULT_ROSTER_DISPLAY_FILTERS).totalCount === 13,
+  'display filters should include assignee and section toggles'
+)
+assert(
+  resolvePositionOrgChartSection('Operations Section Chief', filterCatalog) === 'operations',
+  'Operations Section Chief should map to operations section'
+)
+assert(
+  !positionMatchesSectionFilters('Operations Section Chief', {
+    ...DEFAULT_ROSTER_DISPLAY_FILTERS,
+    showOperationsSection: false,
+  }, filterCatalog),
+  'section filters should hide operations positions'
 )
 
 function findPositionNode(
@@ -433,6 +464,9 @@ const emptyPositionEntry: PositionRosterEntry = {
   memberSchedulePolicy: { allowScheduleAssign: true, allowScheduleUnassign: true },
   editIcs201: true,
   allowWorkAssignment: true,
+  positionType: null,
+  customTypeLabel: null,
+  positionTypeLabel: null,
 }
 assert(
   positionCanBeRemovedFromRoster(emptyPositionEntry, catalog, roster, Object.values(assetsByKey)),
@@ -455,7 +489,7 @@ assert(
 
 const defaultFilterSummary = summarizeActiveDisplayFilters(DEFAULT_ROSTER_DISPLAY_FILTERS)
 assert(defaultFilterSummary.isDefault, 'default display filters should report isDefault')
-assert(defaultFilterSummary.activeCount === 6, 'default display filters should have 6 active toggles')
+assert(defaultFilterSummary.activeCount === 13, 'default display filters should have 13 active toggles')
 assert(
   defaultFilterSummary.inactiveLabels.length === 0,
   'default display filters should have no inactive labels'
@@ -506,8 +540,9 @@ const displayFiltersMenuSource = readFileSync(
   'utf8'
 )
 assert(
-  !displayFiltersMenuSource.includes('Hiding:'),
-  'roster toolbar should not show inline hiding labels'
+  !displayFiltersMenuSource.includes('Hiding:') &&
+    !displayFiltersMenuSource.includes('line-through'),
+  'roster display menu should not show redundant filter pills'
 )
 
 const zoomContainerSource = readFileSync(

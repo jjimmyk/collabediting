@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { cn } from '@/lib/utils'
 import type { WorkspaceMemberCheckInStatus, WorkspaceRosterMember } from '@/lib/workspace-types'
 import type { ResourceListItemData } from '@/features/resources/types'
@@ -12,6 +13,9 @@ import {
   type PositionRosterAssetHandlers,
 } from '@/features/roster/PositionRosterAssetSections'
 import { OrgChartCollapsibleAssetCard } from '@/features/roster/OrgChartCollapsibleAssetCard'
+import { OrgChartNodeDetailDialog } from '@/features/roster/OrgChartNodeDetailDialog'
+import { RosterAssetResourceListItem } from '@/features/roster/RosterAssetResourceListItem'
+import { SingleResourceDetailPanel } from '@/features/roster/SingleResourceDetailPanel'
 import {
   OrgChartCrossbarColumns,
   OrgChartFork,
@@ -27,6 +31,11 @@ import {
 } from '@/features/roster/org-chart-layout-tokens'
 import type { RosterDisplayFilters } from '@/features/roster/roster-display-filters'
 import { singleResourceNodeVisible } from '@/features/roster/roster-display-filters'
+import {
+  orgChartBranchSectionKey,
+  orgChartSectionFilterEnabled,
+} from '@/features/roster/roster-org-chart-sections'
+import type { WorkspacePositionType } from '@/features/roster/workspace-position-type'
 import { SingleResourceOrgChartCard } from '@/features/roster/SingleResourceOrgChartCard'
 import type { WorkspaceOrgChartLayout, WorkspacePositionMeta } from '@/features/roster/workspace-positions'
 
@@ -88,6 +97,11 @@ type WorkspaceOrgChartRosterProps = {
   removingPositionFromRoster?: string | null
   canRemovePositionFromRoster?: (entry: PositionRosterEntry) => boolean
   positionRemovalBlockedReason?: (entry: PositionRosterEntry) => string | null
+  onPositionTypeChange?: (
+    position: string,
+    positionType: WorkspacePositionType | null,
+    customTypeLabel: string | null
+  ) => void
 } & Partial<PositionRosterAssetHandlers>
 
 type OrgChartRenderProps = {
@@ -142,6 +156,13 @@ type OrgChartRenderProps = {
   removingPositionFromRoster?: string | null
   canRemovePositionFromRoster?: (entry: PositionRosterEntry) => boolean
   positionRemovalBlockedReason?: (entry: PositionRosterEntry) => string | null
+  onPositionTypeChange?: (
+    position: string,
+    positionType: WorkspacePositionType | null,
+    customTypeLabel: string | null
+  ) => void
+  onOpenOrgChartAssetDetail: (assetKey: string) => void
+  onOpenSingleResourceDetail: (memberId: string) => void
 }
 
 function filterVisibleOrgChartChildren(
@@ -318,6 +339,7 @@ function OrgChartChildNode({
               ? `Remove ${asset.name} from next OP org chart schedule`
               : `Remove ${asset.name} from org chart`
           }
+          onOpenDetail={() => renderProps.onOpenOrgChartAssetDetail(asset.assetKey)}
           onRemove={
             renderProps.canManageRoster && renderProps.onRemoveAssetFromOrgChart
               ? () => renderProps.onRemoveAssetFromOrgChart!(asset.assetKey)
@@ -345,6 +367,7 @@ function OrgChartChildNode({
           color={node.color ?? parentColor}
           scheduled={node.scheduled}
           canManage={renderProps.canManageRoster}
+          onOpenDetail={() => renderProps.onOpenSingleResourceDetail(member.id)}
           onRemoveFromOrgChart={renderProps.onRemoveSingleResourceFromOrgChart}
         />
       </div>
@@ -429,6 +452,9 @@ function PositionNode({
   removingPositionFromRoster,
   canRemovePositionFromRoster,
   positionRemovalBlockedReason,
+  onPositionTypeChange,
+  onOpenOrgChartAssetDetail,
+  onOpenSingleResourceDetail,
 }: {
   position: string
   color?: OrgChartColor
@@ -495,6 +521,9 @@ function PositionNode({
     removingPositionFromRoster,
     canRemovePositionFromRoster,
     positionRemovalBlockedReason,
+    onPositionTypeChange,
+    onOpenOrgChartAssetDetail,
+    onOpenSingleResourceDetail,
   }
 
   const canRemove =
@@ -543,6 +572,7 @@ function PositionNode({
         onCheckInStatusChange={onCheckInStatusChange}
         showAllowWorkAssignment={showAllowWorkAssignment}
         onToggleAllowWorkAssignment={onToggleAllowWorkAssignment}
+        onPositionTypeChange={onPositionTypeChange}
         showPositionAssets={showPositionAssets}
         assignableAssets={assignableAssetsByPosition[position] ?? []}
         scheduleAssignableAssets={scheduleAssignableAssetsByPosition[position] ?? []}
@@ -639,12 +669,14 @@ function IncidentCommanderSubtree({
   visibleCommandStaff: string[]
 }) {
   const { layoutMode } = renderProps
-  const icVisible = positionNodeIsVisible(
-    orgChartLayout.rootPosition,
-    orgChartLayout.rootChildren,
-    renderProps.visiblePositions,
-    renderProps.displayFilters
-  )
+  const icVisible =
+    renderProps.displayFilters.showIncidentCommander &&
+    positionNodeIsVisible(
+      orgChartLayout.rootPosition,
+      orgChartLayout.rootChildren,
+      renderProps.visiblePositions,
+      renderProps.displayFilters
+    )
 
   if (!icVisible) {
     return (
@@ -847,33 +879,51 @@ export function WorkspaceOrgChartRoster({
   removingPositionFromRoster = null,
   canRemovePositionFromRoster,
   positionRemovalBlockedReason,
+  onPositionTypeChange,
 }: WorkspaceOrgChartRosterProps) {
-  const visibleSectionBranches = orgChartLayout.sectionBranches.filter((branch) =>
-    branch.children.some(
+  const [selectedAssetKey, setSelectedAssetKey] = useState<string | null>(null)
+  const [selectedSingleResourceMemberId, setSelectedSingleResourceMemberId] = useState<string | null>(
+    null
+  )
+  const selectedAsset = selectedAssetKey ? assetsByKey[selectedAssetKey] : null
+  const selectedSingleResourceMember = selectedSingleResourceMemberId
+    ? rosterById[selectedSingleResourceMemberId]
+    : null
+
+  const visibleSectionBranches = orgChartLayout.sectionBranches.filter((branch) => {
+    const sectionKey = orgChartBranchSectionKey(branch)
+    if (sectionKey && !orgChartSectionFilterEnabled(sectionKey, displayFilters)) {
+      return false
+    }
+    return branch.children.some(
       (child) =>
         child.kind === 'position' &&
         positionBranchIsVisible(child, visiblePositions, displayFilters)
     )
-  )
-  const showCommandStaff = orgChartLayout.commandStaffBranch.children.some(
-    (child) =>
-      child.kind === 'position' &&
-      positionBranchIsVisible(child, visiblePositions, displayFilters)
-  )
-  const visibleCommandStaff = getVisibleCommandStaffPositions(
-    orgChartLayout.commandStaffBranch,
-    visiblePositions,
-    displayFilters
-  )
+  })
+  const visibleCommandStaff = displayFilters.showCommandStaff
+    ? getVisibleCommandStaffPositions(
+        orgChartLayout.commandStaffBranch,
+        visiblePositions,
+        displayFilters
+      )
+    : []
+  const showCommandStaff = visibleCommandStaff.length > 0
   const renderIcPosition =
     showCommandStaff ||
     visibleSectionBranches.length > 0 ||
-    positionNodeIsVisible(
-      orgChartLayout.rootPosition,
+    (displayFilters.showIncidentCommander &&
+      positionNodeIsVisible(
+        orgChartLayout.rootPosition,
+        orgChartLayout.rootChildren,
+        visiblePositions,
+        displayFilters
+      )) ||
+    filterVisibleOrgChartChildren(
       orgChartLayout.rootChildren,
       visiblePositions,
       displayFilters
-    )
+    ).length > 0
   const showIcCard = renderIcPosition
 
   const renderProps: OrgChartRenderProps = {
@@ -928,6 +978,9 @@ export function WorkspaceOrgChartRoster({
     removingPositionFromRoster,
     canRemovePositionFromRoster,
     positionRemovalBlockedReason,
+    onPositionTypeChange,
+    onOpenOrgChartAssetDetail: setSelectedAssetKey,
+    onOpenSingleResourceDetail: setSelectedSingleResourceMemberId,
   }
 
   return (
@@ -1001,6 +1054,76 @@ export function WorkspaceOrgChartRoster({
           ) : null}
         </div>
       </div>
+
+      <OrgChartNodeDetailDialog
+        open={selectedAsset !== null}
+        onOpenChange={(open) => {
+          if (!open) setSelectedAssetKey(null)
+        }}
+        title={selectedAsset?.name ?? 'Org chart asset'}
+        description="Org chart asset details"
+      >
+        {selectedAsset ? (
+          <RosterAssetResourceListItem
+            asset={{
+              assetKey: selectedAsset.assetKey,
+              name: selectedAsset.name,
+              type: selectedAsset.type,
+              pointOfContactMemberId: selectedAsset.pointOfContactMemberId,
+              pointOfContactEmail: null,
+            }}
+            resource={selectedAsset}
+            variant="orgChart"
+            glassItemBorderClasses={glassItemBorderClasses}
+            badgeLabel="Org chart"
+            showPoc={Boolean(onUpdateAssetPointOfContact)}
+            pocMembers={pocMembers}
+            canManage={canManageRoster}
+            canEditPoc={canManageRoster}
+            isBusy={false}
+            removeLabel={`Remove ${selectedAsset.name} from org chart`}
+            onRemove={
+              canManageRoster && onRemoveAssetFromOrgChart
+                ? () => {
+                    onRemoveAssetFromOrgChart(selectedAsset.assetKey)
+                    setSelectedAssetKey(null)
+                  }
+                : undefined
+            }
+            onUpdateAssetPointOfContact={onUpdateAssetPointOfContact}
+            onFocusMap={onFocusAsset ? () => onFocusAsset(selectedAsset) : undefined}
+          />
+        ) : null}
+      </OrgChartNodeDetailDialog>
+
+      <OrgChartNodeDetailDialog
+        open={selectedSingleResourceMember !== null}
+        onOpenChange={(open) => {
+          if (!open) setSelectedSingleResourceMemberId(null)
+        }}
+        title={selectedSingleResourceMember?.email ?? 'Single resource'}
+        description="Single resource assigned on the org chart"
+      >
+        {selectedSingleResourceMember ? (
+          <SingleResourceDetailPanel
+            member={selectedSingleResourceMember}
+            scheduled={Boolean(selectedSingleResourceMember.pendingOrgChartReportsTo)}
+            canManage={canManageRoster}
+            showCheckInStatus={showCheckInStatus}
+            canEditCheckInStatus={canEditCheckInStatus}
+            updatingCheckInMemberId={updatingCheckInMemberId}
+            onCheckInStatusChange={onCheckInStatusChange}
+            onRemoveFromOrgChart={
+              canManageRoster && onRemoveSingleResourceFromOrgChart
+                ? (memberId) => {
+                    onRemoveSingleResourceFromOrgChart(memberId)
+                    setSelectedSingleResourceMemberId(null)
+                  }
+                : undefined
+            }
+          />
+        ) : null}
+      </OrgChartNodeDetailDialog>
     </div>
   )
 }

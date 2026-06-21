@@ -1,4 +1,6 @@
 import type { PositionRosterEntry } from '@/features/roster/workspace-position-roster'
+import { positionMatchesSectionFilters } from '@/features/roster/roster-org-chart-sections'
+import type { WorkspacePositionCatalog } from '@/features/roster/workspace-positions'
 
 export type RosterDisplayFilters = {
   showPositionsWithCurrentAssignees: boolean
@@ -7,6 +9,13 @@ export type RosterDisplayFilters = {
   showPositionsWithoutScheduledAssignees: boolean
   showCurrentSingleResources: boolean
   showScheduledSingleResources: boolean
+  showIncidentCommander: boolean
+  showCommandStaff: boolean
+  showOperationsSection: boolean
+  showPlanningSection: boolean
+  showLogisticsSection: boolean
+  showFinanceSection: boolean
+  showIntelInvestigationsSection: boolean
 }
 
 export const DEFAULT_ROSTER_DISPLAY_FILTERS: RosterDisplayFilters = {
@@ -16,9 +25,24 @@ export const DEFAULT_ROSTER_DISPLAY_FILTERS: RosterDisplayFilters = {
   showPositionsWithoutScheduledAssignees: true,
   showCurrentSingleResources: true,
   showScheduledSingleResources: true,
+  showIncidentCommander: true,
+  showCommandStaff: true,
+  showOperationsSection: true,
+  showPlanningSection: true,
+  showLogisticsSection: true,
+  showFinanceSection: true,
+  showIntelInvestigationsSection: true,
 }
 
-export const ROSTER_DISPLAY_FILTER_LABELS: Record<keyof RosterDisplayFilters, string> = {
+export const ROSTER_DISPLAY_FILTER_LABELS: Record<
+  | 'showPositionsWithCurrentAssignees'
+  | 'showPositionsWithoutCurrentAssignees'
+  | 'showPositionsWithScheduledAssignees'
+  | 'showPositionsWithoutScheduledAssignees'
+  | 'showCurrentSingleResources'
+  | 'showScheduledSingleResources',
+  string
+> = {
   showPositionsWithCurrentAssignees: 'Positions with current assignees',
   showPositionsWithoutCurrentAssignees: 'Positions without current assignees',
   showPositionsWithScheduledAssignees: 'Positions with scheduled assignees',
@@ -37,7 +61,12 @@ export function summarizeActiveDisplayFilters(filters: RosterDisplayFilters): {
   const activeCount = keys.filter((key) => filters[key]).length
   const inactiveLabels = keys
     .filter((key) => !filters[key])
-    .map((key) => ROSTER_DISPLAY_FILTER_LABELS[key])
+    .map((key) => {
+      if (key in ROSTER_DISPLAY_FILTER_LABELS) {
+        return ROSTER_DISPLAY_FILTER_LABELS[key as keyof typeof ROSTER_DISPLAY_FILTER_LABELS]
+      }
+      return key
+    })
 
   return {
     activeCount,
@@ -71,21 +100,24 @@ export function positionMatchesScheduledAssigneeFilters(
 
 export function positionMatchesRosterDisplayFilters(
   entry: PositionRosterEntry,
-  filters: RosterDisplayFilters
+  filters: RosterDisplayFilters,
+  catalog: WorkspacePositionCatalog
 ): boolean {
   return (
     positionMatchesCurrentAssigneeFilters(entry, filters) &&
-    positionMatchesScheduledAssigneeFilters(entry, filters)
+    positionMatchesScheduledAssigneeFilters(entry, filters) &&
+    positionMatchesSectionFilters(entry.position, filters, catalog)
   )
 }
 
 export function resolveVisibleRosterPositions(
   entries: PositionRosterEntry[],
-  filters: RosterDisplayFilters
+  filters: RosterDisplayFilters,
+  catalog: WorkspacePositionCatalog
 ): Set<string> {
   return new Set(
     entries
-      .filter((entry) => positionMatchesRosterDisplayFilters(entry, filters))
+      .filter((entry) => positionMatchesRosterDisplayFilters(entry, filters, catalog))
       .map((entry) => entry.position)
   )
 }
