@@ -739,7 +739,11 @@ import {
   resolveHistoricalIapView,
 } from '@/lib/operational-period-snapshot-view'
 import { fetchOperationalPeriodSnapshotBundle } from '@/lib/operational-period-service'
-import type { ActiveWorkspaceAssetDisplayContext } from '@/features/resources/asset-workspace-assignment-display'
+import {
+  areAssetAssignmentDisplayContextsEqual,
+  serializeIcs204AssigneeOptionsKey,
+  type ActiveWorkspaceAssetDisplayContext,
+} from '@/features/resources/asset-workspace-assignment-display'
 import { UNASSIGNED_WORKSPACE_FIELD } from '@/features/resources/asset-workspace-assignment-display'
 import {
   formatOperationalPeriodLabel,
@@ -12149,10 +12153,19 @@ function App() {
   const isPlanningPStepperVisible = showPlanningPStepper && isPlanningPStepperOpen
   useEffect(() => {
     if (showPlanningPStepper) {
-      setPlanningPStepId(PLANNING_P_STEPS[0]?.id ?? 'objectives-meeting')
-      setIsPlanningPStepperOpen(true)
+      setPlanningPStepId((current) =>
+        current === (PLANNING_P_STEPS[0]?.id ?? 'objectives-meeting')
+          ? current
+          : PLANNING_P_STEPS[0]?.id ?? 'objectives-meeting'
+      )
+      setIsPlanningPStepperOpen((current) => (current ? current : true))
     }
   }, [activeIncidentWorkspaceId, activeExerciseWorkspaceId, showPlanningPStepper])
+  useEffect(() => {
+    if (!isUscgInitialResponse) {
+      setIsUscgTutorialOpen(false)
+    }
+  }, [isUscgInitialResponse])
   const activeWorkspaceRosterKey =
     activeIncidentWorkspace !== null
       ? `incident-${activeIncidentWorkspace.id}`
@@ -14309,9 +14322,13 @@ function App() {
     () => buildIcs204AssignedUnitOptions(positionRosterEntries),
     [positionRosterEntries]
   )
+  const ics204AssignedUnitOptionsKey = useMemo(
+    () => serializeIcs204AssigneeOptionsKey(ics204AssignedUnitOptions),
+    [ics204AssignedUnitOptions]
+  )
   useEffect(() => {
     if (!activeWorkspaceSupabaseId || !operationalPeriodsEnabled) {
-      setAssetAssignmentDisplayContext(null)
+      setAssetAssignmentDisplayContext((current) => (current === null ? current : null))
       return
     }
 
@@ -14333,7 +14350,7 @@ function App() {
 
       if (cancelled) return
 
-      setAssetAssignmentDisplayContext({
+      const nextContext: ActiveWorkspaceAssetDisplayContext = {
         workspaceId: activeWorkspaceSupabaseId,
         operationalPeriodsEnabled,
         startedOperationalPeriodCount,
@@ -14341,7 +14358,11 @@ function App() {
         workingIcs204Forms: ics204Forms,
         currentOpIcs204Forms,
         ics204AssigneeOptions: ics204AssignedUnitOptions,
-      })
+      }
+
+      setAssetAssignmentDisplayContext((current) =>
+        areAssetAssignmentDisplayContextsEqual(current, nextContext) ? current : nextContext
+      )
     })()
 
     return () => {
@@ -14353,7 +14374,7 @@ function App() {
     startedOperationalPeriodCount,
     workingOperationalPeriodNumber,
     ics204Forms,
-    ics204AssignedUnitOptions,
+    ics204AssignedUnitOptionsKey,
     workspaceFormsReloadKey,
   ])
   const ics215FormFor204Import = useMemo(() => {

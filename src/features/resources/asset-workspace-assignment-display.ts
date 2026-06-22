@@ -23,6 +23,43 @@ export type ActiveWorkspaceAssetDisplayContext = {
   ics204AssigneeOptions: Ics204AssignedUnitOption[]
 }
 
+export function serializeIcs204AssigneeOptionsKey(options: Ics204AssignedUnitOption[]): string {
+  return options
+    .map((option) => `${option.value}\u0000${option.label}\u0000${option.disabled ? '1' : '0'}`)
+    .join('\u0001')
+}
+
+export function areAssetAssignmentDisplayContextsEqual(
+  left: ActiveWorkspaceAssetDisplayContext | null,
+  right: ActiveWorkspaceAssetDisplayContext | null
+): boolean {
+  if (left === right) {
+    return true
+  }
+  if (!left || !right) {
+    return false
+  }
+
+  if (
+    left.workspaceId !== right.workspaceId ||
+    left.operationalPeriodsEnabled !== right.operationalPeriodsEnabled ||
+    left.startedOperationalPeriodCount !== right.startedOperationalPeriodCount ||
+    left.workingOperationalPeriodNumber !== right.workingOperationalPeriodNumber ||
+    left.workingIcs204Forms !== right.workingIcs204Forms ||
+    left.currentOpIcs204Forms !== right.currentOpIcs204Forms ||
+    left.ics204AssigneeOptions.length !== right.ics204AssigneeOptions.length
+  ) {
+    return false
+  }
+
+  return left.ics204AssigneeOptions.every(
+    (option, index) =>
+      option.value === right.ics204AssigneeOptions[index]?.value &&
+      option.label === right.ics204AssigneeOptions[index]?.label &&
+      option.disabled === right.ics204AssigneeOptions[index]?.disabled
+  )
+}
+
 export function workspaceHasOperationalPeriods(workspace: AccessibleWorkspace): boolean {
   return (
     workspace.workspaceFormat === 'uscg-ics' && workspace.incidentComplexity === 'planning-p'
