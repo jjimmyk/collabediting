@@ -24437,12 +24437,11 @@ function App() {
     return matchesName && matchesCurrentLocation && matchesCurrentOp && matchesNextOp
   })
 
-  return (
-    <>
-      <Toaster position="top-right" />
-      {isCreateActivationOpen ? (
+  if (isCreateActivationOpen) {
+    return (
+      <>
+        <Toaster position="top-right" />
         <CreateActivationPageLayout
-          className="fixed inset-0 z-[200]"
           title={isExerciseActivationWizard ? 'Create Exercise' : 'Create Incident'}
           steps={activationSteps}
           currentStep={activationStep}
@@ -25176,7 +25175,13 @@ function App() {
         {isExerciseActivationWizard && activationStep === 5 && renderExerciseMselInjectsEditor()}
           </div>
         </CreateActivationPageLayout>
-      ) : null}
+      </>
+    )
+  }
+
+  return (
+    <>
+      <Toaster position="top-right" />
     <main className="relative h-screen w-screen overflow-hidden">
       <div
         className={cn(

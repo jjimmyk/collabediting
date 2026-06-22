@@ -50,6 +50,7 @@ import {
 import type { PositionRosterInviteSubmitResult } from '@/features/roster/position-roster-messages'
 import type { WorkspacePositionType } from '@/features/roster/workspace-position-type'
 import type { OrgMemberSearchResult } from '@/lib/workspace-service'
+import { CREATE_ACTIVATION_PORTAL_Z_CLASS } from '@/lib/create-activation-navigation'
 import { cn } from '@/lib/utils'
 
 type BuildTeamRosterStepProps = {
@@ -223,10 +224,10 @@ export function BuildTeamRosterStep({
         <div className="grid gap-2">
           <Label htmlFor="build-team-roster-template">Roster template</Label>
           <Select value={draft.templateSlug} onValueChange={handleTemplateChange}>
-            <SelectTrigger id="build-team-roster-template">
+            <SelectTrigger id="build-team-roster-template" className="w-full">
               <SelectValue placeholder="Select roster template" />
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent className={CREATE_ACTIVATION_PORTAL_Z_CLASS} position="popper">
               {ROSTER_TEMPLATE_CATALOG.map((template) => (
                 <SelectItem key={template.slug} value={template.slug}>
                   {template.name}

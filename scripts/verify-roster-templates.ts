@@ -91,8 +91,9 @@ assert(
     buildTeamSource.includes('WorkspacePositionRosterTable') &&
     buildTeamSource.includes('WorkspaceOrgChartRoster') &&
     buildTeamSource.includes("layout?: 'page' | 'compact'") &&
-    buildTeamSource.includes("layoutMode={isPageLayout ? 'wide' : 'compact'}"),
-  'Build Team step should include template, timing, roster controls, and page layout'
+    buildTeamSource.includes("layoutMode={isPageLayout ? 'wide' : 'compact'}") &&
+    buildTeamSource.includes('CREATE_ACTIVATION_PORTAL_Z_CLASS'),
+  'Build Team step should include template, timing, roster controls, page layout, and portal z-index'
 )
 
 const appSource = readFileSync(join(process.cwd(), 'src/App.tsx'), 'utf8')
@@ -103,6 +104,8 @@ assert(
     appSource.includes('CreateActivationPageLayout') &&
     appSource.includes('navigateToCreateActivation') &&
     !appSource.includes('open={isCreateActivationOpen}') &&
+    appSource.includes('if (isCreateActivationOpen)') &&
+    !appSource.includes('fixed inset-0 z-[200]') &&
     !appSource.includes('Placeholder for roster configuration UI'),
   'App should use full-page create activation flow with roster draft wiring'
 )

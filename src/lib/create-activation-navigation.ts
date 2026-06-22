@@ -31,3 +31,6 @@ export function navigateFromCreateActivation() {
 export function isBuildTeamActivationStep(kind: CreateActivationKind, step: number): boolean {
   return kind === 'incident' ? step === 2 : step === 3
 }
+
+/** Radix portals default to z-50; keep above create-activation page when stacked. */
+export const CREATE_ACTIVATION_PORTAL_Z_CLASS = 'z-[250]'
