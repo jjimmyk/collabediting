@@ -2,7 +2,6 @@ import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { createClient } from '@supabase/supabase-js'
 import type { BuildTeamRosterDraft } from '../src/features/roster/roster-template-types.js'
 import {
-  applyMinimalIcOnlyRoster,
   applyRosterPlanToWorkspace,
   ensureCreatorAsIncidentCommander,
   loadDefaultRosterTemplate,
@@ -98,13 +97,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       await ensureCreatorAsIncidentCommander(admin, workspaceId, user.id, creatorEmail)
     })
 
+    const appliedAt = new Date().toISOString()
+
     await runRosterPlanStep('save workspace roster plan', async () => {
       await saveWorkspaceRosterPlan(admin, {
         workspaceId,
         templateId: template.id,
-        effectTiming: draftPlan.effectTiming,
+        effectTiming: 'immediate',
         draftPlan,
-        appliedAt: draftPlan.effectTiming === 'immediate' ? new Date().toISOString() : null,
+        appliedAt,
         invitesSentAt: null,
       })
     })
@@ -117,18 +118,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       await markRosterInvitesSent(admin, workspaceId)
     })
 
-    if (draftPlan.effectTiming === 'immediate') {
-      await runRosterPlanStep('apply roster plan to workspace', async () => {
-        await applyRosterPlanToWorkspace(admin, workspaceId, draftPlan, user.id)
-      })
-      await runRosterPlanStep('mark roster plan applied', async () => {
-        await markRosterPlanApplied(admin, workspaceId)
-      })
-    } else {
-      await runRosterPlanStep('apply minimal Incident Commander roster', async () => {
-        await applyMinimalIcOnlyRoster(admin, workspaceId)
-      })
-    }
+    await runRosterPlanStep('apply roster plan to workspace', async () => {
+      await applyRosterPlanToWorkspace(admin, workspaceId, draftPlan, user.id)
+    })
+    await runRosterPlanStep('mark roster plan applied', async () => {
+      await markRosterPlanApplied(admin, workspaceId)
+    })
 
     return res.status(200).json({ ok: true })
   } catch (error) {

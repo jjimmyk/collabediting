@@ -7,7 +7,6 @@ import {
   buildDraftRosterMembers,
   buildStandardLifecycleFromDraft,
 } from '@/features/roster/build-draft-position-catalog'
-import { createBuildTeamRosterDraftFromTemplate } from '@/features/roster/roster-draft-state'
 import type { BuildTeamRosterDraft } from '@/features/roster/roster-template-types'
 import { buildDraftPositionSettings } from '@/features/roster/build-draft-position-catalog'
 
@@ -19,11 +18,7 @@ export type LocalRosterPlanRecord = {
 export function resolveEffectiveLocalRosterDraft(
   plan: LocalRosterPlanRecord | undefined
 ): BuildTeamRosterDraft | null {
-  if (!plan) return null
-  if (plan.draft.effectTiming === 'immediate' || plan.applied) {
-    return plan.draft
-  }
-  return createBuildTeamRosterDraftFromTemplate('simple-ics', plan.draft.effectTiming)
+  return plan?.draft ?? null
 }
 
 export function buildLocalStandardLifecycleFromPlan(
@@ -59,8 +54,4 @@ export function buildLocalPositionSettingsFromPlan(
   const effectiveDraft = resolveEffectiveLocalRosterDraft(plan)
   if (!effectiveDraft) return {}
   return buildDraftPositionSettings(effectiveDraft)
-}
-
-export function isLocalRosterPlanPending(plan: LocalRosterPlanRecord | undefined): boolean {
-  return Boolean(plan && plan.draft.effectTiming === 'op_period_1' && !plan.applied)
 }

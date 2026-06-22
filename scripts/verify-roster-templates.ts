@@ -3,6 +3,7 @@ import {
   createDefaultBuildTeamRosterDraft,
   ensureCreatorInBuildTeamDraft,
   isCreatorIncidentCommanderDraftMember,
+  normalizeBuildTeamRosterDraftForApply,
 } from '../src/features/roster/roster-draft-state'
 import {
   getDefaultRosterTemplate,
@@ -13,10 +14,7 @@ import {
   buildDraftPositionCatalog,
   buildStandardLifecycleFromDraft,
 } from '../src/features/roster/build-draft-position-catalog'
-import {
-  isLocalRosterPlanPending,
-  resolveEffectiveLocalRosterDraft,
-} from '../src/features/roster/local-roster-plan'
+import { resolveEffectiveLocalRosterDraft } from '../src/features/roster/local-roster-plan'
 import { ICS_ORG_CHART_POSITIONS } from '../src/features/roster/ics-org-chart-structure'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -74,15 +72,20 @@ assert(
   'Full ICS catalog should expose more positions than Simple ICS'
 )
 
-const deferredPlan = {
-  draft: createBuildTeamRosterDraftFromTemplate('full-ics-roster', 'op_period_1'),
-  applied: false,
-}
-assert(isLocalRosterPlanPending(deferredPlan), 'deferred local plan should be pending before apply')
-const effectiveDeferred = resolveEffectiveLocalRosterDraft(deferredPlan)
+const legacyDeferredDraft = createBuildTeamRosterDraftFromTemplate('full-ics-roster', 'op_period_1')
+const normalizedDraft = normalizeBuildTeamRosterDraftForApply(legacyDeferredDraft)
 assert(
-  effectiveDeferred?.visibleStandardPositions.join(',') === 'Incident Commander',
-  'deferred plan should render IC-only roster before OP1 apply'
+  normalizedDraft.effectTiming === 'immediate',
+  'legacy deferred drafts should normalize to immediate apply'
+)
+const localPlan = {
+  draft: normalizedDraft,
+  applied: true,
+}
+const effectiveDraft = resolveEffectiveLocalRosterDraft(localPlan)
+assert(
+  effectiveDraft?.visibleStandardPositions.length === ICS_ORG_CHART_POSITIONS.length,
+  'local roster plan should use full configured draft immediately'
 )
 
 const archivedLifecycle = buildStandardLifecycleFromDraft(simpleDraft)
@@ -97,14 +100,14 @@ const buildTeamSource = readFileSync(
 )
 assert(
   buildTeamSource.includes('Roster template') &&
-    buildTeamSource.includes('Roster takes effect') &&
+    !buildTeamSource.includes('Roster takes effect') &&
     buildTeamSource.includes('RosterDisplayFiltersMenu') &&
     buildTeamSource.includes('WorkspacePositionRosterTable') &&
     buildTeamSource.includes('WorkspaceOrgChartRoster') &&
     buildTeamSource.includes("layout?: 'page' | 'compact'") &&
     buildTeamSource.includes("layoutMode={isPageLayout ? 'wide' : 'compact'}") &&
     buildTeamSource.includes('CREATE_ACTIVATION_PORTAL_Z_CLASS'),
-  'Build Team step should include template, timing, roster controls, page layout, and portal z-index'
+  'Build Team step should include template and roster controls without effect timing'
 )
 
 const appSource = readFileSync(join(process.cwd(), 'src/App.tsx'), 'utf8')
@@ -112,13 +115,15 @@ assert(
   appSource.includes('BuildTeamRosterStep') &&
     appSource.includes('activationRosterDraft') &&
     appSource.includes('applyWorkspaceRosterPlan') &&
+    appSource.includes('normalizeBuildTeamRosterDraftForApply') &&
     appSource.includes('CreateActivationPageLayout') &&
     appSource.includes('navigateToCreateActivation') &&
     !appSource.includes('open={isCreateActivationOpen}') &&
     appSource.includes('if (isCreateActivationOpen)') &&
     !appSource.includes('fixed inset-0 z-[200]') &&
-    !appSource.includes('Placeholder for roster configuration UI'),
-  'App should use full-page create activation flow with roster draft wiring'
+    !appSource.includes('Placeholder for roster configuration UI') &&
+    !appSource.includes('Full roster activates at Operational Period 1'),
+  'App should use full-page create activation flow with immediate roster apply'
 )
 
 assert(

@@ -99,7 +99,7 @@ export function applyTemplateToBuildTeamDraft(
   templateSlug: string,
   preserveUserEdits: boolean
 ): BuildTeamRosterDraft {
-  const next = createBuildTeamRosterDraftFromTemplate(templateSlug, draft.effectTiming)
+  const next = createBuildTeamRosterDraftFromTemplate(templateSlug, 'immediate')
   const creatorMembers = preserveCreatorDraftMembers(draft)
 
   if (!preserveUserEdits) {
@@ -168,11 +168,10 @@ export function removeDraftMember(draft: BuildTeamRosterDraft, memberId: string)
   }
 }
 
-export function setDraftEffectTiming(
-  draft: BuildTeamRosterDraft,
-  effectTiming: RosterTemplateEffectTiming
+export function normalizeBuildTeamRosterDraftForApply(
+  draft: BuildTeamRosterDraft
 ): BuildTeamRosterDraft {
-  return { ...draft, effectTiming }
+  return draft.effectTiming === 'immediate' ? draft : { ...draft, effectTiming: 'immediate' }
 }
 
 export function createDraftCustomPositionDefaults(): Pick<

@@ -120,8 +120,10 @@ const applyPlanSource = readFileSync(
 assert(
   applyPlanSource.includes('validateBuildTeamRosterDraft(body.draftPlan)') &&
     applyPlanSource.includes('ensureCreatorAsIncidentCommander') &&
-    applyPlanSource.includes('runRosterPlanStep'),
-  'apply workspace roster plan API should validate draft and run stepped apply'
+    applyPlanSource.includes('runRosterPlanStep') &&
+    applyPlanSource.includes("effectTiming: 'immediate'") &&
+    !applyPlanSource.includes('applyMinimalIcOnlyRoster'),
+  'apply workspace roster plan API should validate draft and always apply immediately'
 )
 assert(
   applyPlanSource.includes('loadDefaultRosterTemplate(admin)'),

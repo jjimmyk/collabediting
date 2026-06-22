@@ -12,11 +12,6 @@ import {
   applyPendingSingleResourceAssignmentsOnOperationalPeriodAdvance,
   validatePendingSingleResourceAssignmentsBeforeOpAdvance,
 } from './roster-pending-assignments-shared.js'
-import {
-  applyRosterPlanToWorkspace,
-  loadUnappliedRosterPlan,
-  markRosterPlanApplied,
-} from './roster-plan-shared.js'
 import { ICS_POSITIONS } from './roster-shared.js'
 
 type DbCustomPositionRow = {
@@ -504,27 +499,6 @@ export async function snapshotAndApplyRosterLifecycleOnOperationalPeriodAdvance(
 
   if (snapshotError) {
     throw new Error(snapshotError.message)
-  }
-
-  if (periodNumber === 1) {
-    const pendingPlan = await loadUnappliedRosterPlan(admin, workspaceId)
-    if (pendingPlan?.effect_timing === 'op_period_1' && pendingPlan.draft_plan) {
-      const { data: periodRow } = await admin
-        .from('workspace_operational_periods')
-        .select('started_by')
-        .eq('id', operationalPeriodId)
-        .maybeSingle()
-      const invitedBy =
-        typeof periodRow?.started_by === 'string' ? periodRow.started_by : workspaceId
-
-      await applyRosterPlanToWorkspace(
-        admin,
-        workspaceId,
-        pendingPlan.draft_plan,
-        invitedBy
-      )
-      await markRosterPlanApplied(admin, workspaceId)
-    }
   }
 
   await applyRosterLifecycleOnOperationalPeriodAdvance(admin, workspaceId)

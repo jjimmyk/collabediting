@@ -593,13 +593,12 @@ import {
   navigateToCreateActivation,
   type CreateActivationKind,
 } from '@/lib/create-activation-navigation'
-import { createDefaultBuildTeamRosterDraft, ensureCreatorInBuildTeamDraft } from '@/features/roster/roster-draft-state'
+import { createDefaultBuildTeamRosterDraft, ensureCreatorInBuildTeamDraft, normalizeBuildTeamRosterDraftForApply } from '@/features/roster/roster-draft-state'
 import type { BuildTeamRosterDraft } from '@/features/roster/roster-template-types'
 import {
   buildLocalPositionSettingsFromPlan,
   buildLocalRosterMembersFromPlan,
   buildLocalStandardLifecycleFromPlan,
-  isLocalRosterPlanPending,
   type LocalRosterPlanRecord,
 } from '@/features/roster/local-roster-plan'
 import { applyWorkspaceRosterPlan, fetchWorkspaceRosterPlan } from '@/lib/workspace-roster-plan-service'
@@ -7048,7 +7047,7 @@ function App() {
         const rosterPlanResult = await applyWorkspaceRosterPlan({
           accessToken,
           workspaceId: result.workspace.workspaceId,
-          draftPlan: activationRosterDraft,
+          draftPlan: normalizeBuildTeamRosterDraftForApply(activationRosterDraft),
         })
         const roster = await fetchWorkspaceRoster(result.workspace.workspaceId)
         setSupabaseWorkspaceRoster(roster)
@@ -7075,15 +7074,15 @@ function App() {
     setLocalRosterPlansByKey((previous) => ({
       ...previous,
       [exerciseRosterKey]: {
-        draft: activationRosterDraft,
-        applied: activationRosterDraft.effectTiming === 'immediate',
+        draft: normalizeBuildTeamRosterDraftForApply(activationRosterDraft),
+        applied: true,
       },
     }))
     setLocalPositionSettingsByKey((previous) => ({
       ...previous,
       [exerciseRosterKey]: buildLocalPositionSettingsFromPlan({
-        draft: activationRosterDraft,
-        applied: activationRosterDraft.effectTiming === 'immediate',
+        draft: normalizeBuildTeamRosterDraftForApply(activationRosterDraft),
+        applied: true,
       }),
     }))
     toast.success(`${displayName} created. Exercise activation requests have been sent.`)
@@ -7230,7 +7229,7 @@ function App() {
         const rosterPlanResult = await applyWorkspaceRosterPlan({
           accessToken,
           workspaceId: result.workspace.workspaceId,
-          draftPlan: activationRosterDraft,
+          draftPlan: normalizeBuildTeamRosterDraftForApply(activationRosterDraft),
         })
         const roster = await fetchWorkspaceRoster(result.workspace.workspaceId)
         setSupabaseWorkspaceRoster(roster)
@@ -7259,15 +7258,15 @@ function App() {
     setLocalRosterPlansByKey((previous) => ({
       ...previous,
       [incidentRosterKey]: {
-        draft: activationRosterDraft,
-        applied: activationRosterDraft.effectTiming === 'immediate',
+        draft: normalizeBuildTeamRosterDraftForApply(activationRosterDraft),
+        applied: true,
       },
     }))
     setLocalPositionSettingsByKey((previous) => ({
       ...previous,
       [incidentRosterKey]: buildLocalPositionSettingsFromPlan({
-        draft: activationRosterDraft,
-        applied: activationRosterDraft.effectTiming === 'immediate',
+        draft: normalizeBuildTeamRosterDraftForApply(activationRosterDraft),
+        applied: true,
       }),
     }))
     toast.success(
@@ -13745,21 +13744,6 @@ function App() {
           setActiveWorkspacePositionSettings
         )
         void fetchWorkspaceRosterPlan(activeWorkspaceSupabaseId).then(setWorkspaceRosterPlanSummary)
-      }
-      if (activeWorkspaceRosterKey) {
-        setLocalRosterPlansByKey((previous) => {
-          const current = previous[activeWorkspaceRosterKey]
-          if (!current || current.applied || current.draft.effectTiming !== 'op_period_1') {
-            return previous
-          }
-          return {
-            ...previous,
-            [activeWorkspaceRosterKey]: {
-              ...current,
-              applied: true,
-            },
-          }
-        })
       }
     },
   })
@@ -26327,13 +26311,6 @@ function App() {
                 ) : null}
                 {activeTab === 'roster' && (isInIncidentWorkspace || isInExerciseWorkspace) && (
                   <div className="flex flex-wrap items-center justify-end gap-2">
-                    {(workspaceRosterPlanSummary?.effectTiming === 'op_period_1' &&
-                      !workspaceRosterPlanSummary.appliedAt) ||
-                    isLocalRosterPlanPending(activeLocalRosterPlan) ? (
-                      <Badge variant="outline" className="text-[10px] font-normal">
-                        Full roster activates at Operational Period 1
-                      </Badge>
-                    ) : null}
                     {isViewingHistoricalOperationalPeriod && operationalPeriodsEnabled ? (
                       <Button
                         type="button"

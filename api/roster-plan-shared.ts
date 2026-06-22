@@ -18,16 +18,6 @@ type DbRosterTemplateRow = {
   }
 }
 
-type DbRosterPlanRow = {
-  workspace_id: string
-  roster_template_id: string
-  effect_timing: 'immediate' | 'op_period_1'
-  draft_plan: BuildTeamRosterDraft
-  applied_at: string | null
-  invites_sent_at: string | null
-  roster_templates?: DbRosterTemplateRow | DbRosterTemplateRow[] | null
-}
-
 export async function loadRosterTemplateBySlug(
   admin: SupabaseClient,
   slug: string
@@ -65,26 +55,6 @@ export async function loadDefaultRosterTemplate(
   }
 
   return data as DbRosterTemplateRow
-}
-
-export async function loadUnappliedRosterPlan(
-  admin: SupabaseClient,
-  workspaceId: string
-): Promise<DbRosterPlanRow | null> {
-  const { data, error } = await admin
-    .from('workspace_roster_plans')
-    .select(
-      'workspace_id, roster_template_id, effect_timing, draft_plan, applied_at, invites_sent_at, roster_templates(id, slug, name, definition)'
-    )
-    .eq('workspace_id', workspaceId)
-    .is('applied_at', null)
-    .maybeSingle()
-
-  if (error) {
-    throw new Error(error.message)
-  }
-
-  return (data as DbRosterPlanRow | null) ?? null
 }
 
 async function upsertArchivedStandardPositions(
@@ -240,16 +210,6 @@ export async function applyRosterPlanToWorkspace(
   await upsertCustomPositionsFromDraft(admin, workspaceId, draft, invitedBy)
   await replaceSingleResourceSlots(admin, workspaceId, draft.singleResourceSlots)
   await upsertPositionSettingsFromDraft(admin, workspaceId, draft)
-}
-
-export async function applyMinimalIcOnlyRoster(
-  admin: SupabaseClient,
-  workspaceId: string
-): Promise<void> {
-  const archived = WORKSPACE_ROSTER_POSITIONS.filter((position) => position !== 'Incident Commander')
-  await clearArchivedStandardPositions(admin, workspaceId, ['Incident Commander'])
-  await upsertArchivedStandardPositions(admin, workspaceId, archived)
-  await replaceSingleResourceSlots(admin, workspaceId, [])
 }
 
 export async function sendBuildTeamInvites(
@@ -438,6 +398,8 @@ export function validateBuildTeamRosterDraft(draft: unknown): BuildTeamRosterDra
     throw new Error('draftPlan.effectTiming must be immediate or op_period_1.')
   }
 
+  const effectTiming: BuildTeamRosterDraft['effectTiming'] = 'immediate'
+
   if (!isStringArray(candidate.visibleStandardPositions)) {
     throw new Error('draftPlan.visibleStandardPositions must be a string array.')
   }
@@ -464,7 +426,7 @@ export function validateBuildTeamRosterDraft(draft: unknown): BuildTeamRosterDra
 
   return {
     templateSlug: candidate.templateSlug.trim(),
-    effectTiming: candidate.effectTiming,
+    effectTiming,
     visibleStandardPositions: [...candidate.visibleStandardPositions],
     archivedStandardPositions: [...candidate.archivedStandardPositions],
     customPositions: [...candidate.customPositions],

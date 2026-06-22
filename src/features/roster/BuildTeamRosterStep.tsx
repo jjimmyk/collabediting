@@ -2,7 +2,6 @@ import { useCallback, useMemo, useState } from 'react'
 import { Network, Table2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Label } from '@/components/ui/label'
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import {
   Select,
   SelectContent,
@@ -24,13 +23,9 @@ import {
 import {
   applyTemplateToBuildTeamDraft,
   hasNonCreatorBuildTeamDraftEdits,
-  setDraftEffectTiming,
 } from '@/features/roster/roster-draft-state'
 import { ROSTER_TEMPLATE_CATALOG } from '@/features/roster/roster-template-catalog'
-import type {
-  BuildTeamRosterDraft,
-  RosterTemplateEffectTiming,
-} from '@/features/roster/roster-template-types'
+import type { BuildTeamRosterDraft } from '@/features/roster/roster-template-types'
 import { RosterAddMemberToolbar } from '@/features/roster/RosterAddMemberToolbar'
 import { RosterDisplayFiltersMenu } from '@/features/roster/RosterDisplayFiltersMenu'
 import { RosterZoomContainer } from '@/features/roster/RosterZoomContainer'
@@ -133,13 +128,6 @@ export function BuildTeamRosterStep({
     [draft, onDraftChange]
   )
 
-  const handleEffectTimingChange = useCallback(
-    (value: RosterTemplateEffectTiming) => {
-      onDraftChange(setDraftEffectTiming(draft, value))
-    },
-    [draft, onDraftChange]
-  )
-
   const handleAddMemberSubmit = useCallback(
     async (input: AddWorkspaceMemberSubmitInput): Promise<PositionRosterInviteSubmitResult> => {
       onDraftChange({
@@ -220,58 +208,26 @@ export function BuildTeamRosterStep({
 
   return (
     <div className={cn('gap-4', isPageLayout ? 'flex min-h-0 flex-1 flex-col' : 'grid')}>
-      <div className="grid gap-3 md:grid-cols-2">
-        <div className="grid gap-2">
-          <Label htmlFor="build-team-roster-template">Roster template</Label>
-          <Select value={draft.templateSlug} onValueChange={handleTemplateChange}>
-            <SelectTrigger id="build-team-roster-template" className="w-full">
-              <SelectValue placeholder="Select roster template" />
-            </SelectTrigger>
-            <SelectContent className={CREATE_ACTIVATION_PORTAL_Z_CLASS} position="popper">
-              {ROSTER_TEMPLATE_CATALOG.map((template) => (
-                <SelectItem key={template.slug} value={template.slug}>
-                  {template.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <p className="text-[11px] text-muted-foreground">
-            {
-              ROSTER_TEMPLATE_CATALOG.find((template) => template.slug === draft.templateSlug)
-                ?.description
-            }
-          </p>
-        </div>
-        <div className="grid gap-2">
-          <Label>Roster takes effect</Label>
-          <RadioGroup
-            value={draft.effectTiming}
-            onValueChange={(value) =>
-              handleEffectTimingChange(value as RosterTemplateEffectTiming)
-            }
-            className="grid gap-2"
-          >
-            <label className="flex items-start gap-2 rounded-md border p-2 text-xs">
-              <RadioGroupItem value="immediate" className="mt-0.5" />
-              <span>
-                <span className="font-medium">Immediately when workspace is created</span>
-                <span className="mt-0.5 block text-muted-foreground">
-                  Roster structure and people added here will be active when the workspace opens.
-                </span>
-              </span>
-            </label>
-            <label className="flex items-start gap-2 rounded-md border p-2 text-xs">
-              <RadioGroupItem value="op_period_1" className="mt-0.5" />
-              <span>
-                <span className="font-medium">At start of Operational Period 1</span>
-                <span className="mt-0.5 block text-muted-foreground">
-                  Workspace opens with Incident Commander only until OP 1 starts; invites are still
-                  sent on create.
-                </span>
-              </span>
-            </label>
-          </RadioGroup>
-        </div>
+      <div className="grid gap-2">
+        <Label htmlFor="build-team-roster-template">Roster template</Label>
+        <Select value={draft.templateSlug} onValueChange={handleTemplateChange}>
+          <SelectTrigger id="build-team-roster-template" className="w-full">
+            <SelectValue placeholder="Select roster template" />
+          </SelectTrigger>
+          <SelectContent className={CREATE_ACTIVATION_PORTAL_Z_CLASS} position="popper">
+            {ROSTER_TEMPLATE_CATALOG.map((template) => (
+              <SelectItem key={template.slug} value={template.slug}>
+                {template.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <p className="text-[11px] text-muted-foreground">
+          {
+            ROSTER_TEMPLATE_CATALOG.find((template) => template.slug === draft.templateSlug)
+              ?.description
+          }
+        </p>
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-2">
