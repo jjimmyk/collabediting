@@ -2,6 +2,8 @@ import { isSupabaseConfigured, getSupabaseClient } from '@/lib/supabase'
 import {
   ACTIVE_ORGANIZATION_STORAGE_KEY,
   USCG_ORGANIZATION_ID,
+  USCG_ORGANIZATION_NAME,
+  USCG_ORGANIZATION_SLUG,
 } from '@/lib/organization-constants'
 import type {
   CreatedOrganization,
@@ -32,7 +34,10 @@ export function resolveActiveOrganizationId(
   storedOrganizationId: string | null
 ): string | null {
   if (organizations.length === 0) {
-    return null
+    if (!storedOrganizationId || storedOrganizationId === USCG_ORGANIZATION_ID) {
+      return USCG_ORGANIZATION_ID
+    }
+    return storedOrganizationId
   }
 
   if (
@@ -44,6 +49,28 @@ export function resolveActiveOrganizationId(
 
   const uscg = organizations.find((org) => org.organizationId === USCG_ORGANIZATION_ID)
   return uscg?.organizationId ?? organizations[0]?.organizationId ?? null
+}
+
+export function resolveDisplayOrganization(
+  organizations: UserOrganization[],
+  activeOrganizationId: string | null
+): UserOrganization | null {
+  const match = organizations.find((org) => org.organizationId === activeOrganizationId)
+  if (match) {
+    return match
+  }
+
+  if (activeOrganizationId === USCG_ORGANIZATION_ID) {
+    return {
+      organizationId: USCG_ORGANIZATION_ID,
+      name: USCG_ORGANIZATION_NAME,
+      slug: USCG_ORGANIZATION_SLUG,
+      role: 'member',
+      status: 'active',
+    }
+  }
+
+  return organizations[0] ?? null
 }
 
 export async function fetchUserOrganizations(userId: string): Promise<UserOrganization[]> {
@@ -67,6 +94,9 @@ export async function fetchUserOrganizations(userId: string): Promise<UserOrgani
     .eq('status', 'active')
 
   if (error || !data) {
+    if (error) {
+      console.error('fetchUserOrganizations failed', error.message)
+    }
     return []
   }
 
@@ -104,6 +134,9 @@ export async function fetchOrganizationMembers(
     .order('email')
 
   if (error || !data) {
+    if (error) {
+      console.error('fetchOrganizationMembers failed', error.message)
+    }
     return []
   }
 

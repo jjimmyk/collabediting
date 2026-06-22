@@ -8,6 +8,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { resolveDisplayOrganization } from '@/lib/organization-service'
 import type { UserOrganization } from '@/lib/organization-types'
 import { cn } from '@/lib/utils'
 
@@ -28,8 +29,10 @@ export function OrganizationSwitcher({
   onManageMembers,
   canManageMembers,
 }: OrganizationSwitcherProps) {
-  const activeOrganization =
-    organizations.find((org) => org.organizationId === activeOrganizationId) ?? organizations[0] ?? null
+  const activeOrganization = resolveDisplayOrganization(
+    organizations,
+    activeOrganizationId
+  )
 
   return (
     <div className="space-y-2">

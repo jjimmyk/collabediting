@@ -15,6 +15,7 @@ import {
   fetchUserOrganizations,
   readStoredActiveOrganizationId,
   resolveActiveOrganizationId,
+  resolveDisplayOrganization,
   writeStoredActiveOrganizationId,
 } from '@/lib/organization-service'
 import type { UserOrganization } from '@/lib/organization-types'
@@ -65,7 +66,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [needsPasswordSetup, setNeedsPasswordSetup] = useState(false)
 
   const activeOrganization = useMemo(
-    () => organizations.find((org) => org.organizationId === activeOrganizationId) ?? null,
+    () => resolveDisplayOrganization(organizations, activeOrganizationId),
     [activeOrganizationId, organizations]
   )
 
