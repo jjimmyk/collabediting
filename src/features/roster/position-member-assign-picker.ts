@@ -30,7 +30,8 @@ export function dedupeOrgSearchResultsAgainstRoster(
 
   return orgResults.filter(
     (result) =>
-      !rosterEmails.has(result.email.toLowerCase()) && !rosterUserIds.has(result.id)
+      !rosterEmails.has(result.email.toLowerCase()) &&
+      !(result.id && rosterUserIds.has(result.id))
   )
 }
 

@@ -87,12 +87,13 @@ export function OrgMemberSearchPickerPopover({
           ) : (
             results.map((result) => (
               <Button
-                key={result.id}
+                key={result.id ?? result.email}
                 type="button"
                 variant="ghost"
                 size="sm"
                 className="h-auto min-h-8 w-full flex-col items-start justify-start gap-0.5 px-2 py-1.5 text-left text-xs"
                 onClick={() => {
+                  if (!result.id) return
                   onSelect(result.id)
                   setOpen(false)
                 }}
