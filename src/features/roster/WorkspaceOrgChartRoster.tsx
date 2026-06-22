@@ -77,6 +77,7 @@ type WorkspaceOrgChartRosterProps = {
   onAssignExistingMember: (memberId: string, position: string) => void
   onSearchOrgMembers?: (query: string, position?: string) => Promise<OrgMemberSearchResult[]>
   onAssignOrgMember?: (userId: string, position: string) => void
+  workspaceRosterMembers?: WorkspaceRosterMember[]
   onScheduleAssignMember: (memberId: string, position: string) => void
   onScheduleUnassignMember: (memberId: string, position: string) => void
   onRemoveScheduledAssign: (memberId: string, position: string) => void
@@ -149,6 +150,7 @@ type OrgChartRenderProps = {
   onAssignExistingMember: (memberId: string, position: string) => void
   onSearchOrgMembers?: (query: string, position?: string) => Promise<OrgMemberSearchResult[]>
   onAssignOrgMember?: (userId: string, position: string) => void
+  workspaceRosterMembers?: WorkspaceRosterMember[]
   onScheduleAssignMember: (memberId: string, position: string) => void
   onScheduleUnassignMember: (memberId: string, position: string) => void
   onRemoveScheduledAssign: (memberId: string, position: string) => void
@@ -467,6 +469,7 @@ function PositionNode({
   onAssignExistingMember,
   onSearchOrgMembers,
   onAssignOrgMember,
+  workspaceRosterMembers = [],
   onScheduleAssignMember,
   onScheduleUnassignMember,
   onRemoveScheduledAssign,
@@ -545,6 +548,7 @@ function PositionNode({
     onAssignExistingMember,
     onSearchOrgMembers,
     onAssignOrgMember,
+    workspaceRosterMembers,
     onScheduleAssignMember,
     onScheduleUnassignMember,
     onRemoveScheduledAssign,
@@ -625,6 +629,7 @@ function PositionNode({
         onAssignExistingMember={onAssignExistingMember}
         onSearchOrgMembers={onSearchOrgMembers}
         onAssignOrgMember={onAssignOrgMember}
+        workspaceRosterMembers={workspaceRosterMembers}
         onScheduleAssignMember={onScheduleAssignMember}
         onScheduleUnassignMember={onScheduleUnassignMember}
         onRemoveScheduledAssign={onRemoveScheduledAssign}
@@ -949,6 +954,7 @@ export function WorkspaceOrgChartRoster({
   onAssignExistingMember,
   onSearchOrgMembers,
   onAssignOrgMember,
+  workspaceRosterMembers = [],
   onScheduleAssignMember,
   onScheduleUnassignMember,
   onRemoveScheduledAssign,
@@ -1057,6 +1063,7 @@ export function WorkspaceOrgChartRoster({
     onAssignExistingMember,
     onSearchOrgMembers,
     onAssignOrgMember,
+    workspaceRosterMembers,
     onScheduleAssignMember,
     onScheduleUnassignMember,
     onRemoveScheduledAssign,

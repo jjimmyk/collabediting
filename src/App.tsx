@@ -29708,6 +29708,7 @@ function App() {
                       onAssignOrgMember={(userId, position) => {
                         void assignOrgMemberToPositionRow(userId, position)
                       }}
+                      workspaceRosterMembers={activeWorkspaceRoster}
                       onScheduleAssignMember={(memberId, position) => {
                         void scheduleAssignMemberToPosition(memberId, position)
                       }}
@@ -29832,6 +29833,7 @@ function App() {
                       onAssignOrgMember={(userId, position) => {
                         void assignOrgMemberToPositionRow(userId, position)
                       }}
+                      workspaceRosterMembers={activeWorkspaceRoster}
                       onScheduleAssignMember={(memberId, position) => {
                         void scheduleAssignMemberToPosition(memberId, position)
                       }}

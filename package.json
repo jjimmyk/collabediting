@@ -14,6 +14,7 @@
     "verify:ics215-ics204-work-sync": "npx vite-node scripts/verify-ics215-ics204-work-sync.ts",
     "verify:workspace-asset-have-lookup": "npx vite-node scripts/verify-workspace-asset-have-lookup.ts",
     "verify:add-workspace-member": "npx vite-node scripts/verify-add-workspace-member.ts",
+    "verify:multi-position-assignment": "npx vite-node scripts/verify-multi-position-assignment.ts",
     "verify:add-asset-effective-when": "npx vite-node scripts/verify-add-asset-effective-when.ts",
     "verify:roster-org-chart-display": "npx vite-node scripts/verify-roster-org-chart-display.ts",
     "verify:asset-workspace-assignment-display": "npx vite-node scripts/verify-asset-workspace-assignment-display.ts",

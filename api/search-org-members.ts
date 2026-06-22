@@ -16,6 +16,12 @@ export type OrgMemberSearchResult = {
   fullName: string | null
 }
 
+/**
+ * Loads user ids/emails to exclude from org-member search results.
+ * - Without `position`: exclude everyone already on the workspace roster (add-to-roster flow).
+ * - With `position`: exclude only members assigned to or scheduled for that position
+ *   (position-row assignment flow; roster members on other positions remain eligible).
+ */
 async function loadRosterExclusions(
   admin: ReturnType<typeof createClient>,
   workspaceId: string,

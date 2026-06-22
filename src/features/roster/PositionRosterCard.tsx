@@ -69,6 +69,7 @@ type PositionRosterCardProps = {
   onAssignExistingMember: (memberId: string, position: string) => void
   onSearchOrgMembers?: (query: string, position?: string) => Promise<OrgMemberSearchResult[]>
   onAssignOrgMember?: (userId: string, position: string) => void
+  workspaceRosterMembers?: WorkspaceRosterMember[]
   onScheduleAssignMember: (memberId: string, position: string) => void
   onScheduleUnassignMember: (memberId: string, position: string) => void
   onRemoveScheduledAssign: (memberId: string, position: string) => void
@@ -124,6 +125,7 @@ export function PositionRosterCard({
   onAssignExistingMember,
   onSearchOrgMembers,
   onAssignOrgMember,
+  workspaceRosterMembers = [],
   onScheduleAssignMember,
   onScheduleUnassignMember,
   onRemoveScheduledAssign,
@@ -179,6 +181,7 @@ export function PositionRosterCard({
     onAssignExistingMember,
     onSearchOrgMembers,
     onAssignOrgMember,
+    workspaceRosterMembers,
     onScheduleAssignMember,
     onScheduleUnassignMember,
     onRemoveScheduledAssign,

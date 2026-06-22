@@ -17,10 +17,7 @@ import {
   type RosterInviteAssignmentMode,
 } from '@/features/roster/position-roster-messages'
 import { PositionRosterInviteForm } from '@/features/roster/PositionRosterInviteForm'
-import {
-  MemberPickerPopover,
-  OrgMemberSearchPickerPopover,
-} from '@/features/organization/OrgMemberSearchPickerPopover'
+import { PositionMemberAssignPicker } from '@/features/roster/PositionMemberAssignPicker'
 import {
   PositionAssetPickerPopover,
   type PositionRosterAssetHandlers,
@@ -231,6 +228,7 @@ function PositionAssignmentActionBar({
   onSelectMember,
   onSearchOrgMembers,
   onAssignOrgMember,
+  rosterMembersForOrgDedupe,
   onSelectAsset,
   position,
   inviteMode,
@@ -251,6 +249,7 @@ function PositionAssignmentActionBar({
   onSelectMember: (memberId: string) => void
   onSearchOrgMembers?: (query: string, position?: string) => Promise<OrgMemberSearchResult[]>
   onAssignOrgMember?: (userId: string) => void
+  rosterMembersForOrgDedupe?: WorkspaceRosterMember[]
   onSelectAsset?: (assetKey: string, pointOfContactMemberId?: string) => void
   position: string
   inviteMode: RosterInviteAssignmentMode
@@ -262,22 +261,16 @@ function PositionAssignmentActionBar({
   return (
     <div className="space-y-1.5 pt-1">
       <div className="flex flex-wrap gap-1.5">
-        {onSearchOrgMembers && onAssignOrgMember ? (
-          <OrgMemberSearchPickerPopover
-            label="Existing user"
-            disabled={disabled}
-            position={position}
-            onSearch={onSearchOrgMembers}
-            onSelect={onAssignOrgMember}
-          />
-        ) : (
-          <MemberPickerPopover
-            label="Existing user"
-            members={assignableMembers}
-            disabled={disabled}
-            onSelect={onSelectMember}
-          />
-        )}
+        <PositionMemberAssignPicker
+          label="Existing user"
+          disabled={disabled}
+          position={position}
+          assignableMembers={assignableMembers}
+          rosterMembersForDedupe={rosterMembersForOrgDedupe}
+          onSelectRosterMember={onSelectMember}
+          onSearchOrgMembers={onSearchOrgMembers}
+          onSelectOrgMember={onAssignOrgMember}
+        />
         {showNewUser ? (
           <NewUserInviteControl
             position={position}
@@ -302,7 +295,7 @@ function PositionAssignmentActionBar({
           />
         ) : null}
       </div>
-      {memberEmptyMessage ? (
+      {memberEmptyMessage && !onSearchOrgMembers ? (
         <p className="px-1 text-[11px] text-muted-foreground">{memberEmptyMessage}</p>
       ) : null}
       {showAssetActions && assignableAssets.length === 0 && assetEmptyMessage ? (
@@ -354,6 +347,7 @@ export type PositionRosterUnifiedAssignmentSectionsProps = {
   onAssignExistingMember: (memberId: string, position: string) => void
   onSearchOrgMembers?: (query: string, position?: string) => Promise<OrgMemberSearchResult[]>
   onAssignOrgMember?: (userId: string, position: string) => void
+  workspaceRosterMembers?: WorkspaceRosterMember[]
   onScheduleAssignMember: (memberId: string, position: string) => void
   onScheduleUnassignMember: (memberId: string, position: string) => void
   onRemoveScheduledAssign: (memberId: string, position: string) => void
@@ -391,6 +385,7 @@ export function PositionRosterUnifiedAssignmentSections({
   onAssignExistingMember,
   onSearchOrgMembers,
   onAssignOrgMember,
+  workspaceRosterMembers = [],
   onScheduleAssignMember,
   onScheduleUnassignMember,
   onRemoveScheduledAssign,
@@ -532,6 +527,7 @@ export function PositionRosterUnifiedAssignmentSections({
                   ? (userId) => onAssignOrgMember(userId, entry.position)
                   : undefined
               }
+              rosterMembersForOrgDedupe={workspaceRosterMembers}
               onSelectAsset={
                 assetsEnabled
                   ? (assetKey, pointOfContactMemberId) =>
