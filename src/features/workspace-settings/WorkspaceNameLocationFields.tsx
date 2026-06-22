@@ -204,6 +204,7 @@ export function WorkspaceNameLocationFields({
               variant="outline"
               disabled={!canEdit}
               className="w-full justify-between font-normal"
+              data-uscg-tutorial="incident-complexity"
             >
               <span className="truncate text-left">
                 {complexityOptions.find((option) => option.value === draft.incidentComplexity)

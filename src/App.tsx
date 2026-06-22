@@ -673,6 +673,7 @@ import { NotificationSettingsPage } from '@/components/NotificationSettingsPage'
 import pratusLogo from '@/assets/pratus-logo.png'
 import { Ics201SectionEditorBadges } from '@/features/ics201/Ics201SectionEditorBadges'
 import { Ics201TutorialWizard } from '@/features/ics201/Ics201TutorialWizard'
+import { UscgInitialResponseTutorialWizard } from '@/features/uscg-workspace/UscgInitialResponseTutorialWizard'
 import { HubTutorialWizard } from '@/features/hub/HubTutorialWizard'
 import { ProductToursMenu } from '@/components/ProductToursMenu'
 import { CreateHubNotificationDialog } from '@/components/CreateHubNotificationDialog'
@@ -774,6 +775,7 @@ import {
   normalizeIncidentComplexityForWorkflow,
   STANDARD_INCIDENT_COMPLEXITY_OPTIONS,
   workspaceHasPlanningPStepper,
+  isUscgInitialResponseWorkspace,
 } from '@/lib/workspace-format'
 import { ICS_POSITIONS, WORKSPACE_ROSTER_POSITIONS } from '@/lib/ics-positions'
 
@@ -7554,6 +7556,7 @@ function App() {
   const [isCreatingSignedIcs201Version, setIsCreatingSignedIcs201Version] = useState(false)
   const [isIcs201SignNameDialogOpen, setIsIcs201SignNameDialogOpen] = useState(false)
   const [isIcs201TutorialOpen, setIsIcs201TutorialOpen] = useState(false)
+  const [isUscgTutorialOpen, setIsUscgTutorialOpen] = useState(false)
   const [isHubTutorialOpen, setIsHubTutorialOpen] = useState(false)
   const [isHubMoreMenuOpen, setIsHubMoreMenuOpen] = useState(false)
   const [ics201SignNameInput, setIcs201SignNameInput] = useState('You')
@@ -12136,6 +12139,12 @@ function App() {
       incidentComplexity: activePlanningPWorkspace.incidentComplexity,
       hasSequentialWorkflow: activePlanningPWorkspace.hasSequentialWorkflow,
       sequentialWorkflowType: activePlanningPWorkspace.sequentialWorkflowType,
+    })
+  const isUscgInitialResponse =
+    activePlanningPWorkspace !== null &&
+    isUscgInitialResponseWorkspace({
+      workspaceFormat: activePlanningPWorkspace.workspaceFormat,
+      incidentComplexity: activePlanningPWorkspace.incidentComplexity,
     })
   const isPlanningPStepperVisible = showPlanningPStepper && isPlanningPStepperOpen
   useEffect(() => {
@@ -25412,7 +25421,7 @@ function App() {
             >
               <Menu className="h-4 w-4" />
             </Button>
-            <div className="flex items-center gap-0.5">
+            <div className="flex items-center gap-0.5" data-uscg-tutorial="workspace-header">
               <span className="font-semibold">
                 {isInExerciseWorkspace && activeExerciseWorkspace
                   ? `Exercise ${activeExerciseWorkspace.name}`
@@ -25915,6 +25924,7 @@ function App() {
                           glassIconButtonClasses={glassIconButtonClasses}
                           selectedGlassTabClasses={selectedGlassTabClasses}
                           isGlassMode={isGlassMode}
+                          data-uscg-tutorial="more-menu"
                           data-pratus-context-id="tab:more"
                           data-pratus-context-label="More"
                         />
@@ -38984,7 +38994,7 @@ function App() {
           </div>
         </DialogContent>
       </Dialog>
-      {(isInIncidentWorkspace || isInExerciseWorkspace) && (
+      {(isInIncidentWorkspace || isInExerciseWorkspace) && !isUscgInitialResponse && (
         <Ics201TutorialWizard
           open={isIcs201TutorialOpen}
           onOpenChange={setIsIcs201TutorialOpen}
@@ -38993,6 +39003,18 @@ function App() {
           }
           workspaceKind={isInExerciseWorkspace ? 'exercise' : 'incident'}
           onNavigateToIcs201={() => setActiveTab('briefing')}
+        />
+      )}
+      {(isInIncidentWorkspace || isInExerciseWorkspace) && isUscgInitialResponse && (
+        <UscgInitialResponseTutorialWizard
+          open={isUscgTutorialOpen}
+          onOpenChange={setIsUscgTutorialOpen}
+          workspaceName={
+            activeExerciseWorkspace?.name ?? activeIncidentWorkspace?.name ?? 'Workspace'
+          }
+          workspaceKind={isInExerciseWorkspace ? 'exercise' : 'incident'}
+          onNavigateToIcs201={() => setActiveTab('briefing')}
+          onNavigateToWorkspaceSettings={openWorkspaceSettingsTab}
         />
       )}
       {!isInIncidentWorkspace && !isInExerciseWorkspace && (
@@ -39809,10 +39831,15 @@ function App() {
                   layout="sidebar"
                   isOnHub={!isInIncidentWorkspace && !isInExerciseWorkspace}
                   isInWorkspace={isInIncidentWorkspace || isInExerciseWorkspace}
+                  isUscgInitialResponse={isUscgInitialResponse}
                   onStartTour={(tourId) => {
                     setIsLeftSidebarOpen(false)
                     if (tourId === 'workspace') {
-                      setIsIcs201TutorialOpen(true)
+                      if (isUscgInitialResponse) {
+                        setIsUscgTutorialOpen(true)
+                      } else {
+                        setIsIcs201TutorialOpen(true)
+                      }
                     } else {
                       setIsHubTutorialOpen(true)
                     }

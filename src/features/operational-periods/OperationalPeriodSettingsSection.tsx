@@ -87,6 +87,7 @@ export function OperationalPeriodSettingsSection({
             type="button"
             onClick={() => setConfirmOpen(true)}
             disabled={!canEdit || isStarting}
+            data-uscg-tutorial="start-operational-period"
           >
             {isStarting
               ? 'Starting…'

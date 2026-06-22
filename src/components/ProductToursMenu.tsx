@@ -17,6 +17,7 @@ type ProductToursMenuProps = {
   layout?: 'header' | 'sidebar'
   isOnHub: boolean
   isInWorkspace: boolean
+  isUscgInitialResponse?: boolean
   onStartTour: (tourId: ProductTourId) => void
 }
 
@@ -25,9 +26,10 @@ export function ProductToursMenu({
   layout = 'header',
   isOnHub,
   isInWorkspace,
+  isUscgInitialResponse = false,
   onStartTour,
 }: ProductToursMenuProps) {
-  const options = getProductTourOptions({ isOnHub, isInWorkspace })
+  const options = getProductTourOptions({ isOnHub, isInWorkspace, isUscgInitialResponse })
   const isSidebar = layout === 'sidebar'
 
   return (

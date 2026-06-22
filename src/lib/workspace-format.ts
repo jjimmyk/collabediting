@@ -56,6 +56,16 @@ export function isPlanningPWorkspace(options: {
   )
 }
 
+export function isUscgInitialResponseWorkspace(options: {
+  workspaceFormat?: string | null
+  incidentComplexity?: string | null
+}) {
+  return (
+    options.workspaceFormat === USCG_ICS_WORKFLOW &&
+    options.incidentComplexity !== USCG_PLANNING_P_COMPLEXITY
+  )
+}
+
 /** @deprecated Use {@link isPlanningPWorkspace} */
 export const isPlanningPIncidentWorkspace = isPlanningPWorkspace
 

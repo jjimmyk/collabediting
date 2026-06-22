@@ -3,6 +3,10 @@ import { OperationalPeriodSettingsSection } from '@/features/operational-periods
 import { WorkspaceNameLocationFields } from '@/features/workspace-settings/WorkspaceNameLocationFields'
 import type { WorkspaceOperationalPeriod } from '@/lib/operational-period-types'
 import type { WorkspaceNameLocationDraft } from '@/features/workspace-settings/types'
+import {
+  USCG_ICS_WORKFLOW,
+  USCG_PLANNING_P_COMPLEXITY,
+} from '@/lib/workspace-format'
 
 type FemaAorOption = {
   id: string
@@ -61,6 +65,11 @@ export function WorkspaceSettingsPage({
   opAdvanceLifecycleSummary = null,
   onStartOperationalPeriod,
 }: WorkspaceSettingsPageProps) {
+  const showOperationalPeriodsPreview =
+    !showOperationalPeriods &&
+    draft.workflow === USCG_ICS_WORKFLOW &&
+    draft.incidentComplexity !== USCG_PLANNING_P_COMPLEXITY
+
   return (
     <div className="space-y-6 px-0.5 pb-4">
       <WorkspaceNameLocationFields
@@ -73,6 +82,19 @@ export function WorkspaceSettingsPage({
         isDrawingOnPrimaryMap={isDrawingOnPrimaryMap}
         onRestartMapDraw={onRestartMapDraw}
       />
+      {showOperationalPeriodsPreview ? (
+        <div
+          data-uscg-tutorial="operational-periods-preview"
+          className="mx-auto w-full max-w-2xl space-y-2 rounded-md border border-dashed bg-muted/30 px-4 py-3"
+        >
+          <h3 className="text-sm font-semibold">Operational Periods</h3>
+          <p className="text-xs text-muted-foreground">
+            Set Incident Complexity to Planning-P and save changes to unlock operational period
+            controls. You can then start OP 1 to freeze current ICS forms and begin the next
+            working period.
+          </p>
+        </div>
+      ) : null}
       {showOperationalPeriods && onStartOperationalPeriod ? (
         <OperationalPeriodSettingsSection
           canEdit={canEdit}
@@ -91,7 +113,7 @@ export function WorkspaceSettingsPage({
         <Button type="button" variant="outline" onClick={onCancel} disabled={isSaving}>
           Cancel
         </Button>
-        <Button type="button" onClick={onSave} disabled={!canEdit || isSaving}>
+        <Button type="button" onClick={onSave} disabled={!canEdit || isSaving} data-uscg-tutorial="save-settings">
           {isSaving ? 'Saving…' : 'Save changes'}
         </Button>
       </div>

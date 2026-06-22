@@ -10,8 +10,9 @@ export type ProductTourOption = {
 export function getProductTourOptions(params: {
   isOnHub: boolean
   isInWorkspace: boolean
+  isUscgInitialResponse?: boolean
 }): ProductTourOption[] {
-  const { isOnHub, isInWorkspace } = params
+  const { isOnHub, isInWorkspace, isUscgInitialResponse = false } = params
 
   return [
     {
@@ -24,7 +25,7 @@ export function getProductTourOptions(params: {
     },
     {
       id: 'workspace',
-      label: 'Workspace Tour',
+      label: isUscgInitialResponse ? 'USCG ICS Workspace Tour' : 'Workspace Tour',
       disabled: !isInWorkspace,
       disabledReason: !isInWorkspace
         ? 'Open an incident or exercise workspace to start this tour.'
