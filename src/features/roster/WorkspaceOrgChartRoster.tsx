@@ -13,6 +13,7 @@ import { PositionRosterCard } from '@/features/roster/PositionRosterCard'
 import {
   type PositionRosterAssetHandlers,
 } from '@/features/roster/PositionRosterAssetSections'
+import type { PositionRosterUnifiedAssignmentSectionsProps } from '@/features/roster/PositionRosterAssignmentSections'
 import { OrgChartCollapsibleAssetCard } from '@/features/roster/OrgChartCollapsibleAssetCard'
 import { OrgChartNodeDetailDialog } from '@/features/roster/OrgChartNodeDetailDialog'
 import { RosterAssetResourceListItem } from '@/features/roster/RosterAssetResourceListItem'
@@ -99,12 +100,18 @@ type WorkspaceOrgChartRosterProps = {
     value: string | null,
     scheduled: boolean
   ) => void
-  onAssetCompetencyFunctionChange?: (input: {
-    assetKey: string
+  onMemberCompetencyFunctionChange?: (input: {
+    memberId: string
     positionName: string
-    scope: 'org_chart' | 'scheduled_org_chart'
+    scope:
+      | 'active'
+      | 'scheduled_assign'
+      | 'scheduled_unassign'
+      | 'scheduled_org_chart'
     value: string | null
   }) => void
+  memberScheduleCompetencyByKey?: Record<string, string | null>
+  onAssetCompetencyFunctionChange?: PositionRosterUnifiedAssignmentSectionsProps['onAssetCompetencyFunctionChange']
   showPositionAssets?: boolean
   assignableAssetsByPosition?: Record<string, ResourceListItemData[]>
   scheduleAssignableAssetsByPosition?: Record<string, ResourceListItemData[]>
@@ -185,12 +192,18 @@ type OrgChartRenderProps = {
   competencyOptions: string[]
   canEditCompetencyFunction: boolean
   updatingCompetencyKey: string | null
-  onAssetCompetencyFunctionChange?: (input: {
-    assetKey: string
+  onMemberCompetencyFunctionChange?: (input: {
+    memberId: string
     positionName: string
-    scope: 'org_chart' | 'scheduled_org_chart'
+    scope:
+      | 'active'
+      | 'scheduled_assign'
+      | 'scheduled_unassign'
+      | 'scheduled_org_chart'
     value: string | null
   }) => void
+  memberScheduleCompetencyByKey: Record<string, string | null>
+  onAssetCompetencyFunctionChange?: PositionRosterUnifiedAssignmentSectionsProps['onAssetCompetencyFunctionChange']
   onSingleResourceCompetencyFunctionChange?: (
     memberId: string,
     value: string | null,
@@ -493,6 +506,8 @@ function PositionNode({
   competencyOptions,
   canEditCompetencyFunction,
   updatingCompetencyKey,
+  onMemberCompetencyFunctionChange,
+  memberScheduleCompetencyByKey,
   onAssetCompetencyFunctionChange,
   onSingleResourceCompetencyFunctionChange,
 }: {
@@ -569,6 +584,8 @@ function PositionNode({
     competencyOptions,
     canEditCompetencyFunction,
     updatingCompetencyKey,
+    onMemberCompetencyFunctionChange,
+    memberScheduleCompetencyByKey,
     onAssetCompetencyFunctionChange,
     onSingleResourceCompetencyFunctionChange,
   }
@@ -619,6 +636,12 @@ function PositionNode({
         canEditCheckInStatus={canEditCheckInStatus}
         updatingCheckInMemberId={updatingCheckInMemberId}
         onCheckInStatusChange={onCheckInStatusChange}
+        competencyOptions={competencyOptions}
+        canEditCompetencyFunction={canEditCompetencyFunction}
+        updatingCompetencyKey={updatingCompetencyKey}
+        memberScheduleCompetencyByKey={memberScheduleCompetencyByKey}
+        onMemberCompetencyFunctionChange={onMemberCompetencyFunctionChange}
+        onAssetCompetencyFunctionChange={onAssetCompetencyFunctionChange}
         showAllowWorkAssignment={showAllowWorkAssignment}
         onToggleAllowWorkAssignment={onToggleAllowWorkAssignment}
         onPositionTypeChange={onPositionTypeChange}
@@ -945,6 +968,8 @@ export function WorkspaceOrgChartRoster({
   canEditCompetencyFunction = false,
   updatingCompetencyKey = null,
   onSingleResourceCompetencyFunctionChange,
+  onMemberCompetencyFunctionChange,
+  memberScheduleCompetencyByKey = {},
   onAssetCompetencyFunctionChange,
   showAllowWorkAssignment = false,
   onToggleAllowWorkAssignment,
@@ -1071,6 +1096,8 @@ export function WorkspaceOrgChartRoster({
     competencyOptions,
     canEditCompetencyFunction,
     updatingCompetencyKey,
+    onMemberCompetencyFunctionChange,
+    memberScheduleCompetencyByKey,
     onAssetCompetencyFunctionChange,
     onSingleResourceCompetencyFunctionChange,
   }

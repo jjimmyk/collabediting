@@ -29740,6 +29740,10 @@ function App() {
                       competencyOptions={rosterCompetencyControls.organizationCompetencyOptions}
                       canEditCompetencyFunction={rosterCompetencyControls.canEditCompetencyFunction}
                       updatingCompetencyKey={rosterCompetencyControls.updatingCompetencyKey}
+                      onMemberCompetencyFunctionChange={
+                        rosterCompetencyControls.onMemberCompetencyFunctionChange
+                      }
+                      memberScheduleCompetencyByKey={memberScheduleCompetencyByKey}
                       onSingleResourceCompetencyFunctionChange={
                         rosterCompetencyControls.onSingleResourceCompetencyFunctionChange
                       }

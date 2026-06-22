@@ -80,6 +80,12 @@ type PositionRosterCardProps = {
   canEditCheckInStatus?: boolean
   updatingCheckInMemberId?: string | null
   onCheckInStatusChange?: (memberId: string, status: WorkspaceMemberCheckInStatus) => void
+  competencyOptions?: string[]
+  canEditCompetencyFunction?: boolean
+  updatingCompetencyKey?: string | null
+  memberScheduleCompetencyByKey?: Record<string, string | null>
+  onMemberCompetencyFunctionChange?: import('@/features/roster/PositionRosterAssignmentSections').PositionRosterUnifiedAssignmentSectionsProps['onMemberCompetencyFunctionChange']
+  onAssetCompetencyFunctionChange?: import('@/features/roster/PositionRosterAssignmentSections').PositionRosterUnifiedAssignmentSectionsProps['onAssetCompetencyFunctionChange']
   showPositionAssets?: boolean
   assignableAssets?: ResourceListItemData[]
   scheduleAssignableAssets?: ResourceListItemData[]
@@ -129,6 +135,12 @@ export function PositionRosterCard({
   canEditCheckInStatus = false,
   updatingCheckInMemberId = null,
   onCheckInStatusChange,
+  competencyOptions = [],
+  canEditCompetencyFunction = false,
+  updatingCompetencyKey = null,
+  memberScheduleCompetencyByKey = {},
+  onMemberCompetencyFunctionChange,
+  onAssetCompetencyFunctionChange,
   showPositionAssets = false,
   assignableAssets = [],
   scheduleAssignableAssets = [],
@@ -178,6 +190,12 @@ export function PositionRosterCard({
     canEditCheckInStatus,
     updatingCheckInMemberId,
     onCheckInStatusChange,
+    competencyOptions,
+    canEditCompetencyFunction,
+    updatingCompetencyKey,
+    memberScheduleCompetencyByKey,
+    onMemberCompetencyFunctionChange,
+    onAssetCompetencyFunctionChange,
     showPositionAssets,
     assignableAssets,
     scheduleAssignableAssets,

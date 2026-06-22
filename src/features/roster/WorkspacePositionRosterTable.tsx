@@ -37,6 +37,10 @@ import { formatPositionAssetAssignmentCount } from '@/lib/workspace-position-ass
 import { PositionOpAdvanceLabelSelect } from '@/features/roster/PositionOpAdvanceLabelSelect'
 import { PositionRosterDetailPanel } from '@/features/roster/PositionRosterDetailPanel'
 import {
+  PositionMemberRow,
+  type PositionRosterUnifiedAssignmentSectionsProps,
+} from '@/features/roster/PositionRosterAssignmentSections'
+import {
   PositionPermissionsSection,
   PositionPropertiesSection,
 } from '@/features/roster/PositionRosterPropertySections'
@@ -112,6 +116,10 @@ function AssignedMembersList({
   canEditCheckInStatus = false,
   updatingCheckInMemberId = null,
   onCheckInStatusChange,
+  competencyOptions = [],
+  canEditCompetencyFunction = false,
+  updatingCompetencyKey = null,
+  onMemberCompetencyFunctionChange,
 }: {
   entry: PositionRosterEntry
   assignedSearchQuery: string
@@ -122,6 +130,10 @@ function AssignedMembersList({
   canEditCheckInStatus?: boolean
   updatingCheckInMemberId?: string | null
   onCheckInStatusChange?: (memberId: string, status: WorkspaceMemberCheckInStatus) => void
+  competencyOptions?: string[]
+  canEditCompetencyFunction?: boolean
+  updatingCompetencyKey?: string | null
+  onMemberCompetencyFunctionChange?: import('@/features/roster/PositionRosterAssignmentSections').PositionRosterUnifiedAssignmentSectionsProps['onMemberCompetencyFunctionChange']
 }) {
   const canUnassignNow = entry.memberSchedulePolicy.allowActiveAssignment
   const visibleMembers = useMemo(
@@ -148,45 +160,36 @@ function AssignedMembersList({
   return (
     <div className="space-y-1.5">
       {visibleMembers.map((member) => (
-        <div
+        <PositionMemberRow
           key={`${entry.position}-${member.id}`}
-          className="flex items-center justify-between gap-2 rounded-md border bg-background/70 px-2 py-1"
-        >
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-xs">{member.email}</p>
-            <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
-              <Badge
-                variant={member.status === 'active' ? 'default' : 'outline'}
-                className="h-4 px-1.5 text-[9px]"
-              >
-                {member.status === 'active' ? 'Active' : 'Invited'}
-              </Badge>
-              {showCheckInStatus && onCheckInStatusChange ? (
-                <RosterMemberCheckInStatusSelect
-                  memberId={member.id}
-                  value={member.checkInStatus}
-                  canEdit={canEditCheckInStatus}
-                  isUpdating={updatingCheckInMemberId === member.id}
-                  compact
-                  onChange={onCheckInStatusChange}
-                />
-              ) : null}
-            </div>
-          </div>
-          {canManageRoster && canUnassignNow && (
-            <Button
-              type="button"
-              size="icon"
-              variant="ghost"
-              className="h-7 w-7 shrink-0 text-muted-foreground hover:text-destructive"
-              aria-label={`Remove ${member.email} from ${entry.position}`}
-              disabled={isAssigningPosition === entry.position}
-              onClick={() => onUnassignMember(member.id, entry.position)}
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-            </Button>
-          )}
-        </div>
+          member={member}
+          badgeLabel={member.status === 'active' ? 'Active' : 'Invited'}
+          canManage={canManageRoster && canUnassignNow}
+          isBusy={isAssigningPosition === entry.position}
+          removeLabel={`Remove ${member.email} from ${entry.position}`}
+          onRemove={() => onUnassignMember(member.id, entry.position)}
+          competencyFunction={member.competencyByPosition?.[entry.position] ?? null}
+          competencyOptions={competencyOptions}
+          canEditCompetencyFunction={canEditCompetencyFunction}
+          isUpdatingCompetency={
+            updatingCompetencyKey === `member::${member.id}::${entry.position}::active`
+          }
+          onCompetencyFunctionChange={
+            onMemberCompetencyFunctionChange
+              ? (value) =>
+                  onMemberCompetencyFunctionChange({
+                    memberId: member.id,
+                    positionName: entry.position,
+                    scope: 'active',
+                    value,
+                  })
+              : undefined
+          }
+          showCheckInStatus={showCheckInStatus}
+          canEditCheckInStatus={canEditCheckInStatus}
+          updatingCheckInMemberId={updatingCheckInMemberId}
+          onCheckInStatusChange={onCheckInStatusChange}
+        />
       ))}
     </div>
   )
@@ -441,6 +444,10 @@ export function WorkspacePositionRosterTable({
                           canEditCheckInStatus={canEditCheckInStatus}
                           updatingCheckInMemberId={updatingCheckInMemberId}
                           onCheckInStatusChange={onCheckInStatusChange}
+                          competencyOptions={competencyOptions}
+                          canEditCompetencyFunction={canEditCompetencyFunction}
+                          updatingCompetencyKey={updatingCompetencyKey}
+                          onMemberCompetencyFunctionChange={onMemberCompetencyFunctionChange}
                         />
                       ) : null}
                     </div>

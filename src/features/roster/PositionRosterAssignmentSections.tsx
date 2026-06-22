@@ -347,7 +347,7 @@ export type PositionRosterUnifiedAssignmentSectionsProps = {
   onAssetCompetencyFunctionChange?: (input: {
     assetKey: string
     positionName: string
-    scope: 'active' | 'scheduled_assign' | 'scheduled_unassign' | 'scheduled_org_chart'
+    scope: 'active' | 'scheduled_assign' | 'scheduled_unassign' | 'scheduled_org_chart' | 'org_chart'
     value: string | null
   }) => void
   onAssignExistingMember: (memberId: string, position: string) => void
@@ -464,7 +464,7 @@ export function PositionRosterUnifiedAssignmentSections({
       canManageRow: boolean
       removeLabel: string
       onRemove: () => void
-      scope: 'active' | 'scheduled_assign' | 'scheduled_unassign' | 'scheduled_org_chart'
+      scope: 'active' | 'scheduled_assign' | 'scheduled_unassign' | 'scheduled_org_chart' | 'org_chart'
     }
   ) => (
     <RosterAssetResourceListItem
