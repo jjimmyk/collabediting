@@ -107,6 +107,11 @@ assert(
     rosterPlanSharedSource.includes('archivedPositions.map'),
   'roster plan shared module should validate drafts, ensure creator, and batch archive upserts'
 )
+assert(
+  rosterPlanSharedSource.includes("from '../src/lib/ics-positions.js'") &&
+    !rosterPlanSharedSource.includes("from '@/lib/ics-positions'"),
+  'roster plan shared module should use relative imports for Vercel API runtime'
+)
 
 const applyPlanSource = readFileSync(
   join(process.cwd(), 'api/apply-workspace-roster-plan.ts'),
@@ -117,6 +122,10 @@ assert(
     applyPlanSource.includes('ensureCreatorAsIncidentCommander') &&
     applyPlanSource.includes('runRosterPlanStep'),
   'apply workspace roster plan API should validate draft and run stepped apply'
+)
+assert(
+  applyPlanSource.includes('loadDefaultRosterTemplate(admin)'),
+  'apply workspace roster plan API should pass admin into default template loader'
 )
 
 const appSource = readFileSync(join(process.cwd(), 'src/App.tsx'), 'utf8')

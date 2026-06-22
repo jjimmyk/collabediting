@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { WORKSPACE_ROSTER_POSITIONS } from '@/lib/ics-positions'
-import type { BuildTeamRosterDraft } from '@/features/roster/roster-template-types'
+import { WORKSPACE_ROSTER_POSITIONS } from '../src/lib/ics-positions.js'
+import type { BuildTeamRosterDraft } from '../src/features/roster/roster-template-types.js'
 import {
   addIcsWorkspaceMemberWithEffectiveWhen,
   addSingleResourceWorkspaceMemberWithEffectiveWhen,

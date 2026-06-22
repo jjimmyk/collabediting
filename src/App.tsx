@@ -10154,6 +10154,36 @@ function App() {
   ])
 
   useEffect(() => {
+    if (!isCreateIncidentOpen && !isCreateExerciseOpen) {
+      return
+    }
+
+    if (ics201SketchViewModelRef.current) {
+      try {
+        ics201SketchViewModelRef.current.destroy()
+      } catch {
+        /* ignore */
+      }
+      ics201SketchViewModelRef.current = null
+    }
+
+    mapViewRef.current?.destroy()
+    mapViewRef.current = null
+    mapGraphicsLayerRef.current = null
+    femaRegionsLayerRef.current = null
+    femaRegionGraphicsRef.current = new globalThis.Map()
+    drawLocationLayerRef.current = null
+    drawLocationGraphicRef.current = null
+    ics201SketchLayerRef.current = null
+    mapGraphicsRef.current = new globalThis.Map()
+    analyticsCategoryLayersRef.current = new globalThis.Map()
+    analyticsResolutionLayersRef.current = new globalThis.Map()
+    analyticsLayerZoomTargetRef.current = null
+    analyticsResolutionLayerZoomTargetRef.current = null
+    analyticsResolutionBulkZoomRecordsRef.current = null
+  }, [isCreateIncidentOpen, isCreateExerciseOpen])
+
+  useEffect(() => {
     return () => {
       if (ics201SketchViewModelRef.current) {
         try {

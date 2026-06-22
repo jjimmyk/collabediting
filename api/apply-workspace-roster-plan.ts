@@ -90,7 +90,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const template = await runRosterPlanStep('load roster template', async () => {
       return (
         (await loadRosterTemplateBySlug(admin, draftPlan.templateSlug)) ??
-        (await loadDefaultRosterTemplate())
+        (await loadDefaultRosterTemplate(admin))
       )
     })
 
