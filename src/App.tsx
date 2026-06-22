@@ -2989,13 +2989,41 @@ const scheduleHubMapViewLayoutRefresh = (
 ) => {
   void view.when().then(() => {
     requestAnimationFrame(() => {
-      const resizableView = view as MapView & { resize?: () => void }
-      if (typeof resizableView.resize === 'function') {
-        resizableView.resize()
-      }
-      view.padding = getPadding()
+      requestAnimationFrame(() => {
+        const resizableView = view as MapView & { resize?: () => void }
+        if (typeof resizableView.resize === 'function') {
+          resizableView.resize()
+        }
+        view.padding = getPadding()
+        window.dispatchEvent(new Event('resize'))
+      })
     })
   })
+}
+
+const syncHubMapGraphicsLayer = (
+  view: MapView | null,
+  currentLayer: GraphicsLayer | null,
+  graphics: Graphic[]
+): GraphicsLayer => {
+  const map = view?.map ?? null
+  if (map && currentLayer && map.layers.includes(currentLayer)) {
+    const replacementLayer = new GraphicsLayer()
+    if (graphics.length > 0) {
+      replacementLayer.addMany(graphics)
+    }
+    const layerIndex = map.layers.indexOf(currentLayer)
+    map.remove(currentLayer)
+    map.add(replacementLayer, layerIndex >= 0 ? layerIndex : undefined)
+    return replacementLayer
+  }
+
+  const layer = currentLayer ?? new GraphicsLayer()
+  layer.removeAll()
+  if (graphics.length > 0) {
+    layer.addMany(graphics)
+  }
+  return layer
 }
 
 type Ics214ActivityLogEntry = {
@@ -9771,7 +9799,6 @@ function App() {
       })
       femaRegionsLayerRef.current = femaLayer
     }
-    const graphicsLayer = mapGraphicsLayerRef.current
     const notificationThreatPointGraphics = notifications.flatMap((notification) =>
       (notification.regionalThreats?.threats ?? []).map((threat, threatIndex) => ({
         mapKey: `notification-${notification.id}-threat-${threatIndex}`,
@@ -10089,8 +10116,12 @@ function App() {
     femaRegionGraphicsRef.current.forEach((graphic, regionNumber) => {
       mapGraphicsRef.current.set(`fema-aor-${regionNumber}`, graphic)
     })
-    graphicsLayer.removeAll()
-    graphicsLayer.addMany(allGraphics.map((entry) => entry.graphic))
+    mapGraphicsLayerRef.current = syncHubMapGraphicsLayer(
+      mapViewRef.current,
+      mapGraphicsLayerRef.current,
+      allGraphics.map((entry) => entry.graphic)
+    )
+    const graphicsLayer = mapGraphicsLayerRef.current
 
     if (!mapViewRef.current) {
       const femaLayer = femaRegionsLayerRef.current
@@ -10160,6 +10191,10 @@ function App() {
           void openFemaAorMapPopupRef.current(target.femaAorId, event.mapPoint)
         })
       })
+    }
+
+    if (mapViewRef.current) {
+      scheduleHubMapViewLayoutRefresh(mapViewRef.current, getMapViewportPadding)
     }
   }, [
     aors,
@@ -10581,6 +10616,15 @@ function App() {
     }
 
     scheduleHubMapViewLayoutRefresh(view, getMapViewportPadding)
+    const layoutTimer = window.setTimeout(() => {
+      if (mapViewRef.current) {
+        scheduleHubMapViewLayoutRefresh(mapViewRef.current, getMapViewportPadding)
+      }
+    }, 350)
+
+    return () => {
+      window.clearTimeout(layoutTimer)
+    }
   }, [
     isPratusAiDrawerOpen,
     isObjectivesOpen,
