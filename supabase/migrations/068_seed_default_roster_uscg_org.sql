@@ -228,41 +228,5 @@ grant execute on function public.seed_default_uscg_organization_member(text) to 
 select public.seed_default_uscg_organization_member(email)
 from unnest(public.default_workspace_roster_emails()) as email;
 
-insert into public.organization_members (
-  organization_id,
-  user_id,
-  email,
-  role,
-  status,
-  joined_at
-)
-select distinct
-  o.id,
-  p.id,
-  lower(wm.email),
-  case when coalesce(p.is_org_admin, false) then 'admin'::organization_member_role else 'member'::organization_member_role end,
-  case when p.id is null then 'invited'::organization_member_status else 'active'::organization_member_status end,
-  case when p.id is null then null else coalesce(wm.joined_at, now()) end
-from public.workspace_members wm
-join public.workspaces w on w.id = wm.workspace_id
-join public.organizations o on o.id = w.organization_id and o.slug = 'uscg'
-left join public.profiles p on lower(p.email) = lower(wm.email)
-where wm.status <> 'removed'
-  and lower(wm.email) = any (public.default_workspace_roster_emails())
-on conflict (organization_id, email) do update
-  set
-    user_id = coalesce(excluded.user_id, public.organization_members.user_id),
-    role = case
-      when excluded.role = 'admin' then 'admin'::organization_member_role
-      when public.organization_members.role = 'admin' then 'admin'::organization_member_role
-      else excluded.role
-    end,
-    status = case
-      when excluded.user_id is not null then 'active'::organization_member_status
-      when public.organization_members.status = 'active' then 'active'::organization_member_status
-      else excluded.status
-    end,
-    joined_at = coalesce(public.organization_members.joined_at, excluded.joined_at);
-
 select public.sync_default_roster_user(email)
 from unnest(public.default_workspace_roster_emails()) as email;
