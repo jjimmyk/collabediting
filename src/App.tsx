@@ -2023,10 +2023,51 @@ const createAnalyticsClusterFeatureReduction = () => ({
   ],
 })
 
-const replaceAnalyticsFeatureLayerSource = (layer: FeatureLayer, graphics: Graphic[]) => {
+const replaceAnalyticsFeatureLayerSource = async (
+  layer: FeatureLayer,
+  graphics: Graphic[]
+) => {
+  if (layer.loaded) {
+    const layerWithEdits = layer as FeatureLayer & {
+      applyEdits?: (edits: {
+        addFeatures?: Graphic[]
+        deleteFeatures?: Graphic[]
+      }) => Promise<unknown>
+    }
+    if (typeof layerWithEdits.applyEdits === 'function') {
+      const query = await layer.queryFeatures()
+      await layerWithEdits.applyEdits({
+        deleteFeatures: query.features,
+        addFeatures: graphics,
+      })
+    }
+    return
+  }
+
   layer.source.removeAll()
   if (graphics.length > 0) {
     layer.source.addMany(graphics)
+  }
+}
+
+const scheduleHubMapViewLayoutRefreshWithRetries = (
+  view: MapView,
+  getPadding: () => {
+    left: number
+    right: number
+    top: number
+    bottom: number
+  },
+  isViewActive: () => boolean = () => true
+) => {
+  scheduleHubMapViewLayoutRefresh(view, getPadding)
+  for (const delayMs of [100, 350, 750]) {
+    window.setTimeout(() => {
+      if (!isViewActive()) {
+        return
+      }
+      scheduleHubMapViewLayoutRefresh(view, getPadding)
+    }, delayMs)
   }
 }
 
@@ -9729,9 +9770,30 @@ function App() {
   ])
 
   useEffect(() => {
-    if (!mapContainerRef.current) {
+    if (isCreateIncidentOpen || isCreateExerciseOpen) {
       return
     }
+    if (!isMapVisible) {
+      return
+    }
+
+    let cancelled = false
+    let layoutRafId = 0
+
+    const initializeHubMap = () => {
+      if (cancelled) {
+        return
+      }
+
+      const container = mapContainerRef.current
+      if (!container) {
+        return
+      }
+
+      if (container.clientWidth === 0 || container.clientHeight === 0) {
+        layoutRafId = requestAnimationFrame(initializeHubMap)
+        return
+      }
 
     if (!mapGraphicsLayerRef.current) {
       mapGraphicsLayerRef.current = new GraphicsLayer()
@@ -10160,7 +10222,11 @@ function App() {
       })
       mapViewRef.current = view
       positionMapZoomControls(view)
-      scheduleHubMapViewLayoutRefresh(view, getMapViewportPadding)
+      scheduleHubMapViewLayoutRefreshWithRetries(
+        view,
+        getMapViewportPadding,
+        () => mapViewRef.current === view
+      )
       view.on('click', (event) => {
         void view.hitTest(event).then((response) => {
           const target = resolveMapClickTarget(response.results)
@@ -10194,7 +10260,20 @@ function App() {
     }
 
     if (mapViewRef.current) {
-      scheduleHubMapViewLayoutRefresh(mapViewRef.current, getMapViewportPadding)
+      const activeView = mapViewRef.current
+      scheduleHubMapViewLayoutRefreshWithRetries(
+        activeView,
+        getMapViewportPadding,
+        () => mapViewRef.current === activeView
+      )
+    }
+    }
+
+    initializeHubMap()
+
+    return () => {
+      cancelled = true
+      cancelAnimationFrame(layoutRafId)
     }
   }, [
     aors,
@@ -10207,6 +10286,9 @@ function App() {
     hubAssets,
     rosterPositions,
     safetyAnalyses,
+    isCreateIncidentOpen,
+    isCreateExerciseOpen,
+    isMapVisible,
   ])
 
   useEffect(() => {
@@ -17938,10 +18020,12 @@ function App() {
     layerMap.forEach((layer, key) => {
       const records = recordsByKey.get(key) ?? []
 
-      replaceAnalyticsFeatureLayerSource(
-        layer,
-        records.map((record) => createAnalyticsRecordGraphic(record))
-      )
+      if (showOnMap) {
+        void replaceAnalyticsFeatureLayerSource(
+          layer,
+          records.map((record) => createAnalyticsRecordGraphic(record))
+        )
+      }
 
       layer.visible =
         showOnMap && analyticsVisibleLayerKeys.has(key) && records.length > 0
@@ -17983,12 +18067,14 @@ function App() {
     layerMap.forEach((layer, key) => {
       const records = recordsByKey.get(key) ?? []
 
-      replaceAnalyticsFeatureLayerSource(
-        layer,
-        records.length > 0
-          ? records.map((record) => createAnalyticsResolutionRecordGraphic(record))
-          : []
-      )
+      if (showOnMap) {
+        void replaceAnalyticsFeatureLayerSource(
+          layer,
+          records.length > 0
+            ? records.map((record) => createAnalyticsResolutionRecordGraphic(record))
+            : []
+        )
+      }
 
       layer.visible =
         showOnMap && analyticsVisibleResolutionLayerKeys.has(key) && records.length > 0
