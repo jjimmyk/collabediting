@@ -18,6 +18,8 @@ const SEED_USERS = [
   { email: 'sean@disastertech.com', password: 'Pratus!!!' },
   { email: 'carlton.landry@disastertech.com', password: 'Pratus!!!' },
   { email: 'michael.baccigalopi@disastertech.com', password: 'Pratus!!!' },
+  { email: 'daniel.dunn190@gmail.com', password: 'Pratus!!!' },
+  { email: 'nicolle.bogden@disastertech.com', password: 'Pratus!!!' },
 ] as const
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {

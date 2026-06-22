@@ -6,6 +6,8 @@ export const DEFAULT_WORKSPACE_ROSTER_EMAILS = [
   'sean@disastertech.com',
   'carlton.landry@disastertech.com',
   'michael.baccigalopi@disastertech.com',
+  'daniel.dunn190@gmail.com',
+  'nicolle.bogden@disastertech.com',
 ] as const
 
 export const DEFAULT_WORKSPACE_ROSTER_POSITION = 'Incident Commander'
