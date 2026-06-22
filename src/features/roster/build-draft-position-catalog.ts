@@ -42,7 +42,7 @@ export function buildDraftRosterMembers(draft: BuildTeamRosterDraft): WorkspaceR
     id: member.id,
     userId: member.existingUserId,
     email: member.email,
-    status: 'invited',
+    status: member.status ?? 'invited',
     icsPosition: member.icsPositions[0] ?? '',
     icsPositions: member.assignmentKind === 'ics_position' ? member.icsPositions : [],
     assignmentKind: member.assignmentKind,

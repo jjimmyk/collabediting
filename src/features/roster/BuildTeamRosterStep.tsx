@@ -23,6 +23,7 @@ import {
 } from '@/features/roster/build-draft-position-catalog'
 import {
   applyTemplateToBuildTeamDraft,
+  hasNonCreatorBuildTeamDraftEdits,
   setDraftEffectTiming,
 } from '@/features/roster/roster-draft-state'
 import { ROSTER_TEMPLATE_CATALOG } from '@/features/roster/roster-template-catalog'
@@ -118,8 +119,7 @@ export function BuildTeamRosterStep({
 
   const handleTemplateChange = useCallback(
     (templateSlug: string) => {
-      const preserveUserEdits =
-        draft.customPositions.length > 0 || draft.draftMembers.length > 0
+      const preserveUserEdits = hasNonCreatorBuildTeamDraftEdits(draft)
       if (
         preserveUserEdits &&
         !window.confirm(

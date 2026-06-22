@@ -33,6 +33,7 @@ export type BuildTeamDraftMember = {
   password: string
   personSource: WorkspaceMemberPersonSource
   existingUserId: string | null
+  status?: 'invited' | 'active'
 }
 
 export type BuildTeamDraftCustomPosition = {

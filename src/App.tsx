@@ -584,7 +584,7 @@ import {
   navigateToCreateActivation,
   type CreateActivationKind,
 } from '@/lib/create-activation-navigation'
-import { createDefaultBuildTeamRosterDraft } from '@/features/roster/roster-draft-state'
+import { createDefaultBuildTeamRosterDraft, ensureCreatorInBuildTeamDraft } from '@/features/roster/roster-draft-state'
 import type { BuildTeamRosterDraft } from '@/features/roster/roster-template-types'
 import {
   buildLocalPositionSettingsFromPlan,
@@ -6720,18 +6720,33 @@ function App() {
     setIsCreateExerciseOpen(false)
     navigateFromCreateActivation()
   }
+  const seedActivationRosterDraft = useCallback(
+    (draft: BuildTeamRosterDraft) =>
+      ensureCreatorInBuildTeamDraft(draft, {
+        email: profileEmail ?? '',
+        userId: user?.id ?? null,
+      }),
+    [profileEmail, user?.id]
+  )
   const openCreateIncident = () => {
     resetCreateIncidentForm()
     setIsCreateExerciseOpen(false)
     setIsCreateIncidentOpen(true)
+    setActivationRosterDraft(seedActivationRosterDraft(createDefaultBuildTeamRosterDraft()))
     navigateToCreateActivation('incident')
   }
   const openCreateExercise = () => {
     resetCreateIncidentForm()
     setIsCreateIncidentOpen(false)
     setIsCreateExerciseOpen(true)
+    setActivationRosterDraft(seedActivationRosterDraft(createDefaultBuildTeamRosterDraft()))
     navigateToCreateActivation('exercise')
   }
+  useEffect(() => {
+    if (!isCreateIncidentOpen && !isCreateExerciseOpen) return
+    if (!profileEmail) return
+    setActivationRosterDraft((current) => seedActivationRosterDraft(current))
+  }, [isCreateIncidentOpen, isCreateExerciseOpen, profileEmail, seedActivationRosterDraft, user?.id])
   useEffect(() => {
     const kind = getCreateActivationKindFromPath(window.location.pathname)
     if (kind === 'incident') {
@@ -6918,15 +6933,18 @@ function App() {
           workspaceId: result.workspace.workspaceId,
           draftPlan: activationRosterDraft,
         })
-        if (!rosterPlanResult.ok) {
-          toast.error(rosterPlanResult.message)
-          return
-        }
         const roster = await fetchWorkspaceRoster(result.workspace.workspaceId)
         setSupabaseWorkspaceRoster(roster)
         const planSummary = await fetchWorkspaceRosterPlan(result.workspace.workspaceId)
         setWorkspaceRosterPlanSummary(planSummary)
         closeCreateActivation()
+        if (!rosterPlanResult.ok) {
+          toast.error(
+            `${displayName} was created, but the roster plan could not be applied: ${rosterPlanResult.message}`
+          )
+          enterExerciseWorkspace(persistedExercise)
+          return
+        }
         toast.success(`${displayName} created. Exercise activation requests have been sent.`)
         enterExerciseWorkspace(persistedExercise)
       } finally {
@@ -7096,15 +7114,18 @@ function App() {
           workspaceId: result.workspace.workspaceId,
           draftPlan: activationRosterDraft,
         })
-        if (!rosterPlanResult.ok) {
-          toast.error(rosterPlanResult.message)
-          return
-        }
         const roster = await fetchWorkspaceRoster(result.workspace.workspaceId)
         setSupabaseWorkspaceRoster(roster)
         const planSummary = await fetchWorkspaceRosterPlan(result.workspace.workspaceId)
         setWorkspaceRosterPlanSummary(planSummary)
         closeCreateActivation()
+        if (!rosterPlanResult.ok) {
+          toast.error(
+            `${displayName} was created, but the roster plan could not be applied: ${rosterPlanResult.message}`
+          )
+          enterIncidentWorkspace(persistedIncident)
+          return
+        }
         toast.success(
           `${displayName} created. Activation requests have been sent.`
         )
@@ -16718,6 +16739,7 @@ function App() {
     navigateToCreateActivation('incident')
     setIsCreateExerciseOpen(false)
     setIsCreateIncidentOpen(true)
+    setActivationRosterDraft(seedActivationRosterDraft(createDefaultBuildTeamRosterDraft()))
   }
   const viewingEventModalEvent =
     viewingEventModalId == null

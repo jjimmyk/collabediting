@@ -13,6 +13,47 @@ import { DEFAULT_NEW_CUSTOM_POSITION_TYPE } from '@/features/roster/workspace-po
 import { inferDefaultPositionType } from '@/features/roster/workspace-position-type'
 import { emptyWorkspacePositionCatalog } from '@/features/roster/workspace-positions'
 
+const INCIDENT_COMMANDER_POSITION = 'Incident Commander'
+
+export function isCreatorIncidentCommanderDraftMember(member: BuildTeamDraftMember): boolean {
+  return (
+    member.assignmentKind === 'ics_position' &&
+    member.icsPositions.includes(INCIDENT_COMMANDER_POSITION) &&
+    member.status === 'active'
+  )
+}
+
+export function ensureCreatorInBuildTeamDraft(
+  draft: BuildTeamRosterDraft,
+  creator: { email: string; userId: string | null }
+): BuildTeamRosterDraft {
+  const normalizedEmail = creator.email.trim().toLowerCase()
+  if (!normalizedEmail) {
+    return draft
+  }
+
+  const withoutCreator = draft.draftMembers.filter(
+    (member) => member.email.trim().toLowerCase() !== normalizedEmail
+  )
+
+  const creatorMember: BuildTeamDraftMember = {
+    id: `draft-member-creator-${normalizedEmail.replace(/[^a-z0-9]+/g, '-')}`,
+    email: creator.email.trim(),
+    assignmentKind: 'ics_position',
+    icsPositions: [INCIDENT_COMMANDER_POSITION],
+    orgChartReportsTo: null,
+    password: '',
+    personSource: creator.userId ? 'add_existing' : 'invite_new',
+    existingUserId: creator.userId,
+    status: 'active',
+  }
+
+  return {
+    ...draft,
+    draftMembers: [creatorMember, ...withoutCreator],
+  }
+}
+
 export function createDefaultBuildTeamRosterDraft(): BuildTeamRosterDraft {
   return createBuildTeamRosterDraftFromTemplate(getDefaultRosterTemplate().slug, 'immediate')
 }
@@ -49,14 +90,23 @@ export function createBuildTeamRosterDraftFromTemplate(
   }
 }
 
+function preserveCreatorDraftMembers(draft: BuildTeamRosterDraft): BuildTeamDraftMember[] {
+  return draft.draftMembers.filter(isCreatorIncidentCommanderDraftMember)
+}
+
 export function applyTemplateToBuildTeamDraft(
   draft: BuildTeamRosterDraft,
   templateSlug: string,
   preserveUserEdits: boolean
 ): BuildTeamRosterDraft {
   const next = createBuildTeamRosterDraftFromTemplate(templateSlug, draft.effectTiming)
+  const creatorMembers = preserveCreatorDraftMembers(draft)
+
   if (!preserveUserEdits) {
-    return next
+    return {
+      ...next,
+      draftMembers: creatorMembers,
+    }
   }
 
   return {
@@ -133,4 +183,12 @@ export function createDraftCustomPositionDefaults(): Pick<
     positionType: DEFAULT_NEW_CUSTOM_POSITION_TYPE,
     customTypeLabel: null,
   }
+}
+
+export function hasNonCreatorBuildTeamDraftEdits(draft: BuildTeamRosterDraft): boolean {
+  if (draft.customPositions.length > 0) {
+    return true
+  }
+
+  return draft.draftMembers.some((member) => !isCreatorIncidentCommanderDraftMember(member))
 }

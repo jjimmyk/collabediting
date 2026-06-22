@@ -1,6 +1,8 @@
 import {
   createBuildTeamRosterDraftFromTemplate,
   createDefaultBuildTeamRosterDraft,
+  ensureCreatorInBuildTeamDraft,
+  isCreatorIncidentCommanderDraftMember,
 } from '../src/features/roster/roster-draft-state'
 import {
   getDefaultRosterTemplate,
@@ -37,6 +39,15 @@ assert(defaultDraft.effectTiming === 'immediate', 'default draft should apply im
 assert(
   defaultDraft.visibleStandardPositions.length === ICS_ORG_CHART_POSITIONS.length,
   'Full ICS draft should include all org chart positions'
+)
+
+const seededDefaultDraft = ensureCreatorInBuildTeamDraft(defaultDraft, {
+  email: 'ic@example.com',
+  userId: 'creator-user-id',
+})
+assert(
+  seededDefaultDraft.draftMembers.some(isCreatorIncidentCommanderDraftMember),
+  'default activation draft should include creator as Incident Commander when seeded'
 )
 
 const simpleDraft = createBuildTeamRosterDraftFromTemplate('simple-ics')

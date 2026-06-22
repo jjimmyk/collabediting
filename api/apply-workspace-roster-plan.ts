@@ -4,12 +4,15 @@ import type { BuildTeamRosterDraft } from '../src/features/roster/roster-templat
 import {
   applyMinimalIcOnlyRoster,
   applyRosterPlanToWorkspace,
+  ensureCreatorAsIncidentCommander,
   loadDefaultRosterTemplate,
   loadRosterTemplateBySlug,
   markRosterInvitesSent,
   markRosterPlanApplied,
+  runRosterPlanStep,
   saveWorkspaceRosterPlan,
   sendBuildTeamInvites,
+  validateBuildTeamRosterDraft,
 } from './roster-plan-shared.js'
 
 const supabaseUrl =
@@ -56,10 +59,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const body = parseBody(req)
     const workspaceId = body.workspaceId?.trim()
-    const draftPlan = body.draftPlan
 
-    if (!workspaceId || !draftPlan) {
+    if (!workspaceId || !body.draftPlan) {
       return res.status(400).json({ error: 'workspaceId and draftPlan are required.' })
+    }
+
+    let draftPlan: BuildTeamRosterDraft
+    try {
+      draftPlan = validateBuildTeamRosterDraft(body.draftPlan)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Invalid draftPlan payload.'
+      return res.status(400).json({ error: message })
     }
 
     const admin = createClient(supabaseUrl, supabaseServiceRoleKey)
@@ -77,27 +87,47 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(400).json({ error: 'Signed-in user must have an email address.' })
     }
 
-    const template =
-      (await loadRosterTemplateBySlug(admin, draftPlan.templateSlug)) ??
-      (await loadDefaultRosterTemplate())
-
-    await saveWorkspaceRosterPlan(admin, {
-      workspaceId,
-      templateId: template.id,
-      effectTiming: draftPlan.effectTiming,
-      draftPlan,
-      appliedAt: draftPlan.effectTiming === 'immediate' ? new Date().toISOString() : null,
-      invitesSentAt: null,
+    const template = await runRosterPlanStep('load roster template', async () => {
+      return (
+        (await loadRosterTemplateBySlug(admin, draftPlan.templateSlug)) ??
+        (await loadDefaultRosterTemplate())
+      )
     })
 
-    await sendBuildTeamInvites(admin, workspaceId, draftPlan, user.id, creatorEmail)
-    await markRosterInvitesSent(admin, workspaceId)
+    await runRosterPlanStep('ensure creator Incident Commander membership', async () => {
+      await ensureCreatorAsIncidentCommander(admin, workspaceId, user.id, creatorEmail)
+    })
+
+    await runRosterPlanStep('save workspace roster plan', async () => {
+      await saveWorkspaceRosterPlan(admin, {
+        workspaceId,
+        templateId: template.id,
+        effectTiming: draftPlan.effectTiming,
+        draftPlan,
+        appliedAt: draftPlan.effectTiming === 'immediate' ? new Date().toISOString() : null,
+        invitesSentAt: null,
+      })
+    })
+
+    await runRosterPlanStep('send Build Team invites', async () => {
+      await sendBuildTeamInvites(admin, workspaceId, draftPlan, user.id, creatorEmail)
+    })
+
+    await runRosterPlanStep('mark roster invites sent', async () => {
+      await markRosterInvitesSent(admin, workspaceId)
+    })
 
     if (draftPlan.effectTiming === 'immediate') {
-      await applyRosterPlanToWorkspace(admin, workspaceId, draftPlan, user.id)
-      await markRosterPlanApplied(admin, workspaceId)
+      await runRosterPlanStep('apply roster plan to workspace', async () => {
+        await applyRosterPlanToWorkspace(admin, workspaceId, draftPlan, user.id)
+      })
+      await runRosterPlanStep('mark roster plan applied', async () => {
+        await markRosterPlanApplied(admin, workspaceId)
+      })
     } else {
-      await applyMinimalIcOnlyRoster(admin, workspaceId)
+      await runRosterPlanStep('apply minimal Incident Commander roster', async () => {
+        await applyMinimalIcOnlyRoster(admin, workspaceId)
+      })
     }
 
     return res.status(200).json({ ok: true })

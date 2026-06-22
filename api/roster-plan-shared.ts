@@ -92,20 +92,22 @@ async function upsertArchivedStandardPositions(
   workspaceId: string,
   archivedPositions: string[]
 ): Promise<void> {
-  for (const positionName of archivedPositions) {
-    const { error } = await admin.from('workspace_standard_position_lifecycle').upsert(
-      {
-        workspace_id: workspaceId,
-        position_name: positionName,
-        op_advance_label: 'retire_on_op_advance',
-        archived_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: 'workspace_id,position_name' }
-    )
-    if (error) {
-      throw new Error(error.message)
-    }
+  if (archivedPositions.length === 0) return
+
+  const timestamp = new Date().toISOString()
+  const { error } = await admin.from('workspace_standard_position_lifecycle').upsert(
+    archivedPositions.map((positionName) => ({
+      workspace_id: workspaceId,
+      position_name: positionName,
+      op_advance_label: 'retire_on_op_advance',
+      archived_at: timestamp,
+      updated_at: timestamp,
+    })),
+    { onConflict: 'workspace_id,position_name' }
+  )
+
+  if (error) {
+    throw new Error(error.message)
   }
 }
 
@@ -389,4 +391,137 @@ export async function markRosterInvitesSent(
 
 export function resolveTemplatePositions(template: DbRosterTemplateRow): string[] {
   return Array.isArray(template.definition?.positions) ? template.definition.positions : []
+}
+
+export class RosterPlanApplyError extends Error {
+  step: string
+
+  constructor(step: string, message: string) {
+    super(`${step}: ${message}`)
+    this.name = 'RosterPlanApplyError'
+    this.step = step
+  }
+}
+
+export async function runRosterPlanStep<T>(
+  step: string,
+  action: () => Promise<T>
+): Promise<T> {
+  try {
+    return await action()
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    throw new RosterPlanApplyError(step, message)
+  }
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((entry) => typeof entry === 'string')
+}
+
+function isEffectTiming(value: unknown): value is BuildTeamRosterDraft['effectTiming'] {
+  return value === 'immediate' || value === 'op_period_1'
+}
+
+export function validateBuildTeamRosterDraft(draft: unknown): BuildTeamRosterDraft {
+  if (!draft || typeof draft !== 'object') {
+    throw new Error('draftPlan must be an object.')
+  }
+
+  const candidate = draft as Partial<BuildTeamRosterDraft>
+
+  if (typeof candidate.templateSlug !== 'string' || candidate.templateSlug.trim().length === 0) {
+    throw new Error('draftPlan.templateSlug is required.')
+  }
+
+  if (!isEffectTiming(candidate.effectTiming)) {
+    throw new Error('draftPlan.effectTiming must be immediate or op_period_1.')
+  }
+
+  if (!isStringArray(candidate.visibleStandardPositions)) {
+    throw new Error('draftPlan.visibleStandardPositions must be a string array.')
+  }
+
+  if (!isStringArray(candidate.archivedStandardPositions)) {
+    throw new Error('draftPlan.archivedStandardPositions must be a string array.')
+  }
+
+  if (!Array.isArray(candidate.singleResourceSlots)) {
+    throw new Error('draftPlan.singleResourceSlots must be an array.')
+  }
+
+  if (!Array.isArray(candidate.draftMembers)) {
+    throw new Error('draftPlan.draftMembers must be an array.')
+  }
+
+  if (!candidate.positionSettings || typeof candidate.positionSettings !== 'object') {
+    throw new Error('draftPlan.positionSettings must be an object.')
+  }
+
+  if (!Array.isArray(candidate.customPositions)) {
+    throw new Error('draftPlan.customPositions must be an array.')
+  }
+
+  return {
+    templateSlug: candidate.templateSlug.trim(),
+    effectTiming: candidate.effectTiming,
+    visibleStandardPositions: [...candidate.visibleStandardPositions],
+    archivedStandardPositions: [...candidate.archivedStandardPositions],
+    customPositions: [...candidate.customPositions],
+    singleResourceSlots: candidate.singleResourceSlots.map((slot) => ({
+      label: typeof slot.label === 'string' ? slot.label : '',
+      reportsTo: typeof slot.reportsTo === 'string' ? slot.reportsTo : '',
+    })),
+    draftMembers: [...candidate.draftMembers],
+    positionSettings: { ...candidate.positionSettings },
+  }
+}
+
+export async function ensureCreatorAsIncidentCommander(
+  admin: SupabaseClient,
+  workspaceId: string,
+  userId: string,
+  creatorEmail: string
+): Promise<void> {
+  const normalizedEmail = creatorEmail.trim().toLowerCase()
+
+  const { error: memberError } = await admin.from('workspace_members').upsert(
+    {
+      workspace_id: workspaceId,
+      user_id: userId,
+      email: normalizedEmail,
+      ics_position: 'Incident Commander',
+      status: 'active',
+      invited_by: userId,
+      joined_at: new Date().toISOString(),
+    },
+    { onConflict: 'workspace_id,email' }
+  )
+
+  if (memberError) {
+    throw new Error(memberError.message)
+  }
+
+  const { data: memberRow, error: memberLookupError } = await admin
+    .from('workspace_members')
+    .select('id')
+    .eq('workspace_id', workspaceId)
+    .eq('email', normalizedEmail)
+    .single()
+
+  if (memberLookupError || !memberRow) {
+    throw new Error(memberLookupError?.message ?? 'Could not find workspace member.')
+  }
+
+  const { error: positionError } = await admin.from('workspace_member_positions').upsert(
+    {
+      member_id: memberRow.id,
+      ics_position: 'Incident Commander',
+    },
+    { onConflict: 'member_id,ics_position' }
+  )
+
+  if (positionError) {
+    throw new Error(positionError.message)
+  }
 }
