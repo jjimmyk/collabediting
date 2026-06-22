@@ -38,6 +38,10 @@ import type {
 } from '@/lib/roster-member-assignment'
 import { mapEffectiveWhenToInviteMode } from '@/lib/roster-member-assignment'
 import type { OrgMemberSearchResult } from '@/lib/workspace-service'
+import {
+  isSelectableOrgMember,
+  orgMemberStatusLabel,
+} from '@/features/roster/position-member-assign-picker'
 import { WORKSPACE_ROSTER_POSITIONS } from '@/lib/ics-positions'
 import { cn } from '@/lib/utils'
 
@@ -186,6 +190,10 @@ export function AddWorkspaceMemberDialog({
     operationalPeriodsEnabled: showEffectiveWhen,
   })
 
+  const selectedExistingResult = existingSearchResults.find(
+    (result) => result.id === selectedExistingUserId
+  )
+
   const canSubmit =
     !isSubmitting &&
     !orgChartValidationError &&
@@ -194,12 +202,15 @@ export function AddWorkspaceMemberDialog({
     (personSource === 'invite_new'
       ? isValidRosterEmail(emailDraft) &&
         (passwordDraft.length === 0 || passwordDraft.length >= 8)
-      : isSupabaseEnabled && selectedExistingUserId !== null)
+      : isSupabaseEnabled &&
+        selectedExistingUserId !== null &&
+        isSelectableOrgMember(selectedExistingResult ?? { id: null }))
 
   const handleSubmit = async () => {
-    const selectedExisting = existingSearchResults.find(
-      (result) => result.id === selectedExistingUserId
-    )
+    const selectedExisting = selectedExistingResult
+    if (!selectedExisting?.id) {
+      return
+    }
     const result = await onSubmit({
       personSource,
       assignmentKind,
@@ -447,25 +458,39 @@ export function AddWorkspaceMemberDialog({
                   <p className="px-1 py-2 text-[11px] text-muted-foreground">
                     {existingSearchQuery.trim()
                       ? 'No matching people found.'
-                      : 'No organization members are available to add to this roster.'}
+                      : 'No organization members found.'}
                   </p>
                 ) : (
-                  existingSearchResults.map((result) => (
-                    <button
-                      key={result.id}
-                      type="button"
-                      className={cn(
-                        'flex w-full flex-col rounded-md px-2 py-1.5 text-left text-xs hover:bg-muted',
-                        selectedExistingUserId === result.id && 'bg-primary/10 ring-1 ring-primary'
-                      )}
-                      onClick={() => setSelectedExistingUserId(result.id)}
-                    >
-                      <span className="font-medium">{result.email}</span>
-                      {result.fullName ? (
-                        <span className="text-[11px] text-muted-foreground">{result.fullName}</span>
-                      ) : null}
-                    </button>
-                  ))
+                  existingSearchResults.map((result) => {
+                    const selectable = isSelectableOrgMember(result)
+                    const statusLabel = orgMemberStatusLabel(result)
+                    return (
+                      <button
+                        key={result.id ?? result.email}
+                        type="button"
+                        disabled={!selectable}
+                        className={cn(
+                          'flex w-full flex-col rounded-md px-2 py-1.5 text-left text-xs',
+                          selectable ? 'hover:bg-muted' : 'cursor-not-allowed opacity-60',
+                          selectedExistingUserId === result.id &&
+                            selectable &&
+                            'bg-primary/10 ring-1 ring-primary'
+                        )}
+                        onClick={() => {
+                          if (!selectable || !result.id) return
+                          setSelectedExistingUserId(result.id)
+                        }}
+                      >
+                        <span className="font-medium">{result.email}</span>
+                        {result.fullName ? (
+                          <span className="text-[11px] text-muted-foreground">{result.fullName}</span>
+                        ) : null}
+                        {statusLabel ? (
+                          <span className="text-[11px] text-muted-foreground">{statusLabel}</span>
+                        ) : null}
+                      </button>
+                    )
+                  })
                 )}
               </div>
             </div>

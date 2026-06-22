@@ -43,3 +43,27 @@ export function formatMemberPositionSummary(positions: string[]): string | null 
   }
   return positions.join(', ')
 }
+
+export function isSelectableOrgMember(result: {
+  id: string | null
+  canAdd?: boolean
+}): boolean {
+  return result.canAdd !== false && Boolean(result.id)
+}
+
+export function orgMemberStatusLabel(result: {
+  id: string | null
+  alreadyOnRoster?: boolean
+  canAdd?: boolean
+}): string | null {
+  if (result.alreadyOnRoster) {
+    return 'Already on roster'
+  }
+  if (!result.id) {
+    return 'No sign-in account yet'
+  }
+  if (result.canAdd === false) {
+    return 'Unavailable'
+  }
+  return null
+}

@@ -7,6 +7,7 @@ import {
   dedupeOrgSearchResultsAgainstRoster,
   filterMembersBySearchQuery,
   formatMemberPositionSummary,
+  isSelectableOrgMember,
 } from '@/features/roster/position-member-assign-picker'
 import type { OrgMemberSearchResult } from '@/lib/workspace-service'
 import type { WorkspaceRosterMember } from '@/lib/workspace-types'
@@ -101,7 +102,10 @@ export function PositionMemberAssignPicker({
   )
 
   const filteredOrgResults = useMemo(
-    () => filterMembersBySearchQuery(orgResults, query, (result) => result.fullName),
+    () =>
+      filterMembersBySearchQuery(orgResults, query, (result) => result.fullName).filter(
+        isSelectableOrgMember
+      ),
     [orgResults, query]
   )
 
@@ -173,10 +177,11 @@ export function PositionMemberAssignPicker({
                   </p>
                   {filteredOrgResults.map((result) => (
                     <MemberResultButton
-                      key={`org-${result.id}`}
+                      key={`org-${result.id ?? result.email}`}
                       email={result.email}
                       detail={result.fullName}
                       onClick={() => {
+                        if (!result.id) return
                         onSelectOrgMember?.(result.id)
                         setOpen(false)
                       }}

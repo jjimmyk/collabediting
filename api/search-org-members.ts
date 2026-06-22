@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { createClient } from '@supabase/supabase-js'
+import { loadActiveOrganizationMembers } from './org-member-lookup-shared.js'
 import { authenticateRosterManager } from './roster-auth-shared.js'
 import { getWorkspaceOrganizationId } from './org-shared.js'
 
@@ -11,16 +12,18 @@ const supabaseServiceRoleKey =
   process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.SUPABASE_SECRET_KEY
 
 export type OrgMemberSearchResult = {
-  id: string
+  id: string | null
   email: string
   fullName: string | null
+  alreadyOnRoster: boolean
+  canAdd: boolean
 }
 
 /**
  * Loads user ids/emails to exclude from org-member search results.
- * - Without `position`: exclude everyone already on the workspace roster (add-to-roster flow).
+ * - Without `position`: used only to mark `alreadyOnRoster` (all org members are returned).
  * - With `position`: exclude only members assigned to or scheduled for that position
- *   (position-row assignment flow; roster members on other positions remain eligible).
+ *   from the organization picker (roster members on other positions remain eligible).
  */
 async function loadRosterExclusions(
   admin: ReturnType<typeof createClient>,
@@ -133,52 +136,41 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const organizationId = await getWorkspaceOrganizationId(admin, workspaceId)
 
-    const [{ data: orgMembers, error: orgMembersError }, rosterExclusions] = await Promise.all([
-      admin
-        .from('organization_members')
-        .select('user_id, email, profiles:user_id (full_name)')
-        .eq('organization_id', organizationId)
-        .eq('status', 'active')
-        .not('user_id', 'is', null)
-        .order('email', { ascending: true })
-        .limit(250),
+    const [orgMembers, rosterExclusions] = await Promise.all([
+      loadActiveOrganizationMembers(admin, organizationId),
       loadRosterExclusions(admin, workspaceId, position),
     ])
 
-    if (orgMembersError) {
-      throw new Error(orgMembersError.message)
-    }
+    const profileMatches = orgMembers.flatMap((member) => {
+      const email = member.organizationMemberEmail
+      const userId = member.userId
+      const fullName = member.fullName
+      const haystack = `${email} ${fullName ?? ''}`.toLowerCase()
+      if (query.length > 0 && !haystack.includes(query)) {
+        return []
+      }
 
-    const profileMatches =
-      orgMembers?.flatMap((member) => {
-        const userId = typeof member.user_id === 'string' ? member.user_id : ''
-        const email = typeof member.email === 'string' ? member.email.toLowerCase() : ''
-        if (!userId || !email) return []
+      const alreadyOnRoster =
+        rosterExclusions.emails.has(email) ||
+        (userId ? rosterExclusions.userIds.has(userId) : false)
+      const blockedForPosition =
+        Boolean(position) && userId ? rosterExclusions.userIds.has(userId) : false
+      const canAdd = Boolean(userId) && !alreadyOnRoster && !blockedForPosition
 
-        const profileRaw = member.profiles as { full_name?: string | null } | { full_name?: string | null }[] | null
-        const profile = Array.isArray(profileRaw) ? profileRaw[0] : profileRaw
-        const fullName = profile?.full_name ?? null
-        const haystack = `${email} ${fullName ?? ''}`.toLowerCase()
-        if (query.length > 0 && !haystack.includes(query)) {
-          return []
-        }
-
-        return [{ userId, email, fullName }]
-      }) ?? []
+      return [{ userId, email, fullName, alreadyOnRoster, canAdd }]
+    })
 
     const resultLimit = query.length > 0 ? 25 : 250
 
     const results: OrgMemberSearchResult[] = profileMatches
-      .filter(
-        (entry) =>
-          !rosterExclusions.userIds.has(entry.userId) &&
-          !rosterExclusions.emails.has(entry.email)
-      )
+      .filter((entry) => (position ? entry.canAdd : true))
       .slice(0, resultLimit)
       .map((entry) => ({
         id: entry.userId,
         email: entry.email,
         fullName: entry.fullName,
+        alreadyOnRoster: entry.alreadyOnRoster,
+        canAdd: entry.canAdd,
       }))
 
     return res.status(200).json({ results })

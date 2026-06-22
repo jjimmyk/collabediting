@@ -592,9 +592,11 @@ export async function inviteWorkspaceMember(params: {
 }
 
 export type OrgMemberSearchResult = {
-  id: string
+  id: string | null
   email: string
   fullName: string | null
+  alreadyOnRoster?: boolean
+  canAdd?: boolean
 }
 
 export async function searchOrgMembersForWorkspace(params: {

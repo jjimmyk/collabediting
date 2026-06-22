@@ -58,7 +58,7 @@ export async function userBelongsToOrganization(
   userId: string,
   organizationId: string
 ): Promise<boolean> {
-  const { data } = await admin
+  const { data: byUserId } = await admin
     .from('organization_members')
     .select('id')
     .eq('organization_id', organizationId)
@@ -66,7 +66,34 @@ export async function userBelongsToOrganization(
     .eq('status', 'active')
     .maybeSingle()
 
-  return Boolean(data)
+  if (byUserId) {
+    return true
+  }
+
+  const { data: profile, error: profileError } = await admin
+    .from('profiles')
+    .select('email')
+    .eq('id', userId)
+    .maybeSingle()
+
+  if (profileError) {
+    throw new Error(profileError.message)
+  }
+
+  const email = typeof profile?.email === 'string' ? profile.email.trim().toLowerCase() : ''
+  if (!email) {
+    return false
+  }
+
+  const { data: byEmail } = await admin
+    .from('organization_members')
+    .select('id')
+    .eq('organization_id', organizationId)
+    .eq('status', 'active')
+    .ilike('email', email)
+    .maybeSingle()
+
+  return Boolean(byEmail)
 }
 
 export async function assertUserInWorkspaceOrganization(
