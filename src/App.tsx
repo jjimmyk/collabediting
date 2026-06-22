@@ -2978,6 +2978,26 @@ const positionMapZoomControls = (view: MapView) => {
   })
 }
 
+const scheduleHubMapViewLayoutRefresh = (
+  view: MapView,
+  getPadding: () => {
+    left: number
+    right: number
+    top: number
+    bottom: number
+  }
+) => {
+  void view.when().then(() => {
+    requestAnimationFrame(() => {
+      const resizableView = view as MapView & { resize?: () => void }
+      if (typeof resizableView.resize === 'function') {
+        resizableView.resize()
+      }
+      view.padding = getPadding()
+    })
+  })
+}
+
 type Ics214ActivityLogEntry = {
   dateTime: string
   activities: string
@@ -10109,6 +10129,7 @@ function App() {
       })
       mapViewRef.current = view
       positionMapZoomControls(view)
+      scheduleHubMapViewLayoutRefresh(view, getMapViewportPadding)
       view.on('click', (event) => {
         void view.hitTest(event).then((response) => {
           const target = resolveMapClickTarget(response.results)
@@ -10554,17 +10575,22 @@ function App() {
 
   useEffect(() => {
     // Ensure ArcGIS view recalculates after horizontal layout changes.
-    const frame = requestAnimationFrame(() => {
-      const view = mapViewRef.current as (MapView & { resize?: () => void }) | null
-      if (view && typeof view.resize === 'function') {
-        view.resize()
-      }
-      if (view) {
-        view.padding = getMapViewportPadding()
-      }
-    })
-    return () => cancelAnimationFrame(frame)
-  }, [isPratusAiDrawerOpen, isObjectivesOpen, panelWidthMode, isMapVisible])
+    const view = mapViewRef.current
+    if (!view) {
+      return
+    }
+
+    scheduleHubMapViewLayoutRefresh(view, getMapViewportPadding)
+  }, [
+    isPratusAiDrawerOpen,
+    isObjectivesOpen,
+    panelWidthMode,
+    isMapVisible,
+    isCreateIncidentOpen,
+    isCreateExerciseOpen,
+    activeIncidentWorkspaceId,
+    activeExerciseWorkspaceId,
+  ])
 
   useEffect(() => {
     if (!isPratusAiSelectingContext) {
