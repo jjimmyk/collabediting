@@ -8,6 +8,7 @@ export type WorkspaceMemberScheduleRow = {
   positionName: string
   memberId: string
   scheduleAction: MemberScheduleAction
+  competencyFunction: string | null
   createdAt: string
   createdBy: string | null
 }
@@ -18,6 +19,7 @@ type DbMemberScheduleRow = {
   position_name: string
   member_id: string
   schedule_action: MemberScheduleAction
+  competency_function: string | null
   created_at: string
   created_by: string | null
 }
@@ -29,6 +31,7 @@ function mapDbMemberScheduleRow(row: DbMemberScheduleRow): WorkspaceMemberSchedu
     positionName: row.position_name,
     memberId: row.member_id,
     scheduleAction: row.schedule_action,
+    competencyFunction: row.competency_function?.trim() || null,
     createdAt: row.created_at,
     createdBy: row.created_by,
   }
@@ -42,7 +45,7 @@ export async function fetchWorkspaceMemberSchedules(
 
   const { data, error } = await supabase
     .from('workspace_position_member_schedules')
-    .select('id, workspace_id, position_name, member_id, schedule_action, created_at, created_by')
+    .select('id, workspace_id, position_name, member_id, schedule_action, competency_function, created_at, created_by')
     .eq('workspace_id', workspaceId)
 
   if (error || !data) {
@@ -116,6 +119,16 @@ export function groupMemberSchedulesByPosition(
     map[row.positionName] = current
   }
 
+  return map
+}
+
+export function groupMemberScheduleCompetencyByKey(
+  schedules: WorkspaceMemberScheduleRow[]
+): Record<string, string | null> {
+  const map: Record<string, string | null> = {}
+  for (const row of schedules) {
+    map[`${row.memberId}::${row.positionName}::${row.scheduleAction}`] = row.competencyFunction
+  }
   return map
 }
 

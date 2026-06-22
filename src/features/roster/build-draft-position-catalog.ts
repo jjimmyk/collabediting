@@ -49,6 +49,14 @@ export function buildDraftRosterMembers(draft: BuildTeamRosterDraft): WorkspaceR
     orgChartReportsTo:
       member.assignmentKind === 'single_resource' ? member.orgChartReportsTo : null,
     pendingOrgChartReportsTo: null,
+    competencyFunction:
+      member.assignmentKind === 'single_resource' ? member.competencyFunction ?? null : null,
+    competencyByPosition:
+      member.assignmentKind === 'ics_position'
+        ? Object.fromEntries(
+            member.icsPositions.map((position) => [position, member.competencyFunction ?? null])
+          )
+        : undefined,
     checkInStatus: 'not_arrived',
     addedAt: new Date().toISOString(),
   }))

@@ -10,6 +10,7 @@ type DbPositionAssetAssignmentRow = {
   workspace_id: string
   position_name: string
   asset_key: string
+  competency_function: string | null
   created_at: string
   created_by: string | null
 }
@@ -20,6 +21,7 @@ type DbPositionAssetScheduleRow = {
   position_name: string
   asset_key: string
   schedule_action: AssetScheduleAction
+  competency_function: string | null
   created_at: string
   created_by: string | null
 }
@@ -30,6 +32,7 @@ function mapAssignmentRow(row: DbPositionAssetAssignmentRow): WorkspacePositionA
     workspaceId: row.workspace_id,
     positionName: row.position_name,
     assetKey: row.asset_key,
+    competencyFunction: row.competency_function?.trim() || null,
     createdAt: row.created_at,
     createdBy: row.created_by,
   }
@@ -42,6 +45,7 @@ function mapScheduleRow(row: DbPositionAssetScheduleRow): WorkspacePositionAsset
     positionName: row.position_name,
     assetKey: row.asset_key,
     scheduleAction: row.schedule_action,
+    competencyFunction: row.competency_function?.trim() || null,
     createdAt: row.created_at,
     createdBy: row.created_by,
   }
@@ -55,7 +59,7 @@ export async function fetchWorkspacePositionAssetAssignments(
 
   const { data, error } = await supabase
     .from('workspace_position_asset_assignments')
-    .select('id, workspace_id, position_name, asset_key, created_at, created_by')
+    .select('id, workspace_id, position_name, asset_key, competency_function, created_at, created_by')
     .eq('workspace_id', workspaceId)
 
   if (error || !data) {
@@ -63,6 +67,16 @@ export async function fetchWorkspacePositionAssetAssignments(
   }
 
   return (data as DbPositionAssetAssignmentRow[]).map(mapAssignmentRow)
+}
+
+export function groupAssetScheduleCompetencyByKey(
+  schedules: WorkspacePositionAssetScheduleRow[]
+): Record<string, string | null> {
+  const map: Record<string, string | null> = {}
+  for (const row of schedules) {
+    map[`${row.assetKey}::${row.positionName}::${row.scheduleAction}`] = row.competencyFunction
+  }
+  return map
 }
 
 export async function fetchWorkspaceAssetSchedules(
@@ -73,7 +87,7 @@ export async function fetchWorkspaceAssetSchedules(
 
   const { data, error } = await supabase
     .from('workspace_position_asset_schedules')
-    .select('id, workspace_id, position_name, asset_key, schedule_action, created_at, created_by')
+    .select('id, workspace_id, position_name, asset_key, schedule_action, competency_function, created_at, created_by')
     .eq('workspace_id', workspaceId)
 
   if (error || !data) {
@@ -201,25 +215,36 @@ export async function updateWorkspaceAssetPointOfContact(params: {
   return { ok: true }
 }
 
+export type AssetPendingOrgChartAssignment = {
+  reportsTo: string
+  competencyFunction: string | null
+}
+
 export async function fetchWorkspaceAssetPendingOrgChartReports(
   workspaceId: string
-): Promise<Record<string, string>> {
+): Promise<Record<string, AssetPendingOrgChartAssignment>> {
   const supabase = getSupabaseClient()
   if (!supabase) return {}
 
   const { data, error } = await supabase
     .from('workspace_asset_pending_org_chart')
-    .select('asset_key, org_chart_reports_to')
+    .select('asset_key, org_chart_reports_to, competency_function')
     .eq('workspace_id', workspaceId)
 
   if (error || !data) {
     return {}
   }
 
-  const map: Record<string, string> = {}
+  const map: Record<string, AssetPendingOrgChartAssignment> = {}
   for (const row of data) {
     if (typeof row.asset_key === 'string' && typeof row.org_chart_reports_to === 'string') {
-      map[row.asset_key] = row.org_chart_reports_to
+      map[row.asset_key] = {
+        reportsTo: row.org_chart_reports_to,
+        competencyFunction:
+          typeof row.competency_function === 'string' && row.competency_function.trim().length > 0
+            ? row.competency_function.trim()
+            : null,
+      }
     }
   }
   return map

@@ -28,6 +28,7 @@ import {
 import { RosterAssetResourceListItem } from '@/features/roster/RosterAssetResourceListItem'
 import type { PositionRosterEntry } from '@/features/roster/workspace-position-roster'
 import { RosterMemberCheckInStatusSelect } from '@/features/roster/RosterMemberCheckInStatusSelect'
+import { CompetencyFunctionSelect } from '@/features/roster/CompetencyFunctionSelect'
 import type { WorkspaceMemberCheckInStatus, WorkspaceRosterMember } from '@/lib/workspace-types'
 import type { OrgMemberSearchResult } from '@/lib/workspace-service'
 
@@ -77,6 +78,11 @@ export function PositionMemberRow({
   canEditCheckInStatus = false,
   updatingCheckInMemberId = null,
   onCheckInStatusChange,
+  competencyFunction = null,
+  canEditCompetencyFunction = false,
+  competencyOptions = [],
+  isUpdatingCompetency = false,
+  onCompetencyFunctionChange,
 }: {
   member: WorkspaceRosterMember
   badgeLabel: string
@@ -88,42 +94,59 @@ export function PositionMemberRow({
   canEditCheckInStatus?: boolean
   updatingCheckInMemberId?: string | null
   onCheckInStatusChange?: (memberId: string, status: WorkspaceMemberCheckInStatus) => void
+  competencyFunction?: string | null
+  canEditCompetencyFunction?: boolean
+  competencyOptions?: string[]
+  isUpdatingCompetency?: boolean
+  onCompetencyFunctionChange?: (value: string | null) => void
 }) {
   return (
-    <div className="flex items-center justify-between gap-2 rounded-md border px-2 py-1.5">
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-xs font-medium">{member.email}</p>
-        <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
-          <Badge variant="secondary" className="h-4 px-1.5 text-[9px]">
-            User
-          </Badge>
-          <Badge variant="outline" className="h-4 px-1.5 text-[9px]">
-            {badgeLabel}
-          </Badge>
-          {showCheckInStatus && onCheckInStatusChange ? (
-            <RosterMemberCheckInStatusSelect
-              memberId={member.id}
-              value={member.checkInStatus}
-              canEdit={canEditCheckInStatus}
-              isUpdating={updatingCheckInMemberId === member.id}
-              compact
-              onChange={onCheckInStatusChange}
-            />
-          ) : null}
+    <div className="space-y-1.5 rounded-md border px-2 py-1.5">
+      <div className="flex items-center justify-between gap-2">
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-xs font-medium">{member.email}</p>
+          <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
+            <Badge variant="secondary" className="h-4 px-1.5 text-[9px]">
+              User
+            </Badge>
+            <Badge variant="outline" className="h-4 px-1.5 text-[9px]">
+              {badgeLabel}
+            </Badge>
+            {showCheckInStatus && onCheckInStatusChange ? (
+              <RosterMemberCheckInStatusSelect
+                memberId={member.id}
+                value={member.checkInStatus}
+                canEdit={canEditCheckInStatus}
+                isUpdating={updatingCheckInMemberId === member.id}
+                compact
+                onChange={onCheckInStatusChange}
+              />
+            ) : null}
+          </div>
         </div>
+        {canManage ? (
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            className="h-7 w-7 shrink-0 text-muted-foreground hover:text-destructive"
+            aria-label={removeLabel}
+            disabled={isBusy}
+            onClick={onRemove}
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </Button>
+        ) : null}
       </div>
-      {canManage ? (
-        <Button
-          type="button"
-          size="icon"
-          variant="ghost"
-          className="h-7 w-7 shrink-0 text-muted-foreground hover:text-destructive"
-          aria-label={removeLabel}
-          disabled={isBusy}
-          onClick={onRemove}
-        >
-          <Trash2 className="h-3.5 w-3.5" />
-        </Button>
+      {onCompetencyFunctionChange ? (
+        <CompetencyFunctionSelect
+          value={competencyFunction}
+          options={competencyOptions}
+          disabled={!canEditCompetencyFunction}
+          compact
+          isUpdating={isUpdatingCompetency}
+          onChange={onCompetencyFunctionChange}
+        />
       ) : null}
     </div>
   )
@@ -307,6 +330,26 @@ export type PositionRosterUnifiedAssignmentSectionsProps = {
   canEditCheckInStatus?: boolean
   updatingCheckInMemberId?: string | null
   onCheckInStatusChange?: (memberId: string, status: WorkspaceMemberCheckInStatus) => void
+  competencyOptions?: string[]
+  canEditCompetencyFunction?: boolean
+  updatingCompetencyKey?: string | null
+  memberScheduleCompetencyByKey?: Record<string, string | null>
+  onMemberCompetencyFunctionChange?: (input: {
+    memberId: string
+    positionName: string
+    scope:
+      | 'active'
+      | 'scheduled_assign'
+      | 'scheduled_unassign'
+      | 'scheduled_org_chart'
+    value: string | null
+  }) => void
+  onAssetCompetencyFunctionChange?: (input: {
+    assetKey: string
+    positionName: string
+    scope: 'active' | 'scheduled_assign' | 'scheduled_unassign' | 'scheduled_org_chart'
+    value: string | null
+  }) => void
   onAssignExistingMember: (memberId: string, position: string) => void
   onSearchOrgMembers?: (query: string) => Promise<OrgMemberSearchResult[]>
   onAssignOrgMember?: (userId: string, position: string) => void
@@ -338,6 +381,12 @@ export function PositionRosterUnifiedAssignmentSections({
   canEditCheckInStatus = false,
   updatingCheckInMemberId = null,
   onCheckInStatusChange,
+  competencyOptions = [],
+  canEditCompetencyFunction = false,
+  updatingCompetencyKey = null,
+  memberScheduleCompetencyByKey = {},
+  onMemberCompetencyFunctionChange,
+  onAssetCompetencyFunctionChange,
   onAssignExistingMember,
   onSearchOrgMembers,
   onAssignOrgMember,
@@ -377,6 +426,18 @@ export function PositionRosterUnifiedAssignmentSections({
     onCheckInStatusChange,
   }
 
+  const memberRowCompetencyProps = {
+    competencyOptions,
+    canEditCompetencyFunction,
+    updatingCompetencyKey,
+  }
+
+  const competencyKey = (
+    kind: 'member' | 'asset',
+    id: string,
+    scope: string
+  ) => `${kind}::${id}::${entry.position}::${scope}`
+
   const assignNowEmpty = assignNowCombinedEmptyMessage(entry, assetsEnabled)
   const scheduleAssignEmpty = scheduleAssignCombinedEmptyMessage(entry, assetsEnabled)
   const scheduleOrgChartEmpty = scheduleOrgChartCombinedEmptyMessage(entry, assetsEnabled)
@@ -403,6 +464,7 @@ export function PositionRosterUnifiedAssignmentSections({
       canManageRow: boolean
       removeLabel: string
       onRemove: () => void
+      scope: 'active' | 'scheduled_assign' | 'scheduled_unassign' | 'scheduled_org_chart'
     }
   ) => (
     <RosterAssetResourceListItem
@@ -420,6 +482,20 @@ export function PositionRosterUnifiedAssignmentSections({
       removeLabel={config.removeLabel}
       onRemove={config.onRemove}
       onUpdateAssetPointOfContact={onUpdateAssetPointOfContact}
+      competencyOptions={competencyOptions}
+      canEditCompetencyFunction={canEditCompetencyFunction}
+      isUpdatingCompetency={updatingCompetencyKey === competencyKey('asset', asset.assetKey, config.scope)}
+      onUpdateAssetCompetencyFunction={
+        onAssetCompetencyFunctionChange
+          ? (value) =>
+              onAssetCompetencyFunctionChange({
+                assetKey: asset.assetKey,
+                positionName: entry.position,
+                scope: config.scope,
+                value,
+              })
+          : undefined
+      }
       onFocusMap={
         onFocusAsset && assetsByKey[asset.assetKey]
           ? () => onFocusAsset(assetsByKey[asset.assetKey]!)
@@ -480,7 +556,23 @@ export function PositionRosterUnifiedAssignmentSections({
             isBusy={isBusy}
             removeLabel={`Remove ${member.email} from ${entry.position}`}
             onRemove={() => onUnassignMember(member.id, entry.position)}
+            competencyFunction={member.competencyByPosition?.[entry.position] ?? null}
+            isUpdatingCompetency={
+              updatingCompetencyKey === competencyKey('member', member.id, 'active')
+            }
+            onCompetencyFunctionChange={
+              onMemberCompetencyFunctionChange
+                ? (value) =>
+                    onMemberCompetencyFunctionChange({
+                      memberId: member.id,
+                      positionName: entry.position,
+                      scope: 'active',
+                      value,
+                    })
+                : undefined
+            }
             {...memberRowCheckInProps}
+            {...memberRowCompetencyProps}
           />
         ))}
         {assetsEnabled
@@ -492,6 +584,7 @@ export function PositionRosterUnifiedAssignmentSections({
                 canManageRow: canManageRoster && canAssignNow,
                 removeLabel: `Remove ${asset.name} from ${entry.position}`,
                 onRemove: () => onUnassignAsset(asset.assetKey, entry.position),
+                scope: 'active',
               })
             )
           : null}
@@ -539,7 +632,27 @@ export function PositionRosterUnifiedAssignmentSections({
             isBusy={isBusy}
             removeLabel={`Remove ${member.email} from next OP assign schedule`}
             onRemove={() => onRemoveScheduledAssign(member.id, entry.position)}
+            competencyFunction={
+              memberScheduleCompetencyByKey[
+                `${member.id}::${entry.position}::assign_on_op_advance`
+              ] ?? null
+            }
+            isUpdatingCompetency={
+              updatingCompetencyKey === competencyKey('member', member.id, 'scheduled_assign')
+            }
+            onCompetencyFunctionChange={
+              onMemberCompetencyFunctionChange
+                ? (value) =>
+                    onMemberCompetencyFunctionChange({
+                      memberId: member.id,
+                      positionName: entry.position,
+                      scope: 'scheduled_assign',
+                      value,
+                    })
+                : undefined
+            }
             {...memberRowCheckInProps}
+            {...memberRowCompetencyProps}
           />
         ))}
         {assetsEnabled
@@ -551,6 +664,7 @@ export function PositionRosterUnifiedAssignmentSections({
                 canManageRow: canManageRoster,
                 removeLabel: `Remove ${asset.name} from next OP assign schedule`,
                 onRemove: () => onRemoveScheduledAssignAsset(asset.assetKey, entry.position),
+                scope: 'scheduled_assign',
               })
             )
           : null}
@@ -571,7 +685,23 @@ export function PositionRosterUnifiedAssignmentSections({
             isBusy={isBusy}
             removeLabel={`Remove ${member.email} from next OP org chart schedule`}
             onRemove={() => onRemoveScheduledAssign(member.id, entry.position)}
+            competencyFunction={member.pendingCompetencyFunction ?? null}
+            isUpdatingCompetency={
+              updatingCompetencyKey === competencyKey('member', member.id, 'scheduled_org_chart')
+            }
+            onCompetencyFunctionChange={
+              onMemberCompetencyFunctionChange
+                ? (value) =>
+                    onMemberCompetencyFunctionChange({
+                      memberId: member.id,
+                      positionName: entry.position,
+                      scope: 'scheduled_org_chart',
+                      value,
+                    })
+                : undefined
+            }
             {...memberRowCheckInProps}
+            {...memberRowCompetencyProps}
           />
         ))}
         {assetsEnabled
@@ -583,6 +713,7 @@ export function PositionRosterUnifiedAssignmentSections({
                 canManageRow: canManageRoster,
                 removeLabel: `Remove ${asset.name} from next OP org chart schedule`,
                 onRemove: () => onRemoveScheduledAssignAsset(asset.assetKey, entry.position),
+                scope: 'scheduled_org_chart',
               })
             )
           : null}
@@ -630,7 +761,27 @@ export function PositionRosterUnifiedAssignmentSections({
             isBusy={isBusy}
             removeLabel={`Remove ${member.email} from next OP unassign schedule`}
             onRemove={() => onRemoveScheduledUnassign(member.id, entry.position)}
+            competencyFunction={
+              memberScheduleCompetencyByKey[
+                `${member.id}::${entry.position}::unassign_on_op_advance`
+              ] ?? null
+            }
+            isUpdatingCompetency={
+              updatingCompetencyKey === competencyKey('member', member.id, 'scheduled_unassign')
+            }
+            onCompetencyFunctionChange={
+              onMemberCompetencyFunctionChange
+                ? (value) =>
+                    onMemberCompetencyFunctionChange({
+                      memberId: member.id,
+                      positionName: entry.position,
+                      scope: 'scheduled_unassign',
+                      value,
+                    })
+                : undefined
+            }
             {...memberRowCheckInProps}
+            {...memberRowCompetencyProps}
           />
         ))}
         {assetsEnabled
@@ -642,6 +793,7 @@ export function PositionRosterUnifiedAssignmentSections({
                 canManageRow: canManageRoster,
                 removeLabel: `Remove ${asset.name} from next OP unassign schedule`,
                 onRemove: () => onRemoveScheduledUnassignAsset(asset.assetKey, entry.position),
+                scope: 'scheduled_unassign',
               })
             )
           : null}

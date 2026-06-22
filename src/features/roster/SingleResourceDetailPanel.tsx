@@ -2,6 +2,7 @@ import { Trash2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
+import { CompetencyFunctionSelect } from '@/features/roster/CompetencyFunctionSelect'
 import type { WorkspaceMemberCheckInStatus, WorkspaceRosterMember } from '@/lib/workspace-types'
 
 type SingleResourceDetailPanelProps = {
@@ -12,6 +13,10 @@ type SingleResourceDetailPanelProps = {
   canEditCheckInStatus?: boolean
   updatingCheckInMemberId?: string | null
   onCheckInStatusChange?: (memberId: string, status: WorkspaceMemberCheckInStatus) => void
+  competencyOptions?: string[]
+  canEditCompetencyFunction?: boolean
+  isUpdatingCompetency?: boolean
+  onCompetencyFunctionChange?: (value: string | null) => void
   onRemoveFromOrgChart?: (memberId: string) => void
 }
 
@@ -29,6 +34,10 @@ export function SingleResourceDetailPanel({
   canEditCheckInStatus = false,
   updatingCheckInMemberId = null,
   onCheckInStatusChange,
+  competencyOptions = [],
+  canEditCompetencyFunction = false,
+  isUpdatingCompetency = false,
+  onCompetencyFunctionChange,
   onRemoveFromOrgChart,
 }: SingleResourceDetailPanelProps) {
   const reportsTo = member.orgChartReportsTo ?? member.pendingOrgChartReportsTo
@@ -75,6 +84,20 @@ export function SingleResourceDetailPanel({
             ))}
           </select>
         </div>
+      ) : null}
+
+      {onCompetencyFunctionChange ? (
+        <CompetencyFunctionSelect
+          value={
+            scheduled
+              ? (member.pendingCompetencyFunction ?? null)
+              : (member.competencyFunction ?? null)
+          }
+          options={competencyOptions}
+          disabled={!canEditCompetencyFunction}
+          isUpdating={isUpdatingCompetency}
+          onChange={onCompetencyFunctionChange}
+        />
       ) : null}
 
       {canManage && onRemoveFromOrgChart ? (

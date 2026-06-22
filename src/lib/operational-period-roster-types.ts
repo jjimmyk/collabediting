@@ -13,6 +13,7 @@ export type OperationalPeriodRosterSnapshotMember = {
   status: string
   icsPositions: string[]
   checkInStatus?: WorkspaceMemberCheckInStatus
+  competencyFunction?: string | null
 }
 
 export type OperationalPeriodRosterSnapshotPosition = {
@@ -24,7 +25,11 @@ export type OperationalPeriodRosterSnapshotPosition = {
   editIcs201: boolean
   allowWorkAssignment: boolean
   members: OperationalPeriodRosterSnapshotMember[]
-  assets?: Array<{ assetKey: string; pointOfContactEmail: string | null }>
+  assets?: Array<{
+    assetKey: string
+    pointOfContactEmail: string | null
+    competencyFunction?: string | null
+  }>
 }
 
 export type OperationalPeriodRosterSnapshot = {

@@ -51,6 +51,7 @@ export function OrgChartCollapsibleAssetCard({
           type: asset.type,
           pointOfContactMemberId: asset.pointOfContactMemberId,
           pointOfContactEmail: null,
+          competencyFunction: asset.competencyFunction ?? null,
         }}
         resource={asset}
         variant="orgChart"

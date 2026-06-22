@@ -13,6 +13,7 @@ export type MemberScheduleRow = {
   position_name: string
   member_id: string
   schedule_action: MemberScheduleAction
+  competency_function: string | null
   created_at: string
   created_by: string | null
 }
@@ -23,7 +24,9 @@ export async function fetchWorkspaceMemberSchedules(
 ): Promise<MemberScheduleRow[]> {
   const { data, error } = await admin
     .from('workspace_position_member_schedules')
-    .select('id, workspace_id, position_name, member_id, schedule_action, created_at, created_by')
+    .select(
+      'id, workspace_id, position_name, member_id, schedule_action, competency_function, created_at, created_by'
+    )
     .eq('workspace_id', workspaceId)
 
   if (error) {
@@ -278,6 +281,15 @@ export async function applyMemberSchedulesOnOperationalPeriodAdvance(
     const nextPositions = [...current, schedule.position_name].sort((a, b) => a.localeCompare(b))
     await replaceWorkspaceMemberPositions(admin, schedule.member_id, nextPositions, allowed)
     positionsByMemberId.set(schedule.member_id, nextPositions)
+
+    if (schedule.competency_function?.trim()) {
+      const { error: competencyError } = await admin
+        .from('workspace_member_positions')
+        .update({ competency_function: schedule.competency_function.trim() })
+        .eq('member_id', schedule.member_id)
+        .eq('ics_position', schedule.position_name)
+      if (competencyError) throw new Error(competencyError.message)
+    }
   }
 
   const { error: deleteError } = await admin

@@ -75,6 +75,7 @@ const EMPTY_RESOURCE_SNAPSHOT = (id: number, name: string): Ics204ResourceSnapsh
   ics204DocumentId: null,
   pointOfContactMemberId: null,
   assetCheckInStatus: null,
+  competencyFunction: null,
 })
 
 function cloneEmbeddedIcs204a(value: Ics204aFormState): Ics204aFormState {

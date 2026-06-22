@@ -28,7 +28,8 @@ export function buildPositionAssetWorkspaceMetaByKey(
 export function resolvePositionAssetEntry(
   assetKey: string,
   assetsByKey: Record<string, ResourceListItemData>,
-  workspaceMetaByAssetKey: Record<string, PositionAssetWorkspaceMeta>
+  workspaceMetaByAssetKey: Record<string, PositionAssetWorkspaceMeta>,
+  competencyFunction: string | null = null
 ): PositionAssetRosterEntry | null {
   const asset = assetsByKey[assetKey]
   if (!asset) return null
@@ -40,6 +41,7 @@ export function resolvePositionAssetEntry(
     type: asset.type,
     pointOfContactMemberId: meta?.pointOfContactMemberId ?? asset.pointOfContactMemberId ?? null,
     pointOfContactEmail: meta?.pointOfContactEmail ?? null,
+    competencyFunction,
   }
 }
 
@@ -51,7 +53,12 @@ export function groupPositionAssetAssignmentsByPosition(
   const map: Record<string, PositionAssetRosterEntry[]> = {}
 
   for (const row of assignments) {
-    const entry = resolvePositionAssetEntry(row.assetKey, assetsByKey, workspaceMetaByAssetKey)
+    const entry = resolvePositionAssetEntry(
+      row.assetKey,
+      assetsByKey,
+      workspaceMetaByAssetKey,
+      row.competencyFunction
+    )
     if (!entry) continue
     const current = map[row.positionName] ?? []
     current.push(entry)
@@ -68,10 +75,18 @@ export function groupPositionAssetAssignmentsByPosition(
 export function resolveScheduledPositionAssets(
   assetKeys: string[],
   assetsByKey: Record<string, ResourceListItemData>,
-  workspaceMetaByAssetKey: Record<string, PositionAssetWorkspaceMeta>
+  workspaceMetaByAssetKey: Record<string, PositionAssetWorkspaceMeta>,
+  competencyByAssetKey: Record<string, string | null> = {}
 ): PositionAssetRosterEntry[] {
   return assetKeys
-    .map((assetKey) => resolvePositionAssetEntry(assetKey, assetsByKey, workspaceMetaByAssetKey))
+    .map((assetKey) =>
+      resolvePositionAssetEntry(
+        assetKey,
+        assetsByKey,
+        workspaceMetaByAssetKey,
+        competencyByAssetKey[assetKey] ?? null
+      )
+    )
     .filter((entry): entry is PositionAssetRosterEntry => Boolean(entry))
     .sort((a, b) => a.name.localeCompare(b.name))
 }

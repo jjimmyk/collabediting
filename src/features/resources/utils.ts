@@ -81,6 +81,7 @@ export function applyAssignmentsToHubAssets(
         ics204DocumentId: null,
         pointOfContactMemberId: null,
         assetCheckInStatus: null,
+        competencyFunction: null,
         currentOpPeriod: UNASSIGNED_WORKSPACE_FIELD,
         nextOpPeriod: UNASSIGNED_WORKSPACE_FIELD,
         currentOpPeriodAssignment: UNASSIGNED_WORKSPACE_FIELD,
@@ -101,6 +102,7 @@ export function applyAssignmentsToHubAssets(
       ics204DocumentId: assignment?.ics204DocumentId ?? null,
       pointOfContactMemberId: assignment?.pointOfContactMemberId ?? null,
       assetCheckInStatus: assignment?.checkInStatus ?? 'not_arrived',
+      competencyFunction: assignment?.competencyFunction ?? null,
     }
   })
 }

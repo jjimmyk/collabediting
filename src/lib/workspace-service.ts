@@ -53,6 +53,15 @@ function mapMemberPositions(row: DbWorkspaceMember): string[] {
   return row.ics_position ? [row.ics_position] : []
 }
 
+function mapMemberCompetencyByPosition(row: DbWorkspaceMember): Record<string, string | null> {
+  const map: Record<string, string | null> = {}
+  for (const entry of row.workspace_member_positions ?? []) {
+    if (!entry.ics_position) continue
+    map[entry.ics_position] = entry.competency_function?.trim() || null
+  }
+  return map
+}
+
 function mapDbMember(row: DbWorkspaceMember): WorkspaceRosterMember {
   const assignmentKind =
     row.assignment_kind === 'single_resource' ? 'single_resource' : 'ics_position'
@@ -68,6 +77,9 @@ function mapDbMember(row: DbWorkspaceMember): WorkspaceRosterMember {
     icsPositions,
     assignmentKind,
     orgChartReportsTo: row.org_chart_reports_to ?? null,
+    competencyFunction: row.competency_function?.trim() || null,
+    competencyByPosition:
+      assignmentKind === 'ics_position' ? mapMemberCompetencyByPosition(row) : undefined,
     status: row.status,
     checkInStatus: parseWorkspaceMemberCheckInStatus(row.check_in_status),
     addedAt: formatMemberDate(row.joined_at ?? row.invited_at),
@@ -438,7 +450,8 @@ export async function fetchWorkspaceRoster(workspaceId: string): Promise<Workspa
       invited_at,
       joined_at,
       check_in_status,
-      workspace_member_positions (ics_position)
+      competency_function,
+      workspace_member_positions (ics_position, competency_function)
     `
     )
     .eq('workspace_id', workspaceId)
@@ -454,23 +467,29 @@ export async function fetchWorkspaceRoster(workspaceId: string): Promise<Workspa
 
 export async function fetchWorkspaceMemberPendingOrgChartReports(
   workspaceId: string
-): Promise<Record<string, string>> {
+): Promise<Record<string, { reportsTo: string; competencyFunction: string | null }>> {
   const supabase = getSupabaseClient()
   if (!supabase) return {}
 
   const { data, error } = await supabase
     .from('workspace_member_pending_assignments')
-    .select('member_id, org_chart_reports_to')
+    .select('member_id, org_chart_reports_to, competency_function')
     .eq('workspace_id', workspaceId)
 
   if (error || !data) {
     return {}
   }
 
-  const map: Record<string, string> = {}
+  const map: Record<string, { reportsTo: string; competencyFunction: string | null }> = {}
   for (const row of data) {
     if (typeof row.member_id === 'string' && typeof row.org_chart_reports_to === 'string') {
-      map[row.member_id] = row.org_chart_reports_to
+      map[row.member_id] = {
+        reportsTo: row.org_chart_reports_to,
+        competencyFunction:
+          typeof row.competency_function === 'string' && row.competency_function.trim().length > 0
+            ? row.competency_function.trim()
+            : null,
+      }
     }
   }
   return map
@@ -484,10 +503,14 @@ export async function fetchWorkspaceRosterWithPendingAssignments(
     fetchWorkspaceMemberPendingOrgChartReports(workspaceId),
   ])
 
-  return roster.map((member) => ({
-    ...member,
-    pendingOrgChartReportsTo: pendingByMemberId[member.id] ?? null,
-  }))
+  return roster.map((member) => {
+    const pending = pendingByMemberId[member.id]
+    return {
+      ...member,
+      pendingOrgChartReportsTo: pending?.reportsTo ?? null,
+      pendingCompetencyFunction: pending?.competencyFunction ?? null,
+    }
+  })
 }
 
 export async function removeWorkspaceRosterMember(memberId: string): Promise<boolean> {

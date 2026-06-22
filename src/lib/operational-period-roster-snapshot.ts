@@ -16,6 +16,7 @@ function snapshotAssetsToRosterEntries(
       type: catalog?.type ?? '',
       pointOfContactMemberId: null,
       pointOfContactEmail: asset.pointOfContactEmail ?? null,
+      competencyFunction: asset.competencyFunction ?? null,
     }
   })
 }
@@ -40,6 +41,10 @@ export function buildPositionRosterEntriesFromSnapshot(
           assignmentKind: 'ics_position',
           orgChartReportsTo: null,
           checkInStatus: member.checkInStatus ?? 'not_arrived',
+          competencyByPosition:
+            member.competencyFunction != null
+              ? { [position.name]: member.competencyFunction }
+              : undefined,
           addedAt: snapshot.capturedAt,
         })
       ),

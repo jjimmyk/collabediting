@@ -1,12 +1,17 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { WORKSPACE_ROSTER_POSITIONS } from '../src/lib/ics-positions.js'
-import type { BuildTeamRosterDraft } from '../src/features/roster/roster-template-types.js'
+import type { BuildTeamDraftMember, BuildTeamRosterDraft } from '../src/features/roster/roster-template-types.js'
 import {
   addIcsWorkspaceMemberWithEffectiveWhen,
   addSingleResourceWorkspaceMemberWithEffectiveWhen,
   provisionIcsWorkspaceMemberWithEffectiveWhen,
   provisionSingleResourceMemberWithEffectiveWhen,
 } from './roster-member-add-shared.js'
+import {
+  normalizeCompetencyFunctionLabel,
+  resolveWorkspaceOrganizationId,
+  upsertOrganizationCompetencyFunction,
+} from './roster-competency-shared.js'
 
 type DbRosterTemplateRow = {
   id: string
@@ -212,6 +217,46 @@ export async function applyRosterPlanToWorkspace(
   await upsertPositionSettingsFromDraft(admin, workspaceId, draft)
 }
 
+async function applyDraftMemberCompetency(
+  admin: SupabaseClient,
+  params: {
+    workspaceId: string
+    memberId: string
+    member: BuildTeamDraftMember
+    invitedBy: string
+  }
+): Promise<void> {
+  const competencyFunction = normalizeCompetencyFunctionLabel(params.member.competencyFunction ?? null)
+  if (!competencyFunction) return
+
+  const organizationId = await resolveWorkspaceOrganizationId(admin, params.workspaceId)
+  await upsertOrganizationCompetencyFunction(
+    admin,
+    organizationId,
+    competencyFunction,
+    params.invitedBy
+  )
+
+  if (params.member.assignmentKind === 'single_resource') {
+    const { error } = await admin
+      .from('workspace_members')
+      .update({ competency_function: competencyFunction })
+      .eq('id', params.memberId)
+      .eq('workspace_id', params.workspaceId)
+    if (error) throw new Error(error.message)
+    return
+  }
+
+  for (const position of params.member.icsPositions) {
+    const { error } = await admin
+      .from('workspace_member_positions')
+      .update({ competency_function: competencyFunction })
+      .eq('member_id', params.memberId)
+      .eq('ics_position', position)
+    if (error) throw new Error(error.message)
+  }
+}
+
 export async function sendBuildTeamInvites(
   admin: SupabaseClient,
   workspaceId: string,
@@ -230,7 +275,7 @@ export async function sendBuildTeamInvites(
     if (member.personSource === 'add_existing' && member.existingUserId) {
       if (member.assignmentKind === 'single_resource') {
         if (!member.orgChartReportsTo) continue
-        await addSingleResourceWorkspaceMemberWithEffectiveWhen(admin, {
+        const added = await addSingleResourceWorkspaceMemberWithEffectiveWhen(admin, {
           workspaceId,
           email: member.email,
           orgChartReportsTo: member.orgChartReportsTo,
@@ -239,14 +284,26 @@ export async function sendBuildTeamInvites(
           userId: member.existingUserId,
           invitedBy,
         })
+        await applyDraftMemberCompetency(admin, {
+          workspaceId,
+          memberId: added.memberId,
+          member,
+          invitedBy,
+        })
       } else {
-        await addIcsWorkspaceMemberWithEffectiveWhen(admin, {
+        const added = await addIcsWorkspaceMemberWithEffectiveWhen(admin, {
           workspaceId,
           email: member.email,
           icsPositions: member.icsPositions,
           scheduleOnOpAdvance: false,
           status: 'invited',
           userId: member.existingUserId,
+          invitedBy,
+        })
+        await applyDraftMemberCompetency(admin, {
+          workspaceId,
+          memberId: added.memberId,
+          member,
           invitedBy,
         })
       }
@@ -267,6 +324,12 @@ export async function sendBuildTeamInvites(
       if (!result.ok) {
         throw new Error(`Could not invite ${member.email}.`)
       }
+      await applyDraftMemberCompetency(admin, {
+        workspaceId,
+        memberId: result.memberId,
+        member,
+        invitedBy,
+      })
       continue
     }
 
@@ -283,6 +346,13 @@ export async function sendBuildTeamInvites(
     if (!result.ok) {
       throw new Error(`Could not invite ${member.email}.`)
     }
+
+    await applyDraftMemberCompetency(admin, {
+      workspaceId,
+      memberId: result.memberId,
+      member,
+      invitedBy,
+    })
   }
 }
 

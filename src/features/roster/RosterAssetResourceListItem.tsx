@@ -7,6 +7,7 @@ import {
   AssetPointOfContactSelect,
   PositionAssetRow,
 } from '@/features/roster/PositionRosterAssetSections'
+import { CompetencyFunctionSelect } from '@/features/roster/CompetencyFunctionSelect'
 import type { PositionAssetRosterEntry } from '@/lib/workspace-position-asset-types'
 import type { WorkspaceRosterMember } from '@/lib/workspace-types'
 
@@ -24,6 +25,10 @@ type RosterAssetResourceListItemProps = {
   removeLabel: string
   onRemove?: () => void
   onUpdateAssetPointOfContact?: (assetKey: string, memberId: string | null) => void
+  competencyOptions?: string[]
+  canEditCompetencyFunction?: boolean
+  isUpdatingCompetency?: boolean
+  onUpdateAssetCompetencyFunction?: (assetKey: string, value: string | null) => void
   onFocusMap?: () => void
   open?: boolean
   onOpenChange?: (open: boolean) => void
@@ -44,6 +49,10 @@ export function RosterAssetResourceListItem({
   removeLabel,
   onRemove,
   onUpdateAssetPointOfContact,
+  competencyOptions = [],
+  canEditCompetencyFunction = false,
+  isUpdatingCompetency = false,
+  onUpdateAssetCompetencyFunction,
   onFocusMap,
   open,
   onOpenChange,
@@ -65,6 +74,10 @@ export function RosterAssetResourceListItem({
         removeLabel={removeLabel}
         onRemove={onRemove}
         onUpdateAssetPointOfContact={onUpdateAssetPointOfContact}
+        canEditCompetencyFunction={canEditCompetencyFunction}
+        competencyOptions={competencyOptions}
+        isUpdatingCompetency={isUpdatingCompetency}
+        onUpdateAssetCompetencyFunction={onUpdateAssetCompetencyFunction}
       />
     )
   }
@@ -119,18 +132,32 @@ export function RosterAssetResourceListItem({
         ) : null
       }
       footerAddon={
-        showPoc && onUpdateAssetPointOfContact ? (
-          <div className="border-t px-3 py-2" onClick={(event) => event.stopPropagation()}>
-            <AssetPointOfContactSelect
-              assetKey={asset.assetKey}
-              value={asset.pointOfContactMemberId}
-              members={pocMembers}
-              disabled={!canEditPoc || isBusy}
-              compact
-              onChange={(memberId) => onUpdateAssetPointOfContact(asset.assetKey, memberId)}
-            />
-          </div>
-        ) : null
+        <>
+          {showPoc && onUpdateAssetPointOfContact ? (
+            <div className="border-t px-3 py-2" onClick={(event) => event.stopPropagation()}>
+              <AssetPointOfContactSelect
+                assetKey={asset.assetKey}
+                value={asset.pointOfContactMemberId}
+                members={pocMembers}
+                disabled={!canEditPoc || isBusy}
+                compact
+                onChange={(memberId) => onUpdateAssetPointOfContact(asset.assetKey, memberId)}
+              />
+            </div>
+          ) : null}
+          {onUpdateAssetCompetencyFunction ? (
+            <div className="border-t px-3 py-2" onClick={(event) => event.stopPropagation()}>
+              <CompetencyFunctionSelect
+                value={asset.competencyFunction}
+                options={competencyOptions}
+                disabled={!canEditCompetencyFunction || isBusy}
+                compact
+                isUpdating={isUpdatingCompetency}
+                onChange={(value) => onUpdateAssetCompetencyFunction(asset.assetKey, value)}
+              />
+            </div>
+          ) : null}
+        </>
       }
     />
   )

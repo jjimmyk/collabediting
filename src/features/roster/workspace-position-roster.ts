@@ -117,7 +117,8 @@ export function buildPositionRosterEntries(
     { assignAssetKeys: string[]; unassignAssetKeys: string[] }
   > = {},
   assetsByKey: Record<string, ResourceListItemData> = {},
-  workspaceMetaByAssetKey: Record<string, PositionAssetWorkspaceMeta> = {}
+  workspaceMetaByAssetKey: Record<string, PositionAssetWorkspaceMeta> = {},
+  assetScheduleCompetencyByKey: Record<string, string | null> = {}
 ): PositionRosterEntry[] {
   const normalizedQuery = searchQuery.trim().toLowerCase()
   const memberById = new Map(roster.map((member) => [member.id, member]))
@@ -150,18 +151,39 @@ export function buildPositionRosterEntries(
             !asset.orgChartReportsTo && asset.pendingOrgChartReportsTo === position
         )
         .map((asset) =>
-          resolvePositionAssetEntry(asset.assetKey, assetsByKey, workspaceMetaByAssetKey)
+          resolvePositionAssetEntry(
+            asset.assetKey,
+            assetsByKey,
+            workspaceMetaByAssetKey,
+            asset.competencyFunction ?? null
+          )
         )
         .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry))
       const scheduledAssignAssets = resolveScheduledPositionAssets(
         assetSchedule.assignAssetKeys,
         assetsByKey,
-        workspaceMetaByAssetKey
+        workspaceMetaByAssetKey,
+        Object.fromEntries(
+          assetSchedule.assignAssetKeys.map((assetKey) => [
+            assetKey,
+            assetScheduleCompetencyByKey[
+              `${assetKey}::${position}::assign_on_op_advance`
+            ] ?? null,
+          ])
+        )
       )
       const scheduledUnassignAssets = resolveScheduledPositionAssets(
         assetSchedule.unassignAssetKeys,
         assetsByKey,
-        workspaceMetaByAssetKey
+        workspaceMetaByAssetKey,
+        Object.fromEntries(
+          assetSchedule.unassignAssetKeys.map((assetKey) => [
+            assetKey,
+            assetScheduleCompetencyByKey[
+              `${assetKey}::${position}::unassign_on_op_advance`
+            ] ?? null,
+          ])
+        )
       )
       const resolvedType = resolvePositionType(position, settings, catalog)
 

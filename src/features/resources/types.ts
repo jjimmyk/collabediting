@@ -62,8 +62,10 @@ export type ResourceListItemData = HubAssetCatalogRecord & {
   pointOfContactMemberId: string | null
   /** Deferred org chart placement target when scheduled for next OP. */
   pendingOrgChartReportsTo?: string | null
+  pendingCompetencyFunction?: string | null
   /** Workspace-scoped asset check-in status (stored on assignment). */
   assetCheckInStatus: WorkspaceMemberCheckInStatus | null
+  competencyFunction: string | null
 }
 
 export type AssetWorkspaceOption = {
@@ -80,4 +82,5 @@ export type WorkspaceAssetAssignment = {
   ics204DocumentId?: string | null
   pointOfContactMemberId?: string | null
   checkInStatus?: WorkspaceMemberCheckInStatus
+  competencyFunction?: string | null
 }

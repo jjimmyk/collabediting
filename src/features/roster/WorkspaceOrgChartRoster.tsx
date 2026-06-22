@@ -91,6 +91,20 @@ type WorkspaceOrgChartRosterProps = {
   canEditCheckInStatus?: boolean
   updatingCheckInMemberId?: string | null
   onCheckInStatusChange?: (memberId: string, status: WorkspaceMemberCheckInStatus) => void
+  competencyOptions?: string[]
+  canEditCompetencyFunction?: boolean
+  updatingCompetencyKey?: string | null
+  onSingleResourceCompetencyFunctionChange?: (
+    memberId: string,
+    value: string | null,
+    scheduled: boolean
+  ) => void
+  onAssetCompetencyFunctionChange?: (input: {
+    assetKey: string
+    positionName: string
+    scope: 'org_chart' | 'scheduled_org_chart'
+    value: string | null
+  }) => void
   showPositionAssets?: boolean
   assignableAssetsByPosition?: Record<string, ResourceListItemData[]>
   scheduleAssignableAssetsByPosition?: Record<string, ResourceListItemData[]>
@@ -168,6 +182,20 @@ type OrgChartRenderProps = {
   ) => void
   onOpenOrgChartAssetDetail: (assetKey: string) => void
   onOpenSingleResourceDetail: (memberId: string) => void
+  competencyOptions: string[]
+  canEditCompetencyFunction: boolean
+  updatingCompetencyKey: string | null
+  onAssetCompetencyFunctionChange?: (input: {
+    assetKey: string
+    positionName: string
+    scope: 'org_chart' | 'scheduled_org_chart'
+    value: string | null
+  }) => void
+  onSingleResourceCompetencyFunctionChange?: (
+    memberId: string,
+    value: string | null,
+    scheduled: boolean
+  ) => void
 }
 
 function filterVisibleOrgChartChildren(
@@ -462,6 +490,11 @@ function PositionNode({
   onPositionTypeChange,
   onOpenOrgChartAssetDetail,
   onOpenSingleResourceDetail,
+  competencyOptions,
+  canEditCompetencyFunction,
+  updatingCompetencyKey,
+  onAssetCompetencyFunctionChange,
+  onSingleResourceCompetencyFunctionChange,
 }: {
   position: string
   color?: OrgChartColor
@@ -533,6 +566,11 @@ function PositionNode({
     onPositionTypeChange,
     onOpenOrgChartAssetDetail,
     onOpenSingleResourceDetail,
+    competencyOptions,
+    canEditCompetencyFunction,
+    updatingCompetencyKey,
+    onAssetCompetencyFunctionChange,
+    onSingleResourceCompetencyFunctionChange,
   }
 
   const canRemove =
@@ -903,6 +941,11 @@ export function WorkspaceOrgChartRoster({
   canEditCheckInStatus = false,
   updatingCheckInMemberId = null,
   onCheckInStatusChange,
+  competencyOptions = [],
+  canEditCompetencyFunction = false,
+  updatingCompetencyKey = null,
+  onSingleResourceCompetencyFunctionChange,
+  onAssetCompetencyFunctionChange,
   showAllowWorkAssignment = false,
   onToggleAllowWorkAssignment,
   showPositionAssets = false,
@@ -1025,6 +1068,11 @@ export function WorkspaceOrgChartRoster({
     onPositionTypeChange,
     onOpenOrgChartAssetDetail: setSelectedAssetKey,
     onOpenSingleResourceDetail: setSelectedSingleResourceMemberId,
+    competencyOptions,
+    canEditCompetencyFunction,
+    updatingCompetencyKey,
+    onAssetCompetencyFunctionChange,
+    onSingleResourceCompetencyFunctionChange,
   }
 
   return (
@@ -1115,11 +1163,16 @@ export function WorkspaceOrgChartRoster({
               type: selectedAsset.type,
               pointOfContactMemberId: selectedAsset.pointOfContactMemberId,
               pointOfContactEmail: null,
+              competencyFunction: selectedAsset.pendingOrgChartReportsTo
+                ? (selectedAsset.pendingCompetencyFunction ?? null)
+                : selectedAsset.competencyFunction,
             }}
             resource={selectedAsset}
             variant="orgChart"
             glassItemBorderClasses={glassItemBorderClasses}
-            badgeLabel="Org chart"
+            badgeLabel={
+              selectedAsset.pendingOrgChartReportsTo ? 'Org chart · Next OP' : 'Org chart'
+            }
             showPoc={Boolean(onUpdateAssetPointOfContact)}
             pocMembers={pocMembers}
             canManage={canManageRoster}
@@ -1135,6 +1188,27 @@ export function WorkspaceOrgChartRoster({
                 : undefined
             }
             onUpdateAssetPointOfContact={onUpdateAssetPointOfContact}
+            competencyOptions={competencyOptions}
+            canEditCompetencyFunction={canEditCompetencyFunction}
+            isUpdatingCompetency={
+              updatingCompetencyKey ===
+              (selectedAsset.pendingOrgChartReportsTo
+                ? `asset::${selectedAsset.assetKey}::org_chart::scheduled_org_chart`
+                : `asset::${selectedAsset.assetKey}::org_chart`)
+            }
+            onUpdateAssetCompetencyFunction={
+              onAssetCompetencyFunctionChange
+                ? (value) =>
+                    onAssetCompetencyFunctionChange({
+                      assetKey: selectedAsset.assetKey,
+                      positionName: 'org_chart',
+                      scope: selectedAsset.pendingOrgChartReportsTo
+                        ? 'scheduled_org_chart'
+                        : 'org_chart',
+                      value,
+                    })
+                : undefined
+            }
             onFocusMap={onFocusAsset ? () => onFocusAsset(selectedAsset) : undefined}
           />
         ) : null}
@@ -1157,6 +1231,21 @@ export function WorkspaceOrgChartRoster({
             canEditCheckInStatus={canEditCheckInStatus}
             updatingCheckInMemberId={updatingCheckInMemberId}
             onCheckInStatusChange={onCheckInStatusChange}
+            competencyOptions={competencyOptions}
+            canEditCompetencyFunction={canEditCompetencyFunction}
+            isUpdatingCompetency={
+              updatingCompetencyKey === `member::${selectedSingleResourceMember.id}::single_resource`
+            }
+            onCompetencyFunctionChange={
+              onSingleResourceCompetencyFunctionChange
+                ? (value) =>
+                    onSingleResourceCompetencyFunctionChange(
+                      selectedSingleResourceMember.id,
+                      value,
+                      Boolean(selectedSingleResourceMember.pendingOrgChartReportsTo)
+                    )
+                : undefined
+            }
             onRemoveFromOrgChart={
               canManageRoster && onRemoveSingleResourceFromOrgChart
                 ? (memberId) => {

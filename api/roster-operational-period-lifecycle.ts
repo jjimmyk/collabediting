@@ -38,6 +38,7 @@ type DbMemberRow = {
 type DbMemberPositionRow = {
   member_id: string
   ics_position: string
+  competency_function: string | null
 }
 
 type DbPermissionRow = {
@@ -54,6 +55,7 @@ type DbAssetRow = {
 type DbPositionAssetAssignmentRow = {
   position_name: string
   asset_key: string
+  competency_function: string | null
 }
 
 export type OperationalPeriodRosterSnapshotPayload = {
@@ -67,8 +69,18 @@ export type OperationalPeriodRosterSnapshotPayload = {
     reportsTo?: string | null
     editIcs201: boolean
     allowWorkAssignment: boolean
-    members: Array<{ email: string; status: string; icsPositions: string[]; checkInStatus: string }>
-    assets: Array<{ assetKey: string; pointOfContactEmail: string | null }>
+    members: Array<{
+      email: string
+      status: string
+      icsPositions: string[]
+      checkInStatus: string
+      competencyFunction: string | null
+    }>
+    assets: Array<{
+      assetKey: string
+      pointOfContactEmail: string | null
+      competencyFunction: string | null
+    }>
   }>
   orgChartAssetPlacements: Array<{ assetKey: string; reportsTo: string | null }>
 }
@@ -105,7 +117,7 @@ async function loadRosterLifecycleContext(admin: SupabaseClient, workspaceId: st
       .select('id, email, status, check_in_status')
       .eq('workspace_id', workspaceId)
       .neq('status', 'removed'),
-    admin.from('workspace_member_positions').select('member_id, ics_position'),
+    admin.from('workspace_member_positions').select('member_id, ics_position, competency_function'),
     admin
       .from('workspace_position_permissions')
       .select('ics_position, permission')
@@ -120,7 +132,7 @@ async function loadRosterLifecycleContext(admin: SupabaseClient, workspaceId: st
       .eq('workspace_id', workspaceId),
     admin
       .from('workspace_position_asset_assignments')
-      .select('position_name, asset_key')
+      .select('position_name, asset_key, competency_function')
       .eq('workspace_id', workspaceId),
   ])
 
@@ -148,11 +160,16 @@ async function loadRosterLifecycleContext(admin: SupabaseClient, workspaceId: st
   const memberIds = new Set(members.map((row) => row.id))
   const memberEmailById = new Map(members.map((row) => [row.id, row.email]))
   const positionsByMemberId = new Map<string, string[]>()
+  const competencyByMemberPosition = new Map<string, string | null>()
   for (const row of memberPositions) {
     if (!memberIds.has(row.member_id)) continue
     const current = positionsByMemberId.get(row.member_id) ?? []
     current.push(row.ics_position)
     positionsByMemberId.set(row.member_id, current)
+    competencyByMemberPosition.set(
+      `${row.member_id}::${row.ics_position}`,
+      row.competency_function?.trim() || null
+    )
   }
 
   const editIcs201ByPosition = new Map<string, boolean>()
@@ -180,10 +197,15 @@ async function loadRosterLifecycleContext(admin: SupabaseClient, workspaceId: st
   }
 
   const assetsByPosition = new Map<string, string[]>()
+  const competencyByPositionAsset = new Map<string, string | null>()
   for (const row of positionAssetAssignments) {
     const current = assetsByPosition.get(row.position_name) ?? []
     current.push(row.asset_key)
     assetsByPosition.set(row.position_name, current)
+    competencyByPositionAsset.set(
+      `${row.position_name}::${row.asset_key}`,
+      row.competency_function?.trim() || null
+    )
   }
 
   return {
@@ -197,6 +219,8 @@ async function loadRosterLifecycleContext(admin: SupabaseClient, workspaceId: st
     assets,
     assetsByPosition,
     pocEmailByAssetKey,
+    competencyByMemberPosition,
+    competencyByPositionAsset,
   }
 }
 
@@ -209,6 +233,8 @@ function snapshotAssetsForPosition(
     .map((assetKey) => ({
       assetKey,
       pointOfContactEmail: context.pocEmailByAssetKey.get(assetKey) ?? null,
+      competencyFunction:
+        context.competencyByPositionAsset.get(`${positionName}::${assetKey}`) ?? null,
     }))
     .sort((a, b) => a.assetKey.localeCompare(b.assetKey))
 }
@@ -251,6 +277,10 @@ function buildOperationalPeriodRosterSnapshot(
           status: entry.member.status,
           icsPositions: entry.icsPositions,
           checkInStatus: entry.member.check_in_status ?? 'not_arrived',
+          competencyFunction:
+            context.competencyByMemberPosition.get(
+              `${entry.member.id}::${entry.icsPositions[0] ?? positionName}`
+            ) ?? null,
         })),
       assets: snapshotAssetsForPosition(context, positionName),
     })
@@ -282,6 +312,10 @@ function buildOperationalPeriodRosterSnapshot(
           status: entry.member.status,
           icsPositions: entry.icsPositions,
           checkInStatus: entry.member.check_in_status ?? 'not_arrived',
+          competencyFunction:
+            context.competencyByMemberPosition.get(
+              `${entry.member.id}::${entry.icsPositions[0] ?? custom.name}`
+            ) ?? null,
         })),
       assets: snapshotAssetsForPosition(context, custom.name),
     })

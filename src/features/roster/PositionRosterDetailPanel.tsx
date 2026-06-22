@@ -14,6 +14,7 @@ import {
 } from '@/features/roster/PositionRosterPropertySections'
 import type { PositionRosterAssetHandlers } from '@/features/roster/PositionRosterAssetSections'
 import { PositionRosterUnifiedAssignmentSections } from '@/features/roster/PositionRosterAssignmentSections'
+import type { PositionRosterUnifiedAssignmentSectionsProps } from '@/features/roster/PositionRosterAssignmentSections'
 import type { ResourceListItemData } from '@/features/resources/types'
 import type { WorkspacePositionMeta } from '@/features/roster/workspace-positions'
 
@@ -52,6 +53,12 @@ type PositionRosterDetailPanelProps = {
   canEditCheckInStatus?: boolean
   updatingCheckInMemberId?: string | null
   onCheckInStatusChange?: (memberId: string, status: WorkspaceMemberCheckInStatus) => void
+  competencyOptions?: string[]
+  canEditCompetencyFunction?: boolean
+  updatingCompetencyKey?: string | null
+  memberScheduleCompetencyByKey?: Record<string, string | null>
+  onMemberCompetencyFunctionChange?: PositionRosterUnifiedAssignmentSectionsProps['onMemberCompetencyFunctionChange']
+  onAssetCompetencyFunctionChange?: PositionRosterUnifiedAssignmentSectionsProps['onAssetCompetencyFunctionChange']
   showPositionAssets?: boolean
   assignableAssets?: ResourceListItemData[]
   scheduleAssignableAssets?: ResourceListItemData[]
@@ -96,6 +103,12 @@ export function PositionRosterDetailPanel({
   canEditCheckInStatus = false,
   updatingCheckInMemberId = null,
   onCheckInStatusChange,
+  competencyOptions = [],
+  canEditCompetencyFunction = false,
+  updatingCompetencyKey = null,
+  memberScheduleCompetencyByKey = {},
+  onMemberCompetencyFunctionChange,
+  onAssetCompetencyFunctionChange,
   showPositionAssets = false,
   assignableAssets = [],
   scheduleAssignableAssets = [],
@@ -198,6 +211,12 @@ export function PositionRosterDetailPanel({
         canEditCheckInStatus={canEditCheckInStatus}
         updatingCheckInMemberId={updatingCheckInMemberId}
         onCheckInStatusChange={onCheckInStatusChange}
+        competencyOptions={competencyOptions}
+        canEditCompetencyFunction={canEditCompetencyFunction}
+        updatingCompetencyKey={updatingCompetencyKey}
+        memberScheduleCompetencyByKey={memberScheduleCompetencyByKey}
+        onMemberCompetencyFunctionChange={onMemberCompetencyFunctionChange}
+        onAssetCompetencyFunctionChange={onAssetCompetencyFunctionChange}
         onAssignExistingMember={onAssignExistingMember}
         onSearchOrgMembers={onSearchOrgMembers}
         onAssignOrgMember={onAssignOrgMember}

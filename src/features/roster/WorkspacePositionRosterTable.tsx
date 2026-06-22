@@ -87,6 +87,12 @@ type WorkspacePositionRosterTableProps = {
   canEditCheckInStatus?: boolean
   updatingCheckInMemberId?: string | null
   onCheckInStatusChange?: (memberId: string, status: WorkspaceMemberCheckInStatus) => void
+  competencyOptions?: string[]
+  canEditCompetencyFunction?: boolean
+  updatingCompetencyKey?: string | null
+  memberScheduleCompetencyByKey?: Record<string, string | null>
+  onMemberCompetencyFunctionChange?: import('@/features/roster/PositionRosterAssignmentSections').PositionRosterUnifiedAssignmentSectionsProps['onMemberCompetencyFunctionChange']
+  onAssetCompetencyFunctionChange?: import('@/features/roster/PositionRosterAssignmentSections').PositionRosterUnifiedAssignmentSectionsProps['onAssetCompetencyFunctionChange']
   showPositionAssets?: boolean
   assignableAssetsByPosition?: Record<string, ResourceListItemData[]>
   scheduleAssignableAssetsByPosition?: Record<string, ResourceListItemData[]>
@@ -220,6 +226,12 @@ export function WorkspacePositionRosterTable({
   canEditCheckInStatus = false,
   updatingCheckInMemberId = null,
   onCheckInStatusChange,
+  competencyOptions = [],
+  canEditCompetencyFunction = false,
+  updatingCompetencyKey = null,
+  memberScheduleCompetencyByKey = {},
+  onMemberCompetencyFunctionChange,
+  onAssetCompetencyFunctionChange,
   showAllowWorkAssignment = false,
   onToggleAllowWorkAssignment,
   onPositionTypeChange,
@@ -551,6 +563,12 @@ export function WorkspacePositionRosterTable({
                               canEditCheckInStatus={canEditCheckInStatus}
                               updatingCheckInMemberId={updatingCheckInMemberId}
                               onCheckInStatusChange={onCheckInStatusChange}
+                              competencyOptions={competencyOptions}
+                              canEditCompetencyFunction={canEditCompetencyFunction}
+                              updatingCompetencyKey={updatingCompetencyKey}
+                              memberScheduleCompetencyByKey={memberScheduleCompetencyByKey}
+                              onMemberCompetencyFunctionChange={onMemberCompetencyFunctionChange}
+                              onAssetCompetencyFunctionChange={onAssetCompetencyFunctionChange}
                               showPositionAssets={showPositionAssets}
                               assignableAssets={assignableAssets}
                               scheduleAssignableAssets={scheduleAssignableAssets}

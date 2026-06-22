@@ -16,6 +16,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import type { ResourceListItemData } from '@/features/resources/types'
+import { CompetencyFunctionSelect } from '@/features/roster/CompetencyFunctionSelect'
 import type { PositionAssetRosterEntry } from '@/lib/workspace-position-asset-types'
 import type { WorkspaceRosterMember } from '@/lib/workspace-types'
 
@@ -27,6 +28,7 @@ export type PositionRosterAssetHandlers = {
   onRemoveScheduledAssignAsset: (assetKey: string, position: string) => void
   onRemoveScheduledUnassignAsset: (assetKey: string, position: string) => void
   onUpdateAssetPointOfContact: (assetKey: string, memberId: string | null) => void
+  onUpdateAssetCompetencyFunction?: (assetKey: string, value: string | null) => void
 }
 
 export function AssetPointOfContactSelect({
@@ -85,6 +87,10 @@ export function PositionAssetRow({
   removeLabel,
   onRemove,
   onUpdateAssetPointOfContact,
+  canEditCompetencyFunction = false,
+  competencyOptions = [],
+  isUpdatingCompetency = false,
+  onUpdateAssetCompetencyFunction,
 }: {
   asset: PositionAssetRosterEntry
   badgeLabel: string
@@ -95,6 +101,10 @@ export function PositionAssetRow({
   removeLabel: string
   onRemove?: () => void
   onUpdateAssetPointOfContact: (assetKey: string, memberId: string | null) => void
+  canEditCompetencyFunction?: boolean
+  competencyOptions?: string[]
+  isUpdatingCompetency?: boolean
+  onUpdateAssetCompetencyFunction?: (assetKey: string, value: string | null) => void
 }) {
   return (
     <div className="space-y-1.5 rounded-md border px-2 py-1.5">
@@ -140,6 +150,16 @@ export function PositionAssetRow({
         compact
         onChange={(memberId) => onUpdateAssetPointOfContact(asset.assetKey, memberId)}
       />
+      {onUpdateAssetCompetencyFunction ? (
+        <CompetencyFunctionSelect
+          value={asset.competencyFunction}
+          options={competencyOptions}
+          disabled={!canEditCompetencyFunction || isBusy}
+          compact
+          isUpdating={isUpdatingCompetency}
+          onChange={(value) => onUpdateAssetCompetencyFunction(asset.assetKey, value)}
+        />
+      ) : null}
     </div>
   )
 }

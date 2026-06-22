@@ -74,6 +74,7 @@ export function BuildTeamRosterStep({
   const [isAddMemberOpen, setIsAddMemberOpen] = useState(false)
   const [isAddPositionOpen, setIsAddPositionOpen] = useState(false)
   const [memberPositionPreset, setMemberPositionPreset] = useState<string | null>(null)
+  const [draftCompetencyOptions, setDraftCompetencyOptions] = useState<string[]>([])
 
   const catalog = useMemo(() => buildDraftPositionCatalog(draft), [draft])
   const rosterMembers = useMemo(() => buildDraftRosterMembers(draft), [draft])
@@ -144,6 +145,7 @@ export function BuildTeamRosterStep({
             password: input.password,
             personSource: input.personSource,
             existingUserId: input.existingUserId,
+            competencyFunction: null,
           },
         ],
       })
@@ -204,6 +206,37 @@ export function BuildTeamRosterStep({
       })
     },
     [draft, onDraftChange]
+  )
+
+  const updateDraftMemberCompetency = useCallback(
+    (memberId: string, value: string | null) => {
+      onDraftChange({
+        ...draft,
+        draftMembers: draft.draftMembers.map((member) =>
+          member.id === memberId ? { ...member, competencyFunction: value } : member
+        ),
+      })
+      if (value) {
+        setDraftCompetencyOptions((previous) =>
+          [...new Set([...previous, value])].sort((a, b) => a.localeCompare(b))
+        )
+      }
+    },
+    [draft, onDraftChange]
+  )
+
+  const handleMemberCompetencyFunctionChange = useCallback(
+    (input: { memberId: string; value: string | null }) => {
+      updateDraftMemberCompetency(input.memberId, input.value)
+    },
+    [updateDraftMemberCompetency]
+  )
+
+  const handleSingleResourceCompetencyFunctionChange = useCallback(
+    (memberId: string, value: string | null) => {
+      updateDraftMemberCompetency(memberId, value)
+    },
+    [updateDraftMemberCompetency]
   )
 
   return (
@@ -310,6 +343,9 @@ export function BuildTeamRosterStep({
             }}
             onUnassignMember={() => undefined}
             onPositionTypeChange={handlePositionTypeChange}
+            competencyOptions={draftCompetencyOptions}
+            canEditCompetencyFunction
+            onSingleResourceCompetencyFunctionChange={handleSingleResourceCompetencyFunctionChange}
           />
         ) : (
           <WorkspacePositionRosterTable
@@ -337,6 +373,9 @@ export function BuildTeamRosterStep({
               setIsAddMemberOpen(true)
             }}
             onUnassignMember={() => undefined}
+            competencyOptions={draftCompetencyOptions}
+            canEditCompetencyFunction
+            onMemberCompetencyFunctionChange={handleMemberCompetencyFunctionChange}
           />
         )}
       </RosterZoomContainer>

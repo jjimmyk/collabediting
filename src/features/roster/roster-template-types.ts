@@ -30,6 +30,7 @@ export type BuildTeamDraftMember = {
   assignmentKind: 'ics_position' | 'single_resource'
   icsPositions: string[]
   orgChartReportsTo: string | null
+  competencyFunction?: string | null
   password: string
   personSource: WorkspaceMemberPersonSource
   existingUserId: string | null

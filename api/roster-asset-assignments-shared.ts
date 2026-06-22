@@ -13,6 +13,7 @@ export type AssetScheduleRow = {
   position_name: string
   asset_key: string
   schedule_action: AssetScheduleAction
+  competency_function: string | null
   created_at: string
   created_by: string | null
 }
@@ -48,7 +49,9 @@ export async function fetchWorkspaceAssetSchedules(
 ): Promise<AssetScheduleRow[]> {
   const { data, error } = await admin
     .from('workspace_position_asset_schedules')
-    .select('id, workspace_id, position_name, asset_key, schedule_action, created_at, created_by')
+    .select(
+      'id, workspace_id, position_name, asset_key, schedule_action, competency_function, created_at, created_by'
+    )
     .eq('workspace_id', workspaceId)
 
   if (error) {
@@ -471,6 +474,7 @@ export async function applyAssetSchedulesOnOperationalPeriodAdvance(
       workspace_id: workspaceId,
       position_name: schedule.position_name,
       asset_key: schedule.asset_key,
+      competency_function: schedule.competency_function?.trim() || null,
       created_by: null,
     })
 

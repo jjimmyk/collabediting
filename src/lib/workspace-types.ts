@@ -23,6 +23,12 @@ export type WorkspaceRosterMember = {
   orgChartReportsTo: string | null
   /** Pending single-resource org chart placement (activates on next OP). */
   pendingOrgChartReportsTo?: string | null
+  /** Competency/function for single-resource members. */
+  competencyFunction?: string | null
+  /** Competency/function keyed by ICS position assignment. */
+  competencyByPosition?: Record<string, string | null>
+  /** Pending single-resource competency/function (activates on next OP). */
+  pendingCompetencyFunction?: string | null
   status: WorkspaceMemberStatus
   checkInStatus: WorkspaceMemberCheckInStatus
   addedAt: string
@@ -103,5 +109,6 @@ export type DbWorkspaceMember = {
   invited_at: string
   joined_at: string | null
   check_in_status?: WorkspaceMemberCheckInStatus | null
-  workspace_member_positions?: Array<{ ics_position: string }> | null
+  competency_function?: string | null
+  workspace_member_positions?: Array<{ ics_position: string; competency_function?: string | null }> | null
 }

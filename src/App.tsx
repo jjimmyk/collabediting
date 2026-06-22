@@ -610,6 +610,7 @@ import {
 import { buildDynamicOrgChart } from '@/features/roster/build-dynamic-org-chart'
 import { countAssetsReportingToPosition } from '@/features/roster/workspace-asset-org-chart'
 import { useWorkspaceCustomPositions } from '@/hooks/useWorkspaceCustomPositions'
+import { useRosterCompetencyControls } from '@/hooks/useRosterCompetencyControls'
 import { useWorkspacePositionLifecycle } from '@/hooks/useWorkspacePositionLifecycle'
 import { useOperationalPeriodRosterSnapshot } from '@/hooks/useOperationalPeriodRosterSnapshot'
 import {
@@ -627,6 +628,7 @@ import {
   buildMemberScheduleSummaryFromRows,
   fetchWorkspaceMemberSchedules,
   groupMemberSchedulesByPosition,
+  groupMemberScheduleCompetencyByKey,
   updatePositionMemberSchedules,
   type WorkspaceMemberScheduleRow,
 } from '@/lib/workspace-member-schedule-service'
@@ -637,6 +639,7 @@ import {
   fetchWorkspaceAssetSchedules,
   fetchWorkspacePositionAssetAssignments,
   groupAssetSchedulesByPosition,
+  groupAssetScheduleCompetencyByKey,
   updatePositionAssetAssignment,
   updatePositionAssetSchedules,
   updateWorkspaceAssetPointOfContact,
@@ -8908,9 +8911,9 @@ function App() {
   const [workspaceAssetSchedules, setWorkspaceAssetSchedules] = useState<
     WorkspacePositionAssetScheduleRow[]
   >([])
-  const [assetPendingOrgChartByKey, setAssetPendingOrgChartByKey] = useState<Record<string, string>>(
-    {}
-  )
+  const [assetPendingOrgChartByKey, setAssetPendingOrgChartByKey] = useState<
+    Record<string, import('@/lib/workspace-position-asset-service').AssetPendingOrgChartAssignment>
+  >({})
   const [activeWorkspaceSupabaseId, setActiveWorkspaceSupabaseId] = useState<string | null>(null)
   const [assetAssignmentDisplayContext, setAssetAssignmentDisplayContext] =
     useState<ActiveWorkspaceAssetDisplayContext | null>(null)
@@ -8959,7 +8962,9 @@ function App() {
     () =>
       workspaceAssignedAssets.map((asset) => ({
         ...asset,
-        pendingOrgChartReportsTo: assetPendingOrgChartByKey[asset.assetKey] ?? null,
+        pendingOrgChartReportsTo: assetPendingOrgChartByKey[asset.assetKey]?.reportsTo ?? null,
+        pendingCompetencyFunction:
+          assetPendingOrgChartByKey[asset.assetKey]?.competencyFunction ?? null,
       })),
     [assetPendingOrgChartByKey, workspaceAssignedAssets]
   )
@@ -13773,6 +13778,47 @@ function App() {
     () => groupMemberSchedulesByPosition(workspaceMemberSchedules),
     [workspaceMemberSchedules]
   )
+  const memberScheduleCompetencyByKey = useMemo(
+    () => groupMemberScheduleCompetencyByKey(workspaceMemberSchedules),
+    [workspaceMemberSchedules]
+  )
+  const assetScheduleCompetencyByKey = useMemo(
+    () => groupAssetScheduleCompetencyByKey(workspaceAssetSchedules),
+    [workspaceAssetSchedules]
+  )
+  const rosterCompetencyControls = useRosterCompetencyControls({
+    enabled: isInIncidentWorkspace || isInExerciseWorkspace,
+    isSupabaseEnabled,
+    canManageRoster: canManageWorkspaceRoster,
+    activeWorkspaceSupabaseId,
+    activeOrganizationId,
+    getAccessToken,
+    reloadRoster: async () => {
+      if (!isSupabaseEnabled || !activeWorkspaceSupabaseId) return
+      const roster = await fetchWorkspaceRoster(activeWorkspaceSupabaseId)
+      setSupabaseWorkspaceRoster(roster)
+    },
+    reloadMemberSchedules: async () => {
+      if (!isSupabaseEnabled || !activeWorkspaceSupabaseId) return
+      const schedules = await fetchWorkspaceMemberSchedules(activeWorkspaceSupabaseId)
+      setWorkspaceMemberSchedules(schedules)
+    },
+    reloadWorkspaceAssets: refreshAssignments,
+    reloadPositionAssets: async () => {
+      if (!isSupabaseEnabled || !activeWorkspaceSupabaseId) return
+      const [positionAssets, assetSchedules, pendingOrgChart] = await Promise.all([
+        fetchWorkspacePositionAssetAssignments(activeWorkspaceSupabaseId),
+        fetchWorkspaceAssetSchedules(activeWorkspaceSupabaseId),
+        fetchWorkspaceAssetPendingOrgChartReports(activeWorkspaceSupabaseId),
+      ])
+      setWorkspacePositionAssetAssignments(positionAssets)
+      setWorkspaceAssetSchedules(assetSchedules)
+      setAssetPendingOrgChartByKey(pendingOrgChart)
+      await refreshAssignments()
+    },
+    workspaceMemberSchedules,
+    workspaceAssetSchedules,
+  })
   const assetSchedulesByPosition = useMemo(
     () => groupAssetSchedulesByPosition(workspaceAssetSchedules),
     [workspaceAssetSchedules]
@@ -14264,13 +14310,15 @@ function App() {
       positionAssetsByPosition,
       assetSchedulesByPosition,
       workspaceAssetsByKey,
-      positionAssetWorkspaceMetaByKey
+      positionAssetWorkspaceMetaByKey,
+      assetScheduleCompetencyByKey
     )
   }, [
     activePanelSearchQuery,
     activePositionPermissions,
     activePositionSettings,
     activeWorkspaceRoster,
+    assetScheduleCompetencyByKey,
     assetSchedulesByPosition,
     historicalRosterSnapshot,
     isViewingHistoricalRoster,
@@ -29689,6 +29737,15 @@ function App() {
                       onCheckInStatusChange={(memberId, status) => {
                         void updateMemberCheckInStatus(memberId, status)
                       }}
+                      competencyOptions={rosterCompetencyControls.organizationCompetencyOptions}
+                      canEditCompetencyFunction={rosterCompetencyControls.canEditCompetencyFunction}
+                      updatingCompetencyKey={rosterCompetencyControls.updatingCompetencyKey}
+                      onSingleResourceCompetencyFunctionChange={
+                        rosterCompetencyControls.onSingleResourceCompetencyFunctionChange
+                      }
+                      onAssetCompetencyFunctionChange={
+                        rosterCompetencyControls.onAssetCompetencyFunctionChange
+                      }
                       showPositionAssets={showPositionAssets}
                       assignableAssetsByPosition={assignableAssetsByPosition}
                       scheduleAssignableAssetsByPosition={scheduleAssignableAssetsByPosition}
@@ -29806,6 +29863,16 @@ function App() {
                       onCheckInStatusChange={(memberId, status) => {
                         void updateMemberCheckInStatus(memberId, status)
                       }}
+                      competencyOptions={rosterCompetencyControls.organizationCompetencyOptions}
+                      canEditCompetencyFunction={rosterCompetencyControls.canEditCompetencyFunction}
+                      updatingCompetencyKey={rosterCompetencyControls.updatingCompetencyKey}
+                      memberScheduleCompetencyByKey={memberScheduleCompetencyByKey}
+                      onMemberCompetencyFunctionChange={
+                        rosterCompetencyControls.onMemberCompetencyFunctionChange
+                      }
+                      onAssetCompetencyFunctionChange={
+                        rosterCompetencyControls.onAssetCompetencyFunctionChange
+                      }
                       showPositionAssets={showPositionAssets}
                       assignableAssetsByPosition={assignableAssetsByPosition}
                       scheduleAssignableAssetsByPosition={scheduleAssignableAssetsByPosition}
