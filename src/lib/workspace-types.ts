@@ -42,6 +42,7 @@ export type WorkspaceMetadataRecord = {
 
 export type AccessibleWorkspace = {
   workspaceId: string
+  organizationId: string | null
   kind: WorkspaceKind
   legacyId: number
   name: string

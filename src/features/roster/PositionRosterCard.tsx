@@ -14,6 +14,7 @@ import {
   PopoverTrigger,
 } from '@/components/ui/popover'
 import { cn } from '@/lib/utils'
+import type { OrgMemberSearchResult } from '@/lib/workspace-service'
 import type { WorkspaceMemberCheckInStatus, WorkspaceRosterMember } from '@/lib/workspace-types'
 import type { PositionRosterEntry } from '@/features/roster/workspace-position-roster'
 import type {
@@ -66,6 +67,8 @@ type PositionRosterCardProps = {
     customTypeLabel: string | null
   ) => void
   onAssignExistingMember: (memberId: string, position: string) => void
+  onSearchOrgMembers?: (query: string) => Promise<OrgMemberSearchResult[]>
+  onAssignOrgMember?: (userId: string, position: string) => void
   onScheduleAssignMember: (memberId: string, position: string) => void
   onScheduleUnassignMember: (memberId: string, position: string) => void
   onRemoveScheduledAssign: (memberId: string, position: string) => void
@@ -113,6 +116,8 @@ export function PositionRosterCard({
   onToggleAllowWorkAssignment,
   onPositionTypeChange,
   onAssignExistingMember,
+  onSearchOrgMembers,
+  onAssignOrgMember,
   onScheduleAssignMember,
   onScheduleUnassignMember,
   onRemoveScheduledAssign,
@@ -160,6 +165,8 @@ export function PositionRosterCard({
     onToggleAllowWorkAssignment,
     onPositionTypeChange,
     onAssignExistingMember,
+    onSearchOrgMembers,
+    onAssignOrgMember,
     onScheduleAssignMember,
     onScheduleUnassignMember,
     onRemoveScheduledAssign,

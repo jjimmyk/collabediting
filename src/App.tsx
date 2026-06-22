@@ -216,6 +216,15 @@ import {
   updateRosterMemberPositions,
   updateWorkspace,
 } from '@/lib/workspace-service'
+import {
+  assignOrgMemberToPosition,
+  createOrganization,
+  fetchOrganizationMembers,
+  inviteOrganizationMember,
+} from '@/lib/organization-service'
+import { CreateOrganizationDialog } from '@/features/organization/CreateOrganizationDialog'
+import { OrgMembersSheet } from '@/features/organization/OrgMembersSheet'
+import { OrganizationSwitcher } from '@/features/organization/OrganizationSwitcher'
 import type {
   Ics204FormSectionDrafts,
   Ics204FormState,
@@ -6563,10 +6572,14 @@ function App() {
     user,
     profileEmail,
     isOrgAdmin,
+    organizations,
+    activeOrganization,
+    activeOrganizationId,
     canAccessWorkspace,
     accessibleWorkspaces,
     getAccessToken,
     refreshAccess,
+    setActiveOrganizationId,
     signOut,
   } = useAuth()
   const mapContainerRef = useRef<HTMLDivElement | null>(null)
@@ -6613,6 +6626,14 @@ function App() {
   )
   const [activeTab, setActiveTab] = useState<LeftTab>('notifications')
   const [isLeftSidebarOpen, setIsLeftSidebarOpen] = useState(false)
+  const [isCreateOrganizationOpen, setIsCreateOrganizationOpen] = useState(false)
+  const [isCreatingOrganization, setIsCreatingOrganization] = useState(false)
+  const [isOrgMembersOpen, setIsOrgMembersOpen] = useState(false)
+  const [orgMembers, setOrgMembers] = useState<
+    import('@/lib/organization-types').OrganizationMemberRecord[]
+  >([])
+  const [isLoadingOrgMembers, setIsLoadingOrgMembers] = useState(false)
+  const [isInvitingOrgMember, setIsInvitingOrgMember] = useState(false)
   const [incidentWorkspaceNavQuery, setIncidentWorkspaceNavQuery] = useState('')
   const [exerciseWorkspaceNavQuery, setExerciseWorkspaceNavQuery] = useState('')
   useEffect(() => {
@@ -7007,6 +7028,7 @@ function App() {
           summary,
           workspaceFormat: incidentWorkflow,
           incidentComplexity,
+          organizationId: activeOrganizationId ?? undefined,
         })
 
         if (!result.ok) {
@@ -7184,6 +7206,7 @@ function App() {
           summary,
           workspaceFormat: incidentWorkflow,
           incidentComplexity,
+          organizationId: activeOrganizationId ?? undefined,
         })
 
         if (!result.ok) {
@@ -12550,10 +12573,7 @@ function App() {
         return
       }
 
-      const canManage = await fetchCanManageWorkspaceRoster(
-        activeWorkspaceSupabaseId,
-        isOrgAdmin
-      )
+      const canManage = await fetchCanManageWorkspaceRoster(activeWorkspaceSupabaseId)
       if (!cancelled) {
         setCanManageWorkspaceRoster(canManage)
       }
@@ -12564,7 +12584,7 @@ function App() {
     return () => {
       cancelled = true
     }
-  }, [isSupabaseEnabled, activeWorkspaceSupabaseId, isOrgAdmin])
+  }, [isSupabaseEnabled, activeWorkspaceSupabaseId])
   const isInIcs201Workspace = isInIncidentWorkspace || isInExerciseWorkspace
   const ics201EditingFlags = useMemo(
     () => ({
@@ -15597,6 +15617,133 @@ function App() {
     })
     setRosterAssigningPosition(null)
   }
+  const assignOrgMemberToPositionRow = async (userId: string, position: string) => {
+    if (!isSupabaseEnabled) {
+      toast.error('Assigning organization members requires Supabase persistence.')
+      return
+    }
+    if (!activeWorkspaceSupabaseId) {
+      toast.error('This workspace is not synced to Supabase yet.')
+      return
+    }
+
+    setRosterAssigningPosition(position)
+    try {
+      const accessToken = await getAccessToken()
+      if (!accessToken) {
+        toast.error('Sign in again to assign roster members.')
+        return
+      }
+
+      const result = await assignOrgMemberToPosition({
+        accessToken,
+        workspaceId: activeWorkspaceSupabaseId,
+        userId,
+        icsPosition: position,
+      })
+
+      if (!result.ok) {
+        toast.error(result.message)
+        return
+      }
+
+      const roster = await fetchWorkspaceRoster(activeWorkspaceSupabaseId)
+      setSupabaseWorkspaceRoster(roster)
+      toast.success(`Assigned organization member to ${position}.`)
+    } finally {
+      setRosterAssigningPosition(null)
+    }
+  }
+  const searchOrgMembersForActiveWorkspace = useCallback(
+    async (query: string) => {
+      if (!activeWorkspaceSupabaseId) return []
+      const accessToken = await getAccessToken()
+      if (!accessToken) return []
+      return searchOrgMembersForWorkspace({
+        accessToken,
+        workspaceId: activeWorkspaceSupabaseId,
+        query,
+      })
+    },
+    [activeWorkspaceSupabaseId, getAccessToken]
+  )
+  const refreshOrganizationMembers = useCallback(async () => {
+    if (!activeOrganizationId) {
+      setOrgMembers([])
+      return
+    }
+    setIsLoadingOrgMembers(true)
+    try {
+      const members = await fetchOrganizationMembers(activeOrganizationId)
+      setOrgMembers(members)
+    } finally {
+      setIsLoadingOrgMembers(false)
+    }
+  }, [activeOrganizationId])
+  const handleCreateOrganization = useCallback(
+    async (input: { name: string; slug: string }) => {
+      setIsCreatingOrganization(true)
+      try {
+        const accessToken = await getAccessToken()
+        if (!accessToken) {
+          toast.error('Sign in again to create an organization.')
+          return false
+        }
+
+        const result = await createOrganization({
+          accessToken,
+          name: input.name,
+          slug: input.slug,
+        })
+
+        if (!result.ok) {
+          toast.error(result.message)
+          return false
+        }
+
+        setActiveOrganizationId(result.organization.organizationId)
+        await refreshAccess()
+        toast.success(`Created ${result.organization.name}.`)
+        return true
+      } finally {
+        setIsCreatingOrganization(false)
+      }
+    },
+    [getAccessToken, refreshAccess, setActiveOrganizationId]
+  )
+  const handleInviteOrganizationMember = useCallback(
+    async (email: string) => {
+      if (!activeOrganizationId) {
+        toast.error('Select an organization first.')
+        return false
+      }
+      setIsInvitingOrgMember(true)
+      try {
+        const accessToken = await getAccessToken()
+        if (!accessToken) {
+          toast.error('Sign in again to invite organization members.')
+          return false
+        }
+
+        const result = await inviteOrganizationMember({
+          accessToken,
+          organizationId: activeOrganizationId,
+          email,
+        })
+
+        if (!result.ok) {
+          toast.error(result.message)
+          return false
+        }
+
+        toast.success(`Invited ${email} to ${activeOrganization?.name ?? 'the organization'}.`)
+        return true
+      } finally {
+        setIsInvitingOrgMember(false)
+      }
+    },
+    [activeOrganization?.name, activeOrganizationId, getAccessToken]
+  )
   const unassignMemberFromPosition = async (memberId: string, position: string) => {
     const member = activeWorkspaceRoster.find((entry) => entry.id === memberId)
     if (!member) return
@@ -29527,6 +29674,14 @@ function App() {
                       onAssignExistingMember={(memberId, position) => {
                         void assignExistingMemberToPosition(memberId, position)
                       }}
+                      onSearchOrgMembers={
+                        isSupabaseEnabled && activeWorkspaceSupabaseId
+                          ? searchOrgMembersForActiveWorkspace
+                          : undefined
+                      }
+                      onAssignOrgMember={(userId, position) => {
+                        void assignOrgMemberToPositionRow(userId, position)
+                      }}
                       onScheduleAssignMember={(memberId, position) => {
                         void scheduleAssignMemberToPosition(memberId, position)
                       }}
@@ -29629,6 +29784,14 @@ function App() {
                       }}
                       onAssignExistingMember={(memberId, position) => {
                         void assignExistingMemberToPosition(memberId, position)
+                      }}
+                      onSearchOrgMembers={
+                        isSupabaseEnabled && activeWorkspaceSupabaseId
+                          ? searchOrgMembersForActiveWorkspace
+                          : undefined
+                      }
+                      onAssignOrgMember={(userId, position) => {
+                        void assignOrgMemberToPositionRow(userId, position)
                       }}
                       onScheduleAssignMember={(memberId, position) => {
                         void scheduleAssignMemberToPosition(memberId, position)
@@ -39075,6 +39238,23 @@ function App() {
         }}
         onSubmit={submitAddWorkspaceMemberDialog}
       />
+      <CreateOrganizationDialog
+        open={isCreateOrganizationOpen}
+        onOpenChange={setIsCreateOrganizationOpen}
+        isSubmitting={isCreatingOrganization}
+        onSubmit={handleCreateOrganization}
+      />
+      <OrgMembersSheet
+        open={isOrgMembersOpen}
+        onOpenChange={setIsOrgMembersOpen}
+        organizationName={activeOrganization?.name ?? 'Organization'}
+        canManage={isOrgAdmin}
+        members={orgMembers}
+        isLoading={isLoadingOrgMembers}
+        isInviting={isInvitingOrgMember}
+        onRefresh={refreshOrganizationMembers}
+        onInvite={handleInviteOrganizationMember}
+      />
       <AddWorkspacePositionDialog
         open={isAddWorkspacePositionOpen}
         onOpenChange={setIsAddWorkspacePositionOpen}
@@ -39842,8 +40022,15 @@ function App() {
           className="w-[336px] !max-w-[336px] !min-w-[312px] p-0"
         >
           <div className="flex h-full flex-col">
-            <SheetHeader className="gap-1 border-b border-border bg-muted/40 px-4 py-4">
-              <SheetTitle className="text-base font-semibold">United States Coast Guard</SheetTitle>
+            <SheetHeader className="gap-2 border-b border-border bg-muted/40 px-4 py-4">
+              <OrganizationSwitcher
+                organizations={organizations}
+                activeOrganizationId={activeOrganizationId}
+                onSelectOrganization={setActiveOrganizationId}
+                onCreateOrganization={() => setIsCreateOrganizationOpen(true)}
+                onManageMembers={() => setIsOrgMembersOpen(true)}
+                canManageMembers={isOrgAdmin}
+              />
               <span className="text-xs text-muted-foreground">Navigation</span>
             </SheetHeader>
             <nav className="flex-1 overflow-y-auto px-2 py-3">

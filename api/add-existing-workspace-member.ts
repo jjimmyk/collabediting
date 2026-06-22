@@ -10,6 +10,7 @@ import {
   addIcsWorkspaceMemberWithEffectiveWhen,
   addSingleResourceWorkspaceMemberWithEffectiveWhen,
 } from './roster-member-add-shared.js'
+import { assertUserInWorkspaceOrganization } from './org-shared.js'
 
 const supabaseUrl =
   process.env.VITE_SUPABASE_URL ??
@@ -83,6 +84,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!profile?.email) {
       return res.status(404).json({ error: 'Person not found.' })
     }
+
+    await assertUserInWorkspaceOrganization(admin, workspaceId, userId)
 
     const email = profile.email.trim().toLowerCase()
 

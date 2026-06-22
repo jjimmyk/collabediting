@@ -1,12 +1,7 @@
 import { useState, type ReactNode } from 'react'
-import { CalendarClock, Plus, Trash2, Truck, UserPlus } from 'lucide-react'
+import { CalendarClock, Plus, Trash2, Truck } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from '@/components/ui/popover'
 import type { ResourceListItemData } from '@/features/resources/types'
 import {
   assignableAssetsEmptyMessage,
@@ -23,6 +18,10 @@ import {
 } from '@/features/roster/position-roster-messages'
 import { PositionRosterInviteForm } from '@/features/roster/PositionRosterInviteForm'
 import {
+  MemberPickerPopover,
+  OrgMemberSearchPickerPopover,
+} from '@/features/organization/OrgMemberSearchPickerPopover'
+import {
   PositionAssetPickerPopover,
   type PositionRosterAssetHandlers,
 } from '@/features/roster/PositionRosterAssetSections'
@@ -30,6 +29,7 @@ import { RosterAssetResourceListItem } from '@/features/roster/RosterAssetResour
 import type { PositionRosterEntry } from '@/features/roster/workspace-position-roster'
 import { RosterMemberCheckInStatusSelect } from '@/features/roster/RosterMemberCheckInStatusSelect'
 import type { WorkspaceMemberCheckInStatus, WorkspaceRosterMember } from '@/lib/workspace-types'
+import type { OrgMemberSearchResult } from '@/lib/workspace-service'
 
 function PositionAssignmentLifecycleSection({
   title,
@@ -129,56 +129,6 @@ export function PositionMemberRow({
   )
 }
 
-function MemberPickerPopover({
-  label,
-  members,
-  disabled,
-  onSelect,
-}: {
-  label: string
-  members: WorkspaceRosterMember[]
-  disabled: boolean
-  onSelect: (memberId: string) => void
-}) {
-  const [open, setOpen] = useState(false)
-
-  return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          className="h-7 min-w-[6.5rem] flex-1 gap-1 px-2 text-[11px]"
-          disabled={disabled || members.length === 0}
-        >
-          <UserPlus className="h-3.5 w-3.5 shrink-0" />
-          {label}
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent align="start" className="w-72 p-2">
-        <div className="max-h-56 space-y-1 overflow-y-auto">
-          {members.map((member) => (
-            <Button
-              key={member.id}
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="h-8 w-full justify-start truncate text-xs"
-              onClick={() => {
-                onSelect(member.id)
-                setOpen(false)
-              }}
-            >
-              {member.email}
-            </Button>
-          ))}
-        </div>
-      </PopoverContent>
-    </Popover>
-  )
-}
-
 function NewUserInviteControl({
   position,
   mode,
@@ -256,6 +206,8 @@ function PositionAssignmentActionBar({
   memberEmptyMessage,
   assetEmptyMessage,
   onSelectMember,
+  onSearchOrgMembers,
+  onAssignOrgMember,
   onSelectAsset,
   position,
   inviteMode,
@@ -274,6 +226,8 @@ function PositionAssignmentActionBar({
   memberEmptyMessage: string
   assetEmptyMessage: string
   onSelectMember: (memberId: string) => void
+  onSearchOrgMembers?: (query: string) => Promise<OrgMemberSearchResult[]>
+  onAssignOrgMember?: (userId: string) => void
   onSelectAsset?: (assetKey: string, pointOfContactMemberId?: string) => void
   position: string
   inviteMode: RosterInviteAssignmentMode
@@ -285,12 +239,21 @@ function PositionAssignmentActionBar({
   return (
     <div className="space-y-1.5 pt-1">
       <div className="flex flex-wrap gap-1.5">
-        <MemberPickerPopover
-          label="Existing user"
-          members={assignableMembers}
-          disabled={disabled}
-          onSelect={onSelectMember}
-        />
+        {onSearchOrgMembers && onAssignOrgMember ? (
+          <OrgMemberSearchPickerPopover
+            label="Existing user"
+            disabled={disabled}
+            onSearch={onSearchOrgMembers}
+            onSelect={onAssignOrgMember}
+          />
+        ) : (
+          <MemberPickerPopover
+            label="Existing user"
+            members={assignableMembers}
+            disabled={disabled}
+            onSelect={onSelectMember}
+          />
+        )}
         {showNewUser ? (
           <NewUserInviteControl
             position={position}
@@ -345,6 +308,8 @@ export type PositionRosterUnifiedAssignmentSectionsProps = {
   updatingCheckInMemberId?: string | null
   onCheckInStatusChange?: (memberId: string, status: WorkspaceMemberCheckInStatus) => void
   onAssignExistingMember: (memberId: string, position: string) => void
+  onSearchOrgMembers?: (query: string) => Promise<OrgMemberSearchResult[]>
+  onAssignOrgMember?: (userId: string, position: string) => void
   onScheduleAssignMember: (memberId: string, position: string) => void
   onScheduleUnassignMember: (memberId: string, position: string) => void
   onRemoveScheduledAssign: (memberId: string, position: string) => void
@@ -374,6 +339,8 @@ export function PositionRosterUnifiedAssignmentSections({
   updatingCheckInMemberId = null,
   onCheckInStatusChange,
   onAssignExistingMember,
+  onSearchOrgMembers,
+  onAssignOrgMember,
   onScheduleAssignMember,
   onScheduleUnassignMember,
   onRemoveScheduledAssign,
@@ -482,6 +449,12 @@ export function PositionRosterUnifiedAssignmentSections({
               memberEmptyMessage={assignExistingMembersEmptyMessage(entry, assignable.length)}
               assetEmptyMessage={assignableAssetsEmptyMessage(assetsEnabled)}
               onSelectMember={(memberId) => onAssignExistingMember(memberId, entry.position)}
+              onSearchOrgMembers={onSearchOrgMembers}
+              onAssignOrgMember={
+                onAssignOrgMember
+                  ? (userId) => onAssignOrgMember(userId, entry.position)
+                  : undefined
+              }
               onSelectAsset={
                 assetsEnabled
                   ? (assetKey, pointOfContactMemberId) =>

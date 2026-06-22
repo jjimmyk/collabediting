@@ -172,17 +172,38 @@ function mapAccessibleWorkspaceFields(row: {
 
 export async function fetchAccessibleWorkspaces(
   userId: string,
-  isOrgAdmin: boolean
+  options: {
+    activeOrganizationId: string | null
+    isPlatformOrgAdmin: boolean
+  }
 ): Promise<AccessibleWorkspace[]> {
   const supabase = getSupabaseClient()
   if (!supabase) return []
 
-  if (isOrgAdmin) {
+  const { activeOrganizationId, isPlatformOrgAdmin } = options
+  if (!activeOrganizationId) {
+    return []
+  }
+
+  const workspaceSelect =
+    'id, organization_id, kind, legacy_id, name, region, summary, archived_at, workspace_format, incident_complexity, has_sequential_workflow, sequential_workflow_type, started_operational_period_count, working_operational_period_number, metadata'
+
+  const { data: activeOrgMembership } = await supabase
+    .from('organization_members')
+    .select('role')
+    .eq('organization_id', activeOrganizationId)
+    .eq('user_id', userId)
+    .eq('status', 'active')
+    .maybeSingle()
+
+  const isActiveOrgAdmin =
+    isPlatformOrgAdmin || activeOrgMembership?.role === 'admin'
+
+  if (isActiveOrgAdmin) {
     const { data, error } = await supabase
       .from('workspaces')
-      .select(
-        'id, kind, legacy_id, name, region, summary, archived_at, workspace_format, incident_complexity, has_sequential_workflow, sequential_workflow_type, started_operational_period_count, working_operational_period_number, metadata'
-      )
+      .select(workspaceSelect)
+      .eq('organization_id', activeOrganizationId)
       .order('name')
 
     if (error || !data) {
@@ -191,11 +212,12 @@ export async function fetchAccessibleWorkspaces(
 
     return data.map((row) => ({
       workspaceId: row.id,
+      organizationId: row.organization_id ?? null,
       kind: row.kind as WorkspaceKind,
       legacyId: row.legacy_id,
       name: row.name,
-      icsPosition: 'Org Admin',
-      icsPositions: ['Org Admin'],
+      icsPosition: isPlatformOrgAdmin ? 'Org Admin' : 'Organization Admin',
+      icsPositions: [isPlatformOrgAdmin ? 'Org Admin' : 'Organization Admin'],
       region: row.region ?? null,
       summary: row.summary ?? null,
       archivedAt: row.archived_at ?? null,
@@ -209,8 +231,9 @@ export async function fetchAccessibleWorkspaces(
       `
       ics_position,
       workspace_member_positions (ics_position),
-      workspace:workspaces (
+      workspace:workspaces!inner (
         id,
+        organization_id,
         kind,
         legacy_id,
         name,
@@ -229,6 +252,7 @@ export async function fetchAccessibleWorkspaces(
     )
     .eq('user_id', userId)
     .eq('status', 'active')
+    .eq('workspace.organization_id', activeOrganizationId)
 
   if (error || !data) {
     return []
@@ -239,6 +263,7 @@ export async function fetchAccessibleWorkspaces(
       const workspaceRaw = row.workspace as
         | {
             id: string
+            organization_id?: string | null
             kind: WorkspaceKind
             legacy_id: number
             name: string
@@ -255,6 +280,7 @@ export async function fetchAccessibleWorkspaces(
           }
         | {
             id: string
+            organization_id?: string | null
             kind: WorkspaceKind
             legacy_id: number
             name: string
@@ -291,6 +317,7 @@ export async function fetchAccessibleWorkspaces(
       })
       return {
         workspaceId: workspace.id,
+        organizationId: workspace.organization_id ?? null,
         kind: workspace.kind,
         legacyId: workspace.legacy_id,
         name: workspace.name,
@@ -933,23 +960,20 @@ export async function setWorkspacePositionType(
   return { ok: true }
 }
 
-export async function fetchCanManageWorkspaceRoster(
-  workspaceId: string,
-  isOrgAdmin: boolean
-): Promise<boolean> {
-  if (isOrgAdmin) return true
+export async function fetchCanManageWorkspaceRoster(workspaceId: string): Promise<boolean> {
   const supabase = getSupabaseClient()
   if (!supabase) return true
 
-  const { data, error } = await supabase.rpc('current_user_is_roster_manager', {
-    p_workspace_id: workspaceId,
-  })
+  const [{ data: canAdminister }, { data: isRosterManager }] = await Promise.all([
+    supabase.rpc('current_user_can_administer_workspace', {
+      p_workspace_id: workspaceId,
+    }),
+    supabase.rpc('current_user_is_roster_manager', {
+      p_workspace_id: workspaceId,
+    }),
+  ])
 
-  if (error) {
-    return false
-  }
-
-  return data === true
+  return canAdminister === true || isRosterManager === true
 }
 
 export type CreatedWorkspace = {
@@ -973,6 +997,7 @@ export async function createWorkspace(params: {
   summary?: string
   workspaceFormat?: string
   incidentComplexity?: string
+  organizationId?: string
 }): Promise<{ ok: true; workspace: CreatedWorkspace } | { ok: false; message: string }> {
   if (!isSupabaseConfigured) {
     return { ok: false, message: 'Supabase is not configured.' }
@@ -991,6 +1016,7 @@ export async function createWorkspace(params: {
       summary: params.summary,
       workspaceFormat: params.workspaceFormat,
       incidentComplexity: params.incidentComplexity,
+      organizationId: params.organizationId,
     }),
   })
 

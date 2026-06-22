@@ -1,4 +1,9 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import {
+  getWorkspaceOrganizationId,
+  userIsOrgAdminForOrganization,
+  userIsPlatformOrgAdmin,
+} from './org-shared.js'
 
 const ROSTER_MANAGER_POSITIONS = new Set([
   'Incident Commander',
@@ -9,10 +14,14 @@ const ROSTER_MANAGER_POSITIONS = new Set([
 export async function userCanManageWorkspaceRoster(
   admin: SupabaseClient,
   userId: string,
-  workspaceId: string,
-  isOrgAdmin: boolean
+  workspaceId: string
 ): Promise<boolean> {
-  if (isOrgAdmin) {
+  if (await userIsPlatformOrgAdmin(admin, userId)) {
+    return true
+  }
+
+  const organizationId = await getWorkspaceOrganizationId(admin, workspaceId)
+  if (await userIsOrgAdminForOrganization(admin, userId, organizationId)) {
     return true
   }
 
@@ -68,18 +77,7 @@ export async function authenticateRosterManager(
     throw new Error('Invalid or expired session.')
   }
 
-  const { data: profile } = await admin
-    .from('profiles')
-    .select('is_org_admin')
-    .eq('id', user.id)
-    .maybeSingle()
-
-  const canManage = await userCanManageWorkspaceRoster(
-    admin,
-    user.id,
-    workspaceId,
-    profile?.is_org_admin === true
-  )
+  const canManage = await userCanManageWorkspaceRoster(admin, user.id, workspaceId)
 
   if (!canManage) {
     throw new Error('You do not have permission to manage roster assignments.')

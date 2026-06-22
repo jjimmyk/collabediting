@@ -12,6 +12,8 @@ import {
   provisionIcsWorkspaceMemberWithEffectiveWhen,
   provisionSingleResourceMemberWithEffectiveWhen,
 } from './roster-member-add-shared.js'
+import { userCanManageWorkspaceRoster } from './roster-auth-shared.js'
+import { ensureOrganizationMembership, getWorkspaceOrganizationId } from './org-shared.js'
 
 const supabaseUrl =
   process.env.VITE_SUPABASE_URL ??
@@ -20,11 +22,37 @@ const supabaseUrl =
 const supabaseServiceRoleKey =
   process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.SUPABASE_SECRET_KEY
 
-const ROSTER_MANAGER_POSITIONS = new Set([
-  'Incident Commander',
-  'Planning Section Chief',
-  'Operations Section Chief',
-])
+async function ensureInvitedOrganizationMembership(
+  admin: SupabaseClient,
+  params: {
+    workspaceId: string
+    email: string
+    invitedBy: string
+    userId?: string | null
+    status?: 'invited' | 'active'
+  }
+) {
+  let userId = params.userId ?? null
+  if (!userId) {
+    const { data: profile } = await admin
+      .from('profiles')
+      .select('id')
+      .eq('email', params.email.trim().toLowerCase())
+      .maybeSingle()
+    userId = profile?.id ?? null
+  }
+
+  const organizationId = await getWorkspaceOrganizationId(admin, params.workspaceId)
+  await ensureOrganizationMembership(admin, {
+    organizationId,
+    email: params.email,
+    userId,
+    role: 'member',
+    status: params.status ?? (userId ? 'active' : 'invited'),
+    invitedBy: params.invitedBy,
+    joinedAt: userId ? new Date().toISOString() : null,
+  })
+}
 
 type InviteBody = {
   workspaceId?: string
@@ -249,24 +277,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(401).json({ error: 'Invalid or expired session.' })
     }
 
-    const { data: profile } = await admin
-      .from('profiles')
-      .select('is_org_admin')
-      .eq('id', user.id)
-      .maybeSingle()
-
-    if (!profile?.is_org_admin) {
-      const { data: membership } = await admin
-        .from('workspace_members')
-        .select('ics_position, status')
-        .eq('workspace_id', workspaceId)
-        .eq('user_id', user.id)
-        .eq('status', 'active')
-        .maybeSingle()
-
-      if (!membership || !ROSTER_MANAGER_POSITIONS.has(membership.ics_position)) {
-        return res.status(403).json({ error: 'You do not have permission to invite roster members.' })
-      }
+    const canManage = await userCanManageWorkspaceRoster(admin, user.id, workspaceId)
+    if (!canManage) {
+      return res.status(403).json({ error: 'You do not have permission to invite roster members.' })
     }
 
     const { data: workspace } = await admin
@@ -301,6 +314,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           })
         }
 
+        await ensureInvitedOrganizationMembership(admin, {
+          workspaceId,
+          email,
+          invitedBy: user.id,
+          status: 'active',
+        })
+
         return res.status(200).json({
           ok: true,
           method: 'direct_provision',
@@ -334,6 +354,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         })
       }
 
+      await ensureInvitedOrganizationMembership(admin, {
+        workspaceId,
+        email,
+        invitedBy: user.id,
+        status: 'active',
+      })
+
       return res.status(200).json({
         ok: true,
         method: 'direct_provision',
@@ -350,6 +377,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         scheduleOnOpAdvance,
         status: 'invited',
         invitedBy: user.id,
+      })
+
+      await ensureInvitedOrganizationMembership(admin, {
+        workspaceId,
+        email,
+        invitedBy: user.id,
+        status: 'invited',
       })
 
       const inviteRedirect = getAppCallbackUrl(workspaceId)
@@ -394,6 +428,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       email,
       icsPositions,
       scheduleOnOpAdvance,
+      invitedBy: user.id,
+      status: 'invited',
+    })
+
+    await ensureInvitedOrganizationMembership(admin, {
+      workspaceId,
+      email,
       invitedBy: user.id,
       status: 'invited',
     })

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { cn } from '@/lib/utils'
+import type { OrgMemberSearchResult } from '@/lib/workspace-service'
 import type { WorkspaceMemberCheckInStatus, WorkspaceRosterMember } from '@/lib/workspace-types'
 import type { ResourceListItemData } from '@/features/resources/types'
 import type { PositionRosterEntry } from '@/features/roster/workspace-position-roster'
@@ -73,6 +74,8 @@ type WorkspaceOrgChartRosterProps = {
   showAllowWorkAssignment?: boolean
   onToggleAllowWorkAssignment?: (position: string, enabled: boolean) => void
   onAssignExistingMember: (memberId: string, position: string) => void
+  onSearchOrgMembers?: (query: string) => Promise<OrgMemberSearchResult[]>
+  onAssignOrgMember?: (userId: string, position: string) => void
   onScheduleAssignMember: (memberId: string, position: string) => void
   onScheduleUnassignMember: (memberId: string, position: string) => void
   onRemoveScheduledAssign: (memberId: string, position: string) => void
@@ -123,6 +126,8 @@ type OrgChartRenderProps = {
   positionMetaByName: Record<string, WorkspacePositionMeta>
   onToggleEditIcs201: (position: string, enabled: boolean) => void
   onAssignExistingMember: (memberId: string, position: string) => void
+  onSearchOrgMembers?: (query: string) => Promise<OrgMemberSearchResult[]>
+  onAssignOrgMember?: (userId: string, position: string) => void
   onScheduleAssignMember: (memberId: string, position: string) => void
   onScheduleUnassignMember: (memberId: string, position: string) => void
   onRemoveScheduledAssign: (memberId: string, position: string) => void
@@ -419,6 +424,8 @@ function PositionNode({
   positionMetaByName,
   onToggleEditIcs201,
   onAssignExistingMember,
+  onSearchOrgMembers,
+  onAssignOrgMember,
   onScheduleAssignMember,
   onScheduleUnassignMember,
   onRemoveScheduledAssign,
@@ -488,6 +495,8 @@ function PositionNode({
     positionMetaByName,
     onToggleEditIcs201,
     onAssignExistingMember,
+    onSearchOrgMembers,
+    onAssignOrgMember,
     onScheduleAssignMember,
     onScheduleUnassignMember,
     onRemoveScheduledAssign,
@@ -559,6 +568,8 @@ function PositionNode({
         }
         onToggleEditIcs201={onToggleEditIcs201}
         onAssignExistingMember={onAssignExistingMember}
+        onSearchOrgMembers={onSearchOrgMembers}
+        onAssignOrgMember={onAssignOrgMember}
         onScheduleAssignMember={onScheduleAssignMember}
         onScheduleUnassignMember={onScheduleUnassignMember}
         onRemoveScheduledAssign={onRemoveScheduledAssign}
@@ -875,6 +886,8 @@ export function WorkspaceOrgChartRoster({
   positionMetaByName = {},
   onToggleEditIcs201,
   onAssignExistingMember,
+  onSearchOrgMembers,
+  onAssignOrgMember,
   onScheduleAssignMember,
   onScheduleUnassignMember,
   onRemoveScheduledAssign,
@@ -974,6 +987,8 @@ export function WorkspaceOrgChartRoster({
     positionMetaByName,
     onToggleEditIcs201,
     onAssignExistingMember,
+    onSearchOrgMembers,
+    onAssignOrgMember,
     onScheduleAssignMember,
     onScheduleUnassignMember,
     onRemoveScheduledAssign,

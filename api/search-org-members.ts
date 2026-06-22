@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { createClient } from '@supabase/supabase-js'
 import { authenticateRosterManager } from './roster-auth-shared.js'
+import { getWorkspaceOrganizationId } from './org-shared.js'
 
 const supabaseUrl =
   process.env.VITE_SUPABASE_URL ??
@@ -49,44 +50,65 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const admin = createClient(supabaseUrl, supabaseServiceRoleKey)
     await authenticateRosterManager(admin, accessToken, workspaceId)
 
-    const escaped = query.replace(/[%_,]/g, '\\$&')
-    const pattern = `%${escaped}%`
+    const organizationId = await getWorkspaceOrganizationId(admin, workspaceId)
 
-    const [{ data: profiles, error: profilesError }, { data: rosterRows, error: rosterError }] =
+    const [{ data: orgMembers, error: orgMembersError }, { data: rosterRows, error: rosterError }] =
       await Promise.all([
         admin
-          .from('profiles')
-          .select('id, email, full_name')
-          .or(`email.ilike."${pattern}",full_name.ilike."${pattern}"`)
+          .from('organization_members')
+          .select('user_id, email, profiles:user_id (full_name)')
+          .eq('organization_id', organizationId)
+          .eq('status', 'active')
+          .not('user_id', 'is', null)
           .order('email', { ascending: true })
-          .limit(25),
+          .limit(250),
         admin
           .from('workspace_members')
-          .select('email')
+          .select('email, user_id')
           .eq('workspace_id', workspaceId)
           .neq('status', 'removed'),
       ])
 
-    if (profilesError) {
-      throw new Error(profilesError.message)
+    if (orgMembersError) {
+      throw new Error(orgMembersError.message)
     }
     if (rosterError) {
       throw new Error(rosterError.message)
     }
 
+    const rosterUserIds = new Set(
+      (rosterRows ?? [])
+        .map((row) => (typeof row.user_id === 'string' ? row.user_id : ''))
+        .filter((value) => value.length > 0)
+    )
     const rosterEmails = new Set(
       (rosterRows ?? []).map((row) => (typeof row.email === 'string' ? row.email.toLowerCase() : ''))
     )
 
-    const results: OrgMemberSearchResult[] = (profiles ?? [])
-      .filter((profile) => {
-        const email = typeof profile.email === 'string' ? profile.email.toLowerCase() : ''
-        return email.length > 0 && !rosterEmails.has(email)
-      })
-      .map((profile) => ({
-        id: profile.id,
-        email: profile.email,
-        fullName: profile.full_name ?? null,
+    const profileMatches =
+      orgMembers?.flatMap((member) => {
+        const userId = typeof member.user_id === 'string' ? member.user_id : ''
+        const email = typeof member.email === 'string' ? member.email.toLowerCase() : ''
+        if (!userId || !email) return []
+
+        const profileRaw = member.profiles as { full_name?: string | null } | { full_name?: string | null }[] | null
+        const profile = Array.isArray(profileRaw) ? profileRaw[0] : profileRaw
+        const fullName = profile?.full_name ?? null
+        const haystack = `${email} ${fullName ?? ''}`.toLowerCase()
+        if (!haystack.includes(query)) {
+          return []
+        }
+
+        return [{ userId, email, fullName }]
+      }) ?? []
+
+    const results: OrgMemberSearchResult[] = profileMatches
+      .filter((entry) => !rosterUserIds.has(entry.userId) && !rosterEmails.has(entry.email))
+      .slice(0, 25)
+      .map((entry) => ({
+        id: entry.userId,
+        email: entry.email,
+        fullName: entry.fullName,
       }))
 
     return res.status(200).json({ results })

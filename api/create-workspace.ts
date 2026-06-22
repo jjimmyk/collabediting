@@ -1,5 +1,10 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { createClient } from '@supabase/supabase-js'
+import {
+  ensureOrganizationMembership,
+  userBelongsToOrganization,
+  userIsOrgAdminForOrganization,
+} from './org-shared.js'
 
 const supabaseUrl =
   process.env.VITE_SUPABASE_URL ??
@@ -15,6 +20,7 @@ type CreateWorkspaceBody = {
   summary?: string
   workspaceFormat?: string
   incidentComplexity?: string
+  organizationId?: string
 }
 
 function deriveSequentialWorkflow(
@@ -71,6 +77,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const summary = body.summary?.trim() || null
     const workspaceFormat = body.workspaceFormat?.trim() || null
     const incidentComplexity = body.incidentComplexity?.trim() || null
+    const organizationId = body.organizationId?.trim()
 
     if (kind !== 'incident' && kind !== 'exercise') {
       return res.status(400).json({ error: 'kind must be incident or exercise.' })
@@ -96,6 +103,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const creatorEmail = user.email?.trim().toLowerCase()
     if (!creatorEmail) {
       return res.status(400).json({ error: 'Signed-in user must have an email address.' })
+    }
+
+    let resolvedOrganizationId = organizationId ?? null
+    if (!resolvedOrganizationId) {
+      const { data: uscgOrg } = await admin
+        .from('organizations')
+        .select('id')
+        .eq('slug', 'uscg')
+        .maybeSingle()
+      resolvedOrganizationId = uscgOrg?.id ?? null
+    }
+
+    if (!resolvedOrganizationId) {
+      return res.status(400).json({ error: 'organizationId is required.' })
+    }
+
+    const canCreateInOrganization =
+      (await userIsOrgAdminForOrganization(admin, user.id, resolvedOrganizationId)) ||
+      (await userBelongsToOrganization(admin, user.id, resolvedOrganizationId))
+
+    if (!canCreateInOrganization) {
+      return res.status(403).json({ error: 'You do not have access to that organization.' })
     }
 
     const { data: maxLegacyRow, error: maxLegacyError } = await admin
@@ -124,6 +153,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         incident_complexity: incidentComplexity,
         has_sequential_workflow: sequentialWorkflow.has_sequential_workflow,
         sequential_workflow_type: sequentialWorkflow.sequential_workflow_type,
+        organization_id: resolvedOrganizationId,
       })
       .select(
         'id, kind, legacy_id, name, region, summary, workspace_format, incident_complexity, has_sequential_workflow, sequential_workflow_type'
@@ -191,6 +221,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (positionError) {
       return res.status(500).json({ error: positionError.message })
     }
+
+    await ensureOrganizationMembership(admin, {
+      organizationId: resolvedOrganizationId,
+      email: creatorEmail,
+      userId: user.id,
+      role: 'member',
+      status: 'active',
+      invitedBy: user.id,
+      joinedAt: new Date().toISOString(),
+    })
 
     return res.status(200).json({
       ok: true,
