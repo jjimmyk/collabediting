@@ -64,7 +64,7 @@ type AddWorkspaceMemberDialogProps = {
   positionPreset: string | null
   defaultEffectiveWhen?: RosterMemberEffectiveWhen
   isSubmitting: boolean
-  onSearchExistingPeople: (query: string) => Promise<OrgMemberSearchResult[]>
+  onSearchExistingPeople: (query: string, position?: string) => Promise<OrgMemberSearchResult[]>
   onSubmit: (input: AddWorkspaceMemberSubmitInput) => Promise<PositionRosterInviteSubmitResult>
 }
 
@@ -141,11 +141,6 @@ export function AddWorkspaceMemberDialog({
     }
 
     const query = existingSearchQuery.trim()
-    if (query.length < 2) {
-      setExistingSearchResults([])
-      return
-    }
-
     const timeout = window.setTimeout(() => {
       setIsSearchingExisting(true)
       void onSearchExistingPeople(query)
@@ -158,7 +153,7 @@ export function AddWorkspaceMemberDialog({
         .finally(() => {
           setIsSearchingExisting(false)
         })
-    }, 300)
+    }, query.length > 0 ? 300 : 0)
 
     return () => window.clearTimeout(timeout)
   }, [existingSearchQuery, isSupabaseEnabled, onSearchExistingPeople, open, personSource])
@@ -443,18 +438,16 @@ export function AddWorkspaceMemberDialog({
                   setExistingSearchQuery(event.target.value)
                   setSelectedExistingUserId(null)
                 }}
-                placeholder="Search by name or email"
+                placeholder="Filter by name or email"
               />
-              <div className="space-y-1 rounded-md border p-2">
-                {existingSearchQuery.trim().length < 2 ? (
-                  <p className="px-1 py-2 text-[11px] text-muted-foreground">
-                    Type at least 2 characters to search.
-                  </p>
-                ) : isSearchingExisting ? (
-                  <p className="px-1 py-2 text-[11px] text-muted-foreground">Searching…</p>
+              <div className="max-h-56 space-y-1 overflow-y-auto rounded-md border p-2">
+                {isSearchingExisting ? (
+                  <p className="px-1 py-2 text-[11px] text-muted-foreground">Loading people…</p>
                 ) : existingSearchResults.length === 0 ? (
                   <p className="px-1 py-2 text-[11px] text-muted-foreground">
-                    No matching people found outside this roster.
+                    {existingSearchQuery.trim()
+                      ? 'No matching people found.'
+                      : 'No organization members are available to add to this roster.'}
                   </p>
                 ) : (
                   existingSearchResults.map((result) => (

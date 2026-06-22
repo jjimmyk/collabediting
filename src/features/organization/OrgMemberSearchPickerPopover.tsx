@@ -10,11 +10,13 @@ export function OrgMemberSearchPickerPopover({
   disabled,
   onSearch,
   onSelect,
+  position,
 }: {
   label: string
   disabled: boolean
-  onSearch: (query: string) => Promise<OrgMemberSearchResult[]>
+  onSearch: (query: string, position?: string) => Promise<OrgMemberSearchResult[]>
   onSelect: (userId: string) => void
+  position?: string
 }) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
@@ -29,14 +31,9 @@ export function OrgMemberSearchPickerPopover({
     }
 
     const trimmed = query.trim()
-    if (trimmed.length < 2) {
-      setResults([])
-      return
-    }
-
     const timeout = window.setTimeout(() => {
       setIsSearching(true)
-      void onSearch(trimmed)
+      void onSearch(trimmed, position)
         .then((nextResults) => {
           setResults(nextResults)
         })
@@ -46,12 +43,12 @@ export function OrgMemberSearchPickerPopover({
         .finally(() => {
           setIsSearching(false)
         })
-    }, 250)
+    }, trimmed.length > 0 ? 250 : 0)
 
     return () => {
       window.clearTimeout(timeout)
     }
-  }, [onSearch, open, query])
+  }, [onSearch, open, position, query])
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -71,7 +68,7 @@ export function OrgMemberSearchPickerPopover({
         <Input
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          placeholder="Search organization members..."
+          placeholder="Filter by name or email"
           className="h-8 text-xs"
           autoFocus
         />
@@ -79,15 +76,13 @@ export function OrgMemberSearchPickerPopover({
           {isSearching ? (
             <div className="flex items-center justify-center gap-2 py-6 text-xs text-muted-foreground">
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              Searching…
+              Loading people…
             </div>
-          ) : query.trim().length < 2 ? (
-            <p className="px-1 py-4 text-center text-[11px] text-muted-foreground">
-              Type at least 2 characters to search your organization.
-            </p>
           ) : results.length === 0 ? (
             <p className="px-1 py-4 text-center text-[11px] text-muted-foreground">
-              No matching organization members found.
+              {query.trim()
+                ? 'No matching organization members found.'
+                : 'No organization members are available for this position.'}
             </p>
           ) : (
             results.map((result) => (

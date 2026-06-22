@@ -67,7 +67,7 @@ type PositionRosterCardProps = {
     customTypeLabel: string | null
   ) => void
   onAssignExistingMember: (memberId: string, position: string) => void
-  onSearchOrgMembers?: (query: string) => Promise<OrgMemberSearchResult[]>
+  onSearchOrgMembers?: (query: string, position?: string) => Promise<OrgMemberSearchResult[]>
   onAssignOrgMember?: (userId: string, position: string) => void
   onScheduleAssignMember: (memberId: string, position: string) => void
   onScheduleUnassignMember: (memberId: string, position: string) => void

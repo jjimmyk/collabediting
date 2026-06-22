@@ -601,6 +601,7 @@ export async function searchOrgMembersForWorkspace(params: {
   accessToken: string
   workspaceId: string
   query: string
+  position?: string
 }): Promise<OrgMemberSearchResult[]> {
   if (!isSupabaseConfigured) {
     return []
@@ -610,6 +611,9 @@ export async function searchOrgMembersForWorkspace(params: {
     workspaceId: params.workspaceId,
     q: params.query.trim(),
   })
+  if (params.position?.trim()) {
+    searchParams.set('position', params.position.trim())
+  }
 
   const response = await fetch(`/api/search-org-members?${searchParams.toString()}`, {
     headers: {

@@ -249,7 +249,7 @@ function PositionAssignmentActionBar({
   memberEmptyMessage: string
   assetEmptyMessage: string
   onSelectMember: (memberId: string) => void
-  onSearchOrgMembers?: (query: string) => Promise<OrgMemberSearchResult[]>
+  onSearchOrgMembers?: (query: string, position?: string) => Promise<OrgMemberSearchResult[]>
   onAssignOrgMember?: (userId: string) => void
   onSelectAsset?: (assetKey: string, pointOfContactMemberId?: string) => void
   position: string
@@ -266,6 +266,7 @@ function PositionAssignmentActionBar({
           <OrgMemberSearchPickerPopover
             label="Existing user"
             disabled={disabled}
+            position={position}
             onSearch={onSearchOrgMembers}
             onSelect={onAssignOrgMember}
           />
@@ -351,7 +352,7 @@ export type PositionRosterUnifiedAssignmentSectionsProps = {
     value: string | null
   }) => void
   onAssignExistingMember: (memberId: string, position: string) => void
-  onSearchOrgMembers?: (query: string) => Promise<OrgMemberSearchResult[]>
+  onSearchOrgMembers?: (query: string, position?: string) => Promise<OrgMemberSearchResult[]>
   onAssignOrgMember?: (userId: string, position: string) => void
   onScheduleAssignMember: (memberId: string, position: string) => void
   onScheduleUnassignMember: (memberId: string, position: string) => void

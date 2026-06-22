@@ -15687,7 +15687,7 @@ function App() {
     }
   }
   const searchOrgMembersForActiveWorkspace = useCallback(
-    async (query: string) => {
+    async (query: string, position?: string) => {
       if (!activeWorkspaceSupabaseId) return []
       const accessToken = await getAccessToken()
       if (!accessToken) return []
@@ -15695,6 +15695,7 @@ function App() {
         accessToken,
         workspaceId: activeWorkspaceSupabaseId,
         query,
+        position,
       })
     },
     [activeWorkspaceSupabaseId, getAccessToken]
