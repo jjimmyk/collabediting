@@ -1,5 +1,6 @@
 import type { WorkspaceRosterMember } from '@/lib/workspace-types'
 
+/** Keep in sync with public.default_workspace_roster_emails() in migration 068. */
 export const DEFAULT_WORKSPACE_ROSTER_EMAILS = [
   'jimmy.king@disastertech.com',
   'jamespking47@gmail.com',
