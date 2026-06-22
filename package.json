@@ -16,6 +16,7 @@
     "verify:add-workspace-member": "npx vite-node scripts/verify-add-workspace-member.ts",
     "verify:multi-position-assignment": "npx vite-node scripts/verify-multi-position-assignment.ts",
     "verify:org-member-search": "npx vite-node scripts/verify-org-member-search.ts",
+    "verify:position-assign-dialog": "npx vite-node scripts/verify-position-assign-dialog.ts",
     "verify:add-asset-effective-when": "npx vite-node scripts/verify-add-asset-effective-when.ts",
     "verify:roster-org-chart-display": "npx vite-node scripts/verify-roster-org-chart-display.ts",
     "verify:asset-workspace-assignment-display": "npx vite-node scripts/verify-asset-workspace-assignment-display.ts",

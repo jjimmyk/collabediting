@@ -45,18 +45,44 @@ export function formatMemberPositionSummary(positions: string[]): string | null 
   return positions.join(', ')
 }
 
-export function isSelectableOrgMember(result: {
-  id: string | null
-  canAdd?: boolean
-}): boolean {
-  return result.canAdd !== false && Boolean(result.id)
+export type OrgMemberPickerMode = 'add_to_roster' | 'assign_to_position'
+
+export function isSelectableOrgMember(
+  result: {
+    id: string | null
+    canAdd?: boolean
+    alreadyOnRoster?: boolean
+  },
+  mode: OrgMemberPickerMode = 'add_to_roster'
+): boolean {
+  if (!result.id) {
+    return false
+  }
+  if (mode === 'assign_to_position') {
+    return result.canAdd !== false
+  }
+  return result.canAdd !== false && result.alreadyOnRoster !== true
 }
 
-export function orgMemberStatusLabel(result: {
-  id: string | null
-  alreadyOnRoster?: boolean
-  canAdd?: boolean
-}): string | null {
+export function orgMemberStatusLabel(
+  result: {
+    id: string | null
+    alreadyOnRoster?: boolean
+    canAdd?: boolean
+  },
+  mode: OrgMemberPickerMode = 'add_to_roster',
+  position?: string
+): string | null {
+  if (mode === 'assign_to_position') {
+    if (result.canAdd === false) {
+      return position ? `Already assigned to ${position}` : 'Already assigned here'
+    }
+    if (!result.id) {
+      return 'No sign-in account yet'
+    }
+    return null
+  }
+
   if (result.alreadyOnRoster) {
     return 'Already on roster'
   }

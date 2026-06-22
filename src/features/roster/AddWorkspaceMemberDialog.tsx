@@ -21,6 +21,11 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { ICS_ORG_CHART_ROOT_POSITION } from '@/features/roster/ics-org-chart-structure'
+import {
+  isPositionAssignSelectionValid,
+  PositionMemberAssignList,
+  type PositionMemberAssignSelection,
+} from '@/features/roster/PositionMemberAssignList'
 import type {
   PositionRosterInviteSubmitResult,
   RosterInviteAssignmentMode,
@@ -38,6 +43,7 @@ import type {
 } from '@/lib/roster-member-assignment'
 import { mapEffectiveWhenToInviteMode } from '@/lib/roster-member-assignment'
 import type { OrgMemberSearchResult } from '@/lib/workspace-service'
+import type { WorkspaceRosterMember } from '@/lib/workspace-types'
 import {
   isSelectableOrgMember,
   orgMemberStatusLabel,
@@ -52,6 +58,7 @@ export type AddWorkspaceMemberSubmitInput = {
   email: string
   password: string
   existingUserId: string | null
+  existingMemberId: string | null
   icsPositions: string[]
   orgChartReportsTo: string
   mode: RosterInviteAssignmentMode
@@ -66,6 +73,8 @@ type AddWorkspaceMemberDialogProps = {
   operationalPeriodsEnabled: boolean
   catalog: WorkspacePositionCatalog
   positionPreset: string | null
+  assignableRosterMembers?: WorkspaceRosterMember[]
+  workspaceRosterMembers?: WorkspaceRosterMember[]
   defaultEffectiveWhen?: RosterMemberEffectiveWhen
   isSubmitting: boolean
   onSearchExistingPeople: (query: string, position?: string) => Promise<OrgMemberSearchResult[]>
@@ -84,11 +93,14 @@ export function AddWorkspaceMemberDialog({
   operationalPeriodsEnabled,
   catalog,
   positionPreset,
+  assignableRosterMembers = [],
+  workspaceRosterMembers = [],
   defaultEffectiveWhen = 'now',
   isSubmitting,
   onSearchExistingPeople,
   onSubmit,
 }: AddWorkspaceMemberDialogProps) {
+  const isAssignToPosition = Boolean(positionPreset)
   const [personSource, setPersonSource] = useState<WorkspaceMemberPersonSource>('invite_new')
   const [assignmentKind, setAssignmentKind] = useState<MemberAssignmentKind>('ics_position')
   const [effectiveWhen, setEffectiveWhen] = useState<RosterMemberEffectiveWhen>('now')
@@ -98,6 +110,8 @@ export function AddWorkspaceMemberDialog({
   const [existingSearchQuery, setExistingSearchQuery] = useState('')
   const [existingSearchResults, setExistingSearchResults] = useState<OrgMemberSearchResult[]>([])
   const [selectedExistingUserId, setSelectedExistingUserId] = useState<string | null>(null)
+  const [positionAssignSelection, setPositionAssignSelection] =
+    useState<PositionMemberAssignSelection | null>(null)
   const [isSearchingExisting, setIsSearchingExisting] = useState(false)
   const [positionsDraft, setPositionsDraft] = useState<string[]>(['Incident Commander'])
   const [orgChartReportsToDraft, setOrgChartReportsToDraft] = useState<string>(
@@ -123,6 +137,7 @@ export function AddWorkspaceMemberDialog({
     setExistingSearchQuery('')
     setExistingSearchResults([])
     setSelectedExistingUserId(null)
+    setPositionAssignSelection(null)
     setPositionsDraft(positionPreset ? [positionPreset] : ['Incident Commander'])
     setOrgChartReportsToDraft(positionPreset ?? ICS_ORG_CHART_ROOT_POSITION)
   }
@@ -139,8 +154,10 @@ export function AddWorkspaceMemberDialog({
   }, [lockEffectiveWhenToNextOp])
 
   useEffect(() => {
-    if (!open || personSource !== 'add_existing' || !isSupabaseEnabled) {
-      setExistingSearchResults([])
+    if (!open || personSource !== 'add_existing' || !isSupabaseEnabled || isAssignToPosition) {
+      if (isAssignToPosition) {
+        setExistingSearchResults([])
+      }
       return
     }
 
@@ -160,7 +177,14 @@ export function AddWorkspaceMemberDialog({
     }, query.length > 0 ? 300 : 0)
 
     return () => window.clearTimeout(timeout)
-  }, [existingSearchQuery, isSupabaseEnabled, onSearchExistingPeople, open, personSource])
+  }, [
+    existingSearchQuery,
+    isAssignToPosition,
+    isSupabaseEnabled,
+    onSearchExistingPeople,
+    open,
+    personSource,
+  ])
 
   const togglePositionDraft = (position: string) => {
     if (effectiveWhen === 'next_op_advance') {
@@ -194,6 +218,12 @@ export function AddWorkspaceMemberDialog({
     (result) => result.id === selectedExistingUserId
   )
 
+  const canSubmitExisting = isAssignToPosition
+    ? isPositionAssignSelectionValid(positionAssignSelection)
+    : isSupabaseEnabled &&
+      selectedExistingUserId !== null &&
+      isSelectableOrgMember(selectedExistingResult ?? { id: null }, 'add_to_roster')
+
   const canSubmit =
     !isSubmitting &&
     !orgChartValidationError &&
@@ -202,25 +232,64 @@ export function AddWorkspaceMemberDialog({
     (personSource === 'invite_new'
       ? isValidRosterEmail(emailDraft) &&
         (passwordDraft.length === 0 || passwordDraft.length >= 8)
-      : isSupabaseEnabled &&
-        selectedExistingUserId !== null &&
-        isSelectableOrgMember(selectedExistingResult ?? { id: null }))
+      : canSubmitExisting)
 
   const handleSubmit = async () => {
-    const selectedExisting = selectedExistingResult
-    if (!selectedExisting?.id) {
+    if (personSource === 'add_existing') {
+      if (isAssignToPosition) {
+        if (!isPositionAssignSelectionValid(positionAssignSelection)) {
+          return
+        }
+        const result = await onSubmit({
+          personSource,
+          assignmentKind,
+          effectiveWhen,
+          email: positionAssignSelection!.email.trim().toLowerCase(),
+          password: passwordDraft,
+          existingUserId: positionAssignSelection!.userId,
+          existingMemberId: positionAssignSelection!.rosterMemberId,
+          icsPositions: positionsDraft,
+          orgChartReportsTo: orgChartReportsToDraft,
+          mode: mapEffectiveWhenToInviteMode(effectiveWhen),
+          positionPreset,
+        })
+        if (result === 'success') {
+          onOpenChange(false)
+        }
+        return
+      }
+
+      const selectedExisting = selectedExistingResult
+      if (!selectedExisting?.id) {
+        return
+      }
+      const result = await onSubmit({
+        personSource,
+        assignmentKind,
+        effectiveWhen,
+        email: selectedExisting.email.trim().toLowerCase(),
+        password: passwordDraft,
+        existingUserId: selectedExistingUserId,
+        existingMemberId: null,
+        icsPositions: positionsDraft,
+        orgChartReportsTo: orgChartReportsToDraft,
+        mode: mapEffectiveWhenToInviteMode(effectiveWhen),
+        positionPreset,
+      })
+      if (result === 'success') {
+        onOpenChange(false)
+      }
       return
     }
+
     const result = await onSubmit({
       personSource,
       assignmentKind,
       effectiveWhen,
-      email:
-        personSource === 'invite_new'
-          ? emailDraft.trim().toLowerCase()
-          : (selectedExisting?.email ?? '').trim().toLowerCase(),
+      email: emailDraft.trim().toLowerCase(),
       password: passwordDraft,
-      existingUserId: selectedExistingUserId,
+      existingUserId: null,
+      existingMemberId: null,
       icsPositions: positionsDraft,
       orgChartReportsTo: orgChartReportsToDraft,
       mode: mapEffectiveWhenToInviteMode(effectiveWhen),
@@ -231,8 +300,21 @@ export function AddWorkspaceMemberDialog({
     }
   }
 
-  const submitLabel =
-    personSource === 'add_existing'
+  const submitLabel = isAssignToPosition
+    ? personSource === 'add_existing'
+      ? isSubmitting
+        ? 'Assigning…'
+        : effectiveWhen === 'next_op_advance'
+          ? `Assign (${positionPreset}, next OP)`
+          : `Assign to ${positionPreset}`
+      : isSubmitting
+        ? passwordDraft.length > 0
+          ? 'Adding…'
+          : 'Sending invite…'
+        : effectiveWhen === 'next_op_advance'
+          ? `Send invite (${positionPreset}, next OP)`
+          : `Invite to ${positionPreset}`
+    : personSource === 'add_existing'
       ? isSubmitting
         ? 'Adding…'
         : effectiveWhen === 'next_op_advance'
@@ -263,12 +345,16 @@ export function AddWorkspaceMemberDialog({
       <DialogContent className="!w-[64rem] !max-w-[64rem] sm:!max-w-[64rem] flex max-h-[min(75vh,32rem)] flex-col overflow-hidden">
         <DialogHeader className="shrink-0">
           <DialogTitle>
-            {positionPreset ? `Add member to ${positionPreset}` : 'Add roster member'}
+            {positionPreset ? `Assign to ${positionPreset}` : 'Add roster member'}
           </DialogTitle>
           <DialogDescription>
-            {isSupabaseEnabled
-              ? `Add someone to ${workspaceLabel}. Invite a new person or add someone who already has a Pratus account.`
-              : `Invite a team member by email and assign their role for ${workspaceLabel}.`}
+            {positionPreset
+              ? isSupabaseEnabled
+                ? `Assign someone to ${positionPreset} on ${workspaceLabel}. Roster members can hold multiple positions.`
+                : `Assign a team member to ${positionPreset} for ${workspaceLabel}.`
+              : isSupabaseEnabled
+                ? `Add someone to ${workspaceLabel}. Invite a new person or add someone who already has a Pratus account.`
+                : `Invite a team member by email and assign their role for ${workspaceLabel}.`}
           </DialogDescription>
         </DialogHeader>
 
@@ -305,35 +391,37 @@ export function AddWorkspaceMemberDialog({
             </RadioGroup>
           </div>
 
-          <div className="grid gap-2">
-            <Label>Assignment</Label>
-            <RadioGroup
-              value={assignmentKind}
-              onValueChange={(value) =>
-                setAssignmentKind(value === 'single_resource' ? 'single_resource' : 'ics_position')
-              }
-              className="grid grid-cols-1 gap-2 sm:grid-cols-2"
-            >
-              <label
-                className={cn(
-                  'flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm',
-                  assignmentKind === 'ics_position' && 'border-primary bg-primary/5'
-                )}
+          {!isAssignToPosition ? (
+            <div className="grid gap-2">
+              <Label>Assignment</Label>
+              <RadioGroup
+                value={assignmentKind}
+                onValueChange={(value) =>
+                  setAssignmentKind(value === 'single_resource' ? 'single_resource' : 'ics_position')
+                }
+                className="grid grid-cols-1 gap-2 sm:grid-cols-2"
               >
-                <RadioGroupItem value="ics_position" />
-                Assign ICS position(s)
-              </label>
-              <label
-                className={cn(
-                  'flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm',
-                  assignmentKind === 'single_resource' && 'border-primary bg-primary/5'
-                )}
-              >
-                <RadioGroupItem value="single_resource" />
-                Add as single resource
-              </label>
-            </RadioGroup>
-          </div>
+                <label
+                  className={cn(
+                    'flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm',
+                    assignmentKind === 'ics_position' && 'border-primary bg-primary/5'
+                  )}
+                >
+                  <RadioGroupItem value="ics_position" />
+                  Assign ICS position(s)
+                </label>
+                <label
+                  className={cn(
+                    'flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm',
+                    assignmentKind === 'single_resource' && 'border-primary bg-primary/5'
+                  )}
+                >
+                  <RadioGroupItem value="single_resource" />
+                  Add as single resource
+                </label>
+              </RadioGroup>
+            </div>
+          ) : null}
 
           {showEffectiveWhen ? (
             <div className="grid gap-2">
@@ -372,7 +460,9 @@ export function AddWorkspaceMemberDialog({
                   <span>
                     <span className="font-medium">Next operational period</span>
                     <span className="mt-0.5 block text-[11px] text-muted-foreground">
-                      Person is added to the roster now; assignment applies when the next OP starts.
+                      {isAssignToPosition
+                        ? 'Assignment is scheduled for when the next operational period starts.'
+                        : 'Person is added to the roster now; assignment applies when the next OP starts.'}
                     </span>
                   </span>
                 </label>
@@ -441,18 +531,33 @@ export function AddWorkspaceMemberDialog({
             </>
           ) : (
             <div className="grid gap-2">
-              <Label htmlFor="existing-person-search">Search existing people</Label>
+              <Label htmlFor="existing-person-search">
+                {isAssignToPosition ? 'Select person to assign' : 'Search existing people'}
+              </Label>
               <Input
                 id="existing-person-search"
                 value={existingSearchQuery}
                 onChange={(event) => {
                   setExistingSearchQuery(event.target.value)
                   setSelectedExistingUserId(null)
+                  setPositionAssignSelection(null)
                 }}
                 placeholder="Filter by name or email"
               />
               <div className="max-h-56 space-y-1 overflow-y-auto rounded-md border p-2">
-                {isSearchingExisting ? (
+                {isAssignToPosition && positionPreset ? (
+                  <PositionMemberAssignList
+                    position={positionPreset}
+                    query={existingSearchQuery}
+                    assignableMembers={assignableRosterMembers}
+                    rosterMembersForDedupe={workspaceRosterMembers}
+                    selection={positionAssignSelection}
+                    onSelectionChange={setPositionAssignSelection}
+                    onSearchOrgMembers={onSearchExistingPeople}
+                    orgPickerMode="assign_to_position"
+                    disabled={isSubmitting}
+                  />
+                ) : isSearchingExisting ? (
                   <p className="px-1 py-2 text-[11px] text-muted-foreground">Loading people…</p>
                 ) : existingSearchResults.length === 0 ? (
                   <p className="px-1 py-2 text-[11px] text-muted-foreground">
@@ -462,8 +567,8 @@ export function AddWorkspaceMemberDialog({
                   </p>
                 ) : (
                   existingSearchResults.map((result) => {
-                    const selectable = isSelectableOrgMember(result)
-                    const statusLabel = orgMemberStatusLabel(result)
+                    const selectable = isSelectableOrgMember(result, 'add_to_roster')
+                    const statusLabel = orgMemberStatusLabel(result, 'add_to_roster')
                     return (
                       <button
                         key={result.id ?? result.email}
@@ -539,7 +644,7 @@ export function AddWorkspaceMemberDialog({
                 </div>
               )}
             </div>
-          ) : (
+          ) : !isAssignToPosition ? (
             <div className="grid gap-2">
               <Label htmlFor="single-resource-reports-to">Reports to on org chart</Label>
               <Select value={orgChartReportsToDraft} onValueChange={setOrgChartReportsToDraft}>
@@ -562,7 +667,7 @@ export function AddWorkspaceMemberDialog({
                 <p className="text-xs text-destructive">{orgChartValidationError}</p>
               ) : null}
             </div>
-          )}
+          ) : null}
           </div>
         </div>
 

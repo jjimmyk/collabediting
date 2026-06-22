@@ -15,7 +15,21 @@ assert(
 )
 assert(
   !isSelectableOrgMember({ id: 'user-1', canAdd: false, alreadyOnRoster: true }),
-  'member already on roster should not be selectable'
+  'member already on roster should not be selectable for add-to-roster'
+)
+assert(
+  isSelectableOrgMember(
+    { id: 'user-1', canAdd: true, alreadyOnRoster: true },
+    'assign_to_position'
+  ),
+  'member already on roster should be selectable for position assign when canAdd'
+)
+assert(
+  !isSelectableOrgMember(
+    { id: 'user-1', canAdd: false, alreadyOnRoster: true },
+    'assign_to_position'
+  ),
+  'member already assigned to position should not be selectable for assign'
 )
 assert(
   !isSelectableOrgMember({ id: null, canAdd: false }),
@@ -24,6 +38,14 @@ assert(
 assert(
   orgMemberStatusLabel({ id: 'user-1', alreadyOnRoster: true }) === 'Already on roster',
   'already-on-roster label'
+)
+assert(
+  orgMemberStatusLabel(
+    { id: 'user-1', canAdd: false },
+    'assign_to_position',
+    'Incident Commander'
+  ) === 'Already assigned to Incident Commander',
+  'already-assigned-to-position label'
 )
 assert(
   orgMemberStatusLabel({ id: null, canAdd: false }) === 'No sign-in account yet',

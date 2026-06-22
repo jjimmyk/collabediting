@@ -103,8 +103,8 @@ export function PositionMemberAssignPicker({
 
   const filteredOrgResults = useMemo(
     () =>
-      filterMembersBySearchQuery(orgResults, query, (result) => result.fullName).filter(
-        isSelectableOrgMember
+      filterMembersBySearchQuery(orgResults, query, (result) => result.fullName).filter((result) =>
+        isSelectableOrgMember(result, 'assign_to_position')
       ),
     [orgResults, query]
   )

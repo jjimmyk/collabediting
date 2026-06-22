@@ -15291,7 +15291,11 @@ function App() {
       return 'error'
     }
     const existingMembers = activeWorkspaceRoster
-    if (existingMembers.some((member) => member.email === email)) {
+    if (
+      personSource === 'invite_new' &&
+      !input.positionPreset &&
+      existingMembers.some((member) => member.email === email)
+    ) {
       toast.error('That email is already on the roster.')
       return 'error'
     }
@@ -15502,6 +15506,47 @@ function App() {
     input: AddWorkspaceMemberSubmitInput,
     confirmPasswordOverwrite = false
   ): Promise<PositionRosterInviteSubmitResult> => {
+    if (
+      input.personSource === 'add_existing' &&
+      input.positionPreset &&
+      input.assignmentKind === 'ics_position'
+    ) {
+      const position = input.positionPreset
+      const effectiveWhen: RosterMemberEffectiveWhen =
+        input.effectiveWhen ??
+        (input.mode === 'schedule_on_op_advance' ? 'next_op_advance' : 'now')
+
+      const memberId =
+        input.existingMemberId ??
+        activeWorkspaceRoster.find((member) => member.userId === input.existingUserId)?.id ??
+        null
+
+      if (memberId) {
+        if (effectiveWhen === 'next_op_advance') {
+          await scheduleAssignMemberToPosition(memberId, position)
+        } else {
+          await assignExistingMemberToPosition(memberId, position)
+        }
+        resetAddRosterMemberDraft()
+        setIsAddRosterMemberOpen(false)
+        return 'success'
+      }
+
+      if (input.existingUserId) {
+        if (effectiveWhen === 'next_op_advance') {
+          toast.error('Schedule assign for organization members requires them to be on the roster first.')
+          return 'error'
+        }
+        await assignOrgMemberToPositionRow(input.existingUserId, position)
+        resetAddRosterMemberDraft()
+        setIsAddRosterMemberOpen(false)
+        return 'success'
+      }
+
+      toast.error('Select a person to assign.')
+      return 'error'
+    }
+
     return inviteRosterMemberCore({
       email: input.email,
       password: input.password,
@@ -39275,9 +39320,15 @@ function App() {
         operationalPeriodsEnabled={operationalPeriodsEnabled}
         catalog={workspacePositionCatalog}
         positionPreset={rosterInvitePositionPreset}
+        assignableRosterMembers={
+          rosterInvitePositionPreset
+            ? assignableByPosition[rosterInvitePositionPreset] ?? []
+            : []
+        }
+        workspaceRosterMembers={activeWorkspaceRoster}
         defaultEffectiveWhen={addMemberDefaultEffectiveWhen}
         isSubmitting={isInvitingRosterMember}
-        onSearchExistingPeople={async (query) => {
+        onSearchExistingPeople={async (query, position) => {
           if (!activeWorkspaceSupabaseId) return []
           const accessToken = await getAccessToken()
           if (!accessToken) return []
@@ -39285,6 +39336,7 @@ function App() {
             accessToken,
             workspaceId: activeWorkspaceSupabaseId,
             query,
+            position,
           })
         }}
         onSubmit={submitAddWorkspaceMemberDialog}
