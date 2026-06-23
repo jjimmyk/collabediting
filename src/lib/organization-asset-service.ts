@@ -1,11 +1,17 @@
 import {
   buildUniqueAssetKey,
+  createInputToCatalogFields,
   type CreateOrganizationAssetInput,
   type OrganizationAssetPayload,
+  type UpdateOrganizationAssetInput,
 } from '@/lib/organization-asset-catalog'
 import { isSupabaseConfigured } from '@/lib/supabase'
 
-export type { CreateOrganizationAssetInput, OrganizationAssetPayload } from '@/lib/organization-asset-catalog'
+export type {
+  CreateOrganizationAssetInput,
+  OrganizationAssetPayload,
+  UpdateOrganizationAssetInput,
+} from '@/lib/organization-asset-catalog'
 
 function createLocalId(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -38,6 +44,11 @@ function writeLocalOrganizationAssets(
 
 function mapApiAsset(raw: Record<string, unknown>): OrganizationAssetPayload {
   const mapLocation = Array.isArray(raw.mapLocation) ? raw.mapLocation : [0, 0]
+  const catalogFields =
+    raw.catalogFields && typeof raw.catalogFields === 'object'
+      ? (raw.catalogFields as OrganizationAssetPayload['catalogFields'])
+      : {}
+
   return {
     id: String(raw.id ?? ''),
     organizationId: String(raw.organizationId ?? ''),
@@ -54,6 +65,24 @@ function mapApiAsset(raw: Record<string, unknown>): OrganizationAssetPayload {
       typeof mapLocation[1] === 'number' ? mapLocation[1] : 0,
     ],
     createdAt: String(raw.createdAt ?? new Date().toISOString()),
+    catalogFields,
+  }
+}
+
+function buildApiPayload(input: CreateOrganizationAssetInput | UpdateOrganizationAssetInput) {
+  const mapLocation = input.mapLocation ?? [0, 0]
+  const catalogFields = createInputToCatalogFields(input as CreateOrganizationAssetInput)
+
+  return {
+    name: input.name?.trim(),
+    type: input.type?.trim(),
+    owner: input.owner?.trim() ?? '',
+    assetStatus: input.assetStatus ?? 'FMC',
+    location: input.location?.trim() ?? '',
+    notes: input.notes?.trim() ?? '',
+    areaKey: input.areaKey ?? 'atlantic',
+    mapLocation,
+    ...catalogFields,
   }
 }
 
@@ -115,6 +144,9 @@ export async function createOrganizationAsset(params: {
     return { ok: false, message: 'Asset type is required.' }
   }
 
+  const catalogFields = createInputToCatalogFields(params.input)
+  const mapLocation = params.input.mapLocation ?? [0, 0]
+
   if (!isSupabaseConfigured) {
     const suffix = createLocalId().slice(0, 8)
     const asset: OrganizationAssetPayload = {
@@ -128,8 +160,9 @@ export async function createOrganizationAsset(params: {
       location: params.input.location?.trim() ?? '',
       notes: params.input.notes?.trim() ?? '',
       areaKey: params.input.areaKey ?? 'atlantic',
-      mapLocation: [0, 0],
+      mapLocation,
       createdAt: new Date().toISOString(),
+      catalogFields,
     }
     const current = readLocalOrganizationAssets(params.organizationId)
     writeLocalOrganizationAssets(params.organizationId, [...current, asset])
@@ -148,13 +181,7 @@ export async function createOrganizationAsset(params: {
     },
     body: JSON.stringify({
       organizationId: params.organizationId,
-      name,
-      type,
-      owner: params.input.owner?.trim() ?? '',
-      assetStatus: params.input.assetStatus ?? 'FMC',
-      location: params.input.location?.trim() ?? '',
-      notes: params.input.notes?.trim() ?? '',
-      areaKey: params.input.areaKey ?? 'atlantic',
+      ...buildApiPayload(params.input),
     }),
   })
 
@@ -165,6 +192,84 @@ export async function createOrganizationAsset(params: {
 
   if (!response.ok || !payload.asset) {
     return { ok: false, message: payload.error ?? 'Could not create asset.' }
+  }
+
+  return { ok: true, asset: mapApiAsset(payload.asset) }
+}
+
+export async function updateOrganizationAsset(params: {
+  accessToken?: string | null
+  organizationId: string | null
+  input: UpdateOrganizationAssetInput
+}): Promise<
+  { ok: true; asset: OrganizationAssetPayload } | { ok: false; message: string }
+> {
+  const assetKey = params.input.assetKey.trim()
+
+  if (!params.organizationId) {
+    return { ok: false, message: 'Select an organization before updating assets.' }
+  }
+  if (!assetKey) {
+    return { ok: false, message: 'Asset key is required.' }
+  }
+
+  if (!isSupabaseConfigured) {
+    const current = readLocalOrganizationAssets(params.organizationId)
+    const index = current.findIndex((asset) => asset.assetKey === assetKey)
+    if (index < 0) {
+      return { ok: false, message: 'Organization asset not found.' }
+    }
+
+    const existing = current[index]
+    const catalogFields = {
+      ...existing.catalogFields,
+      ...createInputToCatalogFields(params.input as CreateOrganizationAssetInput),
+    }
+    const mapLocation = params.input.mapLocation ?? existing.mapLocation
+
+    const updated: OrganizationAssetPayload = {
+      ...existing,
+      name: params.input.name?.trim() ?? existing.name,
+      type: params.input.type?.trim() ?? existing.type,
+      owner: params.input.owner?.trim() ?? existing.owner,
+      assetStatus: params.input.assetStatus ?? existing.assetStatus,
+      location: params.input.location?.trim() ?? existing.location,
+      notes: params.input.notes?.trim() ?? existing.notes,
+      areaKey: params.input.areaKey ?? existing.areaKey,
+      mapLocation,
+      catalogFields,
+    }
+
+    const next = [...current]
+    next[index] = updated
+    writeLocalOrganizationAssets(params.organizationId, next)
+    return { ok: true, asset: updated }
+  }
+
+  if (!params.accessToken) {
+    return { ok: false, message: 'Sign in again to update assets.' }
+  }
+
+  const response = await fetch('/api/update-organization-asset', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${params.accessToken}`,
+    },
+    body: JSON.stringify({
+      organizationId: params.organizationId,
+      assetKey,
+      ...buildApiPayload(params.input),
+    }),
+  })
+
+  const payload = (await response.json().catch(() => ({}))) as {
+    error?: string
+    asset?: Record<string, unknown>
+  }
+
+  if (!response.ok || !payload.asset) {
+    return { ok: false, message: payload.error ?? 'Could not update asset.' }
   }
 
   return { ok: true, asset: mapApiAsset(payload.asset) }

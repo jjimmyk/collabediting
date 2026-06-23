@@ -3,9 +3,12 @@ import { createClient } from '@supabase/supabase-js'
 import { randomBytes } from 'node:crypto'
 import {
   buildUniqueAssetKey,
+  catalogFieldsFromBody,
   mapOrganizationAssetRow,
   normalizeAreaKey,
   normalizeAssetStatus,
+  ORGANIZATION_ASSET_SELECT,
+  parseMapLocation,
   type DbOrganizationAssetRow,
 } from './organization-asset-shared.js'
 import { userBelongsToOrganization, userIsPlatformOrgAdmin } from './org-shared.js'
@@ -17,7 +20,7 @@ const supabaseUrl =
 const supabaseServiceRoleKey =
   process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.SUPABASE_SECRET_KEY
 
-type CreateOrganizationAssetBody = {
+type CreateOrganizationAssetBody = Record<string, unknown> & {
   organizationId?: string
   name?: string
   type?: string
@@ -108,6 +111,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       attempts += 1
     }
 
+    const mapLocation = parseMapLocation(body) ?? [0, 0]
+    const catalogFields = catalogFieldsFromBody(body)
+
     const { data, error } = await admin
       .from('organization_assets')
       .insert({
@@ -115,18 +121,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         asset_key: assetKey,
         name,
         type,
-        owner: body.owner?.trim() ?? '',
-        asset_status: normalizeAssetStatus(body.assetStatus),
-        location: body.location?.trim() ?? '',
-        notes: body.notes?.trim() ?? '',
-        area_key: normalizeAreaKey(body.areaKey),
-        map_lng: 0,
-        map_lat: 0,
+        owner: typeof body.owner === 'string' ? body.owner.trim() : '',
+        asset_status: normalizeAssetStatus(
+          typeof body.assetStatus === 'string' ? body.assetStatus : undefined
+        ),
+        location: typeof body.location === 'string' ? body.location.trim() : '',
+        notes: typeof body.notes === 'string' ? body.notes.trim() : '',
+        area_key: normalizeAreaKey(typeof body.areaKey === 'string' ? body.areaKey : undefined),
+        map_lng: mapLocation[0],
+        map_lat: mapLocation[1],
+        catalog_fields: catalogFields,
         created_by: user.id,
       })
-      .select(
-        'id, organization_id, asset_key, name, type, owner, asset_status, location, notes, area_key, map_lng, map_lat, created_by, created_at'
-      )
+      .select(ORGANIZATION_ASSET_SELECT)
       .single()
 
     if (error || !data) {

@@ -20,6 +20,7 @@ import { AssetListHeaderRow, ASSET_LIST_ROW_GRID_CLASS } from '@/features/resour
 import { AssetStatusIndicator } from '@/features/resources/AssetStatusIndicator'
 import { AlmisDataSourceIcon } from '@/features/resources/AlmisDataSourceIcon'
 import type { AssetWorkspaceOption, ResourceCostUnitType, ResourceListItemData } from '@/features/resources/types'
+import { ASSET_STATUS_OPTIONS, type AssetStatus } from '@/features/resources/types'
 import { AssetWorkspaceAssignmentSelect } from '@/features/resources/AssetWorkspaceAssignmentSelect'
 import { UNASSIGNED_WORKSPACE_FIELD } from '@/features/resources/asset-workspace-assignment-display'
 import { RosterMemberCheckInStatusSelect } from '@/features/roster/RosterMemberCheckInStatusSelect'
@@ -52,6 +53,7 @@ type ResourceListItemCardProps = {
   showEditButton?: boolean
   headerActions?: ReactNode
   readOnlyWorkspaceAssignmentFields?: boolean
+  organizationManaged?: boolean
   canEditAssetCheckInStatus?: boolean
   isUpdatingAssetCheckInStatus?: boolean
   onAssetCheckInStatusChange?: (status: WorkspaceMemberCheckInStatus) => void
@@ -119,6 +121,7 @@ export function ResourceListItemCard({
   showEditButton = true,
   headerActions,
   readOnlyWorkspaceAssignmentFields = true,
+  organizationManaged = false,
   canEditAssetCheckInStatus = false,
   isUpdatingAssetCheckInStatus = false,
   onAssetCheckInStatusChange,
@@ -174,17 +177,26 @@ export function ResourceListItemCard({
       return
     }
 
-    onSave({
-      ...draft,
-      assetStatus: resource.assetStatus,
-      assetStatusUpdatedAt: resource.assetStatusUpdatedAt,
-      currentLocation: resource.currentLocation,
-      opcon: resource.opcon,
-      unitType: resource.unitType,
-      unitName: resource.unitName,
-      quantity: Number(draft.quantity) || 0,
-      costPerUnit: Number(draft.costPerUnit) || 0,
-    })
+    if (organizationManaged) {
+      onSave({
+        ...draft,
+        quantity: Number(draft.quantity) || 0,
+        costPerUnit: Number(draft.costPerUnit) || 0,
+        mapLocation: [...draft.mapLocation] as [number, number],
+      })
+    } else {
+      onSave({
+        ...draft,
+        assetStatus: resource.assetStatus,
+        assetStatusUpdatedAt: resource.assetStatusUpdatedAt,
+        currentLocation: resource.currentLocation,
+        opcon: resource.opcon,
+        unitType: resource.unitType,
+        unitName: resource.unitName,
+        quantity: Number(draft.quantity) || 0,
+        costPerUnit: Number(draft.costPerUnit) || 0,
+      })
+    }
     setIsEditing(false)
     setDraft(null)
   }
@@ -256,15 +268,33 @@ export function ResourceListItemCard({
                   )}
                 </div>
                 <AssetStatusIndicator
-                  status={resource.assetStatus}
+                  status={activeResource.assetStatus}
                   showLabel={false}
                   className="justify-self-center"
                 />
-                <span className="text-xs font-normal tabular-nums text-muted-foreground whitespace-nowrap">
-                  {resource.assetStatusUpdatedAt}
-                </span>
+                {isEditing && organizationManaged ? (
+                  <Select
+                    value={activeResource.assetStatus}
+                    onValueChange={(value) => patchDraft('assetStatus', value as AssetStatus)}
+                  >
+                    <SelectTrigger className="h-7 w-full text-[11px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {ASSET_STATUS_OPTIONS.map((status) => (
+                        <SelectItem key={status} value={status}>
+                          {status}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <span className="text-xs font-normal tabular-nums text-muted-foreground whitespace-nowrap">
+                    {activeResource.assetStatusUpdatedAt}
+                  </span>
+                )}
                 <span className="justify-self-center">
-                  <AlmisDataSourceIcon />
+                  {organizationManaged ? null : <AlmisDataSourceIcon />}
                 </span>
               </div>
             )}
@@ -360,9 +390,13 @@ export function ResourceListItemCard({
             <div className="grid grid-cols-2 gap-2">
               <div className="space-y-1">
                 <ResourceFieldLabel>Current Location:</ResourceFieldLabel>
-                <AlmisLockedValue>
-                  <span>{resource.currentLocation}</span>
-                </AlmisLockedValue>
+                {isEditing && organizationManaged ? (
+                  renderEditableInput('currentLocation', activeResource.currentLocation)
+                ) : (
+                  <AlmisLockedValue>
+                    <span>{resource.currentLocation}</span>
+                  </AlmisLockedValue>
+                )}
               </div>
               <div className="space-y-1">
                 <ResourceFieldLabel>Datetime Ordered:</ResourceFieldLabel>
@@ -374,9 +408,13 @@ export function ResourceListItemCard({
               </div>
               <div className="space-y-1">
                 <ResourceFieldLabel>OPCON:</ResourceFieldLabel>
-                <AlmisLockedValue>
-                  <span>{resource.opcon}</span>
-                </AlmisLockedValue>
+                {isEditing && organizationManaged ? (
+                  renderEditableInput('opcon', activeResource.opcon)
+                ) : (
+                  <AlmisLockedValue>
+                    <span>{resource.opcon}</span>
+                  </AlmisLockedValue>
+                )}
               </div>
               <div className="space-y-1">
                 <ResourceFieldLabel>TACON:</ResourceFieldLabel>
@@ -412,15 +450,23 @@ export function ResourceListItemCard({
               </div>
               <div className="space-y-1">
                 <ResourceFieldLabel>Unit Type:</ResourceFieldLabel>
-                <AlmisLockedValue>
-                  <span>{resource.unitType}</span>
-                </AlmisLockedValue>
+                {isEditing && organizationManaged ? (
+                  renderEditableInput('unitType', activeResource.unitType)
+                ) : (
+                  <AlmisLockedValue>
+                    <span>{resource.unitType}</span>
+                  </AlmisLockedValue>
+                )}
               </div>
               <div className="space-y-1">
                 <ResourceFieldLabel>Unit Name:</ResourceFieldLabel>
-                <AlmisLockedValue>
-                  <span>{resource.unitName}</span>
-                </AlmisLockedValue>
+                {isEditing && organizationManaged ? (
+                  renderEditableInput('unitName', activeResource.unitName)
+                ) : (
+                  <AlmisLockedValue>
+                    <span>{resource.unitName}</span>
+                  </AlmisLockedValue>
+                )}
               </div>
               <div className="space-y-1">
                 <ResourceFieldLabel>Cost Unit Type:</ResourceFieldLabel>

@@ -222,8 +222,12 @@ import {
   fetchOrganizationMembers,
   inviteOrganizationMember,
 } from '@/lib/organization-service'
-import type { CreateOrganizationAssetInput } from '@/lib/organization-asset-catalog'
-import { createOrganizationAsset } from '@/lib/organization-asset-service'
+import {
+  isOrganizationManagedAssetKey,
+  resourceToUpdateOrganizationAssetInput,
+  type CreateOrganizationAssetInput,
+} from '@/lib/organization-asset-catalog'
+import { createOrganizationAsset, updateOrganizationAsset } from '@/lib/organization-asset-service'
 import { CreateOrganizationDialog } from '@/features/organization/CreateOrganizationDialog'
 import { OrgMembersSheet } from '@/features/organization/OrgMembersSheet'
 import { OrganizationProfileMenuSection } from '@/features/organization/OrganizationProfileMenuSection'
@@ -8954,11 +8958,17 @@ function App() {
         try {
           if (workspaceId) {
             await assignAsset(assetKey, workspaceId)
+            toast.success('Asset assigned to workspace.')
           } else {
             await unassignAsset(assetKey)
+            toast.success('Asset unassigned.')
           }
         } catch (assignmentError) {
-          console.error(assignmentError)
+          toast.error(
+            assignmentError instanceof Error
+              ? assignmentError.message
+              : 'Could not update workspace assignment.'
+          )
         }
       })()
     },
@@ -9010,6 +9020,31 @@ function App() {
         return true
       } finally {
         setIsCreatingOrganizationAsset(false)
+      }
+    },
+    [activeOrganizationId, getAccessToken, refreshOrganizationAssets]
+  )
+  const handleUpdateOrganizationAsset = useCallback(
+    async (resource: ResourceListItemData) => {
+      if (!activeOrganizationId || !isOrganizationManagedAssetKey(resource.assetKey)) {
+        return
+      }
+
+      try {
+        const accessToken = await getAccessToken()
+        const result = await updateOrganizationAsset({
+          accessToken,
+          organizationId: activeOrganizationId,
+          input: resourceToUpdateOrganizationAssetInput(resource),
+        })
+        if (!result.ok) {
+          toast.error(result.message)
+          return
+        }
+        await refreshOrganizationAssets()
+        toast.success(`${result.asset.name} updated.`)
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : 'Could not update asset.')
       }
     },
     [activeOrganizationId, getAccessToken, refreshOrganizationAssets]
@@ -27857,6 +27892,7 @@ function App() {
                       {cardFilteredResources.map((resource) => {
                         const key = getAssetMapKey(resource.assetKey)
                         const isOpen = expandedItemId === key
+                        const isOrgAsset = isOrganizationManagedAssetKey(resource.assetKey)
                         return (
                           <ResourceListItemCard
                             key={resource.assetKey}
@@ -27864,7 +27900,10 @@ function App() {
                             glassItemBorderClasses={glassItemBorderClasses}
                             selected={selectedPanelItemId === key}
                             open={isOpen}
-                            editable
+                            editable={isOrgAsset}
+                            organizationManaged={isOrgAsset}
+                            onSave={isOrgAsset ? handleUpdateOrganizationAsset : undefined}
+                            readOnlyWorkspaceAssignmentFields={!isOrgAsset}
                             workspaceOptions={assetWorkspaceOptions}
                             assignmentDisabled={isAssetAssignmentsLoading}
                             canEditAssetCheckInStatus={
