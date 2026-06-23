@@ -224,7 +224,7 @@ import {
 } from '@/lib/organization-service'
 import { CreateOrganizationDialog } from '@/features/organization/CreateOrganizationDialog'
 import { OrgMembersSheet } from '@/features/organization/OrgMembersSheet'
-import { OrganizationSwitcher } from '@/features/organization/OrganizationSwitcher'
+import { OrganizationProfileMenuSection } from '@/features/organization/OrganizationProfileMenuSection'
 import type {
   Ics204FormSectionDrafts,
   Ics204FormState,
@@ -25951,11 +25951,18 @@ function App() {
                     <UserCircle className="h-5 w-5" />
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuContent align="end" className="w-72">
                   <DropdownMenuLabel className="truncate font-normal text-muted-foreground">
                     {profileEmail}
-                    {isOrgAdmin ? ' · Org admin' : ''}
                   </DropdownMenuLabel>
+                  <OrganizationProfileMenuSection
+                    organizations={organizations}
+                    activeOrganizationId={activeOrganizationId}
+                    onSelectOrganization={setActiveOrganizationId}
+                    onCreateOrganization={() => setIsCreateOrganizationOpen(true)}
+                    onManageMembers={() => setIsOrgMembersOpen(true)}
+                    canManageMembers={isOrgAdmin}
+                  />
                   <DropdownMenuSeparator />
                   <DropdownMenuItem
                     onClick={() => {
@@ -40176,19 +40183,11 @@ function App() {
       >
         <SheetContent
           side="left"
-          className="w-[336px] !max-w-[336px] !min-w-[312px] p-0"
+          className="w-[420px] !max-w-[420px] !min-w-[390px] p-0"
         >
           <div className="flex h-full flex-col">
-            <SheetHeader className="gap-2 border-b border-border bg-muted/40 px-4 py-4">
-              <OrganizationSwitcher
-                organizations={organizations}
-                activeOrganizationId={activeOrganizationId}
-                onSelectOrganization={setActiveOrganizationId}
-                onCreateOrganization={() => setIsCreateOrganizationOpen(true)}
-                onManageMembers={() => setIsOrgMembersOpen(true)}
-                canManageMembers={isOrgAdmin}
-              />
-              <span className="text-xs text-muted-foreground">Navigation</span>
+            <SheetHeader className="gap-1 border-b border-border bg-muted/40 px-4 py-4">
+              <SheetTitle className="text-sm font-semibold">Navigation</SheetTitle>
             </SheetHeader>
             <nav className="flex-1 overflow-y-auto px-2 py-3">
               <div className="space-y-2">
