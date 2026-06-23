@@ -25,6 +25,8 @@ import {
   extractIcs215WorkAssignmentsDraft,
   appendIcs215ResourceColumn,
 } from '@/features/ics215/utils'
+import type { WorkAssignmentTargetOption } from '@/lib/work-assignment-target-options'
+import type { WorkspaceRosterMember } from '@/lib/workspace-types'
 import { Item } from '@/components/ui/item'
 import { cn } from '@/lib/utils'
 
@@ -35,6 +37,9 @@ type Ics215FormSectionsProps = {
   isSaving: boolean
   glassItemBorderClasses: string
   assigneeOptions: Ics204AssignedUnitOption[]
+  workAssignmentTargetOptions: WorkAssignmentTargetOption[]
+  roster?: WorkspaceRosterMember[]
+  competencyOptions?: string[]
   workspaceAssets?: ResourceListItemData[]
   autoFillHaveFromAssets?: boolean
   onAutoFillHaveFromAssetsChange?: (enabled: boolean) => void
@@ -66,6 +71,9 @@ export function Ics215FormSections({
   isSaving,
   glassItemBorderClasses,
   assigneeOptions,
+  workAssignmentTargetOptions,
+  roster = [],
+  competencyOptions = [],
   editingSections,
   drafts,
   onStartSectionEdit,
@@ -193,7 +201,9 @@ export function Ics215FormSections({
           <Ics215WorkAssignmentsTable
             resourceColumns={workAssignmentsDraft.resourceColumns}
             workAssignments={workAssignmentsDraft.workAssignments}
-            assigneeOptions={assigneeOptions}
+            workAssignmentTargetOptions={workAssignmentTargetOptions}
+            roster={roster}
+            competencyOptions={competencyOptions}
             workspaceAssets={workspaceAssets}
             autoFillHaveFromAssets={autoFillHaveFromAssets}
             editing={isSectionEditing(editingSections, 'work-assignments')}

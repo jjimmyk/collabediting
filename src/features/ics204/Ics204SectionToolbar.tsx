@@ -3,13 +3,20 @@ import { Button } from '@/components/ui/button'
 import { ICS204_SECTION_LABELS } from '@/features/ics204/constants'
 import type { Ics204AssignedUnitOption } from '@/features/ics204/ics204-assigned-unit-options'
 import { resolveIcs204AssignedUnitDisplayLabel } from '@/features/ics204/ics204-assigned-unit-options'
+import { WorkAssignmentTargetPicker } from '@/features/work-assignments/WorkAssignmentTargetPicker'
 import type { Ics204SectionId } from '@/features/ics204/types'
+import type { WorkAssignmentTargetOption } from '@/lib/work-assignment-target-options'
+import { mergeLegacyWorkAssignmentTargetOptions } from '@/lib/work-assignment-target-options'
+import { normalizeWorkAssignmentTargetValue } from '@/lib/work-assignment-target'
+import type { WorkspaceRosterMember } from '@/lib/workspace-types'
 import { cn } from '@/lib/utils'
 
 type Ics204AssignedUnitFieldProps = {
   value: string
   options: Ics204AssignedUnitOption[]
   editable: boolean
+  roster?: WorkspaceRosterMember[]
+  workAssignmentTargetOptions?: WorkAssignmentTargetOption[]
   onChange: (value: string) => void
 }
 
@@ -17,31 +24,35 @@ export function Ics204AssignedUnitField({
   value,
   options,
   editable,
+  roster = [],
+  workAssignmentTargetOptions,
   onChange,
 }: Ics204AssignedUnitFieldProps) {
-  const displayTitle = resolveIcs204AssignedUnitDisplayLabel(value, options)
+  const displayTitle = resolveIcs204AssignedUnitDisplayLabel(value, options, roster)
+  const targetOptions =
+    workAssignmentTargetOptions ??
+    mergeLegacyWorkAssignmentTargetOptions(
+      options.map((option) => ({
+        ...option,
+        group: 'Assignment',
+        targetType: 'position' as const,
+      })),
+      value,
+      roster
+    )
 
   if (!editable) {
     return <p className="truncate text-sm font-semibold leading-tight">{displayTitle}</p>
   }
 
   return (
-    <select
+    <WorkAssignmentTargetPicker
       value={value}
-      onClick={(event) => event.stopPropagation()}
-      onChange={(event) => {
-        event.stopPropagation()
-        onChange(event.target.value)
-      }}
-      className="h-8 w-full max-w-md rounded-md border bg-transparent px-2 text-sm font-semibold outline-none"
-    >
-      <option value="">Select Assigned Unit</option>
-      {options.map((option) => (
-        <option key={option.value} value={option.value} disabled={option.disabled}>
-          {option.label}
-        </option>
-      ))}
-    </select>
+      options={targetOptions}
+      editable
+      roster={roster}
+      onChange={(next) => onChange(normalizeWorkAssignmentTargetValue(next, roster))}
+    />
   )
 }
 

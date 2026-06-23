@@ -32,6 +32,8 @@ import {
   resolveIcs204ResourceSnapshot,
 } from '@/features/ics204/utils'
 import type { Ics204AssignedUnitOption } from '@/features/ics204/ics204-assigned-unit-options'
+import type { WorkAssignmentTargetOption } from '@/lib/work-assignment-target-options'
+import type { WorkspaceRosterMember } from '@/lib/workspace-types'
 import { Ics215WorkAssignmentsTable } from '@/features/ics215/Ics215WorkAssignmentsTable'
 import { Ics215Ics204WorkAssignmentsSyncTooltip } from '@/features/ics204/Ics215Ics204WorkAssignmentsSyncTooltip'
 import type { Ics215Ics204WorkSyncTooltipState } from '@/features/ics204/sync-ics215-work-assignments'
@@ -62,6 +64,9 @@ type Ics204FormSectionsProps = {
   onOpenIcs204a?: (rowId: number) => void
   onFocusResourceMap?: (resourceId: number, mapLocation: [number, number]) => void
   assigneeOptions?: Ics204AssignedUnitOption[]
+  workAssignmentTargetOptions?: WorkAssignmentTargetOption[]
+  roster?: WorkspaceRosterMember[]
+  competencyOptions?: string[]
   onPatchIcs215Import?: (snapshot: Ics204Ics215ImportSnapshot) => void
   workAssignmentsSyncTooltip?: Ics215Ics204WorkSyncTooltipState
   workspaceAssets?: ResourceListItemData[]
@@ -98,6 +103,9 @@ export function Ics204FormSections({
   onOpenIcs204a,
   onFocusResourceMap,
   assigneeOptions = [],
+  workAssignmentTargetOptions = [],
+  roster = [],
+  competencyOptions = [],
   onPatchIcs215Import,
   workAssignmentsSyncTooltip,
   workspaceAssets = [],
@@ -625,7 +633,9 @@ export function Ics204FormSections({
             <Ics215WorkAssignmentsTable
               resourceColumns={ics215Import.resourceColumns}
               workAssignments={ics215Import.workAssignments}
-              assigneeOptions={assigneeOptions}
+              workAssignmentTargetOptions={workAssignmentTargetOptions}
+              roster={roster}
+              competencyOptions={competencyOptions}
               lockedAssignee={ics215Import.assignee}
               workspaceAssets={workspaceAssets}
               autoFillHaveFromAssets={autoFillHaveFromAssets}

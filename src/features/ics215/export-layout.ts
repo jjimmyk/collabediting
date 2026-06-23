@@ -11,10 +11,13 @@ import {
   computeIcs215ColumnTotals,
   computeIcs215ResourceTotals,
 } from '@/features/ics215/utils'
+import { formatWorkAssignmentTargetLabel } from '@/lib/work-assignment-target'
+import type { WorkspaceRosterMember } from '@/lib/workspace-types'
 
 export type Ics215ExportContext = {
   incidentName?: string
   incidentLocation?: string
+  roster?: WorkspaceRosterMember[]
 }
 
 export type Ics215HeaderCell = {
@@ -102,10 +105,11 @@ function buildHeaderCells(
 }
 
 function buildWorkAssignmentExportRow(
-  row: Ics215WorkAssignmentRow
+  row: Ics215WorkAssignmentRow,
+  roster: WorkspaceRosterMember[] = []
 ): Ics215WorkAssignmentExportRow {
   return {
-    assignee: row.assignee,
+    assignee: formatWorkAssignmentTargetLabel(row.assignee, roster),
     workAssignment: row.workAssignment,
     resourceValues: row.resourceValues,
     overheadPositions: row.overheadPositions,
@@ -145,7 +149,9 @@ export function buildIcs215ExportLayout(
     {
       kind: 'work-assignments-table',
       label: 'Work Assignments',
-      rows: form.workAssignments.map(buildWorkAssignmentExportRow),
+      rows: form.workAssignments.map((row) =>
+        buildWorkAssignmentExportRow(row, context.roster ?? [])
+      ),
       resourceColumns: form.resourceColumns,
       columnTotals,
       grandTotals,

@@ -1,12 +1,13 @@
 import {
   buildIcs204PartialFromIcs215,
   canCreateIcs204FromIcs215,
-  getIcs215WorkRowsForAssignee,
+  getIcs215WorkRowsForTarget,
   isIcs215WorkAssignmentRowPopulated,
   listIcs215AssigneesWithWork,
   mapIcs215RowsToIcs204WorkAssignments,
   syncIcs204WorkAssignmentsFromIcs215Import,
 } from '../src/features/ics204/create-from-ics215'
+import { normalizeWorkAssignmentTargetValue } from '../src/lib/work-assignment-target'
 import { createEmptyIcs204Form } from '../src/features/ics204/utils'
 import type { Ics204AssignedUnitOption } from '../src/features/ics204/ics204-assigned-unit-options'
 import {
@@ -22,9 +23,13 @@ function assert(condition: unknown, message: string): asserts condition {
 }
 
 const assigneeOptions: Ics204AssignedUnitOption[] = [
-  { value: 'Division Alpha', label: 'Division Alpha' },
-  { value: 'Medical Group', label: 'Medical Group' },
-  { value: 'Evacuation Group', label: 'Evacuation Group (Nobody Scheduled for Next OP)', disabled: true },
+  { value: 'position:Division Alpha', label: 'Division Alpha' },
+  { value: 'position:Medical Group', label: 'Medical Group' },
+  {
+    value: 'position:Evacuation Group',
+    label: 'Evacuation Group (Nobody Scheduled for Next OP)',
+    disabled: true,
+  },
 ]
 
 const ics215Form = createEmptyIcs215Form('fixture-215')
@@ -77,7 +82,7 @@ ics215Form.workAssignments = [
 
 assert(isIcs215WorkAssignmentRowPopulated(ics215Form.workAssignments[0]), 'row should be populated')
 assert(
-  getIcs215WorkRowsForAssignee(ics215Form, 'Division Alpha').length === 2,
+  getIcs215WorkRowsForTarget(ics215Form, 'Division Alpha').length === 2,
   'Division Alpha should have two rows'
 )
 
@@ -86,7 +91,10 @@ assert(options.length === 2, 'should list two eligible assignees')
 assert(options.every((option) => !option.disabled), 'none should be disabled yet')
 
 const partial = buildIcs204PartialFromIcs215(ics215Form, 'Division Alpha')
-assert(partial.assignedUnit === 'Division Alpha', 'assigned unit should match')
+assert(
+  partial.assignedUnit === normalizeWorkAssignmentTargetValue('Division Alpha'),
+  'assigned unit should match encoded target'
+)
 assert(partial.ics215Import?.workAssignments.length === 2, 'import snapshot should have two rows')
 assert(partial.workAssignments?.length === 2, '204 work assignments should have two rows')
 assert(
@@ -105,9 +113,14 @@ assert(
   'sync should preserve assignment count'
 )
 
-const existing = [{ ...createEmptyIcs204Form('existing'), assignedUnit: 'Division Alpha' }]
+const existing = [
+  {
+    ...createEmptyIcs204Form('existing'),
+    assignedUnit: normalizeWorkAssignmentTargetValue('Division Alpha'),
+  },
+]
 const blocked = listIcs215AssigneesWithWork(ics215Form, assigneeOptions, existing)
-const divisionAlpha = blocked.find((option) => option.assignee === 'Division Alpha')
+const divisionAlpha = blocked.find((option) => option.label === 'Division Alpha')
 assert(divisionAlpha?.disabled === true, 'existing 204 should block duplicate assignee')
 assert(
   canCreateIcs204FromIcs215(ics215Form, assigneeOptions, existing),

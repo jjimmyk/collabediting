@@ -13,6 +13,13 @@ import {
   cloneIcs215ResourceColumns,
   cloneIcs215WorkAssignmentRows,
 } from '@/features/ics215/utils'
+import {
+  formatWorkAssignmentTargetLabel,
+  normalizeWorkAssignmentTargetKey,
+  normalizeWorkAssignmentTargetValue,
+  parseWorkAssignmentTarget,
+} from '@/lib/work-assignment-target'
+import type { WorkspaceRosterMember } from '@/lib/workspace-types'
 
 export type Ics215AssigneeWithWorkOption = {
   assignee: string
@@ -24,8 +31,9 @@ export type Ics215AssigneeWithWorkOption = {
   existingIcs204FormId?: string
 }
 
+/** @deprecated Use normalizeWorkAssignmentTargetKey */
 export function normalizeIcs215Ics204Assignee(value: string): string {
-  return value.trim().toLowerCase()
+  return normalizeWorkAssignmentTargetKey(value)
 }
 
 export function isIcs215WorkAssignmentRowPopulated(row: Ics215WorkAssignmentRow): boolean {
@@ -43,16 +51,26 @@ export function isIcs215WorkAssignmentRowPopulated(row: Ics215WorkAssignmentRow)
   )
 }
 
+export function getIcs215WorkRowsForTarget(
+  form: Ics215FormState,
+  targetValue: string,
+  roster: WorkspaceRosterMember[] = []
+): Ics215WorkAssignmentRow[] {
+  const key = normalizeWorkAssignmentTargetKey(targetValue, roster)
+  if (!key) return []
+  return form.workAssignments.filter(
+    (row) =>
+      normalizeWorkAssignmentTargetKey(row.assignee, roster) === key &&
+      isIcs215WorkAssignmentRowPopulated(row)
+  )
+}
+
+/** @deprecated Use getIcs215WorkRowsForTarget */
 export function getIcs215WorkRowsForAssignee(
   form: Ics215FormState,
   assignee: string
 ): Ics215WorkAssignmentRow[] {
-  const key = normalizeIcs215Ics204Assignee(assignee)
-  return form.workAssignments.filter(
-    (row) =>
-      normalizeIcs215Ics204Assignee(row.assignee) === key &&
-      isIcs215WorkAssignmentRowPopulated(row)
-  )
+  return getIcs215WorkRowsForTarget(form, assignee)
 }
 
 export function mapIcs215RowToIcs204WorkAssignment(
@@ -107,12 +125,14 @@ export function mapIcs215RowsToIcs204WorkAssignments(
 
 export function buildIcs204Ics215ImportSnapshot(
   ics215Form: Ics215FormState,
-  assignee: string
+  targetValue: string,
+  roster: WorkspaceRosterMember[] = []
 ): Ics204Ics215ImportSnapshot {
+  const normalizedTarget = normalizeWorkAssignmentTargetValue(targetValue, roster)
   const resourceColumns = cloneIcs215ResourceColumns(ics215Form.resourceColumns)
-  const rows = getIcs215WorkRowsForAssignee(ics215Form, assignee).map((row) => ({
+  const rows = getIcs215WorkRowsForTarget(ics215Form, normalizedTarget, roster).map((row) => ({
     ...row,
-    assignee,
+    assignee: normalizedTarget,
     resourceValues: Object.fromEntries(
       Object.entries(row.resourceValues ?? {}).map(([columnId, value]) => [
         columnId,
@@ -122,7 +142,7 @@ export function buildIcs204Ics215ImportSnapshot(
   }))
 
   return {
-    assignee,
+    assignee: normalizedTarget,
     resourceColumns,
     workAssignments: cloneIcs215WorkAssignmentRows(rows, resourceColumns),
   }
@@ -143,11 +163,13 @@ export function syncIcs204WorkAssignmentsFromIcs215Import(
 
 export function buildIcs204PartialFromIcs215(
   ics215Form: Ics215FormState,
-  assignee: string
+  targetValue: string,
+  roster: WorkspaceRosterMember[] = []
 ): Partial<Ics204FormState> {
-  const ics215Import = buildIcs204Ics215ImportSnapshot(ics215Form, assignee)
+  const normalizedTarget = normalizeWorkAssignmentTargetValue(targetValue, roster)
+  const ics215Import = buildIcs204Ics215ImportSnapshot(ics215Form, normalizedTarget, roster)
   return {
-    assignedUnit: assignee,
+    assignedUnit: normalizedTarget,
     ics215Import,
     workAssignments: mapIcs215RowsToIcs204WorkAssignments(
       ics215Import.workAssignments,
@@ -159,30 +181,35 @@ export function buildIcs204PartialFromIcs215(
 export function listIcs215AssigneesWithWork(
   ics215Form: Ics215FormState,
   assigneeOptions: Ics204AssignedUnitOption[],
-  existingIcs204Forms: Ics204FormState[]
+  existingIcs204Forms: Ics204FormState[],
+  roster: WorkspaceRosterMember[] = []
 ): Ics215AssigneeWithWorkOption[] {
   const eligibleOptions = assigneeOptions.filter((option) => !option.disabled)
-  const rowsByAssigneeKey = new Map<string, Ics215WorkAssignmentRow[]>()
+  const rowsByTargetKey = new Map<string, Ics215WorkAssignmentRow[]>()
 
   for (const row of ics215Form.workAssignments) {
-    if (!row.assignee.trim() || !isIcs215WorkAssignmentRowPopulated(row)) continue
+    const normalizedRowTarget = normalizeWorkAssignmentTargetValue(row.assignee, roster)
+    if (!normalizedRowTarget || !isIcs215WorkAssignmentRowPopulated(row)) continue
     const matchedOption = eligibleOptions.find(
       (option) =>
-        normalizeIcs215Ics204Assignee(option.value) === normalizeIcs215Ics204Assignee(row.assignee)
+        normalizeWorkAssignmentTargetKey(option.value, roster) ===
+        normalizeWorkAssignmentTargetKey(normalizedRowTarget, roster)
     )
     if (!matchedOption) continue
-    const key = normalizeIcs215Ics204Assignee(matchedOption.value)
-    rowsByAssigneeKey.set(key, [...(rowsByAssigneeKey.get(key) ?? []), row])
+    const key = normalizeWorkAssignmentTargetKey(matchedOption.value, roster)
+    rowsByTargetKey.set(key, [...(rowsByTargetKey.get(key) ?? []), row])
   }
 
   return eligibleOptions
-    .filter((option) => rowsByAssigneeKey.has(normalizeIcs215Ics204Assignee(option.value)))
+    .filter((option) =>
+      rowsByTargetKey.has(normalizeWorkAssignmentTargetKey(option.value, roster))
+    )
     .map((option) => {
-      const rows = rowsByAssigneeKey.get(normalizeIcs215Ics204Assignee(option.value)) ?? []
-      const existingForm = existingIcs204Forms.find(
-        (form) =>
-          normalizeIcs215Ics204Assignee(form.assignedUnit) ===
-          normalizeIcs215Ics204Assignee(option.value)
+      const rows =
+        rowsByTargetKey.get(normalizeWorkAssignmentTargetKey(option.value, roster)) ?? []
+      const existingForm = existingIcs204Forms.find((form) =>
+        normalizeWorkAssignmentTargetKey(form.assignedUnit, roster) ===
+        normalizeWorkAssignmentTargetKey(option.value, roster)
       )
       const preview =
         rows
@@ -205,10 +232,39 @@ export function listIcs215AssigneesWithWork(
 export function canCreateIcs204FromIcs215(
   ics215Form: Ics215FormState | null,
   assigneeOptions: Ics204AssignedUnitOption[],
-  existingIcs204Forms: Ics204FormState[] = []
+  existingIcs204Forms: Ics204FormState[] = [],
+  roster: WorkspaceRosterMember[] = []
 ): boolean {
   if (!ics215Form) return false
-  return listIcs215AssigneesWithWork(ics215Form, assigneeOptions, existingIcs204Forms).some(
-    (option) => !option.disabled
+  return listIcs215AssigneesWithWork(
+    ics215Form,
+    assigneeOptions,
+    existingIcs204Forms,
+    roster
+  ).some((option) => !option.disabled)
+}
+
+export function resolveIcs215TargetLabel(
+  targetValue: string,
+  roster: WorkspaceRosterMember[] = []
+): string {
+  return formatWorkAssignmentTargetLabel(targetValue, roster)
+}
+
+export function isSameWorkAssignmentTarget(
+  left: string,
+  right: string,
+  roster: WorkspaceRosterMember[] = []
+): boolean {
+  return (
+    normalizeWorkAssignmentTargetKey(left, roster) ===
+    normalizeWorkAssignmentTargetKey(right, roster)
   )
+}
+
+export function summarizeWorkAssignmentTarget(
+  targetValue: string,
+  roster: WorkspaceRosterMember[] = []
+): string {
+  return parseWorkAssignmentTarget(targetValue, roster).label
 }

@@ -539,8 +539,10 @@ import {
 } from '@/features/ics204/utils'
 import {
   buildIcs204AssignedUnitOptions,
+  buildIcs204AssignedUnitTargetOptions,
   isIcs204AssignedUnitSelectable,
   mergeLegacyIcs204AssignedUnitOption,
+  normalizeIcs204AssignedUnitValue,
   resolveIcs204AssignedUnitRecipients,
 } from '@/features/ics204/ics204-assigned-unit-options'
 import {
@@ -14371,8 +14373,34 @@ function App() {
     positionRosterEntries.length,
   ])
   const ics204AssignedUnitOptions = useMemo(
-    () => buildIcs204AssignedUnitOptions(positionRosterEntries),
-    [positionRosterEntries]
+    () =>
+      buildIcs204AssignedUnitOptions(
+        positionRosterEntries,
+        activeWorkspaceRoster,
+        rosterCompetencyControls.organizationCompetencyOptions,
+        memberSchedulesByPosition
+      ),
+    [
+      activeWorkspaceRoster,
+      memberSchedulesByPosition,
+      positionRosterEntries,
+      rosterCompetencyControls.organizationCompetencyOptions,
+    ]
+  )
+  const workAssignmentTargetOptions = useMemo(
+    () =>
+      buildIcs204AssignedUnitTargetOptions(
+        positionRosterEntries,
+        activeWorkspaceRoster,
+        rosterCompetencyControls.organizationCompetencyOptions,
+        memberSchedulesByPosition
+      ),
+    [
+      activeWorkspaceRoster,
+      memberSchedulesByPosition,
+      positionRosterEntries,
+      rosterCompetencyControls.organizationCompetencyOptions,
+    ]
   )
   const ics204AssignedUnitOptionsKey = useMemo(
     () => serializeIcs204AssigneeOptionsKey(ics204AssignedUnitOptions),
@@ -14439,19 +14467,21 @@ function App() {
         ? listIcs215AssigneesWithWork(
             ics215FormFor204Import,
             ics204AssignedUnitOptions,
-            displayIcs204Forms
+            displayIcs204Forms,
+            activeWorkspaceRoster
           )
         : [],
-    [displayIcs204Forms, ics204AssignedUnitOptions, ics215FormFor204Import]
+    [activeWorkspaceRoster, displayIcs204Forms, ics204AssignedUnitOptions, ics215FormFor204Import]
   )
   const canCreateIcs204From215 = useMemo(
     () =>
       canCreateIcs204FromIcs215(
         ics215FormFor204Import,
         ics204AssignedUnitOptions,
-        displayIcs204Forms
+        displayIcs204Forms,
+        activeWorkspaceRoster
       ),
-    [displayIcs204Forms, ics204AssignedUnitOptions, ics215FormFor204Import]
+    [activeWorkspaceRoster, displayIcs204Forms, ics204AssignedUnitOptions, ics215FormFor204Import]
   )
   const ics215WorkAssignmentsSyncTooltip = useMemo(
     () =>
@@ -21932,7 +21962,11 @@ function App() {
       toast.error('No ICS-215 available to import from.')
       return
     }
-    const partial = buildIcs204PartialFromIcs215(ics215FormFor204Import, assignee)
+    const partial = buildIcs204PartialFromIcs215(
+      ics215FormFor204Import,
+      assignee,
+      activeWorkspaceRoster
+    )
     const result = await createIcs204Form(partial)
     if (!result) {
       toast.error('Failed to create ICS-204 from ICS-215.')
@@ -21988,10 +22022,11 @@ function App() {
       return false
     }
 
-    const title = buildIcs204AssignmentNotificationTitle(form)
+    const title = buildIcs204AssignmentNotificationTitle(form, activeWorkspaceRoster)
     const summary = buildIcs204AssignmentNotificationSummary(form, {
       workspaceLabel: activeWorkspaceRosterLabel,
       assignedByEmail: profileEmail,
+      roster: activeWorkspaceRoster,
     })
     const payloads = recipients.map((email) => ({
       recipientEmail: email,
@@ -22195,7 +22230,9 @@ function App() {
     if (!payload) return
     setIcs204PreviewFormId(formId)
     setIcs204PreviewPages(paginateIcs204Export(payload.layout))
-    setIcs204PreviewTitle(`ICS-204 Preview — ${resolveIcs204ListTitle(payload.exportForm)}`)
+    setIcs204PreviewTitle(
+      `ICS-204 Preview — ${resolveIcs204ListTitle(payload.exportForm, activeWorkspaceRoster)}`
+    )
     setIsIcs204PreviewOpen(true)
   }
   const exportIcs204Word = (formId: string) => {
@@ -24843,8 +24880,11 @@ function App() {
       ? null
       : hubAssets.find((resource) => resource.id === selectedPratusResourceId) ?? null
   const ics204LabelsByDocumentId = useMemo(
-    () => Object.fromEntries(ics204Forms.map((form) => [form.id, resolveIcs204ListTitle(form)])),
-    [ics204Forms]
+    () =>
+      Object.fromEntries(
+        ics204Forms.map((form) => [form.id, resolveIcs204ListTitle(form, activeWorkspaceRoster)])
+      ),
+    [ics204Forms, activeWorkspaceRoster]
   )
   const ics204PickerForm =
     ics204ResourcePickerFormId === null
@@ -35064,6 +35104,9 @@ function App() {
                       activeIncidentWorkspace?.region ?? activeExerciseWorkspace?.region ?? ''
                     }
                     assigneeOptions={ics204AssignedUnitOptions}
+                    workAssignmentTargetOptions={workAssignmentTargetOptions}
+                    roster={activeWorkspaceRoster}
+                    competencyOptions={rosterCompetencyControls.organizationCompetencyOptions}
                     editingSections={ics215EditingSections}
                     sectionDrafts={ics215SectionDrafts}
                     onStartSectionEdit={startIcs215SectionEdit}
@@ -35561,10 +35604,11 @@ function App() {
                           const isFormFullySigned =
                             !!latestFormSignature && hasPlanningReview && hasOperationsReview
                           const isFormAssigned = !!ics204AssignedByFormId[form.id]
-                          const ics204ListTitle = resolveIcs204ListTitle(form)
+                          const ics204ListTitle = resolveIcs204ListTitle(form, activeWorkspaceRoster)
                           const assignedUnitOptions = mergeLegacyIcs204AssignedUnitOption(
                             ics204AssignedUnitOptions,
-                            form.assignedUnit
+                            form.assignedUnit,
+                            activeWorkspaceRoster
                           )
                           const assignedUnitSelectable = isIcs204AssignedUnitSelectable(
                             form.assignedUnit,
@@ -35615,10 +35659,15 @@ function App() {
                                         value={form.assignedUnit}
                                         options={assignedUnitOptions}
                                         editable={assignedUnitEditable}
+                                        roster={activeWorkspaceRoster}
+                                        workAssignmentTargetOptions={workAssignmentTargetOptions}
                                         onChange={(value) =>
                                           handleIcs204AssignedUnitChange(
                                             form.id,
-                                            value,
+                                            normalizeIcs204AssignedUnitValue(
+                                              value,
+                                              activeWorkspaceRoster
+                                            ),
                                             latestFormVersion ?? null
                                           )
                                         }
@@ -35989,6 +36038,11 @@ function App() {
                                       expandedWorkAssignmentKey={expandedIcs204WorkAssignmentKey}
                                       onExpandedWorkAssignmentKeyChange={setExpandedIcs204WorkAssignmentKey}
                                       assigneeOptions={assignedUnitOptions}
+                                      workAssignmentTargetOptions={workAssignmentTargetOptions}
+                                      roster={activeWorkspaceRoster}
+                                      competencyOptions={
+                                        rosterCompetencyControls.organizationCompetencyOptions
+                                      }
                                       onPatchIcs215Import={(snapshot) =>
                                         patchIcs204Ics215ImportDraft(form.id, snapshot)
                                       }

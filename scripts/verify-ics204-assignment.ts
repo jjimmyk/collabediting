@@ -1,5 +1,6 @@
 import {
   buildIcs204AssignedUnitOptions,
+  buildIcs204AssignedUnitTargetOptions,
   classifyIcs204AssignedUnitOption,
   isIcs204AssignedUnitSelectable,
   resolveIcs204AssignedUnitRecipients,
@@ -93,13 +94,23 @@ assert(hiddenOption === null, 'Retiring positions should be hidden')
 const scheduledOption = classifyIcs204AssignedUnitOption(scheduledOnlyEntry)
 assert(scheduledOption?.disabled !== true, 'Scheduled assignee-only positions should be selectable')
 
+const targetOptions = buildIcs204AssignedUnitTargetOptions([
+  selectableEntry,
+  disabledEntry,
+  retiringPosition,
+  scheduledOnlyEntry,
+])
+assert(
+  targetOptions.filter((option) => option.group === 'Positions').length === 3,
+  'Only non-retiring positions should appear as position options'
+)
+
 const options = buildIcs204AssignedUnitOptions([
   selectableEntry,
   disabledEntry,
   retiringPosition,
   scheduledOnlyEntry,
 ])
-assert(options.length === 3, 'Only non-retiring positions should appear in options')
 
 assert(
   isIcs204AssignedUnitSelectable('Operations Section Chief', options),

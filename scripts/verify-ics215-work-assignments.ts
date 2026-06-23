@@ -8,6 +8,7 @@ import {
   createDefaultIcs215WorkAssignments,
   normalizeIcs215FormState,
 } from '../src/features/ics215/utils'
+import { normalizeWorkAssignmentTargetValue } from '../src/lib/work-assignment-target'
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) {
@@ -65,8 +66,8 @@ assert(
   'Legacy custom resource category should become a column'
 )
 assert(
-  legacyForm.workAssignments[0]?.assignee === 'Division A',
-  'Legacy division/group should migrate to assignee'
+  legacyForm.workAssignments[0]?.assignee === normalizeWorkAssignmentTargetValue('Division A'),
+  'Legacy division/group should migrate to encoded position assignee'
 )
 assert(
   legacyForm.workAssignments[0]?.workAssignment === 'Legacy instructions',

@@ -1,9 +1,12 @@
 import type { Ics204FormState } from '@/features/ics204/types'
 import { resolveIcs204ListTitle } from '@/features/ics204/utils'
+import { formatWorkAssignmentTargetLabel } from '@/lib/work-assignment-target'
+import type { WorkspaceRosterMember } from '@/lib/workspace-types'
 
 export type Ics204AssignmentNotificationContext = {
   workspaceLabel: string
   assignedByEmail: string | null
+  roster?: WorkspaceRosterMember[]
 }
 
 function truncate(value: string, maxLength: number): string {
@@ -23,19 +26,23 @@ function resolveIcs204Leader(form: Ics204FormState): string {
   )
 }
 
-export function buildIcs204AssignmentNotificationTitle(form: Ics204FormState): string {
+export function buildIcs204AssignmentNotificationTitle(
+  form: Ics204FormState,
+  roster: WorkspaceRosterMember[] = []
+): string {
   const assignedUnit = form.assignedUnit.trim()
   if (assignedUnit.length > 0) {
-    return `ICS-204 assigned: ${assignedUnit}`
+    return `ICS-204 assigned: ${formatWorkAssignmentTargetLabel(assignedUnit, roster)}`
   }
-  return `ICS-204 assigned: ${resolveIcs204ListTitle(form)}`
+  return `ICS-204 assigned: ${resolveIcs204ListTitle(form, roster)}`
 }
 
 export function buildIcs204AssignmentNotificationSummary(
   form: Ics204FormState,
   context: Ics204AssignmentNotificationContext
 ): string {
-  const assignedUnit = form.assignedUnit.trim() || 'Unassigned Unit'
+  const assignedUnit =
+    formatWorkAssignmentTargetLabel(form.assignedUnit, context.roster ?? []) || 'Unassigned Unit'
   const leader = resolveIcs204Leader(form)
   const assignmentLines = form.workAssignments
     .map((row) => row.assignment.trim())

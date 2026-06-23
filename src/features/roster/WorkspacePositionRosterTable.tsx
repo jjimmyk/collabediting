@@ -1,14 +1,16 @@
-import { useMemo, useState } from 'react'
-import { ChevronDown, ChevronRight, Plus, Trash2, UserPlus, X } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { ChevronDown, ChevronRight, Trash2, UserPlus, X } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from '@/components/ui/popover'
 import {
   Table,
   TableBody,
@@ -21,6 +23,7 @@ import type { OrgMemberSearchResult } from '@/lib/workspace-service'
 import type { WorkspaceMemberCheckInStatus, WorkspaceRosterMember } from '@/lib/workspace-types'
 import type { RosterInviteAssignmentMode } from '@/features/roster/position-roster-messages'
 import type { PositionRosterEntry } from '@/features/roster/workspace-position-roster'
+import { PositionLifecycleBadges } from '@/features/roster/PositionLifecycleBadges'
 import {
   filterPositionRosterMembers,
   formatPositionAssignmentCount,
@@ -263,6 +266,21 @@ export function WorkspacePositionRosterTable({
     (canManageRoster ? 1 : 0)
   const [expandedPositions, setExpandedPositions] = useState<Set<string>>(() => new Set())
   const [assignedSearchQuery, setAssignedSearchQuery] = useState('')
+  const [managedPosition, setManagedPosition] = useState<string | null>(null)
+
+  const managedEntry = useMemo(
+    () =>
+      managedPosition
+        ? entries.find((entry) => entry.position === managedPosition) ?? null
+        : null,
+    [entries, managedPosition]
+  )
+
+  useEffect(() => {
+    if (managedPosition && !managedEntry) {
+      setManagedPosition(null)
+    }
+  }, [managedEntry, managedPosition])
 
   const filteredEntries = useMemo(() => {
     const normalizedQuery = assignedSearchQuery.trim().toLowerCase()
@@ -365,14 +383,6 @@ export function WorkspacePositionRosterTable({
             </TableRow>
           ) : (
             filteredEntries.map((entry) => {
-              const assignable = assignableByPosition[entry.position] ?? []
-              const scheduleAssignable = scheduleAssignableByPosition[entry.position] ?? []
-              const scheduleUnassignable = scheduleUnassignableByPosition[entry.position] ?? []
-              const assignableAssets = assignableAssetsByPosition[entry.position] ?? []
-              const scheduleAssignableAssets =
-                scheduleAssignableAssetsByPosition[entry.position] ?? []
-              const scheduleUnassignableAssets =
-                scheduleUnassignableAssetsByPosition[entry.position] ?? []
               const isExpanded = expandedPositions.has(entry.position)
               const assetCount =
                 entry.assets.length +
@@ -509,94 +519,17 @@ export function WorkspacePositionRosterTable({
                   {canManageRoster ? (
                     <TableCell className="align-top">
                       <div className="flex flex-wrap gap-1.5">
-                        {entry.memberSchedulePolicy.allowActiveAssignment ? (
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="default"
-                            className="h-7 gap-1 px-2 text-[11px]"
-                            disabled={isAssigningPosition === entry.position}
-                            onClick={() => onInviteToPosition(entry.position, 'assign_now')}
-                          >
-                            <Plus className="h-3.5 w-3.5" />
-                            Add user
-                          </Button>
-                        ) : null}
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="outline"
-                              className="h-7 gap-1 px-2 text-[11px]"
-                              disabled={isAssigningPosition === entry.position}
-                            >
-                              <UserPlus className="h-3.5 w-3.5" />
-                              Manage
-                            </Button>
-                          </PopoverTrigger>
-                          <PopoverContent
-                            align="start"
-                            className="w-[min(32rem,calc(100vw-2rem))] max-h-[70vh] overflow-y-auto p-3"
-                          >
-                            <PositionRosterDetailPanel
-                              entry={entry}
-                              assignable={assignable}
-                              scheduleAssignable={scheduleAssignable}
-                              scheduleUnassignable={scheduleUnassignable}
-                              canManageRoster={canManageRoster}
-                              isPermissionBusy={isUpdatingPermission === entry.position}
-                              isAssignBusy={isAssigningPosition === entry.position}
-                              showOpAdvanceLabels={showOpAdvanceLabels}
-                              positionMeta={positionMetaByName[entry.position]}
-                              isUpdatingOpAdvanceLabel={isUpdatingOpAdvanceLabel === entry.position}
-                              onOpAdvanceLabelChange={
-                                onOpAdvanceLabelChange
-                                  ? (label) => onOpAdvanceLabelChange(entry.position, label)
-                                  : undefined
-                              }
-                              onToggleEditIcs201={onToggleEditIcs201}
-                              showAllowWorkAssignment={showAllowWorkAssignment}
-                              onToggleAllowWorkAssignment={onToggleAllowWorkAssignment}
-                              onPositionTypeChange={onPositionTypeChange}
-                              onAssignExistingMember={onAssignExistingMember}
-                              onSearchOrgMembers={onSearchOrgMembers}
-                              onAssignOrgMember={onAssignOrgMember}
-                              workspaceRosterMembers={workspaceRosterMembers}
-                              onScheduleAssignMember={onScheduleAssignMember}
-                              onScheduleUnassignMember={onScheduleUnassignMember}
-                              onRemoveScheduledAssign={onRemoveScheduledAssign}
-                              onRemoveScheduledUnassign={onRemoveScheduledUnassign}
-                              onInviteToPosition={onInviteToPosition}
-                              onUnassignMember={onUnassignMember}
-                              showCheckInStatus={showCheckInStatus}
-                              canEditCheckInStatus={canEditCheckInStatus}
-                              updatingCheckInMemberId={updatingCheckInMemberId}
-                              onCheckInStatusChange={onCheckInStatusChange}
-                              competencyOptions={competencyOptions}
-                              canEditCompetencyFunction={canEditCompetencyFunction}
-                              updatingCompetencyKey={updatingCompetencyKey}
-                              memberScheduleCompetencyByKey={memberScheduleCompetencyByKey}
-                              onMemberCompetencyFunctionChange={onMemberCompetencyFunctionChange}
-                              onAssetCompetencyFunctionChange={onAssetCompetencyFunctionChange}
-                              showPositionAssets={showPositionAssets}
-                              assignableAssets={assignableAssets}
-                              scheduleAssignableAssets={scheduleAssignableAssets}
-                              scheduleUnassignableAssets={scheduleUnassignableAssets}
-                              pocMembers={pocMembers}
-                              assetsByKey={assetsByKey}
-                              glassItemBorderClasses={glassItemBorderClasses}
-                              onFocusAsset={onFocusAsset}
-                              onAssignAsset={onAssignAsset}
-                              onUnassignAsset={onUnassignAsset}
-                              onScheduleAssignAsset={onScheduleAssignAsset}
-                              onScheduleUnassignAsset={onScheduleUnassignAsset}
-                              onRemoveScheduledAssignAsset={onRemoveScheduledAssignAsset}
-                              onRemoveScheduledUnassignAsset={onRemoveScheduledUnassignAsset}
-                              onUpdateAssetPointOfContact={onUpdateAssetPointOfContact}
-                            />
-                          </PopoverContent>
-                        </Popover>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-7 gap-1 px-2 text-[11px]"
+                          disabled={isAssigningPosition === entry.position}
+                          onClick={() => setManagedPosition(entry.position)}
+                        >
+                          <UserPlus className="h-3.5 w-3.5" />
+                          Manage
+                        </Button>
                         {onRemovePositionFromRoster &&
                         canRemovePositionFromRoster?.(entry) ? (
                           <Button
@@ -629,6 +562,106 @@ export function WorkspacePositionRosterTable({
           )}
         </TableBody>
       </Table>
+
+      <Dialog
+        open={managedPosition !== null}
+        onOpenChange={(open) => {
+          if (!open) setManagedPosition(null)
+        }}
+      >
+        <DialogContent
+          overlayClassName="bg-black/20 backdrop-blur-sm"
+          className="flex max-h-[min(75vh,40rem)] w-full max-w-[min(32rem,calc(100vw-2rem))] flex-col gap-0 overflow-hidden p-0 sm:max-w-[min(32rem,calc(100vw-2rem))]"
+        >
+          {managedEntry ? (
+            <>
+              <DialogHeader className="shrink-0 space-y-2 border-b px-4 py-3 text-left">
+                <DialogTitle>{managedEntry.position}</DialogTitle>
+                <PositionLifecycleBadges entry={managedEntry} />
+                <DialogDescription>
+                  {canManageRoster
+                    ? 'Manage assignees, assets, and permissions for this position.'
+                    : 'View assignees, assets, and permissions for this position.'}
+                </DialogDescription>
+              </DialogHeader>
+              <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-3">
+                <PositionRosterDetailPanel
+                  entry={managedEntry}
+                  assignable={assignableByPosition[managedEntry.position] ?? []}
+                  scheduleAssignable={scheduleAssignableByPosition[managedEntry.position] ?? []}
+                  scheduleUnassignable={scheduleUnassignableByPosition[managedEntry.position] ?? []}
+                  canManageRoster={canManageRoster}
+                  isPermissionBusy={isUpdatingPermission === managedEntry.position}
+                  isAssignBusy={isAssigningPosition === managedEntry.position}
+                  showOpAdvanceLabels={showOpAdvanceLabels}
+                  positionMeta={positionMetaByName[managedEntry.position]}
+                  isUpdatingOpAdvanceLabel={isUpdatingOpAdvanceLabel === managedEntry.position}
+                  onOpAdvanceLabelChange={
+                    onOpAdvanceLabelChange
+                      ? (label) => onOpAdvanceLabelChange(managedEntry.position, label)
+                      : undefined
+                  }
+                  onToggleEditIcs201={onToggleEditIcs201}
+                  showAllowWorkAssignment={showAllowWorkAssignment}
+                  onToggleAllowWorkAssignment={onToggleAllowWorkAssignment}
+                  onPositionTypeChange={onPositionTypeChange}
+                  onAssignExistingMember={onAssignExistingMember}
+                  onSearchOrgMembers={onSearchOrgMembers}
+                  onAssignOrgMember={onAssignOrgMember}
+                  workspaceRosterMembers={workspaceRosterMembers}
+                  onScheduleAssignMember={onScheduleAssignMember}
+                  onScheduleUnassignMember={onScheduleUnassignMember}
+                  onRemoveScheduledAssign={onRemoveScheduledAssign}
+                  onRemoveScheduledUnassign={onRemoveScheduledUnassign}
+                  onInviteToPosition={onInviteToPosition}
+                  onUnassignMember={onUnassignMember}
+                  showCheckInStatus={showCheckInStatus}
+                  canEditCheckInStatus={canEditCheckInStatus}
+                  updatingCheckInMemberId={updatingCheckInMemberId}
+                  onCheckInStatusChange={onCheckInStatusChange}
+                  competencyOptions={competencyOptions}
+                  canEditCompetencyFunction={canEditCompetencyFunction}
+                  updatingCompetencyKey={updatingCompetencyKey}
+                  memberScheduleCompetencyByKey={memberScheduleCompetencyByKey}
+                  onMemberCompetencyFunctionChange={onMemberCompetencyFunctionChange}
+                  onAssetCompetencyFunctionChange={onAssetCompetencyFunctionChange}
+                  showPositionAssets={showPositionAssets}
+                  assignableAssets={assignableAssetsByPosition[managedEntry.position] ?? []}
+                  scheduleAssignableAssets={
+                    scheduleAssignableAssetsByPosition[managedEntry.position] ?? []
+                  }
+                  scheduleUnassignableAssets={
+                    scheduleUnassignableAssetsByPosition[managedEntry.position] ?? []
+                  }
+                  pocMembers={pocMembers}
+                  assetsByKey={assetsByKey}
+                  glassItemBorderClasses={glassItemBorderClasses}
+                  onFocusAsset={onFocusAsset}
+                  onAssignAsset={onAssignAsset}
+                  onUnassignAsset={onUnassignAsset}
+                  onScheduleAssignAsset={onScheduleAssignAsset}
+                  onScheduleUnassignAsset={onScheduleUnassignAsset}
+                  onRemoveScheduledAssignAsset={onRemoveScheduledAssignAsset}
+                  onRemoveScheduledUnassignAsset={onRemoveScheduledUnassignAsset}
+                  onUpdateAssetPointOfContact={onUpdateAssetPointOfContact}
+                  hidePositionTitle
+                  canRemoveFromRoster={canRemovePositionFromRoster?.(managedEntry) ?? false}
+                  removalBlockedReason={positionRemovalBlockedReason?.(managedEntry) ?? null}
+                  isRemovingFromRoster={isDeletingCustomPosition === managedEntry.position}
+                  onRemoveFromRoster={
+                    onRemovePositionFromRoster
+                      ? () => {
+                          onRemovePositionFromRoster(managedEntry.position)
+                          setManagedPosition(null)
+                        }
+                      : undefined
+                  }
+                />
+              </div>
+            </>
+          ) : null}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

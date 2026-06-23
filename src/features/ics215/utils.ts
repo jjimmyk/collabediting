@@ -1,5 +1,8 @@
 import { ics201AuthorColorFromId } from '@/features/ics201/utils'
 import {
+  normalizeWorkAssignmentTargetValue,
+} from '@/lib/work-assignment-target'
+import {
   ICS215_DEFAULT_RESOURCE_COLUMNS,
   ICS215_DEFAULT_WORK_ASSIGNMENT_COUNT,
 } from '@/features/ics215/constants'
@@ -148,7 +151,7 @@ function migrateLegacyWorkAssignmentRow(
 
   return {
     id: typeof row.id === 'number' ? row.id : index + 1,
-    assignee,
+    assignee: normalizeWorkAssignmentTargetValue(assignee),
     workAssignment: String(row.workAssignment ?? row.workAssignmentInstructions ?? ''),
     resourceValues,
     overheadPositions: String(row.overheadPositions ?? ''),
@@ -188,7 +191,7 @@ function normalizeWorkAssignmentRow(
 
   return {
     id: typeof row.id === 'number' ? row.id : index + 1,
-    assignee: String(row.assignee ?? ''),
+    assignee: normalizeWorkAssignmentTargetValue(String(row.assignee ?? '')),
     workAssignment: String(row.workAssignment ?? ''),
     resourceValues,
     overheadPositions: String(row.overheadPositions ?? ''),

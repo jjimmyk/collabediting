@@ -1,10 +1,8 @@
 import { Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
-import { Ics204AssignedUnitField } from '@/features/ics204/Ics204SectionToolbar'
-import type { Ics204AssignedUnitOption } from '@/features/ics204/ics204-assigned-unit-options'
-import { mergeLegacyIcs204AssignedUnitOption } from '@/features/ics204/ics204-assigned-unit-options'
 import { Ics202ReadOnlyField } from '@/features/ics202/Ics202SectionToolbar'
+import { WorkAssignmentTargetPicker } from '@/features/work-assignments/WorkAssignmentTargetPicker'
 import { ResourceHaveFillButton } from '@/features/resources/ResourceHaveFillButton'
 import { fillHaveForResourceValue } from '@/features/resources/workspace-asset-have-lookup'
 import type { ResourceListItemData } from '@/features/resources/types'
@@ -18,15 +16,21 @@ import {
   createEmptyResourceValues,
   createNextIcs215WorkAssignmentId,
 } from '@/features/ics215/utils'
+import type { WorkAssignmentTargetOption } from '@/lib/work-assignment-target-options'
+import { mergeLegacyWorkAssignmentTargetOptions } from '@/lib/work-assignment-target-options'
+import { normalizeWorkAssignmentTargetValue } from '@/lib/work-assignment-target'
+import type { WorkspaceRosterMember } from '@/lib/workspace-types'
 import { cn } from '@/lib/utils'
 
 type Ics215WorkAssignmentsTableProps = {
   resourceColumns: Ics215ResourceColumn[]
   workAssignments: Ics215WorkAssignmentRow[]
-  assigneeOptions: Ics204AssignedUnitOption[]
+  workAssignmentTargetOptions: WorkAssignmentTargetOption[]
+  roster?: WorkspaceRosterMember[]
+  competencyOptions?: string[]
   workspaceAssets?: ResourceListItemData[]
   autoFillHaveFromAssets?: boolean
-  /** When set, hides the assignee column and pins new rows to this unit. */
+  /** When set, hides the assignee column and pins new rows to this target. */
   lockedAssignee?: string
   editing: boolean
   onChange: (next: {
@@ -93,7 +97,9 @@ function ResourceValueCell({
 export function Ics215WorkAssignmentsTable({
   resourceColumns,
   workAssignments,
-  assigneeOptions,
+  workAssignmentTargetOptions,
+  roster = [],
+  competencyOptions = [],
   workspaceAssets = [],
   autoFillHaveFromAssets = false,
   lockedAssignee,
@@ -102,6 +108,7 @@ export function Ics215WorkAssignmentsTable({
   onHaveFillComplete,
 }: Ics215WorkAssignmentsTableProps) {
   const hideAssigneeColumn = Boolean(lockedAssignee?.trim())
+  const lockedTargetValue = normalizeWorkAssignmentTargetValue(lockedAssignee ?? '', roster)
   const columnTotals = computeIcs215ColumnTotals(resourceColumns, workAssignments)
 
   const patchRows = (nextRows: Ics215WorkAssignmentRow[]) => {
@@ -192,7 +199,7 @@ export function Ics215WorkAssignmentsTable({
       ...workAssignments,
       {
         id: createNextIcs215WorkAssignmentId(workAssignments),
-        assignee: lockedAssignee?.trim() ?? '',
+        assignee: lockedTargetValue,
         workAssignment: '',
         resourceValues: createEmptyResourceValues(resourceColumns),
         overheadPositions: '',
@@ -328,9 +335,10 @@ export function Ics215WorkAssignmentsTable({
               </tr>
             ) : (
               workAssignments.map((row) => {
-                const assigneeOptionsForRow = mergeLegacyIcs204AssignedUnitOption(
-                  assigneeOptions,
-                  row.assignee
+                const targetOptionsForRow = mergeLegacyWorkAssignmentTargetOptions(
+                  workAssignmentTargetOptions,
+                  row.assignee,
+                  roster
                 )
 
                 return (
@@ -338,16 +346,24 @@ export function Ics215WorkAssignmentsTable({
                     {!hideAssigneeColumn ? (
                       <td className={cn(fixedColumnClass, 'px-2 py-2')}>
                         {editing ? (
-                          <Ics204AssignedUnitField
+                          <WorkAssignmentTargetPicker
                             value={row.assignee}
-                            options={assigneeOptionsForRow}
+                            options={targetOptionsForRow}
                             editable
-                            onChange={(value) => patchRow(row.id, { assignee: value })}
+                            roster={roster}
+                            competencyOptions={competencyOptions}
+                            showMemberCompetencyEditor
+                            selectClassName="text-xs font-normal"
+                            onChange={(value) =>
+                              patchRow(row.id, {
+                                assignee: normalizeWorkAssignmentTargetValue(value, roster),
+                              })
+                            }
                           />
                         ) : (
                           <Ics202ReadOnlyField
                             value={
-                              assigneeOptionsForRow.find((option) => option.value === row.assignee)
+                              targetOptionsForRow.find((option) => option.value === row.assignee)
                                 ?.label ?? row.assignee
                             }
                           />

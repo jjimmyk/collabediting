@@ -1,8 +1,9 @@
 import {
   buildIcs204Ics215ImportSnapshot,
-  getIcs215WorkRowsForAssignee,
+  getIcs215WorkRowsForTarget,
   mapIcs215RowsToIcs204WorkAssignments,
 } from '../src/features/ics204/create-from-ics215'
+import { normalizeWorkAssignmentTargetValue } from '../src/lib/work-assignment-target'
 import { createEmptyIcs204Form } from '../src/features/ics204/utils'
 import {
   applyIcs215ImportToIcs204Form,
@@ -29,8 +30,8 @@ function assert(condition: unknown, message: string): asserts condition {
 }
 
 const assigneeOptions: Ics204AssignedUnitOption[] = [
-  { value: 'Division Alpha', label: 'Division Alpha' },
-  { value: 'Medical Group', label: 'Medical Group' },
+  { value: 'position:Division Alpha', label: 'Division Alpha' },
+  { value: 'position:Medical Group', label: 'Medical Group' },
 ]
 
 const ics215Form = createEmptyIcs215Form('fixture-215')
@@ -75,7 +76,7 @@ const linked204 = {
   assignedUnit: 'Division Alpha',
   ics215Import: buildIcs204Ics215ImportSnapshot(ics215Form, 'Division Alpha'),
   workAssignments: mapIcs215RowsToIcs204WorkAssignments(
-    getIcs215WorkRowsForAssignee(ics215Form, 'Division Alpha'),
+    getIcs215WorkRowsForTarget(ics215Form, 'Division Alpha'),
     ics215Form.resourceColumns
   ),
 }
@@ -96,7 +97,7 @@ const updated215From204 = syncIcs204WorkAssignmentsToIcs215(
   ics215Form
 )
 assert(updated215From204 !== null, '204 should sync to 215')
-const alphaRows = getIcs215WorkRowsForAssignee(updated215From204!, 'Division Alpha')
+const alphaRows = getIcs215WorkRowsForTarget(updated215From204!, 'Division Alpha')
 assert(alphaRows[0]?.workAssignment === 'Updated from ICS-204.', '215 row should update from 204')
 
 const updated215 = mergeAssigneeRowsIntoIcs215Form(
@@ -128,7 +129,7 @@ const card204 = {
   ...createEmptyIcs204Form('card-204'),
   assignedUnit: 'Medical Group',
   workAssignments: mapIcs215RowsToIcs204WorkAssignments(
-    getIcs215WorkRowsForAssignee(updated215, 'Medical Group'),
+    getIcs215WorkRowsForTarget(updated215, 'Medical Group'),
     updated215.resourceColumns
   ),
 }
@@ -140,7 +141,10 @@ const mapped = mapIcs204WorkAssignmentsToIcs215Rows(
 assert(mapped.rows[0]?.workAssignment.includes('triage'), 'reverse mapper should preserve assignment')
 
 const imported204 = applyIcs215ImportToIcs204Form(card204, updated215)
-assert(imported204.ics215Import?.assignee === 'Medical Group', 'auto-link should set import snapshot')
+assert(
+  imported204.ics215Import?.assignee === normalizeWorkAssignmentTargetValue('Medical Group'),
+  'auto-link should set import snapshot'
+)
 
 const tooltip215 = resolveIcs215WorkSyncTooltipFor215(updated215, [linked204, card204], assigneeOptions, {
   [linked204.id]: { 'work-assignments': linked204.workAssignments },

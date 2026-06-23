@@ -2,6 +2,7 @@ import { ICS215_SECTION_LABELS } from '@/features/ics215/constants'
 import { type Ics215ExportContext } from '@/features/ics215/export-layout'
 import type { Ics215FormState } from '@/features/ics215/types'
 import { computeIcs215ColumnTotals, computeIcs215ResourceTotals } from '@/features/ics215/utils'
+import { formatWorkAssignmentTargetLabel } from '@/lib/work-assignment-target'
 
 export type Ics215DocxBlock =
   | { kind: 'title'; text: string }
@@ -115,7 +116,7 @@ export function buildIcs215DocxBlocks(
     const columnTotals = computeIcs215ColumnTotals(form.resourceColumns, form.workAssignments)
     form.workAssignments.forEach((row, index) => {
       pushParagraph(`Assignment ${index + 1}`)
-      pushField('Assignee', row.assignee)
+      pushField('Assignee', formatWorkAssignmentTargetLabel(row.assignee, context.roster))
       pushField('Work Assignment', row.workAssignment)
       for (const column of form.resourceColumns) {
         const value = row.resourceValues[column.id]

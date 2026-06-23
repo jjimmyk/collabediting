@@ -18,6 +18,8 @@ import type {
   Ics204VersionRow,
   Ics204WorkAssignmentRow,
 } from '@/features/ics204/types'
+import { formatWorkAssignmentTargetLabel } from '@/lib/work-assignment-target'
+import type { WorkspaceRosterMember } from '@/lib/workspace-types'
 
 type LegacyIcs204ResourceAssignedRow = Partial<Ics204ResourceAssignedRow> & {
   resourceIdentifier?: string
@@ -385,12 +387,20 @@ export function applyIcs204SectionDraft(
   }
 }
 
-export function resolveIcs204AssignedUnitLabel(form: Ics204FormState): string {
-  return form.assignedUnit.trim()
+export function resolveIcs204AssignedUnitLabel(
+  form: Ics204FormState,
+  roster: WorkspaceRosterMember[] = []
+): string {
+  const assignedUnit = form.assignedUnit.trim()
+  if (!assignedUnit) return ''
+  return formatWorkAssignmentTargetLabel(assignedUnit, roster)
 }
 
-export function resolveIcs204ListTitle(form: Ics204FormState): string {
-  const assignedUnit = resolveIcs204AssignedUnitLabel(form)
+export function resolveIcs204ListTitle(
+  form: Ics204FormState,
+  roster: WorkspaceRosterMember[] = []
+): string {
+  const assignedUnit = resolveIcs204AssignedUnitLabel(form, roster)
   return assignedUnit.length > 0 ? assignedUnit : `ICS-204 #${form.id.slice(0, 8)}`
 }
 

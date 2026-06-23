@@ -71,6 +71,7 @@ type PositionRosterDetailPanelProps = {
   removalBlockedReason?: string | null
   isRemovingFromRoster?: boolean
   onRemoveFromRoster?: () => void
+  hidePositionTitle?: boolean
 } & Partial<PositionRosterAssetHandlers>
 
 export function PositionRosterDetailPanel({
@@ -129,6 +130,7 @@ export function PositionRosterDetailPanel({
   removalBlockedReason = null,
   isRemovingFromRoster = false,
   onRemoveFromRoster,
+  hidePositionTitle = false,
 }: PositionRosterDetailPanelProps) {
   const assetsHandlersReady = Boolean(
     onAssignAsset &&
@@ -143,13 +145,17 @@ export function PositionRosterDetailPanel({
   return (
     <div className="space-y-3">
       <div className="space-y-1.5">
-        <p className="text-sm font-medium">{entry.position}</p>
-        <PositionLifecycleBadges entry={entry} />
-        <p className="text-xs text-muted-foreground">
-          {canManageRoster
-            ? 'Manage assignees, assets, and permissions for this position.'
-            : 'View assignees, assets, and permissions for this position.'}
-        </p>
+        {hidePositionTitle ? null : (
+          <>
+            <p className="text-sm font-medium">{entry.position}</p>
+            <PositionLifecycleBadges entry={entry} />
+            <p className="text-xs text-muted-foreground">
+              {canManageRoster
+                ? 'Manage assignees, assets, and permissions for this position.'
+                : 'View assignees, assets, and permissions for this position.'}
+            </p>
+          </>
+        )}
         {entry.isPlanned ? (
           <p className="text-[11px] text-muted-foreground">
             This position activates on the next operational period. Schedule users and assets for

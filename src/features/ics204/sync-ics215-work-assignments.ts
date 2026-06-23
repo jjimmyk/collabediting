@@ -2,12 +2,15 @@ import type { Ics204AssignedUnitOption } from '@/features/ics204/ics204-assigned
 import { resolveIcs204AssignedUnitDisplayLabel } from '@/features/ics204/ics204-assigned-unit-options'
 import {
   buildIcs204Ics215ImportSnapshot,
-  getIcs215WorkRowsForAssignee,
+  getIcs215WorkRowsForTarget,
   isIcs215WorkAssignmentRowPopulated,
   mapIcs215RowsToIcs204WorkAssignments,
-  normalizeIcs215Ics204Assignee,
   syncIcs204WorkAssignmentsFromIcs215Import,
 } from '@/features/ics204/create-from-ics215'
+import {
+  normalizeWorkAssignmentTargetKey,
+  normalizeWorkAssignmentTargetValue,
+} from '@/lib/work-assignment-target'
 import type {
   Ics204FormSectionDrafts,
   Ics204FormState,
@@ -112,7 +115,7 @@ export function mapIcs204WorkAssignmentsToIcs215Rows(
 
     return {
       id: row.id > 0 ? row.id : index + 1,
-      assignee,
+      assignee: normalizeWorkAssignmentTargetValue(assignee),
       workAssignment: row.assignment,
       resourceValues,
       overheadPositions: row.overheadPositions,
@@ -135,9 +138,9 @@ export function mergeAssigneeRowsIntoIcs215Form(
   incomingRows: Ics215WorkAssignmentRow[],
   incomingColumns?: Ics215ResourceColumn[]
 ): Ics215FormState {
-  const assigneeKey = normalizeIcs215Ics204Assignee(assignee)
+  const assigneeKey = normalizeWorkAssignmentTargetKey(assignee)
   const otherRows = form.workAssignments.filter(
-    (row) => normalizeIcs215Ics204Assignee(row.assignee) !== assigneeKey
+    (row) => normalizeWorkAssignmentTargetKey(row.assignee) !== assigneeKey
   )
   const resourceColumns = incomingColumns
     ? mergeResourceColumns(form.resourceColumns, incomingColumns)
@@ -145,7 +148,7 @@ export function mergeAssigneeRowsIntoIcs215Form(
   const normalizedIncoming = cloneIcs215WorkAssignmentRows(
     incomingRows.map((row) => ({
       ...row,
-      assignee,
+      assignee: normalizeWorkAssignmentTargetValue(assignee),
       resourceValues: {
         ...createEmptyResourceValues(resourceColumns),
         ...row.resourceValues,
@@ -171,7 +174,7 @@ export function isIcs204WorkAssignmentsLinkedToIcs215(
   const assignee = form.assignedUnit.trim()
   if (!assignee || !ics215Form) return false
   if (form.ics215Import) return true
-  if (getIcs215WorkRowsForAssignee(ics215Form, assignee).length > 0) return true
+  if (getIcs215WorkRowsForTarget(ics215Form, assignee).length > 0) return true
   return form.workAssignments.some(
     (row) =>
       row.assignment.trim().length > 0 ||
@@ -207,7 +210,7 @@ export function syncIcs204WorkAssignmentsToIcs215(
   if (ics204Form.ics215Import) {
     return mergeAssigneeRowsIntoIcs215Form(
       ics215Form,
-      assignee,
+      normalizeWorkAssignmentTargetValue(assignee),
       ics204Form.ics215Import.workAssignments,
       ics204Form.ics215Import.resourceColumns
     )
@@ -220,7 +223,7 @@ export function syncIcs204WorkAssignmentsToIcs215(
   )
   return mergeAssigneeRowsIntoIcs215Form(
     ics215Form,
-    assignee,
+    normalizeWorkAssignmentTargetValue(assignee),
     mapped.rows,
     mapped.resourceColumns
   )
@@ -317,7 +320,7 @@ export function collectAssigneeKeysFromIcs215WorkAssignments(
     const assignee = row.assignee.trim()
     if (!assignee) continue
     if (!isIcs215WorkAssignmentRowPopulated(row)) continue
-    keys.add(normalizeIcs215Ics204Assignee(assignee))
+    keys.add(normalizeWorkAssignmentTargetKey(assignee))
   }
   return [...keys]
 }
@@ -351,7 +354,7 @@ export function createIcs215RowsFromIcs204ImportSnapshot(
       ? [
           {
             id: 1,
-            assignee,
+            assignee: normalizeWorkAssignmentTargetValue(assignee),
             workAssignment: '',
             resourceValues: createEmptyResourceValues(resourceColumns),
             overheadPositions: '',
@@ -367,7 +370,7 @@ export function createIcs215RowsFromIcs204ImportSnapshot(
     reassignIcs215RowIds(
       normalizedRows.map((row) => ({
         ...row,
-        assignee,
+        assignee: normalizeWorkAssignmentTargetValue(assignee),
       }))
     ),
     resourceColumns
