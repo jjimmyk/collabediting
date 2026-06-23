@@ -3,6 +3,7 @@ import {
   countOrgChartConnectorLines,
   type CaptureOrgChartImageOptions,
 } from '@/features/roster/capture-org-chart-image'
+import { triggerOrgChartConnectorRedraw } from '@/features/roster/org-chart-connector-dom'
 
 export const ICS207_CAPTURE_ROOT_ATTR = 'data-ics207-capture-root'
 export const ORG_CHART_PAINT_COMPLETE_ATTR = 'data-org-chart-paint-complete'
@@ -11,9 +12,9 @@ export const ROSTER_ORG_CHART_LIVE_ROOT_ATTR = 'data-roster-org-chart-live-root'
 const MIN_CAPTURE_WIDTH_PX = 1
 const MIN_CAPTURE_HEIGHT_PX = 1
 const MIN_PNG_BYTES = 1_024
-const PAINT_WAIT_MS = 2_000
+const PAINT_WAIT_MS = 8_000
 const CAPTURE_TIMEOUT_MS = 8_000
-const CONNECTOR_RETRY_MS = 1_500
+const CONNECTOR_RETRY_MS = 5_000
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => {
@@ -85,18 +86,21 @@ function isWideOrgChart(root: HTMLElement): boolean {
 async function ensureWideConnectorsPainted(root: HTMLElement): Promise<void> {
   if (!isWideOrgChart(root)) return
 
+  const cardCount = countOrgChartCards(root)
+  if (cardCount <= 1) return
+
   const started = Date.now()
   while (Date.now() - started < CONNECTOR_RETRY_MS) {
+    triggerOrgChartConnectorRedraw(root)
     if (countOrgChartConnectorLines(root) > 0) {
       await nextFrames(2)
       return
     }
-    await sleep(50)
+    await nextFrames(1)
   }
 
-  if (countOrgChartCards(root) > 1 && countOrgChartConnectorLines(root) === 0) {
-    console.warn('Org chart connector lines were not detected; proceeding with capture.')
-    return
+  if (countOrgChartConnectorLines(root) === 0) {
+    throw new Error('Org chart connector lines are not ready. Try exporting again.')
   }
 }
 
@@ -117,6 +121,11 @@ export async function waitForOrgChartPainted(
       }
 
       if (countOrgChartCards(root) > 0 && hasMinimumDimensions(root)) {
+        if (isWideOrgChart(root) && countOrgChartConnectorLines(root) === 0) {
+          triggerOrgChartConnectorRedraw(root)
+          await nextFrames(1)
+          continue
+        }
         await nextFrames(2)
         await ensureWideConnectorsPainted(root)
         return root
