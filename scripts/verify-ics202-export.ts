@@ -1,3 +1,4 @@
+import { ICS202_BOX_STACK } from '@/features/ics202/export-box-stack'
 import {
   assertIcs202DocxLayoutConsistency,
   buildIcs202DocxDocumentRelsXml,
@@ -6,6 +7,7 @@ import {
   buildIcs202DocxXml,
 } from '@/features/ics202/export-docx-layout'
 import { buildIcs202ExportLayout } from '@/features/ics202/export-layout'
+import { ICS202_EXPORT_PAGE_METRICS } from '@/features/ics202/export-page-metrics'
 import {
   assertIcs202PaginationInvariants,
   formatIcs202ContinuedLabel,
@@ -64,9 +66,12 @@ asdfasdfasdfasdf
 asdfasdfasdfasdfasdf`
 
 function buildUserFixtureForm() {
+  const expandedPriorities = [USER_FIXTURE_PRIORITIES, USER_FIXTURE_PRIORITIES, USER_FIXTURE_PRIORITIES].join(
+    '\n'
+  )
   return createEmptyIcs202Form('fixture-export', {
     incidentName: 'planning p 61426',
-    incidentPriorities: USER_FIXTURE_PRIORITIES,
+    incidentPriorities: expandedPriorities,
     commandEmphasis: 'this is a version of the 202 and now imma sign this',
     criticalInformationRequirements: '',
     limitationsAndConstraints: '',
@@ -78,9 +83,10 @@ function buildUserFixtureForm() {
 }
 
 function buildMadDogFixtureForm() {
+  const expandedPriorities = [MAD_DOG_FIXTURE_PRIORITIES, MAD_DOG_FIXTURE_PRIORITIES].join('\n')
   return createEmptyIcs202Form('fixture-mad-dog', {
     incidentName: 'BP Mad Dog Process Area Gas Release',
-    incidentPriorities: MAD_DOG_FIXTURE_PRIORITIES,
+    incidentPriorities: expandedPriorities,
     commandEmphasis: 'Monitor gas readings and maintain process area isolation.',
     preparedByName: 'Jimmy King',
     preparedByPositionTitle: 'Incident Commander',
@@ -133,6 +139,15 @@ function assertDocxFooterLayout(pages: ReturnType<typeof paginateIcs202Export>):
 }
 
 export function runIcs202ExportPaginationFixtureChecks(): void {
+  assert(
+    ICS202_BOX_STACK.segmentGapPt === 0,
+    'Touching-box layout requires zero segment gap.'
+  )
+  assert(
+    ICS202_EXPORT_PAGE_METRICS.segmentGapPt === 0,
+    'Export page metrics must use zero segment gap.'
+  )
+
   const userForm = buildUserFixtureForm()
   const userPages = paginateIcs202Export(
     buildIcs202ExportLayout(userForm, { incidentName: userForm.incidentName })

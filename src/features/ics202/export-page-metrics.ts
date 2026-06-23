@@ -1,4 +1,7 @@
 import {
+  ICS202_BOX_STACK,
+} from '@/features/ics202/export-box-stack'
+import {
   ICS202_DOCX_CONTENT_WIDTH,
   ICS202_DOCX_FOOTER_RESERVE_DXA,
   ICS202_DOCX_HEADER_RESERVE_DXA,
@@ -16,8 +19,6 @@ const DOCX_BODY_LINE_PT = 11
 const DOCX_LABEL_LINE_PT = 10
 /** Checkbox / small text row in lifelines grid. */
 const DOCX_SMALL_LINE_PT = 10
-/** docxSectionSpacer() — sz 4 paragraph with no after spacing. */
-const DOCX_SECTION_SPACER_PT = 4
 /** Section table cells use normal w:tcMar (80 dxa top + bottom). */
 const DOCX_SECTION_CELL_VERTICAL_MARGIN_PT = (80 + 80) * PT_PER_DXA
 /** Prepared-by table cells use tight w:tcMar (60 dxa top + bottom). */
@@ -32,8 +33,8 @@ export const ICS202_EXPORT_PAGE_METRICS = {
   wordFooterReservePt: ICS202_DOCX_FOOTER_RESERVE_DXA * PT_PER_DXA,
   /** Horizontal inset inside normal section table cells (w:tcMar left+right 100 dxa each). */
   boxPaddingPt: 100 * PT_PER_DXA * 2,
-  segmentGapPt: DOCX_SECTION_SPACER_PT,
-  sectionSpacerPt: DOCX_SECTION_SPACER_PT,
+  segmentGapPt: ICS202_BOX_STACK.segmentGapPt,
+  sectionSpacerPt: ICS202_BOX_STACK.sectionSpacerPt,
   contentWidthPt: ICS202_DOCX_CONTENT_WIDTH * PT_PER_DXA,
   sectionTableCellMarginPt: DOCX_SECTION_CELL_VERTICAL_MARGIN_PT,
   preparedByTableCellMarginPt: DOCX_PREPARED_BY_CELL_VERTICAL_MARGIN_PT,

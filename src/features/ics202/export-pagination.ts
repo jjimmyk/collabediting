@@ -138,7 +138,6 @@ function remainingHeight(draft: PageDraft): number {
 function estimateTextBoxHeight(lineCount: number, minLines = PAGE.minBodyLines): number {
   const lines = Math.max(lineCount, minLines)
   return (
-    PAGE.sectionSpacerPt * 2 +
     PAGE.sectionTableCellMarginPt * 2 +
     PAGE.labelLineHeightPt +
     lines * PAGE.paginationLineHeightPt
@@ -149,7 +148,6 @@ function estimateLifelinesHeight(optionCount: number): number {
   const rows = Math.ceil(optionCount / 4)
   const innerRowHeightPt = PAGE.sectionTableCellMarginPt + PAGE.smallLineHeightPt
   return (
-    PAGE.sectionSpacerPt * 2 +
     PAGE.sectionTableCellMarginPt +
     PAGE.labelLineHeightPt +
     rows * innerRowHeightPt +
@@ -161,7 +159,6 @@ function estimateObjectivesHeight(rowCount: number, showTableHeader: boolean): n
   const rows = Math.max(rowCount, 1)
   const header = showTableHeader ? PAGE.smallLineHeightPt + PAGE.sectionTableCellMarginPt : 0
   return (
-    PAGE.sectionSpacerPt * 2 +
     PAGE.sectionTableCellMarginPt * 2 +
     PAGE.labelLineHeightPt +
     header +
@@ -172,7 +169,6 @@ function estimateObjectivesHeight(rowCount: number, showTableHeader: boolean): n
 function estimateSiteSafetyHeight(locationLineCount: number): number {
   const lines = Math.max(locationLineCount, 1)
   return (
-    PAGE.sectionSpacerPt * 2 +
     PAGE.sectionTableCellMarginPt +
     PAGE.labelLineHeightPt * 2 +
     PAGE.smallLineHeightPt +
@@ -183,7 +179,6 @@ function estimateSiteSafetyHeight(locationLineCount: number): number {
 
 function textBoxShellHeightPt(): number {
   return (
-    PAGE.sectionSpacerPt * 2 +
     PAGE.sectionTableCellMarginPt * 2 +
     PAGE.labelLineHeightPt
   )

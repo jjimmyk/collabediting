@@ -204,9 +204,7 @@ function renderHeaderContentDocx(headerCells: Ics202HeaderCell[]): string {
 
   return (
     title +
-    docxSectionSpacer() +
-    docxFixedTable([col, col, col], `<w:tr>${cells}</w:tr>`) +
-    docxSectionSpacer()
+    docxFixedTable([col, col, col], `<w:tr>${cells}</w:tr>`)
   )
 }
 
@@ -273,7 +271,7 @@ function renderIcsExpirationLineDocx(footerLeft: string): string {
   )
 }
 
-export function renderPhysicalPageSegmentDocx(segment: Ics202PhysicalPageSegment): string {
+export function renderPhysicalPageSegmentRowsDocx(segment: Ics202PhysicalPageSegment): string {
   switch (segment.kind) {
     case 'lifelines': {
       const col = ICS202_DOCX_COL.lifeline
@@ -292,25 +290,19 @@ export function renderPhysicalPageSegmentDocx(segment: Ics202PhysicalPageSegment
         gridRows.push(`<w:tr>${cells}</w:tr>`)
       }
       const innerTable = docxFixedTable(cols, gridRows.join(''))
-      return (
-        docxSectionSpacer() +
-        docxFixedTable(
-          [ICS202_DOCX_CONTENT_WIDTH],
-          docxCantSplitRow(
-            docxCell(
-              ICS202_DOCX_CONTENT_WIDTH,
-              docxLabelParagraph(segment.label) + innerTable
-            )
-          )
-        ) +
-        docxSectionSpacer()
+      return docxCantSplitRow(
+        docxCell(
+          ICS202_DOCX_CONTENT_WIDTH,
+          docxLabelParagraph(segment.label) + innerTable
+        )
       )
     }
     case 'text-box':
-      return (
-        docxSectionSpacer() +
-        docxSectionBox(segment.label, docxLinesParagraphs(segment.bodyLines, 18)) +
-        docxSectionSpacer()
+      return docxCantSplitRow(
+        docxCell(
+          ICS202_DOCX_CONTENT_WIDTH,
+          docxLabelParagraph(segment.label) + docxLinesParagraphs(segment.bodyLines, 18)
+        )
       )
     case 'objectives': {
       const omCol = ICS202_DOCX_COL.om
@@ -337,15 +329,8 @@ export function renderPhysicalPageSegmentDocx(segment: Ics202PhysicalPageSegment
               )
               .join('')
       const innerTable = docxFixedTable([omCol, objCol], headerRow + bodyRows)
-      return (
-        docxSectionSpacer() +
-        docxFixedTable(
-          [ICS202_DOCX_CONTENT_WIDTH],
-          docxCantSplitRow(
-            docxCell(ICS202_DOCX_CONTENT_WIDTH, docxLabelParagraph(segment.label) + innerTable)
-          )
-        ) +
-        docxSectionSpacer()
+      return docxCantSplitRow(
+        docxCell(ICS202_DOCX_CONTENT_WIDTH, docxLabelParagraph(segment.label) + innerTable)
       )
     }
     case 'site-safety-plan': {
@@ -356,10 +341,11 @@ export function renderPhysicalPageSegmentDocx(segment: Ics202PhysicalPageSegment
         ? '9. Site Safety Plan located at: (Continued):'
         : '9. Site Safety Plan located at:'
       if (segment.continued) {
-        return (
-          docxSectionSpacer() +
-          docxSectionBox(locationLabel, docxLinesParagraphs(segment.locationLines, 16)) +
-          docxSectionSpacer()
+        return docxCantSplitRow(
+          docxCell(
+            ICS202_DOCX_CONTENT_WIDTH,
+            docxLabelParagraph(locationLabel) + docxLinesParagraphs(segment.locationLines, 16)
+          )
         )
       }
       const innerTable = docxFixedTable(
@@ -376,22 +362,24 @@ export function renderPhysicalPageSegmentDocx(segment: Ics202PhysicalPageSegment
           ) +
           `</w:tr>`
       )
-      return (
-        docxSectionSpacer() +
-        docxFixedTable(
-          [ICS202_DOCX_CONTENT_WIDTH],
-          docxCantSplitRow(docxCell(ICS202_DOCX_CONTENT_WIDTH, innerTable))
-        ) +
-        docxSectionSpacer()
-      )
+      return docxCantSplitRow(docxCell(ICS202_DOCX_CONTENT_WIDTH, innerTable))
     }
     default:
       return ''
   }
 }
 
+/** @deprecated Use renderPhysicalPageSegmentRowsDocx within the page body stack table. */
+export function renderPhysicalPageSegmentDocx(segment: Ics202PhysicalPageSegment): string {
+  return renderPhysicalPageSegmentRowsDocx(segment)
+}
+
 function renderPhysicalPageBodyDocx(page: Ics202PhysicalPage): string {
-  return page.segments.map(renderPhysicalPageSegmentDocx).join('')
+  const rows = page.segments.map(renderPhysicalPageSegmentRowsDocx).join('')
+  if (!rows) {
+    return ''
+  }
+  return docxFixedTable([ICS202_DOCX_CONTENT_WIDTH], rows)
 }
 
 function buildSectionPropertiesXml(footerRelationshipId: string, nextPage: boolean): string {
@@ -631,5 +619,9 @@ export function assertIcs202DocxLayoutConsistency(documentXml: string): void {
   }
   if (documentXml.includes('<w:tbl><w:tblPr><w:tblW w:w="5000" w:type="pct"')) {
     throw new Error('ICS-202 DOCX export still contains legacy pct-width tables.')
+  }
+  const spacerParagraphCount = (documentXml.match(/<w:sz w:val="4"\/>/g) ?? []).length
+  if (spacerParagraphCount > 0) {
+    throw new Error('ICS-202 DOCX body must not include section spacer paragraphs.')
   }
 }

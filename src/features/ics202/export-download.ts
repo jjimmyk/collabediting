@@ -243,16 +243,18 @@ type PdfLine = { text: string; font: 'F1' | 'F2'; size: number; x: number; y: nu
 
 type PdfBoxResult = { ops: string; height: number; lines: PdfLine[] }
 
-function drawBoxExact(
+function drawStackSegmentBox(
   leftX: number,
   topY: number,
   width: number,
   label: string,
   bodyLines: string[],
-  bodySize = 9,
-  labelSize = 7,
-  minBodyLines = 1
+  opts: { bodySize?: number; labelSize?: number; minBodyLines?: number; drawTop?: boolean } = {}
 ): PdfBoxResult {
+  const bodySize = opts.bodySize ?? 9
+  const labelSize = opts.labelSize ?? 7
+  const minBodyLines = opts.minBodyLines ?? 1
+  const drawTop = opts.drawTop ?? true
   const pad = 6
   const labelLead = 10
   const bodyLead = 11
@@ -263,7 +265,13 @@ function drawBoxExact(
   const height = pad + labelLines.length * labelLead + 4 + renderedBodyLines * bodyLead + pad
   const bottomY = topY - height
   let ops = '0.75 w\n'
-  ops += `${leftX.toFixed(2)} ${bottomY.toFixed(2)} ${width.toFixed(2)} ${height.toFixed(2)} re S\n`
+  if (drawTop) {
+    ops += `${leftX.toFixed(2)} ${bottomY.toFixed(2)} ${width.toFixed(2)} ${height.toFixed(2)} re S\n`
+  } else {
+    ops += `${leftX.toFixed(2)} ${bottomY.toFixed(2)} m ${leftX.toFixed(2)} ${topY.toFixed(2)} l S\n`
+    ops += `${(leftX + width).toFixed(2)} ${bottomY.toFixed(2)} m ${(leftX + width).toFixed(2)} ${topY.toFixed(2)} l S\n`
+    ops += `${leftX.toFixed(2)} ${bottomY.toFixed(2)} m ${(leftX + width).toFixed(2)} ${bottomY.toFixed(2)} l S\n`
+  }
 
   const pdfLines: PdfLine[] = []
   let y = topY - pad - labelSize
@@ -280,13 +288,30 @@ function drawBoxExact(
   return { ops, height, lines: pdfLines }
 }
 
+function drawBoxExact(
+  leftX: number,
+  topY: number,
+  width: number,
+  label: string,
+  bodyLines: string[],
+  bodySize = 9,
+  labelSize = 7,
+  minBodyLines = 1
+): PdfBoxResult {
+  return drawStackSegmentBox(leftX, topY, width, label, bodyLines, {
+    bodySize,
+    labelSize,
+    minBodyLines,
+    drawTop: true,
+  })
+}
+
 function renderPdfPageHeader(
   page: Ics202PhysicalPage,
   margin: number,
   contentWidth: number,
   startY: number
 ): { ops: string; lines: PdfLine[]; nextY: number } {
-  const gap = 6
   let y = startY
   let ops = ''
   const lines: PdfLine[] = []
@@ -300,7 +325,6 @@ function renderPdfPageHeader(
     y -= size + 4
     lines.push({ text: sanitizeForPdf(line), font: bold ? 'F2' : 'F1', size, x, y, bold })
   }
-  y -= gap
 
   const cellW = contentWidth / page.headerCells.length
   const cellHeights = page.headerCells.map((cell) => {
@@ -337,7 +361,7 @@ function renderPdfPageHeader(
       cy -= 10
     })
   })
-  y = bottomY - gap
+  y = bottomY
   return { ops, lines, nextY: y }
 }
 
@@ -345,9 +369,9 @@ function renderPdfPageSegment(
   segment: Ics202PhysicalPageSegment,
   margin: number,
   contentWidth: number,
-  startY: number
+  startY: number,
+  drawTop: boolean
 ): { ops: string; lines: PdfLine[]; nextY: number } {
-  const gap = 6
   let y = startY
 
   switch (segment.kind) {
@@ -355,13 +379,23 @@ function renderPdfPageSegment(
       const optionLines = segment.options.map(
         (opt) => `${opt.checked ? '[X]' : '[ ]'} ${opt.label}`
       )
-      const box = drawBoxExact(margin, y, contentWidth, segment.label, optionLines, 8, 7, 2)
-      y -= box.height + gap
+      const box = drawStackSegmentBox(margin, y, contentWidth, segment.label, optionLines, {
+        bodySize: 8,
+        labelSize: 7,
+        minBodyLines: 2,
+        drawTop,
+      })
+      y -= box.height
       return { ops: box.ops, lines: box.lines, nextY: y }
     }
     case 'text-box': {
-      const box = drawBoxExact(margin, y, contentWidth, segment.label, segment.bodyLines, 9, 7, 1)
-      y -= box.height + gap
+      const box = drawStackSegmentBox(margin, y, contentWidth, segment.label, segment.bodyLines, {
+        bodySize: 9,
+        labelSize: 7,
+        minBodyLines: 1,
+        drawTop,
+      })
+      y -= box.height
       return { ops: box.ops, lines: box.lines, nextY: y }
     }
     case 'objectives': {
@@ -369,24 +403,27 @@ function renderPdfPageSegment(
         segment.rows.length === 0
           ? [' ']
           : segment.rows.map((row) => row.objective || ' ')
-      const box = drawBoxExact(margin, y, contentWidth, segment.label, body, 8.5, 7, 1)
-      y -= box.height + gap
+      const box = drawStackSegmentBox(margin, y, contentWidth, segment.label, body, {
+        bodySize: 8.5,
+        labelSize: 7,
+        minBodyLines: 1,
+        drawTop,
+      })
+      y -= box.height
       return { ops: box.ops, lines: box.lines, nextY: y }
     }
     case 'site-safety-plan': {
       if (segment.continued) {
         const label = '9. Site Safety Plan located at: (Continued):'
-        const box = drawBoxExact(
+        const box = drawStackSegmentBox(
           margin,
           y,
           contentWidth,
           label,
           segment.locationLines,
-          8,
-          7,
-          1
+          { bodySize: 8, labelSize: 7, minBodyLines: 1, drawTop }
         )
-        y -= box.height + gap
+        y -= box.height
         return { ops: box.ops, lines: box.lines, nextY: y }
       }
       const yes = segment.required ? '[X]' : '[ ]'
@@ -395,7 +432,13 @@ function renderPdfPageSegment(
       const height = Math.max(44, 20 + segment.locationLines.length * 10 + 12)
       const bottomY = y - height
       let ops = '0.75 w\n'
-      ops += `${margin.toFixed(2)} ${bottomY.toFixed(2)} ${contentWidth.toFixed(2)} ${height.toFixed(2)} re S\n`
+      if (drawTop) {
+        ops += `${margin.toFixed(2)} ${bottomY.toFixed(2)} ${contentWidth.toFixed(2)} ${height.toFixed(2)} re S\n`
+      } else {
+        ops += `${margin.toFixed(2)} ${bottomY.toFixed(2)} m ${margin.toFixed(2)} ${y.toFixed(2)} l S\n`
+        ops += `${(margin + contentWidth).toFixed(2)} ${bottomY.toFixed(2)} m ${(margin + contentWidth).toFixed(2)} ${y.toFixed(2)} l S\n`
+        ops += `${margin.toFixed(2)} ${bottomY.toFixed(2)} m ${(margin + contentWidth).toFixed(2)} ${bottomY.toFixed(2)} l S\n`
+      }
       ops += `${(margin + half).toFixed(2)} ${bottomY.toFixed(2)} m ${(margin + half).toFixed(2)} ${y.toFixed(2)} l S\n`
       const lines: PdfLine[] = [
         {
@@ -431,7 +474,7 @@ function renderPdfPageSegment(
           y: y - 20 - i * 10,
         })
       })
-      y = bottomY - gap
+      y = bottomY
       return { ops, lines, nextY: y }
     }
     default:
@@ -533,12 +576,12 @@ function buildIcs202PdfBytes(pages: Ics202PhysicalPage[]): Uint8Array {
     ops += header.ops
     lines.push(...header.lines)
     let y = header.nextY
-    for (const segment of page.segments) {
-      const rendered = renderPdfPageSegment(segment, margin, contentWidth, y)
+    page.segments.forEach((segment) => {
+      const rendered = renderPdfPageSegment(segment, margin, contentWidth, y, false)
       ops += rendered.ops
       lines.push(...rendered.lines)
       y = rendered.nextY
-    }
+    })
     const preparedBy = renderPdfPagePreparedBy(page.preparedBy, margin, contentWidth, preparedByTopY)
     ops += preparedBy.ops
     lines.push(...preparedBy.lines)

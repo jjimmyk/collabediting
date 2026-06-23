@@ -8,6 +8,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import {
+  ICS202_PREVIEW_STACK_CLASS,
+  ics202PreviewSegmentRowClass,
+} from '@/features/ics202/export-box-stack'
 import { ICS202_FORM_TITLE_LINES } from '@/features/ics202/export-layout'
 import type { Ics202PagePreparedBy, Ics202PhysicalPage, Ics202PhysicalPageSegment } from '@/features/ics202/export-pagination'
 
@@ -20,17 +24,17 @@ type Ics202ExportPreviewDialogProps = {
   onExportPdf: () => void
 }
 
-function PreviewBox({
+function StackSection({
   label,
   children,
-  className,
+  isFirstInStack,
 }: {
   label?: string
   children: React.ReactNode
-  className?: string
+  isFirstInStack: boolean
 }) {
   return (
-    <div className={`border border-zinc-900 ${className ?? ''}`}>
+    <div className={ics202PreviewSegmentRowClass(isFirstInStack)}>
       {label ? (
         <div className="border-b border-zinc-900 px-2 py-1 text-[11px] font-semibold">{label}</div>
       ) : null}
@@ -39,11 +43,15 @@ function PreviewBox({
   )
 }
 
-function renderPreviewSegment(segment: Ics202PhysicalPageSegment, index: number) {
+function renderPreviewSegment(
+  segment: Ics202PhysicalPageSegment,
+  index: number,
+  isFirstInStack: boolean
+) {
   switch (segment.kind) {
     case 'lifelines':
       return (
-        <PreviewBox key={`ics202-seg-${index}`} label={segment.label}>
+        <StackSection key={`ics202-seg-${index}`} label={segment.label} isFirstInStack={isFirstInStack}>
           <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px] xl:grid-cols-4">
             {segment.options.map((opt) => (
               <span key={opt.id}>
@@ -51,19 +59,19 @@ function renderPreviewSegment(segment: Ics202PhysicalPageSegment, index: number)
               </span>
             ))}
           </div>
-        </PreviewBox>
+        </StackSection>
       )
     case 'text-box':
       return (
-        <PreviewBox key={`ics202-seg-${index}`} label={segment.label}>
+        <StackSection key={`ics202-seg-${index}`} label={segment.label} isFirstInStack={isFirstInStack}>
           <p className="min-h-[2rem] whitespace-pre-wrap text-[11px] leading-snug">
             {segment.bodyLines.join('\n').trim().length > 0 ? segment.bodyLines.join('\n') : ' '}
           </p>
-        </PreviewBox>
+        </StackSection>
       )
     case 'objectives':
       return (
-        <PreviewBox key={`ics202-seg-${index}`} label={segment.label}>
+        <StackSection key={`ics202-seg-${index}`} label={segment.label} isFirstInStack={isFirstInStack}>
           {segment.showTableHeader ? (
             <div className="mb-1 grid grid-cols-[2.5rem_minmax(0,1fr)] gap-2 text-[10px] font-semibold">
               <span>O/M</span>
@@ -82,33 +90,41 @@ function renderPreviewSegment(segment: Ics202PhysicalPageSegment, index: number)
               ))
             )}
           </div>
-        </PreviewBox>
+        </StackSection>
       )
     case 'site-safety-plan':
       if (segment.continued) {
         return (
-          <PreviewBox
+          <StackSection
             key={`ics202-seg-${index}`}
             label="9. Site Safety Plan located at: (Continued):"
+            isFirstInStack={isFirstInStack}
           >
             <p className="whitespace-pre-wrap text-[11px]">
               {segment.locationLines.join('\n').trim().length > 0
                 ? segment.locationLines.join('\n')
                 : ' '}
             </p>
-          </PreviewBox>
+          </StackSection>
         )
       }
       return (
-        <div key={`ics202-seg-${index}`} className="grid grid-cols-2 border border-zinc-900">
+        <div
+          key={`ics202-seg-${index}`}
+          className={`grid grid-cols-2 ${ics202PreviewSegmentRowClass(isFirstInStack)}`}
+        >
           <div className="border-r border-zinc-900 px-2 py-2">
-            <p className="text-[10px] font-semibold">8. Site Safety Plan Required:</p>
+            <p className="border-b border-zinc-900 pb-1 text-[10px] font-semibold">
+              8. Site Safety Plan Required:
+            </p>
             <p className="mt-1 text-[11px]">
               Yes {segment.required ? '[X]' : '[ ]'} &nbsp; No {segment.required ? '[ ]' : '[X]'}
             </p>
           </div>
           <div className="px-2 py-2">
-            <p className="text-[10px] font-semibold">9. Site Safety Plan located at:</p>
+            <p className="border-b border-zinc-900 pb-1 text-[10px] font-semibold">
+              9. Site Safety Plan located at:
+            </p>
             <p className="mt-1 whitespace-pre-wrap text-[11px]">
               {segment.locationLines.join('\n').trim().length > 0
                 ? segment.locationLines.join('\n')
@@ -122,9 +138,9 @@ function renderPreviewSegment(segment: Ics202PhysicalPageSegment, index: number)
   }
 }
 
-function renderPreviewPreparedBy(preparedBy: Ics202PagePreparedBy) {
+function renderPreviewPreparedBy(preparedBy: Ics202PagePreparedBy, isFirstInStack: boolean) {
   return (
-    <PreviewBox label={preparedBy.label}>
+    <StackSection label={preparedBy.label} isFirstInStack={isFirstInStack}>
       <div className="grid grid-cols-4 gap-2 text-[10px]">
         {(
           [
@@ -140,7 +156,7 @@ function renderPreviewPreparedBy(preparedBy: Ics202PagePreparedBy) {
           </div>
         ))}
       </div>
-    </PreviewBox>
+    </StackSection>
   )
 }
 
@@ -148,9 +164,9 @@ function renderPreviewPage(page: Ics202PhysicalPage, index: number) {
   return (
     <div
       key={`ics202-page-${page.displayPageNumber}-${index}`}
-      className="flex min-h-[720px] flex-col border-2 border-zinc-900 bg-white p-4 shadow-sm dark:bg-zinc-100"
+      className="flex min-h-[720px] flex-col bg-white p-4 shadow-sm dark:bg-zinc-100"
     >
-      <div className="space-y-0.5 text-center">
+      <div className="mb-2 space-y-0.5 text-center">
         {ICS202_FORM_TITLE_LINES.map((line, lineIndex) => (
           <p
             key={line}
@@ -164,23 +180,30 @@ function renderPreviewPage(page: Ics202PhysicalPage, index: number) {
           </p>
         ))}
       </div>
-      <div className="grid grid-cols-3 border border-zinc-900">
-        {page.headerCells.map((cell) => (
-          <div key={cell.label} className="border-r border-zinc-900 px-2 py-1 last:border-r-0">
-            <p className="text-[10px] font-semibold">{cell.label}</p>
-            {cell.subLabels?.map((sub) => (
-              <p key={sub} className="text-[9px] text-zinc-600">
-                {sub}
-              </p>
-            ))}
-            <p className="mt-1 whitespace-pre-wrap text-[11px]">{cell.value || ' '}</p>
-          </div>
-        ))}
+      <div className={`flex-1 ${ICS202_PREVIEW_STACK_CLASS}`}>
+        <div className="grid grid-cols-3 border-b border-zinc-900">
+          {page.headerCells.map((cell) => (
+            <div key={cell.label} className="border-r border-zinc-900 px-2 py-1 last:border-r-0">
+              <p className="text-[10px] font-semibold">{cell.label}</p>
+              {cell.subLabels?.map((sub) => (
+                <p key={sub} className="text-[9px] text-zinc-600">
+                  {sub}
+                </p>
+              ))}
+              <p className="mt-1 whitespace-pre-wrap text-[11px]">{cell.value || ' '}</p>
+            </div>
+          ))}
+        </div>
+        {page.segments.map((segment, segmentIndex) =>
+          renderPreviewSegment(segment, segmentIndex, segmentIndex === 0)
+        )}
+        {renderPreviewPreparedBy(page.preparedBy, page.segments.length === 0)}
       </div>
-      <div className="mt-2 flex-1 space-y-2">{page.segments.map(renderPreviewSegment)}</div>
-      <div className="mt-auto space-y-2 border-t border-zinc-300 pt-2">
-        {renderPreviewPreparedBy(page.preparedBy)}
-        <div className="text-[10px] text-zinc-600">{page.footerLeft}</div>
+      <div className="mt-2 flex items-center justify-between text-[10px] text-zinc-600">
+        <span>{page.footerLeft}</span>
+        <span>
+          Page {page.displayPageNumber} of {page.totalPages}
+        </span>
       </div>
     </div>
   )
@@ -203,8 +226,8 @@ export function Ics202ExportPreviewDialog({
             {title}
           </DialogTitle>
           <DialogDescription className="text-xs">
-            USCG ICS 202-CG boxed layout preview. Continuation sections repeat their label;
-            prepared-by and the ICS expiration line appear in the page footer on export.
+            USCG ICS 202-CG boxed layout preview. Sections share borders with no vertical gaps;
+            continuation segments repeat their label when content overflows a page.
           </DialogDescription>
         </DialogHeader>
         <div className="max-h-[70vh] overflow-y-auto">
