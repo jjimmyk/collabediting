@@ -42,8 +42,6 @@ export function OrgChartSpineChildren({
       <OrgChartSpineRegister parentId={parentId} childIds={childIds} />
       <div
         data-org-chart-spine-children
-        data-org-chart-spine-parent-id={parentId}
-        data-org-chart-spine-child-ids={childIds.join('\0')}
         className={cn('flex flex-col', ORG_CHART_SUBORDINATE_ROW_GAP, className)}
       >
         {children}
