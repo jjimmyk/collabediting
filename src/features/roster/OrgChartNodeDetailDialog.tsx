@@ -29,7 +29,7 @@ export function OrgChartNodeDetailDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         className={cn(
-          'max-h-[min(85vh,48rem)] max-w-2xl overflow-y-auto',
+          'max-h-[min(85vh,48rem)] w-full max-w-[calc(100%-2rem)] overflow-y-auto sm:max-w-2xl',
           contentClassName
         )}
       >

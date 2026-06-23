@@ -39,6 +39,7 @@ import {
 } from '@/features/roster/org-chart-visibility'
 import {
   ORG_CHART_CANVAS_MIN_WIDTH,
+  ORG_CHART_ASSET_DETAIL_MODAL_CLASS,
   ORG_CHART_CARD_TO_CHILDREN_GAP,
   ORG_CHART_CONNECTOR_STEM_HEIGHT,
   ORG_CHART_POSITION_CARD_MAX_WIDTH,
@@ -418,9 +419,6 @@ function OrgChartChildNode({
               renderProps.canManageRoster && renderProps.onRemoveAssetFromOrgChart
                 ? () => renderProps.onRemoveAssetFromOrgChart!(asset.assetKey)
                 : undefined
-            }
-            onFocusMap={
-              renderProps.onFocusAsset ? () => renderProps.onFocusAsset!(asset) : undefined
             }
             onUpdateAssetPointOfContact={renderProps.onUpdateAssetPointOfContact}
           />
@@ -1341,7 +1339,7 @@ export function WorkspaceOrgChartRoster({
         }}
         title={selectedAsset?.name ?? 'Org chart asset'}
         description="Org chart asset details"
-        contentClassName="max-w-[84rem]"
+        contentClassName={ORG_CHART_ASSET_DETAIL_MODAL_CLASS}
       >
         {selectedAsset ? (
           <RosterAssetResourceListItem
@@ -1397,7 +1395,6 @@ export function WorkspaceOrgChartRoster({
                     })
                 : undefined
             }
-            onFocusMap={onFocusAsset ? () => onFocusAsset(selectedAsset) : undefined}
           />
         ) : null}
       </OrgChartNodeDetailDialog>

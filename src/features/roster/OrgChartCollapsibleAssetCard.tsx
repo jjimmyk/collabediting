@@ -18,7 +18,6 @@ type OrgChartCollapsibleAssetCardProps = {
   removeLabel: string
   onOpenDetail?: () => void
   onRemove?: () => void
-  onFocusMap?: () => void
   onUpdateAssetPointOfContact?: (assetKey: string, memberId: string | null) => void
 }
 
@@ -32,7 +31,6 @@ export function OrgChartCollapsibleAssetCard({
   removeLabel,
   onOpenDetail,
   onRemove,
-  onFocusMap,
   onUpdateAssetPointOfContact,
 }: OrgChartCollapsibleAssetCardProps) {
   return (
@@ -70,7 +68,6 @@ export function OrgChartCollapsibleAssetCard({
         removeLabel={removeLabel}
         onRemove={onRemove}
         onUpdateAssetPointOfContact={onUpdateAssetPointOfContact}
-        onFocusMap={onFocusMap}
       />
     </button>
   )

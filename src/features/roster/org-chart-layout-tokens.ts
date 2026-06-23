@@ -61,8 +61,8 @@ export const ORG_CHART_ASSET_CARD_MAX_WIDTH = ORG_CHART_POSITION_CARD_MAX_WIDTH
 export const ORG_CHART_ASSET_CARD_WIDTH =
   `${ORG_CHART_ASSET_CARD_MIN_WIDTH} ${ORG_CHART_ASSET_CARD_MAX_WIDTH}`
 
-/** @deprecated Org chart assets now use position card width; kept for verify compatibility. */
-export const ORG_CHART_ASSET_CARD_LEGACY_MAX_WIDTH = 'max-w-[36rem]'
+/** Asset detail modal in org chart — 2× default dialog width (42rem → 84rem). */
+export const ORG_CHART_ASSET_DETAIL_MODAL_CLASS = 'sm:max-w-[84rem]'
 
 export const LOGISTICS_SECTION_LABEL = 'Logistics Section'
 
