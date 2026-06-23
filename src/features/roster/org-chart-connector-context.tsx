@@ -16,12 +16,12 @@ type RedrawListener = () => void
 type OrgChartConnectorContextValue = {
   chartRef: RefObject<HTMLDivElement | null>
   spineLinksRef: RefObject<OrgChartSpineLink[]>
-  icBusRef: RefObject<OrgChartIcBusLink | null>
+  icBusLinksRef: RefObject<OrgChartIcBusLink[]>
   registerCard: (id: string, element: HTMLElement | null) => void
   getCardElement: (id: string) => HTMLElement | null
   registerSpine: (link: OrgChartSpineLink) => void
   unregisterSpine: (parentId: string) => void
-  registerIcBus: (link: OrgChartIcBusLink | null) => void
+  setIcBusLinks: (links: OrgChartIcBusLink[]) => void
   subscribeRedraw: (listener: RedrawListener) => () => void
 }
 
@@ -45,11 +45,16 @@ function icBusEqual(a: OrgChartIcBusLink | null, b: OrgChartIcBusLink | null): b
   )
 }
 
+function icBusLinksEqual(a: OrgChartIcBusLink[], b: OrgChartIcBusLink[]): boolean {
+  if (a.length !== b.length) return false
+  return a.every((link, index) => icBusEqual(link, b[index]))
+}
+
 export function OrgChartConnectorProvider({ children }: { children: ReactNode }) {
   const chartRef = useRef<HTMLDivElement>(null)
   const cardsRef = useRef(new Map<string, HTMLElement>())
   const spineLinksRef = useRef<OrgChartSpineLink[]>([])
-  const icBusRef = useRef<OrgChartIcBusLink | null>(null)
+  const icBusLinksRef = useRef<OrgChartIcBusLink[]>([])
   const listenersRef = useRef(new Set<RedrawListener>())
 
   const notifyRedraw = useCallback(() => {
@@ -108,10 +113,10 @@ export function OrgChartConnectorProvider({ children }: { children: ReactNode })
     [notifyRedraw]
   )
 
-  const registerIcBus = useCallback(
-    (link: OrgChartIcBusLink | null) => {
-      if (icBusEqual(icBusRef.current, link)) return
-      icBusRef.current = link
+  const setIcBusLinks = useCallback(
+    (links: OrgChartIcBusLink[]) => {
+      if (icBusLinksEqual(icBusLinksRef.current, links)) return
+      icBusLinksRef.current = links
       notifyRedraw()
     },
     [notifyRedraw]
@@ -121,12 +126,12 @@ export function OrgChartConnectorProvider({ children }: { children: ReactNode })
     () => ({
       chartRef,
       spineLinksRef,
-      icBusRef,
+      icBusLinksRef,
       registerCard,
       getCardElement,
       registerSpine,
       unregisterSpine,
-      registerIcBus,
+      setIcBusLinks,
       subscribeRedraw,
     }),
     [
@@ -134,7 +139,7 @@ export function OrgChartConnectorProvider({ children }: { children: ReactNode })
       getCardElement,
       registerSpine,
       unregisterSpine,
-      registerIcBus,
+      setIcBusLinks,
       subscribeRedraw,
     ]
   )

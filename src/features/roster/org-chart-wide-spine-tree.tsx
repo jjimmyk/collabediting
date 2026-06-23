@@ -1,9 +1,4 @@
-import { cn } from '@/lib/utils'
-import { OrgChartCardAnchor } from '@/features/roster/org-chart-card-anchor'
-import {
-  ORG_CHART_COMMAND_STAFF_HEADER_ID,
-  orgChartNodeConnectorId,
-} from '@/features/roster/org-chart-node-id'
+import { orgChartNodeConnectorId } from '@/features/roster/org-chart-node-id'
 import {
   OrgChartSpineChildren,
   OrgChartSpineNode,
@@ -155,21 +150,5 @@ function OrgChartWideSpineNode({
         />
       }
     />
-  )
-}
-
-export function CommandStaffHeaderCard({ className }: { className?: string }) {
-  return (
-    <OrgChartCardAnchor
-      id={ORG_CHART_COMMAND_STAFF_HEADER_ID}
-      className={cn(
-        'rounded-xl border-2 border-border px-3 py-2.5 text-center shadow-sm',
-        className
-      )}
-    >
-      <p className="text-[11px] font-bold uppercase tracking-wide text-foreground">
-        Command Staff
-      </p>
-    </OrgChartCardAnchor>
   )
 }

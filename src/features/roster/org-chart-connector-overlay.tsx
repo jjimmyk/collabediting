@@ -27,7 +27,7 @@ function appendSvgLines(
 }
 
 export function OrgChartConnectorOverlay({ zoom = 1 }: { zoom?: number }) {
-  const { chartRef, spineLinksRef, icBusRef, getCardElement, subscribeRedraw } =
+  const { chartRef, spineLinksRef, icBusLinksRef, getCardElement, subscribeRedraw } =
     useOrgChartConnectors()
 
   useLayoutEffect(() => {
@@ -68,8 +68,7 @@ export function OrgChartConnectorOverlay({ zoom = 1 }: { zoom?: number }) {
         )
       }
 
-      const icBus = icBusRef.current
-      if (icBus) {
+      for (const icBus of icBusLinksRef.current) {
         const commanderEl = getCardElement(icBus.commanderId)
         const headerEls = icBus.headerIds
           .map((id) => getCardElement(id))
@@ -97,7 +96,7 @@ export function OrgChartConnectorOverlay({ zoom = 1 }: { zoom?: number }) {
       observer.disconnect()
       unsubscribe()
     }
-  }, [chartRef, getCardElement, icBusRef, spineLinksRef, subscribeRedraw, zoom])
+  }, [chartRef, getCardElement, icBusLinksRef, spineLinksRef, subscribeRedraw, zoom])
 
   return (
     <svg

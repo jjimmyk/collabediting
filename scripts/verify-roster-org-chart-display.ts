@@ -576,8 +576,10 @@ const wideLayoutSource = readFileSync(
 assert(
   wideLayoutSource.includes('data-org-chart-wide-root') &&
     wideLayoutSource.includes('OrgChartSubHierarchyColumn') &&
-    wideLayoutSource.includes('OrgChartIcBusRegistrar'),
-  'wide org chart layout should use three-band structure with sub-hierarchy alignment'
+    wideLayoutSource.includes('OrgChartIcBusesRegistrar') &&
+    wideLayoutSource.includes('ORG_CHART_WIDE_COMMAND_STAFF_MARGIN_TOP') &&
+    !wideLayoutSource.includes('CommandStaffHeaderCard'),
+  'wide org chart layout should center command staff under IC and omit the command staff badge'
 )
 
 const connectorOverlaySource = readFileSync(
