@@ -222,6 +222,8 @@ import {
   fetchOrganizationMembers,
   inviteOrganizationMember,
 } from '@/lib/organization-service'
+import type { CreateOrganizationAssetInput } from '@/lib/organization-asset-catalog'
+import { createOrganizationAsset } from '@/lib/organization-asset-service'
 import { CreateOrganizationDialog } from '@/features/organization/CreateOrganizationDialog'
 import { OrgMembersSheet } from '@/features/organization/OrgMembersSheet'
 import { OrganizationProfileMenuSection } from '@/features/organization/OrganizationProfileMenuSection'
@@ -562,6 +564,9 @@ import {
 import { getAssetMapKey } from '@/data/hub-asset-catalog'
 import { useWorkspaceAssetAssignments } from '@/hooks/useWorkspaceAssetAssignments'
 import { WorkspaceAssignedAssetsPanel } from '@/features/resources/WorkspaceAssignedAssetsPanel'
+import { AssetsTabToolbar } from '@/features/resources/AssetsTabToolbar'
+import { AddWorkspaceAssetDialog } from '@/features/resources/AddWorkspaceAssetDialog'
+import { CreateOrganizationAssetDialog } from '@/features/resources/CreateOrganizationAssetDialog'
 import { AssetWorkspaceAssignmentSelect } from '@/features/resources/AssetWorkspaceAssignmentSelect'
 import {
   SINGLE_RESOURCE_POSITION_LABEL,
@@ -8929,11 +8934,14 @@ function App() {
     syncIcs204AttachmentsForDocument,
     getAssetsForWorkspace,
     refreshAssignments,
+    refreshOrganizationAssets,
     updateAssetCheckInStatus,
   } = useWorkspaceAssetAssignments({
     enabled: true,
     accessibleWorkspaces,
     userId: user?.id ?? null,
+    organizationId: activeOrganizationId,
+    getAccessToken,
     displayContext: assetAssignmentDisplayContext,
   })
   const assetWorkspaceOptions = useMemo(
@@ -8978,12 +8986,101 @@ function App() {
     },
     [activeWorkspaceSupabaseId, handleAssetAssignmentChange]
   )
+  const handleCreateOrganizationAsset = useCallback(
+    async (input: CreateOrganizationAssetInput) => {
+      if (!activeOrganizationId) {
+        toast.error('Select an organization before creating assets.')
+        return false
+      }
+
+      setIsCreatingOrganizationAsset(true)
+      try {
+        const accessToken = await getAccessToken()
+        const result = await createOrganizationAsset({
+          accessToken,
+          organizationId: activeOrganizationId,
+          input,
+        })
+        if (!result.ok) {
+          toast.error(result.message)
+          return false
+        }
+        await refreshOrganizationAssets()
+        toast.success(`${result.asset.name} created.`)
+        return true
+      } finally {
+        setIsCreatingOrganizationAsset(false)
+      }
+    },
+    [activeOrganizationId, getAccessToken, refreshOrganizationAssets]
+  )
+  const handleAssignExistingWorkspaceAsset = useCallback(
+    async (assetKey: string) => {
+      if (!activeWorkspaceSupabaseId) {
+        return false
+      }
+      try {
+        await assignAsset(assetKey, activeWorkspaceSupabaseId)
+        toast.success('Asset assigned to workspace.')
+        return true
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : 'Could not assign asset.')
+        return false
+      }
+    },
+    [activeWorkspaceSupabaseId, assignAsset]
+  )
+  const handleCreateAndAssignWorkspaceAsset = useCallback(
+    async (input: CreateOrganizationAssetInput) => {
+      if (!activeWorkspaceSupabaseId) {
+        toast.error('Open a workspace before assigning assets.')
+        return false
+      }
+      if (!activeOrganizationId) {
+        toast.error('Select an organization before creating assets.')
+        return false
+      }
+
+      setIsCreatingOrganizationAsset(true)
+      try {
+        const accessToken = await getAccessToken()
+        const result = await createOrganizationAsset({
+          accessToken,
+          organizationId: activeOrganizationId,
+          input,
+        })
+        if (!result.ok) {
+          toast.error(result.message)
+          return false
+        }
+        await refreshOrganizationAssets()
+        await assignAsset(result.asset.assetKey, activeWorkspaceSupabaseId)
+        toast.success(`${result.asset.name} created and assigned.`)
+        return true
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : 'Could not create and assign asset.')
+        return false
+      } finally {
+        setIsCreatingOrganizationAsset(false)
+      }
+    },
+    [
+      activeOrganizationId,
+      activeWorkspaceSupabaseId,
+      assignAsset,
+      getAccessToken,
+      refreshOrganizationAssets,
+    ]
+  )
   const [workspaceFormsReloadKey, setWorkspaceFormsReloadKey] = useState(0)
   const [isRosterLoading, setIsRosterLoading] = useState(false)
   const [isInvitingRosterMember, setIsInvitingRosterMember] = useState(false)
   const [isAddRosterMemberOpen, setIsAddRosterMemberOpen] = useState(false)
   const [isAddWorkspacePositionOpen, setIsAddWorkspacePositionOpen] = useState(false)
   const [isAddAssetToOrgChartOpen, setIsAddAssetToOrgChartOpen] = useState(false)
+  const [isCreateOrganizationAssetOpen, setIsCreateOrganizationAssetOpen] = useState(false)
+  const [isAddWorkspaceAssetOpen, setIsAddWorkspaceAssetOpen] = useState(false)
+  const [isCreatingOrganizationAsset, setIsCreatingOrganizationAsset] = useState(false)
   const [isSavingAssetOrgChartPlacement, setIsSavingAssetOrgChartPlacement] = useState(false)
   const [isSavingCustomPosition, setIsSavingCustomPosition] = useState(false)
   const [deletingCustomPosition, setDeletingCustomPosition] = useState<string | null>(null)
@@ -26498,6 +26595,10 @@ function App() {
                 )}
                 {activeTab === 'resources' && !isInWorkspaceContext && (
                   <div className="flex flex-wrap items-center justify-end gap-2">
+                    <AssetsTabToolbar
+                      canManageAssets={Boolean(profileEmail && activeOrganizationId)}
+                      onAddAsset={() => setIsCreateOrganizationAssetOpen(true)}
+                    />
                     {resourcesPanelView === 'resources' && (
                       <div className="flex w-56 items-center gap-2 rounded-md border px-2 py-1.5">
                         <Search className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
@@ -26715,6 +26816,14 @@ function App() {
                         </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
+                  </div>
+                )}
+                {activeTab === 'resources' && isInWorkspaceContext && (
+                  <div className="flex flex-wrap items-center justify-end gap-2">
+                    <AssetsTabToolbar
+                      canManageAssets={effectiveCanManageRoster}
+                      onAddAsset={() => setIsAddWorkspaceAssetOpen(true)}
+                    />
                   </div>
                 )}
                 {activeTab === 'aors' && (
@@ -39407,6 +39516,20 @@ function App() {
         onOpenChange={setIsCreateOrganizationOpen}
         isSubmitting={isCreatingOrganization}
         onSubmit={handleCreateOrganization}
+      />
+      <CreateOrganizationAssetDialog
+        open={isCreateOrganizationAssetOpen}
+        onOpenChange={setIsCreateOrganizationAssetOpen}
+        isSubmitting={isCreatingOrganizationAsset}
+        onSubmit={handleCreateOrganizationAsset}
+      />
+      <AddWorkspaceAssetDialog
+        open={isAddWorkspaceAssetOpen}
+        onOpenChange={setIsAddWorkspaceAssetOpen}
+        unassignedAssets={unassignedHubAssets}
+        isSubmitting={isCreatingOrganizationAsset || isAssetAssignmentsLoading}
+        onAssignExisting={handleAssignExistingWorkspaceAsset}
+        onCreateAndAssign={handleCreateAndAssignWorkspaceAsset}
       />
       <OrgMembersSheet
         open={isOrgMembersOpen}

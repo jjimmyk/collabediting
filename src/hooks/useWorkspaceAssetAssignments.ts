@@ -8,6 +8,8 @@ import {
   assignmentsRecordFromRows,
   getAssignedAssetsNotOnOrgChart,
 } from '@/features/resources/utils'
+import { mergeHubAssetCatalog } from '@/lib/organization-asset-catalog'
+import { fetchOrganizationAssets } from '@/lib/organization-asset-service'
 import {
   assignAssetToWorkspace,
   fetchAllAssetAssignments,
@@ -24,6 +26,8 @@ type UseWorkspaceAssetAssignmentsOptions = {
   enabled: boolean
   accessibleWorkspaces: AccessibleWorkspace[]
   userId: string | null
+  organizationId: string | null
+  getAccessToken?: () => Promise<string | null>
   displayContext?: ActiveWorkspaceAssetDisplayContext | null
 }
 
@@ -31,9 +35,14 @@ export function useWorkspaceAssetAssignments({
   enabled,
   accessibleWorkspaces,
   userId,
+  organizationId,
+  getAccessToken,
   displayContext = null,
 }: UseWorkspaceAssetAssignmentsOptions) {
   const [assignmentRows, setAssignmentRows] = useState<WorkspaceAssetAssignment[]>([])
+  const [organizationAssets, setOrganizationAssets] = useState<
+    import('@/lib/organization-asset-catalog').OrganizationAssetPayload[]
+  >([])
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -52,15 +61,40 @@ export function useWorkspaceAssetAssignments({
     [assignmentRows]
   )
 
+  const mergedCatalog = useMemo(
+    () => mergeHubAssetCatalog(getAllHubAssets(), organizationAssets),
+    [organizationAssets]
+  )
+
   const hubAssets = useMemo(
     () =>
       enrichAssetsWithWorkspaceAssignmentDisplay(
-        applyAssignmentsToHubAssets(getAllHubAssets(), assignmentRows, workspacesById),
+        applyAssignmentsToHubAssets(mergedCatalog, assignmentRows, workspacesById),
         workspacesById,
         displayContext
       ),
-    [assignmentRows, displayContext, workspacesById]
+    [assignmentRows, displayContext, mergedCatalog, workspacesById]
   )
+
+  const refreshOrganizationAssets = useCallback(async () => {
+    if (!organizationId) {
+      setOrganizationAssets([])
+      return
+    }
+
+    const accessToken = getAccessToken ? await getAccessToken() : null
+    const result = await fetchOrganizationAssets({
+      organizationId,
+      accessToken,
+    })
+
+    if (!result.ok) {
+      setError(result.message)
+      return
+    }
+
+    setOrganizationAssets(result.assets)
+  }, [getAccessToken, organizationId])
 
   useEffect(() => {
     if (!enabled) {
@@ -76,6 +110,7 @@ export function useWorkspaceAssetAssignments({
         const rows = await seedDefaultAssetAssignmentsIfEmpty(workspaceIdByName)
         if (cancelled) return
         setAssignmentRows(rows)
+        await refreshOrganizationAssets()
       } catch (loadError) {
         if (cancelled) return
         setError(loadError instanceof Error ? loadError.message : 'Failed to load asset assignments.')
@@ -91,7 +126,12 @@ export function useWorkspaceAssetAssignments({
     return () => {
       cancelled = true
     }
-  }, [enabled, workspaceIdByName])
+  }, [enabled, refreshOrganizationAssets, workspaceIdByName])
+
+  useEffect(() => {
+    if (!enabled) return
+    void refreshOrganizationAssets()
+  }, [enabled, refreshOrganizationAssets])
 
   const assignAsset = useCallback(
     async (assetKey: string, workspaceId: string) => {
@@ -177,6 +217,7 @@ export function useWorkspaceAssetAssignments({
     getAssetsForWorkspace,
     getAssetsForWorkspaceNotOnOrgChart,
     refreshAssignments,
+    refreshOrganizationAssets,
     updateAssetCheckInStatus,
   }
 }
