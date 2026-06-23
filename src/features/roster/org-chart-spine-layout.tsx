@@ -126,17 +126,18 @@ export function OrgChartSubHierarchyColumn({
   className?: string
 }) {
   const columnRef = useRef<HTMLDivElement>(null)
-  const { getCardElement, revision } = useOrgChartConnectors()
+  const { getCardElement, subscribeRedraw } = useOrgChartConnectors()
 
   useLayoutEffect(() => {
     const column = columnRef.current
-    const header = getCardElement(headerId)
-    if (!column || !header) return
+    if (!column) return
 
     const chart = column.closest('[data-org-chart-wide-root]')
     if (!chart) return
 
     const align = () => {
+      const header = getCardElement(headerId)
+      if (!header) return
       const chartRect = chart.getBoundingClientRect()
       const headerRect = header.getBoundingClientRect()
       const columnRect = column.getBoundingClientRect()
@@ -149,10 +150,13 @@ export function OrgChartSubHierarchyColumn({
     align()
     const observer = new ResizeObserver(align)
     observer.observe(chart)
-    observer.observe(header)
     observer.observe(column)
-    return () => observer.disconnect()
-  }, [getCardElement, headerId, revision])
+    const unsubscribe = subscribeRedraw(align)
+    return () => {
+      observer.disconnect()
+      unsubscribe()
+    }
+  }, [getCardElement, headerId, subscribeRedraw])
 
   return (
     <div

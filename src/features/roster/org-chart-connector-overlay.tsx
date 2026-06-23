@@ -7,7 +7,7 @@ import {
 import { ORG_CHART_SPINE_ANCHOR_RATIO } from '@/features/roster/org-chart-layout-tokens'
 
 export function OrgChartConnectorOverlay({ zoom = 1 }: { zoom?: number }) {
-  const { chartRef, spineLinksRef, icBusRef, getCardElement, revision } =
+  const { chartRef, spineLinksRef, icBusRef, getCardElement, subscribeRedraw } =
     useOrgChartConnectors()
 
   useLayoutEffect(() => {
@@ -69,8 +69,12 @@ export function OrgChartConnectorOverlay({ zoom = 1 }: { zoom?: number }) {
     draw()
     const observer = new ResizeObserver(draw)
     observer.observe(chart)
-    return () => observer.disconnect()
-  }, [chartRef, getCardElement, icBusRef, revision, spineLinksRef, zoom])
+    const unsubscribe = subscribeRedraw(draw)
+    return () => {
+      observer.disconnect()
+      unsubscribe()
+    }
+  }, [chartRef, getCardElement, icBusRef, spineLinksRef, subscribeRedraw, zoom])
 
   return (
     <svg

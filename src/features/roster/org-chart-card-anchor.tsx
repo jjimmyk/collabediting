@@ -10,14 +10,14 @@ type OrgChartCardAnchorProps = {
 }
 
 export function OrgChartCardAnchor({ id, children, className }: OrgChartCardAnchorProps) {
-  const connectors = useOptionalOrgChartConnectors()
+  const registerCard = useOptionalOrgChartConnectors()?.registerCard
   const ref = useRef<HTMLDivElement>(null)
 
   useLayoutEffect(() => {
-    if (!connectors) return
-    connectors.registerCard(id, ref.current)
-    return () => connectors.registerCard(id, null)
-  }, [connectors, id])
+    if (!registerCard) return
+    registerCard(id, ref.current)
+    return () => registerCard(id, null)
+  }, [registerCard, id])
 
   return (
     <div
