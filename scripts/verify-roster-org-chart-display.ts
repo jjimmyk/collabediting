@@ -558,16 +558,16 @@ assert(
   connectorSource.includes('ORG_CHART_SUBORDINATE_ARM_CHANNEL_WIDTH') &&
     connectorSource.includes('OrgChartSpineTeeRow') &&
     connectorSource.includes('OrgChartCenterSpine') &&
-    !connectorSource.includes('ORG_CHART_SUBORDINATE_ARM_OFFSET'),
-  'org chart connectors should use arm channels and ICS spine layout'
+    connectorSource.includes('ORG_CHART_CONNECTOR_BORDER_WIDTH'),
+  'org chart connectors should use arm channels, ICS spine layout, and continuous border trunks'
 )
 assert(
   orgChartRosterSource.includes('OrgChartRightIndentStack') &&
     !orgChartRosterSource.includes('OrgChartVerticalStack') &&
     orgChartRosterSource.includes('ORG_CHART_CARD_TO_CHILDREN_GAP') &&
     orgChartRosterSource.includes('IncidentCommanderSpine') &&
-    orgChartRosterSource.includes('OrgChartSpineTeeRow'),
-  'org chart roster should use spine hub and consistent spacing'
+    orgChartRosterSource.includes('showInboundStem={spineAboveSections}'),
+  'org chart roster should use spine hub with section crossbar inbound stem'
 )
 
 const icsStructureSource = readFileSync(
@@ -588,6 +588,7 @@ assert(
   layoutTokensSource.includes('ORG_CHART_CARD_TO_CHILDREN_GAP') &&
     layoutTokensSource.includes('ORG_CHART_SUBORDINATE_ARM_CHANNEL_WIDTH') &&
     layoutTokensSource.includes('ORG_CHART_CARD_LAYER_CLASS') &&
+    layoutTokensSource.includes('ORG_CHART_CONNECTOR_BORDER_WIDTH') &&
     layoutTokensSource.includes('orgChartCrossbarBarInsetClassName'),
   'org chart layout tokens should centralize spacing, arm channels, and card layers'
 )

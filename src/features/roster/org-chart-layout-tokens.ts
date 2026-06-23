@@ -3,6 +3,10 @@ export const ORG_CHART_CONNECTOR_CLASS = 'bg-muted-foreground/70'
 /** Stroke width for org chart connector lines. */
 export const ORG_CHART_CONNECTOR_LINE_WIDTH = 'w-0.5'
 
+/** Connector border for continuous vertical trunks (matches line stroke). */
+export const ORG_CHART_CONNECTOR_BORDER_CLASS = 'border-muted-foreground/70'
+export const ORG_CHART_CONNECTOR_BORDER_WIDTH = 'border-l-2'
+
 /** Short vertical stub between a parent card and its child subtree. */
 export const ORG_CHART_CONNECTOR_STEM_HEIGHT = 'h-4'
 

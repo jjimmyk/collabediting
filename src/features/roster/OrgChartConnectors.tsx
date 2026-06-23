@@ -1,6 +1,8 @@
 import type { ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 import {
+  ORG_CHART_CONNECTOR_BORDER_CLASS,
+  ORG_CHART_CONNECTOR_BORDER_WIDTH,
   ORG_CHART_CONNECTOR_CLASS,
   ORG_CHART_CONNECTOR_DROP_HEIGHT,
   ORG_CHART_CONNECTOR_LINE_WIDTH,
@@ -9,7 +11,6 @@ import {
   ORG_CHART_LOGISTICS_FORK_MIN_WIDTH,
   ORG_CHART_SUBORDINATE_ARM_CHANNEL_WIDTH,
   ORG_CHART_SUBORDINATE_ROW_GAP,
-  ORG_CHART_SUBORDINATE_TRUNK_WIDTH,
   orgChartCrossbarBarInsetClassName,
 } from '@/features/roster/org-chart-layout-tokens'
 
@@ -198,8 +199,8 @@ export function OrgChartVerticalStack({ children }: { children: ReactNode[] }) {
 }
 
 /**
- * ICS-style subordinate layout: vertical trunk, arm channel, then card column.
- * Horizontal arms never overlap card borders.
+ * ICS-style subordinate layout: one continuous border-left trunk, arm channel, then card.
+ * The trunk runs through row gaps so vertical lines never break between subordinates.
  */
 export function OrgChartRightIndentStack({
   children,
@@ -212,26 +213,27 @@ export function OrgChartRightIndentStack({
 
   return (
     <div
-      className="flex w-full min-w-0 flex-row items-stretch self-start"
+      className="flex w-full min-w-0 flex-col self-start"
       data-org-chart-layout="right-indent"
     >
-      <div className={cn('relative shrink-0', ORG_CHART_SUBORDINATE_TRUNK_WIDTH)} aria-hidden>
-        {connectFromParent ? (
-          <OrgChartVerticalLine
-            heightClassName={ORG_CHART_CONNECTOR_STEM_HEIGHT}
-            className="absolute left-1/2 top-0 -translate-x-1/2"
-          />
-        ) : null}
+      {connectFromParent ? (
         <div
           className={cn(
-            'absolute right-0',
-            ORG_CHART_CONNECTOR_LINE_WIDTH,
-            ORG_CHART_CONNECTOR_CLASS,
-            connectFromParent ? 'top-4 bottom-0' : 'inset-y-0'
+            'flex flex-row items-start',
+            ORG_CHART_SUBORDINATE_ARM_CHANNEL_WIDTH
           )}
-        />
-      </div>
-      <div className={cn('flex min-w-0 flex-col', ORG_CHART_SUBORDINATE_ROW_GAP)}>
+        >
+          <OrgChartVerticalLine heightClassName={ORG_CHART_CONNECTOR_STEM_HEIGHT} />
+        </div>
+      ) : null}
+      <div
+        className={cn(
+          'flex flex-col',
+          ORG_CHART_SUBORDINATE_ROW_GAP,
+          ORG_CHART_CONNECTOR_BORDER_WIDTH,
+          ORG_CHART_CONNECTOR_BORDER_CLASS
+        )}
+      >
         {children.map((child, index) => (
           <div key={index} className="flex min-w-0 flex-row items-center">
             <div

@@ -330,10 +330,12 @@ function OrgChartChildren({
   children,
   parentColor,
   renderProps,
+  connectFromParent = false,
 }: {
   children: OrgChartNode[]
   parentColor?: OrgChartColor
   renderProps: OrgChartRenderProps
+  connectFromParent?: boolean
 }) {
   const visibleChildren = filterVisibleOrgChartChildren(
     children,
@@ -344,7 +346,7 @@ function OrgChartChildren({
 
   if (visibleChildren.every(isSubordinateRowChild)) {
     return (
-      <OrgChartRightIndentStack>
+      <OrgChartRightIndentStack connectFromParent={connectFromParent}>
         {visibleChildren.map((child, index) => (
           <OrgChartLayoutNode
             key={orgChartNodeKey(child, index)}
@@ -725,7 +727,12 @@ function PositionNode({
         }
       />
       {!suppressChildren ? (
-        <OrgChartChildren children={children} parentColor={color} renderProps={renderProps} />
+        <OrgChartChildren
+          children={children}
+          parentColor={color}
+          renderProps={renderProps}
+          connectFromParent
+        />
       ) : null}
     </div>
   )
@@ -980,6 +987,8 @@ function IncidentCommanderSpine({
     )
   }
 
+  const spineAboveSections = connectFromParent || showCommandStaff || hasRootChildren
+
   return (
     <>
       {connectFromParent ? <OrgChartCenterSpine /> : null}
@@ -991,15 +1000,12 @@ function IncidentCommanderSpine({
         </>
       ) : null}
       {hasSections ? (
-        <>
-          {showCommandStaff || hasRootChildren ? <OrgChartCenterSpine /> : null}
-          <SectionBranchesCrossbar
-            visibleSectionBranches={visibleSectionBranches}
-            layoutMode={layoutMode}
-            renderProps={renderProps}
-            showInboundStem={false}
-          />
-        </>
+        <SectionBranchesCrossbar
+          visibleSectionBranches={visibleSectionBranches}
+          layoutMode={layoutMode}
+          renderProps={renderProps}
+          showInboundStem={spineAboveSections}
+        />
       ) : null}
     </>
   )
