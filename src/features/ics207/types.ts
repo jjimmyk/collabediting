@@ -21,3 +21,10 @@ export function ics207ExportFilenameBase(context: Ics207ExportContext): string {
 export function formatIcs207ExportTimestamp(date = new Date()): string {
   return date.toISOString().slice(0, 16).replace(/[:T]/g, '-')
 }
+
+export type Ics207ExportPreview = {
+  scope: OrgChartExportScope
+  context: Ics207ExportContext
+  pngBytes: Uint8Array
+  pngDataUrl: string
+}

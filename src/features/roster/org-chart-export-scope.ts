@@ -6,6 +6,9 @@ import type { WorkspaceRosterMember } from '@/lib/workspace-types'
 
 export type OrgChartExportScope = 'current_op' | 'next_op'
 
+/** Org chart screenshot zoom for ICS-207 export — matches roster at 60%. */
+export const ICS207_EXPORT_ZOOM = 0.6
+
 export const ORG_CHART_EXPORT_DISPLAY_FILTERS: RosterDisplayFilters = {
   ...DEFAULT_ROSTER_DISPLAY_FILTERS,
   showPositionsWithScheduledAssignees: false,

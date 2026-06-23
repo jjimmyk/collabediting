@@ -2,8 +2,10 @@ import assert from 'node:assert/strict'
 import { buildIcs207ExportContext } from '../src/features/ics207/export-layout'
 import { buildIcs207PdfBytesForTest } from '../src/features/ics207/export-download'
 import { buildOrgChartLayoutForExport } from '../src/features/roster/build-org-chart-for-export'
+import { assertOrgChartCaptureNotBlank } from '../src/features/roster/org-chart-export-capture'
 import {
   buildProjectedOrgChartExportData,
+  ICS207_EXPORT_ZOOM,
   projectPositionRosterEntryForExport,
   projectPositionRosterEntriesForExport,
 } from '../src/features/roster/org-chart-export-scope'
@@ -177,11 +179,16 @@ const context = buildIcs207ExportContext({
   scope: 'current_op',
   incidentName: 'Test Incident',
   incidentLocation: 'Cape Cod',
-  operationalPeriodFrom: '2026-06-23 08:00',
+  operationalPeriodFrom: '2026-06-18T02:26',
+  operationalPeriodTo: '2026-06-18T14:26',
   preparedByName: 'Planner',
   preparedByPositionTitle: 'Planning Section Chief',
 })
-assert.match(context.operationalPeriodDate, /2026-06-23/)
+assert.equal(context.operationalPeriodDate, '06/18/2026')
+assert.equal(context.operationalPeriodTime, '14:26')
+assert.equal(ICS207_EXPORT_ZOOM, 0.6)
+
+assert.throws(() => assertOrgChartCaptureNotBlank(new Uint8Array(100)))
 
 const pngBytes = Uint8Array.from(
   Buffer.from(

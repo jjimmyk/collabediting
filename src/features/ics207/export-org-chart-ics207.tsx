@@ -5,19 +5,21 @@ import {
   formatIcs207ExportTimestamp,
   ics207ExportFilenameBase,
   type Ics207ExportContext,
+  type Ics207ExportPreview,
 } from '@/features/ics207/types'
-import {
-  captureOrgChartImage,
-  waitForOrgChartLayoutSettle,
-} from '@/features/roster/capture-org-chart-image'
-import {
-  buildProjectedOrgChartExportData,
-  type OrgChartExportScope,
-} from '@/features/roster/org-chart-export-scope'
 import {
   buildExportOrgChartLayout,
   OrgChartExportCaptureTree,
 } from '@/features/roster/OrgChartExportCaptureTree'
+import {
+  captureOrgChartElement,
+  pngBytesToDataUrl,
+  waitForOrgChartCaptureReady,
+} from '@/features/roster/org-chart-export-capture'
+import {
+  buildProjectedOrgChartExportData,
+  type OrgChartExportScope,
+} from '@/features/roster/org-chart-export-scope'
 import type { RosterPanelLayoutMode } from '@/features/roster/roster-layout'
 import type { PositionRosterEntry } from '@/features/roster/workspace-position-roster'
 import type { WorkspacePositionCatalog } from '@/features/roster/workspace-positions'
@@ -32,6 +34,7 @@ export type ExportOrgChartIcs207Input = {
   roster: WorkspaceRosterMember[]
   workspaceLabel: string
   layoutMode: RosterPanelLayoutMode
+  glassItemBorderClasses: string
   incidentName: string
   incidentLocation?: string | null
   operationalPeriodFrom?: string | null
@@ -39,6 +42,18 @@ export type ExportOrgChartIcs207Input = {
   profileEmail?: string | null
   profileDisplayName?: string | null
   preparedByPositionTitle?: string | null
+}
+
+function buildExportContext(input: ExportOrgChartIcs207Input): Ics207ExportContext {
+  return buildIcs207ExportContext({
+    scope: input.scope,
+    incidentName: input.incidentName,
+    incidentLocation: input.incidentLocation,
+    operationalPeriodFrom: input.operationalPeriodFrom,
+    operationalPeriodTo: input.operationalPeriodTo,
+    preparedByName: resolveIcs207PreparedByName(input.profileEmail, input.profileDisplayName),
+    preparedByPositionTitle: input.preparedByPositionTitle,
+  })
 }
 
 async function captureProjectedOrgChart(
@@ -52,51 +67,44 @@ async function captureProjectedOrgChart(
     input.scope
   )
 
-  const container = document.createElement('div')
-  container.setAttribute('data-ics207-export-host', '')
-  container.style.cssText =
-    'position:fixed;left:-100000px;top:0;z-index:-1;pointer-events:none;opacity:1'
-  document.body.appendChild(container)
+  const host = document.createElement('div')
+  host.setAttribute('data-ics207-export-host', '')
+  host.style.cssText =
+    'position:fixed;inset:0;z-index:99999;overflow:auto;background:#ffffff;pointer-events:none;opacity:0.01;'
+  document.body.appendChild(host)
 
-  const root = createRoot(container)
+  const mount = document.createElement('div')
+  mount.style.cssText = 'display:inline-block;min-width:max-content;padding:16px;'
+  host.appendChild(mount)
+
+  const root = createRoot(mount)
 
   try {
-    const element = await new Promise<HTMLElement>((resolve, reject) => {
-      const timeout = window.setTimeout(() => {
-        reject(new Error('Org chart capture timed out'))
-      }, 15000)
+    root.render(
+      <OrgChartExportCaptureTree
+        catalog={projected.catalog}
+        entries={projected.entries}
+        entriesByPosition={projected.entriesByPosition}
+        assetsByKey={projected.assetsByKey}
+        rosterById={projected.rosterById}
+        orgChartLayout={orgChartLayout}
+        workspaceLabel={input.workspaceLabel}
+        layoutMode={input.layoutMode}
+        glassItemBorderClasses={input.glassItemBorderClasses}
+      />
+    )
 
-      root.render(
-        <OrgChartExportCaptureTree
-          scope={input.scope}
-          catalog={projected.catalog}
-          entries={projected.entries}
-          entriesByPosition={projected.entriesByPosition}
-          assetsByKey={projected.assetsByKey}
-          rosterById={projected.rosterById}
-          orgChartLayout={orgChartLayout}
-          workspaceLabel={input.workspaceLabel}
-          layoutMode={input.layoutMode}
-          onReady={(el) => {
-            window.clearTimeout(timeout)
-            resolve(el)
-          }}
-        />
-      )
-    })
-
-    await waitForOrgChartLayoutSettle()
-    return captureOrgChartImage({ root: element, backgroundColor: '#ffffff', pixelRatio: 2 })
+    const captureTarget = await waitForOrgChartCaptureReady(mount)
+    return captureOrgChartElement(captureTarget)
   } finally {
     root.unmount()
-    container.remove()
+    host.remove()
   }
 }
 
-export async function exportOrgChartIcs207Pdf(input: ExportOrgChartIcs207Input): Promise<{
-  filename: string
-  context: Ics207ExportContext
-}> {
+export async function generateIcs207OrgChartPreview(
+  input: ExportOrgChartIcs207Input
+): Promise<Ics207ExportPreview> {
   const projected = buildProjectedOrgChartExportData({
     catalog: input.catalog,
     entries: input.entries,
@@ -105,18 +113,29 @@ export async function exportOrgChartIcs207Pdf(input: ExportOrgChartIcs207Input):
     scope: input.scope,
   })
 
-  const chartPng = await captureProjectedOrgChart(input, projected)
-  const context = buildIcs207ExportContext({
-    scope: input.scope,
-    incidentName: input.incidentName,
-    incidentLocation: input.incidentLocation,
-    operationalPeriodFrom: input.operationalPeriodFrom,
-    operationalPeriodTo: input.operationalPeriodTo,
-    preparedByName: resolveIcs207PreparedByName(input.profileEmail, input.profileDisplayName),
-    preparedByPositionTitle: input.preparedByPositionTitle,
-  })
+  const pngBytes = await captureProjectedOrgChart(input, projected)
+  const context = buildExportContext(input)
 
-  const filename = `${ics207ExportFilenameBase(context)}_${formatIcs207ExportTimestamp()}.pdf`
-  await downloadIcs207Pdf(filename, chartPng, context)
-  return { filename, context }
+  return {
+    scope: input.scope,
+    context,
+    pngBytes,
+    pngDataUrl: pngBytesToDataUrl(pngBytes),
+  }
+}
+
+export async function downloadIcs207FromPreview(preview: Ics207ExportPreview): Promise<string> {
+  const filename = `${ics207ExportFilenameBase(preview.context)}_${formatIcs207ExportTimestamp()}.pdf`
+  await downloadIcs207Pdf(filename, preview.pngBytes, preview.context)
+  return filename
+}
+
+/** @deprecated Use generateIcs207OrgChartPreview + downloadIcs207FromPreview */
+export async function exportOrgChartIcs207Pdf(input: ExportOrgChartIcs207Input): Promise<{
+  filename: string
+  context: Ics207ExportContext
+}> {
+  const preview = await generateIcs207OrgChartPreview(input)
+  const filename = await downloadIcs207FromPreview(preview)
+  return { filename, context: preview.context }
 }

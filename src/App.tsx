@@ -582,8 +582,7 @@ import { isIncidentArchived } from '@/lib/incident-archive'
 import { WorkspacePositionRosterTable } from '@/features/roster/WorkspacePositionRosterTable'
 import { WorkspaceOrgChartRoster } from '@/features/roster/WorkspaceOrgChartRoster'
 import { OrgChartIcs207ExportDialog } from '@/features/ics207/OrgChartIcs207ExportDialog'
-import { exportOrgChartIcs207Pdf } from '@/features/ics207/export-org-chart-ics207'
-import type { OrgChartExportScope } from '@/features/roster/org-chart-export-scope'
+import type { ExportOrgChartIcs207Input } from '@/features/ics207/export-org-chart-ics207'
 import { RosterAddMemberToolbar } from '@/features/roster/RosterAddMemberToolbar'
 import { RosterDisplayFiltersMenu } from '@/features/roster/RosterDisplayFiltersMenu'
 import { RosterZoomControls } from '@/features/roster/RosterZoomControls'
@@ -9164,7 +9163,6 @@ function App() {
   const [updatingCheckInMemberId, setUpdatingCheckInMemberId] = useState<string | null>(null)
   const [rosterViewMode, setRosterViewMode] = useState<'table' | 'org-chart'>('table')
   const [isIcs207ExportDialogOpen, setIsIcs207ExportDialogOpen] = useState(false)
-  const [isExportingIcs207, setIsExportingIcs207] = useState(false)
   const [rosterDisplayFilters, setRosterDisplayFilters] = useState<RosterDisplayFilters>(
     DEFAULT_ROSTER_DISPLAY_FILTERS
   )
@@ -14654,48 +14652,38 @@ function App() {
       ),
     [positionRosterEntries, rosterDisplayFilters, workspacePositionCatalog]
   )
-  const handleExportOrgChartIcs207 = useCallback(
-    async (scope: OrgChartExportScope) => {
-      setIsExportingIcs207(true)
-      try {
-        await exportOrgChartIcs207Pdf({
-          scope,
-          catalog: workspacePositionCatalog,
-          entries: positionRosterEntries,
-          assets: workspaceAssignedAssetsWithPending,
-          roster: activeWorkspaceRoster,
-          workspaceLabel: activeWorkspaceRosterLabel,
-          layoutMode: rosterPanelLayoutMode,
-          incidentName:
-            ics202Form?.incidentName?.trim() ||
-            activeWorkspaceRosterLabel,
-          incidentLocation: ics202Form?.incidentLocation ?? '',
-          operationalPeriodFrom: ics202Form?.operationalPeriodFrom ?? '',
-          operationalPeriodTo: ics202Form?.operationalPeriodTo ?? '',
-          profileEmail,
-        })
-        toast.success('ICS-207 exported.')
-        setIsIcs207ExportDialogOpen(false)
-      } catch {
-        toast.error('Could not export ICS-207. Try again.')
-      } finally {
-        setIsExportingIcs207(false)
-      }
-    },
-    [
-      activeWorkspaceRoster,
-      activeWorkspaceRosterLabel,
-      ics202Form?.incidentLocation,
-      ics202Form?.incidentName,
-      ics202Form?.operationalPeriodFrom,
-      ics202Form?.operationalPeriodTo,
-      positionRosterEntries,
+  const ics207ExportInput = useMemo<Omit<ExportOrgChartIcs207Input, 'scope'> | null>(() => {
+    if (!isInIncidentWorkspace && !isInExerciseWorkspace) return null
+    return {
+      catalog: workspacePositionCatalog,
+      entries: positionRosterEntries,
+      assets: workspaceAssignedAssetsWithPending,
+      roster: activeWorkspaceRoster,
+      workspaceLabel: activeWorkspaceRosterLabel,
+      layoutMode: rosterPanelLayoutMode,
+      glassItemBorderClasses,
+      incidentName: ics202Form?.incidentName?.trim() || activeWorkspaceRosterLabel,
+      incidentLocation: ics202Form?.incidentLocation ?? '',
+      operationalPeriodFrom: ics202Form?.operationalPeriodFrom ?? '',
+      operationalPeriodTo: ics202Form?.operationalPeriodTo ?? '',
       profileEmail,
-      rosterPanelLayoutMode,
-      workspaceAssignedAssetsWithPending,
-      workspacePositionCatalog,
-    ]
-  )
+    }
+  }, [
+    activeWorkspaceRoster,
+    activeWorkspaceRosterLabel,
+    glassItemBorderClasses,
+    ics202Form?.incidentLocation,
+    ics202Form?.incidentName,
+    ics202Form?.operationalPeriodFrom,
+    ics202Form?.operationalPeriodTo,
+    isInExerciseWorkspace,
+    isInIncidentWorkspace,
+    positionRosterEntries,
+    profileEmail,
+    rosterPanelLayoutMode,
+    workspaceAssignedAssetsWithPending,
+    workspacePositionCatalog,
+  ])
   const assignableByPosition = useMemo(() => {
     const map: Record<string, WorkspaceRosterMember[]> = {}
     for (const position of workspacePositionCatalog.rosterPositionNames) {
@@ -26689,7 +26677,6 @@ function App() {
                         variant="outline"
                         className="gap-1.5"
                         disabled={
-                          isExportingIcs207 ||
                           isRosterLoading ||
                           isCustomPositionsLoading ||
                           isViewingHistoricalRoster
@@ -39689,8 +39676,10 @@ function App() {
         open={isIcs207ExportDialogOpen}
         onOpenChange={setIsIcs207ExportDialogOpen}
         operationalPeriodsEnabled={operationalPeriodsEnabled}
-        isExporting={isExportingIcs207}
-        onExport={handleExportOrgChartIcs207}
+        exportInput={ics207ExportInput}
+        onExportComplete={() => {
+          toast.success('ICS-207 exported.')
+        }}
       />
       <Dialog
         open={isRosterPasswordOverwriteConfirmOpen}
