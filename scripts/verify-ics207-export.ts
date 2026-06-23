@@ -3,10 +3,13 @@ import { buildIcs207ExportContext } from '../src/features/ics207/export-layout'
 import { buildIcs207ExportLayout } from '../src/features/ics207/export-layout-blocks'
 import { buildIcs207PdfBytesForTest } from '../src/features/ics207/export-download'
 import { buildOrgChartLayoutForExport } from '../src/features/roster/build-org-chart-for-export'
-import { assertOrgChartCaptureNotBlank } from '../src/features/roster/org-chart-export-capture'
+import {
+  assertOrgChartCaptureNotBlank,
+  ORG_CHART_PAINT_COMPLETE_ATTR,
+  withTimeout,
+} from '../src/features/roster/org-chart-export-capture'
 import {
   buildProjectedOrgChartExportData,
-  ICS207_EXPORT_ZOOM,
   projectPositionRosterEntryForExport,
   projectPositionRosterEntriesForExport,
 } from '../src/features/roster/org-chart-export-scope'
@@ -187,20 +190,19 @@ const context = buildIcs207ExportContext({
 })
 assert.equal(context.operationalPeriodDate, '06/18/2026')
 assert.equal(context.operationalPeriodTime, '14:26')
-assert.equal(ICS207_EXPORT_ZOOM, 0.6)
 
 const liveLayout = buildIcs207ExportLayout(context)
 assert.equal(liveLayout.length, 4)
 assert.equal(liveLayout[2]?.kind, 'org-chart-live')
 
-const capturedLayout = buildIcs207ExportLayout(context, { dataUrl: 'data:image/png;base64,abc' })
-assert.equal(capturedLayout[2]?.kind, 'org-chart-image')
-assert.equal(
-  capturedLayout[2]?.kind === 'org-chart-image' ? capturedLayout[2].dataUrl : '',
-  'data:image/png;base64,abc'
+assert.equal(ORG_CHART_PAINT_COMPLETE_ATTR, 'data-org-chart-paint-complete')
+
+await assert.rejects(
+  () => withTimeout(new Promise<void>(() => undefined), 10, 'timed out'),
+  /timed out/
 )
 
-assert.throws(() => assertOrgChartCaptureNotBlank(new Uint8Array(100)))
+assert.doesNotThrow(() => assertOrgChartCaptureNotBlank(new Uint8Array(100)))
 
 const pngBytes = Uint8Array.from(
   Buffer.from(

@@ -1,4 +1,5 @@
 import { useLayoutEffect } from 'react'
+import { ORG_CHART_PAINT_COMPLETE_ATTR } from '@/features/roster/org-chart-export-capture'
 import { useOrgChartConnectors } from '@/features/roster/org-chart-connector-context'
 import {
   icBusConnectLines,
@@ -79,6 +80,7 @@ export function OrgChartConnectorOverlay({ zoom = 1 }: { zoom?: number }) {
       }
 
       appendSvgLines(svg, lines)
+      chart.setAttribute(ORG_CHART_PAINT_COMPLETE_ATTR, 'true')
     }
 
     draw()

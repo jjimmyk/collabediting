@@ -1,4 +1,4 @@
-import { type ReactNode, useLayoutEffect, useRef } from 'react'
+import { forwardRef, type ReactNode, useLayoutEffect, useRef } from 'react'
 import { cn } from '@/lib/utils'
 import { scrollToHorizontalCenter, stepRosterZoom } from '@/features/roster/roster-zoom'
 
@@ -7,60 +7,88 @@ type RosterZoomContainerProps = {
   onZoomChange?: (zoom: number) => void
   centerScroll?: boolean
   recenterToken?: number
+  initialScrollLeft?: number
+  initialScrollTop?: number
   children: ReactNode
   className?: string
 }
 
-export function RosterZoomContainer({
-  zoom,
-  onZoomChange,
-  centerScroll = false,
-  recenterToken = 0,
-  children,
-  className,
-}: RosterZoomContainerProps) {
-  const scrollRef = useRef<HTMLDivElement>(null)
+export const RosterZoomContainer = forwardRef<HTMLDivElement, RosterZoomContainerProps>(
+  function RosterZoomContainer(
+    {
+      zoom,
+      onZoomChange,
+      centerScroll = false,
+      recenterToken = 0,
+      initialScrollLeft,
+      initialScrollTop,
+      children,
+      className,
+    },
+    ref
+  ) {
+    const scrollRef = useRef<HTMLDivElement>(null)
 
-  useLayoutEffect(() => {
-    if (!centerScroll) return
+    useLayoutEffect(() => {
+      const container = scrollRef.current
+      if (!container) return
 
-    const container = scrollRef.current
-    if (!container) return
+      if (initialScrollLeft !== undefined) {
+        container.scrollLeft = initialScrollLeft
+      }
+      if (initialScrollTop !== undefined) {
+        container.scrollTop = initialScrollTop
+      }
+    }, [initialScrollLeft, initialScrollTop, zoom])
 
-    const center = () => scrollToHorizontalCenter(container)
-    center()
+    useLayoutEffect(() => {
+      if (!centerScroll) return
 
-    const frame = requestAnimationFrame(center)
-    return () => cancelAnimationFrame(frame)
-  }, [centerScroll, recenterToken])
+      const container = scrollRef.current
+      if (!container) return
 
-  useLayoutEffect(() => {
-    if (!onZoomChange) return
+      const center = () => scrollToHorizontalCenter(container)
+      center()
 
-    const container = scrollRef.current
-    if (!container) return
+      const frame = requestAnimationFrame(center)
+      return () => cancelAnimationFrame(frame)
+    }, [centerScroll, recenterToken])
 
-    const handleWheel = (event: WheelEvent) => {
-      if (!(event.ctrlKey || event.metaKey)) return
+    useLayoutEffect(() => {
+      if (!onZoomChange) return
 
-      event.preventDefault()
-      onZoomChange(stepRosterZoom(zoom, event.deltaY < 0 ? 'in' : 'out'))
-    }
+      const container = scrollRef.current
+      if (!container) return
 
-    container.addEventListener('wheel', handleWheel, { passive: false })
-    return () => container.removeEventListener('wheel', handleWheel)
-  }, [onZoomChange, zoom])
+      const handleWheel = (event: WheelEvent) => {
+        if (!(event.ctrlKey || event.metaKey)) return
 
-  return (
-    <div
-      ref={scrollRef}
-      className={cn('min-w-0 w-full max-w-full overflow-auto scroll-smooth', className)}
-    >
-      <div className="flex min-w-full justify-center">
-        <div style={{ zoom }} className="w-max">
-          {children}
+        event.preventDefault()
+        onZoomChange(stepRosterZoom(zoom, event.deltaY < 0 ? 'in' : 'out'))
+      }
+
+      container.addEventListener('wheel', handleWheel, { passive: false })
+      return () => container.removeEventListener('wheel', handleWheel)
+    }, [onZoomChange, zoom])
+
+    return (
+      <div
+        ref={(node) => {
+          scrollRef.current = node
+          if (typeof ref === 'function') {
+            ref(node)
+          } else if (ref) {
+            ref.current = node
+          }
+        }}
+        className={cn('min-w-0 w-full max-w-full overflow-auto scroll-smooth', className)}
+      >
+        <div className="flex min-w-full justify-center">
+          <div style={{ zoom }} className="w-max">
+            {children}
+          </div>
         </div>
       </div>
-    </div>
-  )
-}
+    )
+  }
+)

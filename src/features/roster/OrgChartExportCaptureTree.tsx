@@ -1,15 +1,16 @@
+import { useLayoutEffect, useRef } from 'react'
 import { buildOrgChartLayoutForExport } from '@/features/roster/build-org-chart-for-export'
 import {
-  ICS207_EXPORT_ZOOM,
-  ORG_CHART_EXPORT_DISPLAY_FILTERS,
-  type OrgChartExportScope,
-} from '@/features/roster/org-chart-export-scope'
-import { RosterZoomContainer } from '@/features/roster/RosterZoomContainer'
+  ORG_CHART_PAINT_COMPLETE_ATTR,
+} from '@/features/roster/org-chart-export-capture'
 import { resolveVisibleRosterPositions } from '@/features/roster/roster-display-filters'
 import type { RosterPanelLayoutMode } from '@/features/roster/roster-layout'
 import type { PositionRosterEntry } from '@/features/roster/workspace-position-roster'
 import type { WorkspaceOrgChartLayout, WorkspacePositionCatalog } from '@/features/roster/workspace-positions'
 import { WorkspaceOrgChartRoster } from '@/features/roster/WorkspaceOrgChartRoster'
+import type { Ics207OrgChartVisualSnapshot } from '@/features/ics207/export-org-chart-ics207'
+import type { OrgChartExportScope } from '@/features/roster/org-chart-export-scope'
+import { RosterZoomContainer } from '@/features/roster/RosterZoomContainer'
 import type { ResourceListItemData } from '@/features/resources/types'
 import type { WorkspaceRosterMember } from '@/lib/workspace-types'
 
@@ -26,6 +27,24 @@ export type OrgChartExportCaptureTreeProps = {
   workspaceLabel: string
   layoutMode: RosterPanelLayoutMode
   glassItemBorderClasses: string
+  visualSnapshot: Ics207OrgChartVisualSnapshot
+}
+
+function OrgChartExportPaintMarker({ rootRef }: { rootRef: React.RefObject<HTMLDivElement | null> }) {
+  useLayoutEffect(() => {
+    const root = rootRef.current
+    if (!root) return
+
+    const markPainted = () => {
+      root.setAttribute(ORG_CHART_PAINT_COMPLETE_ATTR, 'true')
+    }
+
+    markPainted()
+    const frame = requestAnimationFrame(markPainted)
+    return () => cancelAnimationFrame(frame)
+  }, [rootRef])
+
+  return null
 }
 
 export function OrgChartExportCaptureTree({
@@ -38,19 +57,25 @@ export function OrgChartExportCaptureTree({
   workspaceLabel,
   layoutMode,
   glassItemBorderClasses,
+  visualSnapshot,
 }: OrgChartExportCaptureTreeProps) {
+  const rootRef = useRef<HTMLDivElement | null>(null)
+
   const visiblePositions = resolveVisibleRosterPositions(
     entries,
-    ORG_CHART_EXPORT_DISPLAY_FILTERS,
+    visualSnapshot.displayFilters,
     catalog
   )
 
   return (
-    <div
-      data-org-chart-export-root=""
-      className="inline-block bg-white text-foreground"
-    >
-      <RosterZoomContainer zoom={ICS207_EXPORT_ZOOM} centerScroll>
+    <div ref={rootRef} data-ics207-capture-root="" className="inline-block bg-white text-foreground">
+      <OrgChartExportPaintMarker rootRef={rootRef} />
+      <RosterZoomContainer
+        zoom={visualSnapshot.zoom}
+        centerScroll={false}
+        initialScrollLeft={visualSnapshot.scrollLeft}
+        initialScrollTop={visualSnapshot.scrollTop}
+      >
         <WorkspaceOrgChartRoster
           exportMode
           orgChartLayout={orgChartLayout}
@@ -58,7 +83,7 @@ export function OrgChartExportCaptureTree({
           assetsByKey={assetsByKey}
           rosterById={rosterById}
           visiblePositions={visiblePositions}
-          displayFilters={ORG_CHART_EXPORT_DISPLAY_FILTERS}
+          displayFilters={visualSnapshot.displayFilters}
           assignableByPosition={{}}
           scheduleAssignableByPosition={{}}
           scheduleUnassignableByPosition={{}}
@@ -68,7 +93,7 @@ export function OrgChartExportCaptureTree({
           isAssigningPosition={null}
           workspaceLabel={workspaceLabel}
           layoutMode={layoutMode}
-          zoom={ICS207_EXPORT_ZOOM}
+          zoom={visualSnapshot.zoom}
           showOpAdvanceLabels={false}
           positionMetaByName={catalog.positionMetaByName}
           onToggleEditIcs201={noop}

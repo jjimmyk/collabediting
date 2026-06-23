@@ -582,7 +582,7 @@ import { isIncidentArchived } from '@/lib/incident-archive'
 import { WorkspacePositionRosterTable } from '@/features/roster/WorkspacePositionRosterTable'
 import { WorkspaceOrgChartRoster } from '@/features/roster/WorkspaceOrgChartRoster'
 import { OrgChartIcs207ExportDialog } from '@/features/ics207/OrgChartIcs207ExportDialog'
-import type { ExportOrgChartIcs207Input } from '@/features/ics207/export-org-chart-ics207'
+import type { ExportOrgChartIcs207BaseInput, Ics207OrgChartVisualSnapshot } from '@/features/ics207/export-org-chart-ics207'
 import { RosterAddMemberToolbar } from '@/features/roster/RosterAddMemberToolbar'
 import { RosterDisplayFiltersMenu } from '@/features/roster/RosterDisplayFiltersMenu'
 import { RosterZoomControls } from '@/features/roster/RosterZoomControls'
@@ -9163,6 +9163,10 @@ function App() {
   const [updatingCheckInMemberId, setUpdatingCheckInMemberId] = useState<string | null>(null)
   const [rosterViewMode, setRosterViewMode] = useState<'table' | 'org-chart'>('table')
   const [isIcs207ExportDialogOpen, setIsIcs207ExportDialogOpen] = useState(false)
+  const [ics207VisualSnapshot, setIcs207VisualSnapshot] =
+    useState<Ics207OrgChartVisualSnapshot | null>(null)
+  const rosterOrgChartScrollRef = useRef<HTMLDivElement | null>(null)
+  const rosterOrgChartLiveRootRef = useRef<HTMLDivElement | null>(null)
   const [rosterDisplayFilters, setRosterDisplayFilters] = useState<RosterDisplayFilters>(
     DEFAULT_ROSTER_DISPLAY_FILTERS
   )
@@ -14652,7 +14656,7 @@ function App() {
       ),
     [positionRosterEntries, rosterDisplayFilters, workspacePositionCatalog]
   )
-  const ics207ExportInput = useMemo<Omit<ExportOrgChartIcs207Input, 'scope'> | null>(() => {
+  const ics207ExportBaseInput = useMemo<ExportOrgChartIcs207BaseInput | null>(() => {
     if (!isInIncidentWorkspace && !isInExerciseWorkspace) return null
     return {
       catalog: workspacePositionCatalog,
@@ -14667,6 +14671,13 @@ function App() {
       operationalPeriodFrom: ics202Form?.operationalPeriodFrom ?? '',
       operationalPeriodTo: ics202Form?.operationalPeriodTo ?? '',
       profileEmail,
+      visualSnapshot: ics207VisualSnapshot ?? {
+        zoom: rosterZoomLevel,
+        displayFilters: rosterDisplayFilters,
+        layoutMode: rosterPanelLayoutMode,
+        scrollLeft: 0,
+        scrollTop: 0,
+      },
     }
   }, [
     activeWorkspaceRoster,
@@ -14676,14 +14687,31 @@ function App() {
     ics202Form?.incidentName,
     ics202Form?.operationalPeriodFrom,
     ics202Form?.operationalPeriodTo,
+    ics207VisualSnapshot,
     isInExerciseWorkspace,
     isInIncidentWorkspace,
     positionRosterEntries,
     profileEmail,
+    rosterDisplayFilters,
     rosterPanelLayoutMode,
+    rosterZoomLevel,
     workspaceAssignedAssetsWithPending,
     workspacePositionCatalog,
   ])
+  const openIcs207ExportDialog = useCallback(() => {
+    setIcs207VisualSnapshot({
+      zoom: rosterZoomLevel,
+      displayFilters: rosterDisplayFilters,
+      layoutMode: rosterPanelLayoutMode,
+      scrollLeft: rosterOrgChartScrollRef.current?.scrollLeft ?? 0,
+      scrollTop: rosterOrgChartScrollRef.current?.scrollTop ?? 0,
+    })
+    setIsIcs207ExportDialogOpen(true)
+  }, [rosterDisplayFilters, rosterPanelLayoutMode, rosterZoomLevel])
+  const getLiveOrgChartCaptureRoot = useCallback(
+    () => rosterOrgChartLiveRootRef.current,
+    []
+  )
   const assignableByPosition = useMemo(() => {
     const map: Record<string, WorkspaceRosterMember[]> = {}
     for (const position of workspacePositionCatalog.rosterPositionNames) {
@@ -26681,7 +26709,7 @@ function App() {
                           isCustomPositionsLoading ||
                           isViewingHistoricalRoster
                         }
-                        onClick={() => setIsIcs207ExportDialogOpen(true)}
+                        onClick={openIcs207ExportDialog}
                       >
                         <DownloadIcon className="h-3.5 w-3.5" />
                         Export ICS-207
@@ -29971,6 +29999,7 @@ function App() {
                       </Item>
                     ) : (
                       <RosterZoomContainer
+                        ref={rosterOrgChartScrollRef}
                         zoom={rosterZoomLevel}
                         onZoomChange={handleRosterZoomChange}
                         centerScroll={rosterViewMode === 'org-chart'}
@@ -29978,6 +30007,11 @@ function App() {
                         className="max-h-[calc(100vh-16rem)]"
                       >
                       {rosterViewMode === 'org-chart' ? (
+                        <div
+                          ref={rosterOrgChartLiveRootRef}
+                          data-roster-org-chart-live-root=""
+                          className="inline-block"
+                        >
                         <WorkspaceOrgChartRoster
                       orgChartLayout={workspaceOrgChartLayout}
                       entriesByPosition={positionRosterEntriesByPosition}
@@ -30107,6 +30141,7 @@ function App() {
                         void handleUpdatePositionType(position, positionType, customTypeLabel)
                       }}
                     />
+                        </div>
                       ) : (
                         <WorkspacePositionRosterTable
                       entries={positionRosterEntries}
@@ -39674,9 +39709,15 @@ function App() {
       />
       <OrgChartIcs207ExportDialog
         open={isIcs207ExportDialogOpen}
-        onOpenChange={setIsIcs207ExportDialogOpen}
+        onOpenChange={(open) => {
+          setIsIcs207ExportDialogOpen(open)
+          if (!open) {
+            setIcs207VisualSnapshot(null)
+          }
+        }}
         operationalPeriodsEnabled={operationalPeriodsEnabled}
-        exportInput={ics207ExportInput}
+        exportInput={ics207ExportBaseInput}
+        getLiveCaptureRoot={getLiveOrgChartCaptureRoot}
         onExportComplete={() => {
           toast.success('ICS-207 exported.')
         }}

@@ -49,8 +49,9 @@ export function Ics207PreviewOrgChartPanel({ exportInput }: Ics207PreviewOrgChar
       rosterById={projected.rosterById}
       orgChartLayout={orgChartLayout}
       workspaceLabel={exportInput.workspaceLabel}
-      layoutMode={exportInput.layoutMode}
+      layoutMode={exportInput.visualSnapshot.layoutMode}
       glassItemBorderClasses={exportInput.glassItemBorderClasses}
+      visualSnapshot={exportInput.visualSnapshot}
     />
   )
 }

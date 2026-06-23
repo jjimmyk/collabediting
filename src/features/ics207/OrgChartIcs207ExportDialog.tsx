@@ -20,21 +20,26 @@ import {
   buildIcs207ExportContext,
   resolveIcs207PreparedByName,
 } from '@/features/ics207/export-layout'
-import { downloadIcs207FromPreview } from '@/features/ics207/export-org-chart-ics207'
+import {
+  downloadIcs207FromPreview,
+  type ExportOrgChartIcs207BaseInput,
+} from '@/features/ics207/export-org-chart-ics207'
 import type { ExportOrgChartIcs207Input } from '@/features/ics207/export-org-chart-ics207'
 import { Ics207PreviewOrgChartPanel } from '@/features/ics207/Ics207PreviewOrgChartPanel'
-import { useIcs207OrgChartCapture } from '@/features/ics207/use-ics207-org-chart-capture'
+import { useOrgChartPaintReady } from '@/features/ics207/use-org-chart-paint-ready'
 import {
   ICS202_PREVIEW_STACK_CLASS,
   ics202PreviewSegmentRowClass,
 } from '@/features/ics202/export-box-stack'
+import { captureIcs207Box4ForPdf, pngBytesToDataUrl } from '@/features/roster/org-chart-export-capture'
 import type { OrgChartExportScope } from '@/features/roster/org-chart-export-scope'
 
 type OrgChartIcs207ExportDialogProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
   operationalPeriodsEnabled: boolean
-  exportInput: Omit<ExportOrgChartIcs207Input, 'scope'> | null
+  exportInput: ExportOrgChartIcs207BaseInput | null
+  getLiveCaptureRoot?: () => HTMLElement | null
   onExportComplete?: () => void
 }
 
@@ -43,11 +48,10 @@ function renderPreviewBlock(
   index: number,
   options: {
     isFirstInStack: boolean
-    chartContainerRef: (node: HTMLDivElement | null) => void
-    showLiveChart: boolean
+    box4ContainerRef: (node: HTMLDivElement | null) => void
     exportInput: ExportOrgChartIcs207Input | null
-    captureWaiting: boolean
-    captureError: string | null
+    exportError: string | null
+    isGeneratingPdf: boolean
   }
 ) {
   const rowClass = ics202PreviewSegmentRowClass(options.isFirstInStack)
@@ -70,10 +74,7 @@ function renderPreviewBlock(
       return (
         <div key={`ics207-${index}`} className={`grid grid-cols-3 ${rowClass}`}>
           {block.cells.map((cell) => (
-            <div
-              key={cell.label}
-              className="border-r border-zinc-900 p-2 last:border-r-0"
-            >
+            <div key={cell.label} className="border-r border-zinc-900 p-2 last:border-r-0">
               <div className="text-[10px] font-semibold">{cell.label}</div>
               {cell.subFields ? (
                 <div className="mt-1 grid grid-cols-2 gap-2 text-[11px]">
@@ -93,48 +94,28 @@ function renderPreviewBlock(
           ))}
         </div>
       )
-    case 'org-chart-image':
-      return (
-        <div key={`ics207-${index}`} className={`relative ${rowClass}`}>
-          <div className="absolute left-2 top-2 text-[10px] font-semibold">4.</div>
-          <div className="flex min-h-[280px] items-center justify-center bg-white p-3 pl-6">
-            {block.dataUrl ? (
-              <img
-                src={block.dataUrl}
-                alt={block.alt}
-                className="max-h-[420px] max-w-full object-contain"
-              />
-            ) : (
-              <span className="text-[11px] text-zinc-500"> </span>
-            )}
-          </div>
-        </div>
-      )
     case 'org-chart-live':
       return (
         <div key={`ics207-${index}`} className={`relative ${rowClass}`}>
           <div className="absolute left-2 top-2 z-10 text-[10px] font-semibold">4.</div>
           <div
-            ref={options.showLiveChart ? options.chartContainerRef : undefined}
+            ref={options.box4ContainerRef}
             data-ics207-box-4-chart=""
             className="relative min-h-[280px] overflow-auto bg-white p-3 pl-6"
           >
             {options.exportInput ? (
-              <>
-                <Ics207PreviewOrgChartPanel exportInput={options.exportInput} />
-                {options.captureError ? (
-                  <div className="absolute inset-0 flex items-center justify-center bg-white/90 p-4 text-center text-[11px] text-red-700">
-                    {options.captureError}
-                  </div>
-                ) : options.captureWaiting ? (
-                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-white/70 text-[11px] text-zinc-600">
-                    <Loader2 className="h-5 w-5 animate-spin" />
-                    Capturing org chart at 60% zoom…
-                  </div>
-                ) : null}
-              </>
+              <Ics207PreviewOrgChartPanel exportInput={options.exportInput} />
+            ) : null}
+            {options.isGeneratingPdf ? (
+              <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-2 bg-white/60 text-[11px] text-zinc-600">
+                <Loader2 className="h-5 w-5 animate-spin" />
+                Generating PDF…
+              </div>
             ) : null}
           </div>
+          {options.exportError ? (
+            <p className="px-3 pb-2 text-[11px] text-red-700">{options.exportError}</p>
+          ) : null}
         </div>
       )
     case 'prepared-by':
@@ -170,19 +151,25 @@ export function OrgChartIcs207ExportDialog({
   onOpenChange,
   operationalPeriodsEnabled,
   exportInput,
+  getLiveCaptureRoot,
   onExportComplete,
 }: OrgChartIcs207ExportDialogProps) {
   const [scope, setScope] = useState<OrgChartExportScope>('current_op')
-  const [chartContainer, setChartContainer] = useState<HTMLDivElement | null>(null)
+  const [box4Container, setBox4Container] = useState<HTMLDivElement | null>(null)
   const [isExporting, setIsExporting] = useState(false)
-  const chartContainerRef = useCallback((node: HTMLDivElement | null) => {
-    setChartContainer(node)
+  const [exportError, setExportError] = useState<string | null>(null)
+  const box4ContainerRef = useCallback((node: HTMLDivElement | null) => {
+    setBox4Container(node)
   }, [])
 
   const scopedExportInput = useMemo<ExportOrgChartIcs207Input | null>(() => {
     if (!exportInput) return null
-    return { ...exportInput, scope }
-  }, [exportInput, scope])
+    return {
+      ...exportInput,
+      scope,
+      getLiveCaptureRoot,
+    }
+  }, [exportInput, getLiveCaptureRoot, scope])
 
   const context = useMemo(() => {
     if (!scopedExportInput) return null
@@ -200,20 +187,18 @@ export function OrgChartIcs207ExportDialog({
     })
   }, [scopedExportInput])
 
-  const captureKey = `${scope}-${open ? 'open' : 'closed'}`
-  const capture = useIcs207OrgChartCapture(chartContainer, captureKey, open && chartContainer !== null)
+  const paintReadyKey = `${scope}-${open ? 'open' : 'closed'}`
+  const chartPaintReady = useOrgChartPaintReady(
+    open ? box4Container : null,
+    paintReadyKey
+  )
 
-  const showCapturedImage = capture.status === 'ready'
-  const capturedDataUrl = capture.status === 'ready' ? capture.pngDataUrl : undefined
   const layoutBlocks = useMemo(() => {
     if (!context) return []
-    return buildIcs207ExportLayout(
-      context,
-      capturedDataUrl ? { dataUrl: capturedDataUrl } : undefined
-    )
-  }, [capturedDataUrl, context])
+    return buildIcs207ExportLayout(context)
+  }, [context])
 
-  const canExport = showCapturedImage && !isExporting
+  const canExport = Boolean(context && scopedExportInput && chartPaintReady && !isExporting)
 
   return (
     <Dialog
@@ -221,7 +206,8 @@ export function OrgChartIcs207ExportDialog({
       onOpenChange={(nextOpen) => {
         if (!nextOpen) {
           setScope('current_op')
-          setChartContainer(null)
+          setBox4Container(null)
+          setExportError(null)
         }
         onOpenChange(nextOpen)
       }}
@@ -233,8 +219,8 @@ export function OrgChartIcs207ExportDialog({
             Export ICS-207
           </DialogTitle>
           <DialogDescription className="text-xs">
-            USCG ICS 207-CG boxed layout preview. Box 4 renders the org chart at 60% zoom, then
-            captures it for PDF export.
+            USCG ICS 207-CG preview. Box 4 shows the org chart as it appears in the roster at your
+            current zoom and filters. PDF export captures this preview when you click Export PDF.
           </DialogDescription>
         </DialogHeader>
 
@@ -243,6 +229,7 @@ export function OrgChartIcs207ExportDialog({
           onValueChange={(value) => {
             if (value === 'current_op' || value === 'next_op') {
               setScope(value)
+              setExportError(null)
             }
           }}
           className="grid gap-2 sm:grid-cols-2"
@@ -291,11 +278,10 @@ export function OrgChartIcs207ExportDialog({
                 {layoutBlocks.map((block, index) =>
                   renderPreviewBlock(block, index, {
                     isFirstInStack: index === 0,
-                    chartContainerRef,
-                    showLiveChart: !showCapturedImage,
+                    box4ContainerRef,
                     exportInput: scopedExportInput,
-                    captureWaiting: capture.status === 'waiting' && !showCapturedImage,
-                    captureError: capture.status === 'error' ? capture.message : null,
+                    exportError,
+                    isGeneratingPdf: isExporting,
                   })
                 )}
               </div>
@@ -321,17 +307,32 @@ export function OrgChartIcs207ExportDialog({
             className="h-8 gap-1 bg-blue-600 text-xs text-white hover:bg-blue-700"
             disabled={!canExport}
             onClick={() => {
-              if (capture.status !== 'ready' || !context) return
+              if (!context || !scopedExportInput || !box4Container) return
+              setExportError(null)
               setIsExporting(true)
-              void downloadIcs207FromPreview({
+              void captureIcs207Box4ForPdf({
+                box4Container,
                 scope,
-                context,
-                pngBytes: capture.pngBytes,
-                pngDataUrl: capture.pngDataUrl,
+                getLiveCaptureRoot,
               })
+                .then((pngBytes) =>
+                  downloadIcs207FromPreview({
+                    scope,
+                    context,
+                    pngBytes,
+                    pngDataUrl: pngBytesToDataUrl(pngBytes),
+                  })
+                )
                 .then(() => {
                   onExportComplete?.()
                   onOpenChange(false)
+                })
+                .catch((error: unknown) => {
+                  setExportError(
+                    error instanceof Error
+                      ? error.message
+                      : 'Could not export ICS-207 PDF. Try again.'
+                  )
                 })
                 .finally(() => {
                   setIsExporting(false)

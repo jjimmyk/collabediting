@@ -1,4 +1,3 @@
-import { DEFAULT_ROSTER_DISPLAY_FILTERS, type RosterDisplayFilters } from '@/features/roster/roster-display-filters'
 import type { PositionRosterEntry } from '@/features/roster/workspace-position-roster'
 import type { WorkspacePositionCatalog, WorkspacePositionMeta } from '@/features/roster/workspace-positions'
 import type { ResourceListItemData } from '@/features/resources/types'
@@ -6,16 +5,8 @@ import type { WorkspaceRosterMember } from '@/lib/workspace-types'
 
 export type OrgChartExportScope = 'current_op' | 'next_op'
 
-/** Org chart screenshot zoom for ICS-207 export — matches roster at 60%. */
+/** @deprecated Export uses the roster's current zoom at dialog open time. */
 export const ICS207_EXPORT_ZOOM = 0.6
-
-export const ORG_CHART_EXPORT_DISPLAY_FILTERS: RosterDisplayFilters = {
-  ...DEFAULT_ROSTER_DISPLAY_FILTERS,
-  showPositionsWithScheduledAssignees: false,
-  showPositionsWithoutScheduledAssignees: true,
-  showScheduledSingleResources: false,
-  showCurrentSingleResources: true,
-}
 
 function positionMetaIncludedInExport(
   meta: WorkspacePositionMeta | undefined,
