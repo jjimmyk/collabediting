@@ -46,8 +46,8 @@ function renderWorkAssignmentsTable(
   const resourceCount = segment.resourceColumns.length
   const gridTemplate =
     resourceCount > 0
-      ? `minmax(4.5rem,0.85fr) minmax(6rem,1.1fr) minmax(1.25rem,0.25fr) minmax(1.25rem,0.25fr) repeat(${resourceCount}, minmax(1.25rem,0.25fr)) minmax(4rem,0.75fr) minmax(4rem,0.75fr) minmax(4rem,0.75fr) minmax(3.5rem,0.6fr)`
-      : 'minmax(4.5rem,0.85fr) minmax(6rem,1.1fr) minmax(1.25rem,0.25fr) minmax(1.25rem,0.25fr) minmax(4rem,0.75fr) minmax(4rem,0.75fr) minmax(4rem,0.75fr) minmax(3.5rem,0.6fr)'
+      ? `minmax(4.5rem,0.85fr) minmax(6rem,1.1fr) minmax(1.25rem,0.25fr) repeat(${resourceCount}, minmax(1.25rem,0.25fr)) minmax(4rem,0.75fr) minmax(4rem,0.75fr) minmax(4rem,0.75fr) minmax(3.5rem,0.6fr)`
+      : 'minmax(4.5rem,0.85fr) minmax(6rem,1.1fr) minmax(1.25rem,0.25fr) minmax(4rem,0.75fr) minmax(4rem,0.75fr) minmax(4rem,0.75fr) minmax(3.5rem,0.6fr)'
 
   const showContinuedLabel = segment.label.includes('(Continued)')
 
@@ -70,7 +70,6 @@ function renderWorkAssignmentsTable(
             <span className={`border-r border-zinc-900 ${verticalHeaderClass}`}>
               {ICS215_LEGACY_KINDS_HEADER_LABEL}
             </span>
-            <span className="border-r border-zinc-900 p-1" />
             {segment.resourceColumns.map((column) => (
               <span key={column.id} className={`border-r border-zinc-900 ${verticalHeaderClass}`}>
                 {column.label}
@@ -109,9 +108,6 @@ function renderWorkAssignmentsTable(
                         >
                           {row.workAssignment || ' '}
                         </td>
-                      ) : null}
-                      {rhnIndex === 0 ? (
-                        <td rowSpan={3} className="border-r border-zinc-900 p-1" />
                       ) : null}
                       <td className="border-r border-zinc-900 bg-zinc-50 p-1 text-right font-semibold uppercase">
                         {ICS215_LEGACY_RHN_LABELS[rhnIndex]}
@@ -168,7 +164,6 @@ function renderWorkAssignmentsTable(
                 style={{ gridTemplateColumns: gridTemplate }}
               >
                 <span className="col-span-2 border-r border-zinc-900 p-1">{totalRow.label}</span>
-                <span className="border-r border-zinc-900 p-1" />
                 <span className="border-r border-zinc-900 bg-zinc-50 p-1 text-right uppercase">
                   {ICS215_LEGACY_RHN_LABELS[ICS215_LEGACY_RHN_FIELDS.indexOf(totalRow.field)]}
                 </span>
@@ -198,7 +193,7 @@ function renderWorkAssignmentsTable(
           >
             <span
               className="border-r border-zinc-900 p-1"
-              style={{ gridColumn: `span ${4 + resourceCount}` }}
+              style={{ gridColumn: `span ${3 + resourceCount}` }}
             />
             <span
               className="col-span-4 border-zinc-900 p-2"

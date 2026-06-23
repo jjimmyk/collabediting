@@ -128,8 +128,8 @@ assert(
 )
 assert(
   ics215LegacyTotalColCount(lastSegment.resourceColumns.length) ===
-    4 + lastSegment.resourceColumns.length + 4,
-  'Legacy column count should be assignee + work + kinds + rhn + resources + overflow'
+    3 + lastSegment.resourceColumns.length + 4,
+  'Legacy column count should be assignee + work + kinds+RHN + resources + overflow'
 )
 assert(
   documentXml.includes('<w:textDirection w:val="tbRl"/>'),

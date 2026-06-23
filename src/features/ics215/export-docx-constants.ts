@@ -24,6 +24,13 @@ export const ICS215_PDF_PREPARED_BY_FOOTER_HEIGHT_PT = 52
 
 export const ICS215_PDF_ICS_LINE_Y_PT = ICS215_PDF_PAGE.marginPt + 14
 
+/** Space reserved at page bottom for ICS expiration / page number line. */
+export const ICS215_PDF_PAGE_FOOTER_RESERVE_PT = 28
+
+export const ICS215_PDF_TITLE_BLOCK_HEIGHT_PT = 40
+
+export const ICS215_PDF_HEADER_INFO_GRID_HEIGHT_PT = 68
+
 export function ics215PdfPreparedByFooterTopY(): number {
   return (
     ICS215_PDF_ICS_LINE_Y_PT +

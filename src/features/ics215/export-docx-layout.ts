@@ -19,7 +19,6 @@ import {
   ics215LegacyKindsCol,
   ics215LegacyOverflowStartCol,
   ics215LegacyResourceStartCol,
-  ics215LegacyRhnCol,
   legacyResourceCellValue,
 } from '@/features/ics215/export-legacy-table'
 import { buildIcs215HeaderInfoColumnWidths } from '@/features/ics215/export-legacy-geometry'
@@ -274,7 +273,6 @@ function renderWorkAssignmentsTableDocx(
   const cols = buildIcs215LegacyTableColumnWidths(segment.resourceColumns)
   const resourceCount = segment.resourceColumns.length
   const kindsCol = ics215LegacyKindsCol()
-  const rhnCol = ics215LegacyRhnCol()
   const resourceStart = ics215LegacyResourceStartCol()
   const overflowStart = ics215LegacyOverflowStartCol(resourceCount)
 
@@ -291,8 +289,7 @@ function renderWorkAssignmentsTableDocx(
         cols[kindsCol],
         docxParagraph(ICS215_LEGACY_KINDS_HEADER_LABEL, { bold: true, size: 12, vertical: true }),
         { vertical: true, mar: 'tight' }
-      ) +
-      docxCell(cols[rhnCol], docxParagraph(' ', { size: 10 }))
+      )
     segment.resourceColumns.forEach((column, index) => {
       headerCells += docxCell(
         cols[resourceStart + index],
@@ -337,16 +334,14 @@ function renderWorkAssignmentsTableDocx(
         if (isFirst) {
           cells +=
             docxCell(cols[0], docxMultilineParagraphs(row.assignee || ' ', 14), { vMerge: 'restart' }) +
-            docxCell(cols[1], docxMultilineParagraphs(row.workAssignment || ' ', 14), { vMerge: 'restart' }) +
-            docxCell(cols[kindsCol], docxParagraph(' ', { size: 14 }), { vMerge: 'restart' })
+            docxCell(cols[1], docxMultilineParagraphs(row.workAssignment || ' ', 14), { vMerge: 'restart' })
         } else {
           cells +=
             docxCell(cols[0], docxParagraph(' ', { size: 14 }), { vMerge: 'continue' }) +
-            docxCell(cols[1], docxParagraph(' ', { size: 14 }), { vMerge: 'continue' }) +
-            docxCell(cols[kindsCol], docxParagraph(' ', { size: 14 }), { vMerge: 'continue' })
+            docxCell(cols[1], docxParagraph(' ', { size: 14 }), { vMerge: 'continue' })
         }
         cells += docxCell(
-          cols[rhnCol],
+          cols[kindsCol],
           docxParagraph(ICS215_LEGACY_RHN_LABELS[rhnIndex], { bold: true, size: 10, right: true })
         )
         segment.resourceColumns.forEach((column, index) => {
@@ -397,9 +392,8 @@ function renderWorkAssignmentsTableDocx(
         docxCell(cols[0] + cols[1], docxParagraph(totalRow.label, { bold: true, size: 12 }), {
           gridSpan: 2,
         }) +
-        docxCell(cols[kindsCol], docxParagraph(' ', { size: 12 })) +
         docxCell(
-          cols[rhnCol],
+          cols[kindsCol],
           docxParagraph(
             ICS215_LEGACY_RHN_LABELS[ICS215_LEGACY_RHN_FIELDS.indexOf(totalRow.field)],
             { bold: true, size: 10, right: true }

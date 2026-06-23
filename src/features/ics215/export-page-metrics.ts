@@ -4,8 +4,10 @@ import {
   ICS215_DOCX_FOOTER_RESERVE_DXA,
   ICS215_DOCX_HEADER_RESERVE_DXA,
   ICS215_DOCX_PAGE,
+  ICS215_PDF_HEADER_INFO_GRID_HEIGHT_PT,
   ICS215_PDF_PAGE,
-  ics215PdfPreparedByFooterTopY,
+  ICS215_PDF_PAGE_FOOTER_RESERVE_PT,
+  ICS215_PDF_TITLE_BLOCK_HEIGHT_PT,
 } from '@/features/ics215/export-docx-constants'
 
 const PT_PER_DXA = 1 / 20
@@ -38,16 +40,16 @@ export const ICS215_EXPORT_PAGE_METRICS = {
   /** Single legacy IA header row with vertical kinds/resource labels. */
   tableLegacyVerticalHeaderHeightPt: 48,
   /** Boxes 1–4 two-row header grid. */
-  tableLegacyHeaderInfoHeightPt: 68,
+  tableLegacyHeaderInfoHeightPt: ICS215_PDF_HEADER_INFO_GRID_HEIGHT_PT,
   legacyContinuedLabelHeightPt: 12,
+  legacyTotalRowHeightPt: 18,
   minBodyLines: 1,
-  pageLayoutBufferPt: 40,
+  pageLayoutBufferPt: 12,
   capacitySafetyFactor: 0.52,
   tinyContinuationLineThreshold: 3,
 } as const
 
-const ICS215_PDF_HEADER_ESTIMATE_PT = 148
-const ICS215_PDF_PAGE_LAYOUT_BUFFER_PT = 24
+const ICS215_PDF_PAGE_LAYOUT_BUFFER_PT = 12
 
 export function ics215DocxPageSegmentCapacityPt(): number {
   const raw =
@@ -62,11 +64,12 @@ export function ics215DocxPageSegmentCapacityPt(): number {
 
 export function ics215PdfPageSegmentCapacityPt(): number {
   const contentTop = ICS215_PDF_PAGE.heightPt - ICS215_PDF_PAGE.marginPt
-  const contentBottom = ics215PdfPreparedByFooterTopY() + ICS215_EXPORT_PAGE_METRICS.segmentGapPt
+  const contentBottom = ICS215_PDF_PAGE.marginPt + ICS215_PDF_PAGE_FOOTER_RESERVE_PT
   return Math.floor(
     contentTop -
       contentBottom -
-      ICS215_PDF_HEADER_ESTIMATE_PT -
+      ICS215_PDF_TITLE_BLOCK_HEIGHT_PT -
+      ICS215_PDF_HEADER_INFO_GRID_HEIGHT_PT -
       ICS215_PDF_PAGE_LAYOUT_BUFFER_PT
   )
 }

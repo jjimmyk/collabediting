@@ -1,5 +1,9 @@
 import type { Ics215ResourceColumn } from '@/features/ics215/types'
-import { buildIcs215LegacyTableColumnWidths, ics215LegacyKindsCol, ics215LegacyOverflowStartCol } from '@/features/ics215/export-legacy-table'
+import {
+  buildIcs215LegacyTableColumnWidths,
+  ics215LegacyOverflowStartCol,
+  ics215LegacyResourceStartCol,
+} from '@/features/ics215/export-legacy-table'
 
 /** Header boxes 1–4 column ratios: left stack (1+2) | date/time (3) | operational period (4). */
 export const ICS215_HEADER_INFO_COL_RATIOS = [26, 12, 14] as const
@@ -17,19 +21,19 @@ export function buildIcs215HeaderInfoColumnWidths(totalWidth: number): number[] 
   return widths
 }
 
-/** Left edge X of the resource-zone (kinds column) within a legacy work table. */
+/** Left edge X of resource tally columns (first resource col, not kinds/RHN). */
 export function legacyResourceZoneLeftX(
   columnWidths: number[],
   leftX: number
 ): number {
   let x = leftX
-  for (let col = 0; col < ics215LegacyKindsCol(); col += 1) {
+  for (let col = 0; col < ics215LegacyResourceStartCol(); col += 1) {
     x += columnWidths[col]
   }
   return x
 }
 
-/** Right edge X of the resource-zone (last resource column) within a legacy work table. */
+/** Right edge X of the resource-zone (last resource column). */
 export function legacyResourceZoneRightX(
   columnWidths: number[],
   leftX: number,

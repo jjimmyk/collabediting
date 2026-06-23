@@ -10,8 +10,15 @@ import type {
   Ics215WorkAssignmentsTableBlock,
 } from '@/features/ics215/export-layout'
 import type { Ics215ResourceColumn, Ics215ResourceValue } from '@/features/ics215/types'
-import { ICS215_LEGACY_ASSIGNMENT_ROWS_PER_BLOCK, ICS215_LEGACY_TOTAL_FOOTER_ROWS } from '@/features/ics215/export-legacy-table'
+import {
+  ICS215_LEGACY_ASSIGNMENT_ROWS_PER_BLOCK,
+  ICS215_LEGACY_TOTAL_FOOTER_ROWS,
+  buildIcs215LegacyTableColumnWidths,
+  estimateLegacyAssignmentBlockHeightPt,
+  scaleLegacyColumnWidthsToPt,
+} from '@/features/ics215/export-legacy-table'
 import { ICS215_PREPARED_BY_FOOTER_HEIGHT_PT } from '@/features/ics215/export-legacy-geometry'
+import { ICS215_PDF_CONTENT_WIDTH } from '@/features/ics215/export-docx-constants'
 import {
   ICS215_EXPORT_PAGE_METRICS as PAGE,
   ics215DocxPageSegmentCapacityPt,
@@ -151,24 +158,32 @@ function workTableShellHeight(showTableHeader: boolean, continued: boolean): num
   return continuedLead + headerHeight
 }
 
-function estimateAssignmentBlockHeight(row: Ics215WorkAssignmentExportRow): number {
-  const workLines = Math.max(
-    1,
-    flattenWrappedBody(row.workAssignment, 24).length,
-    flattenWrappedBody(row.assignee, 12).length
+function estimateAssignmentBlockHeight(
+  row: Ics215WorkAssignmentExportRow,
+  resourceColumns: Ics215ResourceColumn[]
+): number {
+  const columnWidthsPt = scaleLegacyColumnWidthsToPt(
+    buildIcs215LegacyTableColumnWidths(resourceColumns),
+    ICS215_PDF_CONTENT_WIDTH
   )
-  const singleRowHeight =
-    PAGE.tableRowHeightPt + (workLines - 1) * PAGE.paginationLineHeightPt
-  return singleRowHeight * ICS215_LEGACY_ASSIGNMENT_ROWS_PER_BLOCK
+  const measureLines = (text: string, maxWidth: number, maxLines: number) =>
+    wrapIcs215TextLines(text, maxWidth, 6.5, false).slice(0, maxLines).length
+
+  return estimateLegacyAssignmentBlockHeightPt(
+    row,
+    columnWidthsPt,
+    resourceColumns.length,
+    measureLines
+  )
 }
 
 function estimateWorkAssignmentsTableSegmentHeight(segment: Ics215WorkAssignmentsTableSegment): number {
   let height = workTableShellHeight(segment.showTableHeader, segment.continued)
   for (const row of segment.rows) {
-    height += estimateAssignmentBlockHeight(row)
+    height += estimateAssignmentBlockHeight(row, segment.resourceColumns)
   }
   if (segment.showResourceTotalsFooter) {
-    height += PAGE.tableRowHeightPt * ICS215_LEGACY_TOTAL_FOOTER_ROWS
+    height += PAGE.legacyTotalRowHeightPt * ICS215_LEGACY_TOTAL_FOOTER_ROWS
   }
   if (segment.showPreparedByFooter) {
     height += ICS215_PREPARED_BY_FOOTER_HEIGHT_PT

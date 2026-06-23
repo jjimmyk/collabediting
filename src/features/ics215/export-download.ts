@@ -26,8 +26,9 @@ import {
   ics215LegacyKindsCol,
   ics215LegacyOverflowStartCol,
   ics215LegacyResourceStartCol,
-  ics215LegacyRhnCol,
+  estimateLegacyAssignmentBlockHeightPt,
   legacyResourceCellValue,
+  scaleLegacyColumnWidthsToPt,
 } from '@/features/ics215/export-legacy-table'
 import {
   buildIcs215HeaderInfoColumnWidths,
@@ -415,6 +416,8 @@ type PdfTableRow = {
   height: number
   cells: PdfTableCell[]
   borderAfter?: Ics215LegacyBorderAfter
+  /** Omit internal vertical rules between overflow cols 8–11 (box 15). */
+  suppressOverflowVerticalLines?: boolean
 }
 
 type DrawPdfTableOptions = {
@@ -478,11 +481,15 @@ function pdfPlaceCellTextLines(
       : rowTop - pad - fontSize
   return textLines.map((line, lineIndex) => {
     const textWidth = estimatePdfTextWidth(line, fontSize, bold)
-    const x = center
+    let x = center
       ? cellX + pad + Math.max(0, (cellWidth - pad * 2 - textWidth) / 2)
       : right
         ? cellX + cellWidth - pad - textWidth
         : cellX + pad
+    const maxX = cellX + cellWidth - pad
+    if (x + textWidth > maxX) {
+      x = Math.max(cellX + pad, maxX - textWidth)
+    }
     return {
       text: line,
       font: bold ? 'F2' : 'F1',
@@ -522,10 +529,24 @@ function drawPdfTableWithSpans(
   ops += `${leftX.toFixed(2)} ${bottomY.toFixed(2)} m ${leftX.toFixed(2)} ${topY.toFixed(2)} l S\n`
   ops += `${(leftX + tableWidth).toFixed(2)} ${bottomY.toFixed(2)} m ${(leftX + tableWidth).toFixed(2)} ${topY.toFixed(2)} l S\n`
 
+  const overflowStart =
+    resourceCount > 0 ? ics215LegacyOverflowStartCol(resourceCount) : columnWidths.length
+
   let xOffset = leftX
   for (let col = 1; col < columnWidths.length; col += 1) {
     xOffset += columnWidths[col - 1]
-    ops += `${xOffset.toFixed(2)} ${bottomY.toFixed(2)} m ${xOffset.toFixed(2)} ${topY.toFixed(2)} l S\n`
+    const isInternalOverflowDivider =
+      col > overflowStart && col < overflowStart + 4
+    let segmentTop = topY
+    for (let rowIndex = 0; rowIndex < rows.length; rowIndex += 1) {
+      const row = rows[rowIndex]
+      const segmentBottom = segmentTop - row.height
+      const suppress = row.suppressOverflowVerticalLines && isInternalOverflowDivider
+      if (!suppress) {
+        ops += `${xOffset.toFixed(2)} ${segmentBottom.toFixed(2)} m ${xOffset.toFixed(2)} ${segmentTop.toFixed(2)} l S\n`
+      }
+      segmentTop = segmentBottom
+    }
   }
 
   const zoneLeft = legacyResourceZoneLeftX(columnWidths, leftX)
@@ -632,33 +653,10 @@ function estimateLegacyAssignmentBlockHeight(
   columnWidths: number[],
   resourceCount: number
 ): number {
-  const pad = 6
-  const minBlockHeight = 36
-  const lineHeight = 8.5
-  const measure = (text: string, colIndex: number, maxLines: number) =>
-    wrapPdfText(sanitizeForPdf(text || ' '), columnWidths[colIndex] - pad, 6.5, false).slice(
-      0,
-      maxLines
-    ).length
+  const measureLines = (text: string, maxWidth: number, maxLines: number) =>
+    wrapPdfText(sanitizeForPdf(text || ' '), maxWidth, 6.5, false).slice(0, maxLines).length
 
-  const overflowCol = ics215LegacyOverflowStartCol(resourceCount)
-
-  const assigneeLines = measure(row.assignee, 0, 4)
-  const workLines = measure(row.workAssignment, 1, 6)
-  const overheadLines = measure(row.overheadPositions, overflowCol, 3)
-  const specialLines = measure(row.specialEquipmentSupplies, overflowCol + 1, 3)
-  const reportingLines = measure(row.reportingLocation, overflowCol + 2, 2)
-  const arrivalLines = measure(row.requestedArrivalTime, overflowCol + 3, 2)
-  const maxLines = Math.max(
-    assigneeLines,
-    workLines,
-    overheadLines,
-    specialLines,
-    reportingLines,
-    arrivalLines,
-    1
-  )
-  return Math.max(minBlockHeight, maxLines * lineHeight + 10)
+  return estimateLegacyAssignmentBlockHeightPt(row, columnWidths, resourceCount, measureLines)
 }
 
 function buildWorkAssignmentsTablePdfRows(
@@ -668,7 +666,6 @@ function buildWorkAssignmentsTablePdfRows(
 ): PdfTableRow[] {
   const resourceCount = segment.resourceColumns.length
   const kindsCol = ics215LegacyKindsCol()
-  const rhnCol = ics215LegacyRhnCol()
   const resourceStart = ics215LegacyResourceStartCol()
   const overflowStart = ics215LegacyOverflowStartCol(resourceCount)
   const headerFontSize = 6
@@ -696,7 +693,6 @@ function buildWorkAssignmentsTablePdfRows(
         fontSize: headerFontSize,
         vertical: true,
       },
-      { col: rhnCol, text: ' ', fontSize: headerFontSize },
     ]
     segment.resourceColumns.forEach((column, index) => {
       headerCells.push({
@@ -776,13 +772,12 @@ function buildWorkAssignmentsTablePdfRows(
             fontSize: 6.5,
             vAlign: 'top',
             maxLines: 8,
-          },
-          { col: kindsCol, rowSpan: ICS215_LEGACY_RHN_FIELDS.length, text: ' ', fontSize: 6.5 }
+          }
         )
       }
 
       cells.push({
-        col: rhnCol,
+        col: kindsCol,
         text: ICS215_LEGACY_RHN_LABELS[rhnIndex],
         bold: true,
         right: true,
@@ -846,7 +841,7 @@ function buildWorkAssignmentsTablePdfRows(
   }
 
   if (segment.showResourceTotalsFooter) {
-    const footerHeight = 14
+    const footerHeight = 18
     ICS215_LEGACY_TOTAL_ROWS.forEach((totalRow, totalIndex) => {
       const totalCells: PdfTableCell[] = [
         {
@@ -854,12 +849,12 @@ function buildWorkAssignmentsTablePdfRows(
           colSpan: 2,
           text: totalRow.label,
           bold: true,
-          fontSize: 6.5,
+          fontSize: 6,
           vAlign: 'middle',
+          maxLines: 2,
         },
-        { col: kindsCol, text: ' ', fontSize: 6.5 },
         {
-          col: rhnCol,
+          col: kindsCol,
           text: ICS215_LEGACY_RHN_LABELS[ICS215_LEGACY_RHN_FIELDS.indexOf(totalRow.field)],
           bold: true,
           right: true,
@@ -890,31 +885,32 @@ function buildWorkAssignmentsTablePdfRows(
 
   if (segment.showPreparedByFooter && preparedByFooter) {
     const overflowSpan = 4
-    rows.push({
-      height: ICS215_PREPARED_BY_FOOTER_HEIGHT_PT,
-      cells: [
-        {
-          col: 0,
-          colSpan: overflowStart,
-          text: ' ',
-          fontSize: 6.5,
-        },
-        {
-          col: overflowStart,
-          colSpan: overflowSpan,
-          text: [
-            preparedByFooter.label,
-            `Name: ${preparedByFooter.name.trim() || ' '}`,
-            `Position/Title: ${preparedByFooter.positionTitle.trim() || ' '}`,
-            `Date/Time: ${preparedByFooter.dateTime.trim() || ' '}`,
-          ].join('\n'),
-          fontSize: 6.5,
-          vAlign: 'top',
-          maxLines: 5,
-        },
-      ],
-      borderAfter: 'none',
-    })
+      rows.push({
+        height: ICS215_PREPARED_BY_FOOTER_HEIGHT_PT,
+        cells: [
+          {
+            col: 0,
+            colSpan: overflowStart,
+            text: ' ',
+            fontSize: 6.5,
+          },
+          {
+            col: overflowStart,
+            colSpan: overflowSpan,
+            text: [
+              preparedByFooter.label,
+              `Name: ${preparedByFooter.name.trim() || ' '}`,
+              `Position/Title: ${preparedByFooter.positionTitle.trim() || ' '}`,
+              `Date/Time: ${preparedByFooter.dateTime.trim() || ' '}`,
+            ].join('\n'),
+            fontSize: 6.5,
+            vAlign: 'top',
+            maxLines: 5,
+          },
+        ],
+        borderAfter: 'none',
+        suppressOverflowVerticalLines: true,
+      })
   }
 
   return rows

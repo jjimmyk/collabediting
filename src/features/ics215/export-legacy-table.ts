@@ -20,6 +20,10 @@ export const ICS215_LEGACY_ASSIGNMENT_ROWS_PER_BLOCK = ICS215_LEGACY_RHN_FIELDS.
 
 export const ICS215_LEGACY_TOTAL_FOOTER_ROWS = ICS215_LEGACY_TOTAL_ROWS.length
 
+export const ICS215_LEGACY_ASSIGNMENT_MIN_BLOCK_HEIGHT_PT = 36
+export const ICS215_LEGACY_ASSIGNMENT_LINE_HEIGHT_PT = 8.5
+export const ICS215_LEGACY_ASSIGNMENT_CELL_PAD_PT = 6
+
 function allocateProportionalWidths(ratios: readonly number[], totalWidth: number): number[] {
   const ratioSum = ratios.reduce((sum, ratio) => sum + ratio, 0)
   const widths = ratios.map((ratio) => Math.floor((ratio / ratioSum) * totalWidth))
@@ -28,27 +32,33 @@ function allocateProportionalWidths(ratios: readonly number[], totalWidth: numbe
   return widths
 }
 
-/** Legacy IA: assignee | work | kinds (vertical) | R/H/N | one col per resource | overhead × 4 */
+/** Legacy IA: assignee | work | kinds+RHN | one col per resource | overhead × 4 */
 export function buildIcs215LegacyTableColumnWidths(
   resourceColumns: Ics215ResourceColumn[]
 ): number[] {
   const resourceRatios = resourceColumns.map(() => 2)
   return allocateProportionalWidths(
-    [10, 16, 4, 4, ...resourceRatios, 10, 12, 12, 8],
+    [10, 16, 5, ...resourceRatios, 10, 12, 12, 8],
     ICS215_LEGACY_DOCX_CONTENT_WIDTH
   )
+}
+
+export function scaleLegacyColumnWidthsToPt(
+  docxWidths: number[],
+  tableWidthPt: number
+): number[] {
+  const docxTotal = docxWidths.reduce((sum, width) => sum + width, 0)
+  const widths = docxWidths.map((width) => Math.floor((width / docxTotal) * tableWidthPt))
+  widths[widths.length - 1] += tableWidthPt - widths.reduce((sum, width) => sum + width, 0)
+  return widths
 }
 
 export function ics215LegacyKindsCol(): number {
   return 2
 }
 
-export function ics215LegacyRhnCol(): number {
-  return 3
-}
-
 export function ics215LegacyResourceStartCol(): number {
-  return 4
+  return 3
 }
 
 export function ics215LegacyOverflowStartCol(resourceCount: number): number {
@@ -75,4 +85,58 @@ export function estimateLegacyVerticalHeaderHeight(
   const trimmed = text.trim()
   const approxWidth = trimmed.length * fontSize * 0.53
   return Math.max(minHeight, approxWidth + 10)
+}
+
+export type LegacyAssignmentHeightInput = {
+  assignee: string
+  workAssignment: string
+  overheadPositions: string
+  specialEquipmentSupplies: string
+  reportingLocation: string
+  requestedArrivalTime: string
+}
+
+/** Shared assignment block height (3× RHN rows) for PDF render + pagination. */
+export function estimateLegacyAssignmentBlockHeightPt(
+  row: LegacyAssignmentHeightInput,
+  columnWidthsPt: number[],
+  resourceCount: number,
+  measureLines: (text: string, maxWidth: number, maxLines: number) => number
+): number {
+  const overflowCol = ics215LegacyOverflowStartCol(resourceCount)
+  const assigneeLines = measureLines(row.assignee, columnWidthsPt[0] - ICS215_LEGACY_ASSIGNMENT_CELL_PAD_PT, 4)
+  const workLines = measureLines(row.workAssignment, columnWidthsPt[1] - ICS215_LEGACY_ASSIGNMENT_CELL_PAD_PT, 8)
+  const overheadLines = measureLines(
+    row.overheadPositions,
+    columnWidthsPt[overflowCol] - ICS215_LEGACY_ASSIGNMENT_CELL_PAD_PT,
+    3
+  )
+  const specialLines = measureLines(
+    row.specialEquipmentSupplies,
+    columnWidthsPt[overflowCol + 1] - ICS215_LEGACY_ASSIGNMENT_CELL_PAD_PT,
+    3
+  )
+  const reportingLines = measureLines(
+    row.reportingLocation,
+    columnWidthsPt[overflowCol + 2] - ICS215_LEGACY_ASSIGNMENT_CELL_PAD_PT,
+    2
+  )
+  const arrivalLines = measureLines(
+    row.requestedArrivalTime,
+    columnWidthsPt[overflowCol + 3] - ICS215_LEGACY_ASSIGNMENT_CELL_PAD_PT,
+    2
+  )
+  const maxLines = Math.max(
+    assigneeLines,
+    workLines,
+    overheadLines,
+    specialLines,
+    reportingLines,
+    arrivalLines,
+    1
+  )
+  return Math.max(
+    ICS215_LEGACY_ASSIGNMENT_MIN_BLOCK_HEIGHT_PT,
+    maxLines * ICS215_LEGACY_ASSIGNMENT_LINE_HEIGHT_PT + 10
+  )
 }
