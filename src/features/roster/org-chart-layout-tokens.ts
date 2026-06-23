@@ -1,5 +1,14 @@
 export const ORG_CHART_CONNECTOR_CLASS = 'bg-muted-foreground/70'
 
+/** Width of the shared vertical trunk beside right-indented subordinates. */
+export const ORG_CHART_SUBORDINATE_TRUNK_WIDTH = 'w-4'
+
+/** Horizontal connector arm from trunk into each subordinate card row. */
+export const ORG_CHART_SUBORDINATE_ARM_WIDTH = 'w-4'
+
+/** Vertical gap between stacked subordinate rows. */
+export const ORG_CHART_SUBORDINATE_ROW_GAP = 'gap-2'
+
 export const ORG_CHART_POSITION_CARD_MIN_WIDTH = 'min-w-[10rem]'
 export const ORG_CHART_POSITION_CARD_MAX_WIDTH = 'max-w-[12rem]'
 export const ORG_CHART_POSITION_CARD_WIDTH =

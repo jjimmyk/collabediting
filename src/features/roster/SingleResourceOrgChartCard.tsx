@@ -49,9 +49,7 @@ export function SingleResourceOrgChartCard({
             ) : null}
           </div>
           {reportsTo ? (
-            <p className="truncate text-[10px] text-muted-foreground">
-              Reports to {reportsTo}
-            </p>
+            <p className="sr-only">Reports to {reportsTo}</p>
           ) : null}
         </button>
         {canManage && onRemoveFromOrgChart ? (

@@ -549,6 +549,16 @@ assert(
   connectorSource.includes('-translate-y-1/2') && connectorSource.includes('-mt-px'),
   'org chart connectors should overlap horizontal and vertical junctions'
 )
+assert(
+  connectorSource.includes('OrgChartRightIndentStack') &&
+    connectorSource.includes('data-org-chart-layout="right-indent"'),
+  'org chart should render subordinates with right-indent connector layout'
+)
+assert(
+  orgChartRosterSource.includes('OrgChartRightIndentStack') &&
+    !orgChartRosterSource.includes('OrgChartVerticalStack'),
+  'org chart roster should use right-indent stacks for subordinate rows'
+)
 
 assert(
   ROSTER_ZOOM_MIN === 0.5 &&

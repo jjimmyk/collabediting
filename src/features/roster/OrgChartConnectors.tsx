@@ -4,6 +4,9 @@ import {
   ORG_CHART_CONNECTOR_CLASS,
   ORG_CHART_FORK_BRANCH_COLUMN_MIN_WIDTH,
   ORG_CHART_LOGISTICS_FORK_MIN_WIDTH,
+  ORG_CHART_SUBORDINATE_ARM_WIDTH,
+  ORG_CHART_SUBORDINATE_ROW_GAP,
+  ORG_CHART_SUBORDINATE_TRUNK_WIDTH,
 } from '@/features/roster/org-chart-layout-tokens'
 
 export function OrgChartVerticalLine({
@@ -93,6 +96,59 @@ export function OrgChartVerticalStack({ children }: { children: ReactNode[] }) {
       {children.map((child, index) => (
         <OrgChartInboundStem key={index}>{child}</OrgChartInboundStem>
       ))}
+    </div>
+  )
+}
+
+/**
+ * ICS-style subordinate layout: vertical trunk down from the superior, horizontal
+ * arms to the right into each indented child card (Planning/Finance unit stacks, etc.).
+ */
+export function OrgChartRightIndentStack({
+  children,
+  connectFromParent = true,
+}: {
+  children: ReactNode[]
+  connectFromParent?: boolean
+}) {
+  if (children.length === 0) return null
+
+  return (
+    <div
+      className="flex w-full min-w-0 flex-row items-stretch self-start"
+      data-org-chart-layout="right-indent"
+    >
+      <div
+        className={cn(
+          'relative flex shrink-0 flex-col items-center',
+          ORG_CHART_SUBORDINATE_TRUNK_WIDTH
+        )}
+      >
+        {connectFromParent ? (
+          <OrgChartVerticalLine heightClassName="h-4" className="shrink-0" />
+        ) : null}
+        <div
+          className={cn(
+            'absolute left-1/2 w-0.5 -translate-x-1/2',
+            ORG_CHART_CONNECTOR_CLASS,
+            connectFromParent ? 'top-4 bottom-0' : 'top-0 bottom-0'
+          )}
+          aria-hidden
+        />
+      </div>
+      <div className={cn('flex min-w-0 flex-1 flex-col', ORG_CHART_SUBORDINATE_ROW_GAP)}>
+        {children.map((child, index) => (
+          <div key={index} className="relative flex min-w-0 items-center">
+            <OrgChartHorizontalLine
+              className={cn(
+                'absolute -left-4 top-1/2 -translate-y-1/2',
+                ORG_CHART_SUBORDINATE_ARM_WIDTH
+              )}
+            />
+            <div className="min-w-0 flex-1">{child}</div>
+          </div>
+        ))}
+      </div>
     </div>
   )
 }

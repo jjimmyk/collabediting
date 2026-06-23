@@ -22,8 +22,8 @@ import {
   OrgChartCrossbarColumns,
   OrgChartFork,
   OrgChartInboundStem,
+  OrgChartRightIndentStack,
   OrgChartVerticalLine,
-  OrgChartVerticalStack,
 } from '@/features/roster/OrgChartConnectors'
 import {
   ORG_CHART_CANVAS_MIN_WIDTH,
@@ -258,6 +258,10 @@ function orgChartNodeKey(node: OrgChartNode, index: number): string {
   return node.label
 }
 
+function isSubordinateRowChild(node: OrgChartNode): boolean {
+  return node.kind === 'position' || node.kind === 'asset' || node.kind === 'single_resource'
+}
+
 function OrgChartLayoutNode({
   node,
   parentColor,
@@ -275,7 +279,7 @@ function OrgChartLayoutNode({
     )
     if (visibleChildren.length === 0) return null
     return (
-      <OrgChartVerticalStack>
+      <OrgChartRightIndentStack>
         {visibleChildren.map((child, index) => (
           <OrgChartLayoutNode
             key={orgChartNodeKey(child, index)}
@@ -284,7 +288,7 @@ function OrgChartLayoutNode({
             renderProps={renderProps}
           />
         ))}
-      </OrgChartVerticalStack>
+      </OrgChartRightIndentStack>
     )
   }
 
@@ -330,10 +334,25 @@ function OrgChartChildren({
   )
   if (visibleChildren.length === 0) return null
 
+  if (visibleChildren.every(isSubordinateRowChild)) {
+    return (
+      <OrgChartRightIndentStack>
+        {visibleChildren.map((child, index) => (
+          <OrgChartLayoutNode
+            key={orgChartNodeKey(child, index)}
+            node={child}
+            parentColor={parentColor}
+            renderProps={renderProps}
+          />
+        ))}
+      </OrgChartRightIndentStack>
+    )
+  }
+
   return (
     <div className="flex w-full min-w-0 flex-col items-center gap-2">
       {visibleChildren.map((child, index) => {
-        if (child.kind === 'stack' || child.kind === 'fork') {
+        if (child.kind === 'stack') {
           return (
             <OrgChartLayoutNode
               key={orgChartNodeKey(child, index)}
@@ -341,6 +360,18 @@ function OrgChartChildren({
               parentColor={parentColor}
               renderProps={renderProps}
             />
+          )
+        }
+
+        if (child.kind === 'fork') {
+          return (
+            <OrgChartInboundStem key={orgChartNodeKey(child, index)} heightClassName="h-5">
+              <OrgChartLayoutNode
+                node={child}
+                parentColor={parentColor}
+                renderProps={renderProps}
+              />
+            </OrgChartInboundStem>
           )
         }
 
@@ -374,7 +405,7 @@ function OrgChartChildNode({
     const scheduled = node.scheduled ?? false
 
     return (
-      <div className="flex w-full justify-center">
+      <div className="flex w-full min-w-0 justify-start">
         <OrgChartCollapsibleAssetCard
           asset={asset}
           color={node.color ?? parentColor}
@@ -409,7 +440,7 @@ function OrgChartChildNode({
     const member = renderProps.rosterById[node.memberId]
     if (!member) return null
     return (
-      <div className={cn('flex w-full justify-center', ORG_CHART_POSITION_CARD_WIDTH)}>
+      <div className={cn('flex w-full min-w-0 justify-start', ORG_CHART_POSITION_CARD_WIDTH)}>
         <SingleResourceOrgChartCard
           member={member}
           color={node.color ?? parentColor}
@@ -597,11 +628,15 @@ function PositionNode({
   const canRemove =
     canRemovePositionFromRoster?.(entry) ?? false
   const removalBlockedReason = positionRemovalBlockedReason?.(entry) ?? null
+  const hasVisibleChildren =
+    !suppressChildren &&
+    filterVisibleOrgChartChildren(children, visiblePositions, displayFilters).length > 0
 
   return (
     <div
       className={cn(
-        'flex w-full min-w-0 flex-col items-center',
+        'flex w-full min-w-0 flex-col',
+        hasVisibleChildren ? 'items-start' : 'items-center',
         layoutMode === 'wide' && ORG_CHART_POSITION_CARD_MAX_WIDTH
       )}
     >
