@@ -562,12 +562,33 @@ assert(
   'org chart connectors should use arm channels, ICS spine layout, and continuous border trunks'
 )
 assert(
-  orgChartRosterSource.includes('OrgChartRightIndentStack') &&
+  orgChartRosterSource.includes('OrgChartWideLayout') &&
+    orgChartRosterSource.includes('OrgChartRightIndentStack') &&
     !orgChartRosterSource.includes('OrgChartVerticalStack') &&
-    orgChartRosterSource.includes('ORG_CHART_CARD_TO_CHILDREN_GAP') &&
-    orgChartRosterSource.includes('IncidentCommanderSpine') &&
-    orgChartRosterSource.includes('showInboundStem={spineAboveSections}'),
-  'org chart roster should use spine hub with section crossbar inbound stem'
+    orgChartRosterSource.includes('IncidentCommanderSubtree'),
+  'org chart roster should use SVG wide layout and compact legacy subtree'
+)
+
+const wideLayoutSource = readFileSync(
+  join(process.cwd(), 'src/features/roster/org-chart-wide-layout.tsx'),
+  'utf8'
+)
+assert(
+  wideLayoutSource.includes('data-org-chart-wide-root') &&
+    wideLayoutSource.includes('OrgChartSubHierarchyColumn') &&
+    wideLayoutSource.includes('OrgChartIcBusRegistrar'),
+  'wide org chart layout should use three-band structure with sub-hierarchy alignment'
+)
+
+const connectorOverlaySource = readFileSync(
+  join(process.cwd(), 'src/features/roster/org-chart-connector-overlay.tsx'),
+  'utf8'
+)
+assert(
+  connectorOverlaySource.includes('spineConnectLines') &&
+    connectorOverlaySource.includes('icBusConnectLines') &&
+    connectorOverlaySource.includes('ResizeObserver'),
+  'org chart connector overlay should draw measured SVG lines'
 )
 
 const icsStructureSource = readFileSync(
@@ -589,6 +610,7 @@ assert(
     layoutTokensSource.includes('ORG_CHART_SUBORDINATE_ARM_CHANNEL_WIDTH') &&
     layoutTokensSource.includes('ORG_CHART_CARD_LAYER_CLASS') &&
     layoutTokensSource.includes('ORG_CHART_CONNECTOR_BORDER_WIDTH') &&
+    layoutTokensSource.includes('ORG_CHART_SPINE_ANCHOR_RATIO') &&
     layoutTokensSource.includes('orgChartCrossbarBarInsetClassName'),
   'org chart layout tokens should centralize spacing, arm channels, and card layers'
 )

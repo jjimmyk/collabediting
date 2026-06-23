@@ -28,6 +28,15 @@ export const ORG_CHART_CARD_TO_CHILDREN_GAP = 'gap-2'
 /** Renders org chart cards above connector lines. */
 export const ORG_CHART_CARD_LAYER_CLASS = 'relative z-10 bg-background'
 
+/** Horizontal anchor for spine connectors — 10% from card left edge (ICS 207 reference). */
+export const ORG_CHART_SPINE_ANCHOR_RATIO = 0.1
+
+/** Gap between section header row and sub-hierarchy row in wide layout. */
+export const ORG_CHART_WIDE_SUB_HIERARCHY_MARGIN_TOP = 'mt-14'
+
+/** Gap between IC band and section header row in wide layout. */
+export const ORG_CHART_WIDE_GROUPS_ROW_MARGIN_TOP = 'mt-16'
+
 export const ORG_CHART_POSITION_CARD_MIN_WIDTH = 'min-w-[10rem]'
 export const ORG_CHART_POSITION_CARD_MAX_WIDTH = 'max-w-[12rem]'
 export const ORG_CHART_POSITION_CARD_WIDTH =

@@ -29942,6 +29942,7 @@ function App() {
                       isAssigningPosition={rosterAssigningPosition}
                       workspaceLabel={activeWorkspaceRosterLabel}
                       layoutMode={rosterPanelLayoutMode}
+                      zoom={rosterZoomLevel}
                       showOpAdvanceLabels={showPositionOpAdvanceLabels}
                       positionMetaByName={workspacePositionCatalog.positionMetaByName}
                       isUpdatingOpAdvanceLabel={updatingOpAdvanceLabelPosition}

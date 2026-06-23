@@ -329,6 +329,7 @@ export function BuildTeamRosterStep({
             isAssigningPosition={null}
             workspaceLabel={workspaceLabel}
             layoutMode={isPageLayout ? 'wide' : 'compact'}
+            zoom={rosterZoomLevel}
             showOpAdvanceLabels={false}
             positionMetaByName={catalog.positionMetaByName}
             onToggleEditIcs201={() => undefined}

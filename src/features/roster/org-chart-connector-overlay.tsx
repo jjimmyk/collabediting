@@ -1,0 +1,82 @@
+import { useLayoutEffect } from 'react'
+import { useOrgChartConnectors } from '@/features/roster/org-chart-connector-context'
+import {
+  icBusConnectLines,
+  spineConnectLines,
+} from '@/features/roster/org-chart-connector-draw'
+import { ORG_CHART_SPINE_ANCHOR_RATIO } from '@/features/roster/org-chart-layout-tokens'
+
+export function OrgChartConnectorOverlay({ zoom = 1 }: { zoom?: number }) {
+  const { chartRef, spineLinksRef, icBusRef, getCardElement, revision } =
+    useOrgChartConnectors()
+
+  useLayoutEffect(() => {
+    const chart = chartRef.current
+    if (!chart) return
+
+    const svg = chart.querySelector<SVGSVGElement>('[data-org-chart-connectors]')
+    if (!svg) return
+
+    const draw = () => {
+      const chartRect = chart.getBoundingClientRect()
+      const width = chart.offsetWidth
+      const height = chart.offsetHeight
+      svg.setAttribute('viewBox', `0 0 ${width} ${height}`)
+      svg.setAttribute('width', String(width))
+      svg.setAttribute('height', String(height))
+      svg.innerHTML = ''
+
+      const lines: ReturnType<typeof spineConnectLines> = []
+
+      for (const link of spineLinksRef.current) {
+        const parentEl = getCardElement(link.parentId)
+        if (!parentEl) continue
+        const childEls = link.childIds
+          .map((id) => getCardElement(id))
+          .filter((el): el is HTMLElement => el !== null)
+        if (childEls.length === 0) continue
+        lines.push(
+          ...spineConnectLines(chartRect, parentEl, childEls, ORG_CHART_SPINE_ANCHOR_RATIO)
+        )
+      }
+
+      const icBus = icBusRef.current
+      if (icBus) {
+        const commanderEl = getCardElement(icBus.commanderId)
+        const headerEls = icBus.headerIds
+          .map((id) => getCardElement(id))
+          .filter((el): el is HTMLElement => el !== null)
+        if (commanderEl && headerEls.length > 0) {
+          lines.push(...icBusConnectLines(chartRect, commanderEl, headerEls))
+        }
+      }
+
+      for (const segment of lines) {
+        const el = document.createElementNS('http://www.w3.org/2000/svg', 'line')
+        el.setAttribute('x1', String(segment.x1))
+        el.setAttribute('y1', String(segment.y1))
+        el.setAttribute('x2', String(segment.x2))
+        el.setAttribute('y2', String(segment.y2))
+        el.setAttribute(
+          'stroke',
+          segment.thick ? 'rgb(107 114 128)' : 'rgb(156 163 175)'
+        )
+        el.setAttribute('stroke-width', segment.thick ? '2' : '1.5')
+        svg.appendChild(el)
+      }
+    }
+
+    draw()
+    const observer = new ResizeObserver(draw)
+    observer.observe(chart)
+    return () => observer.disconnect()
+  }, [chartRef, getCardElement, icBusRef, revision, spineLinksRef, zoom])
+
+  return (
+    <svg
+      data-org-chart-connectors
+      aria-hidden
+      className="pointer-events-none absolute left-0 top-0 overflow-visible"
+    />
+  )
+}

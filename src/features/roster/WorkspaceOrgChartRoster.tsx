@@ -27,6 +27,16 @@ import {
   OrgChartSpineTeeRow,
   OrgChartVerticalLine,
 } from '@/features/roster/OrgChartConnectors'
+import { OrgChartCardAnchor } from '@/features/roster/org-chart-card-anchor'
+import { orgChartNodeConnectorId } from '@/features/roster/org-chart-node-id'
+import { OrgChartWideLayout } from '@/features/roster/org-chart-wide-layout'
+import type { OrgChartWideRenderProps } from '@/features/roster/org-chart-wide-layout.types'
+import {
+  filterVisibleOrgChartChildren,
+  orgChartNodeKey,
+  positionBranchIsVisible,
+  positionNodeIsVisible,
+} from '@/features/roster/org-chart-visibility'
 import {
   ORG_CHART_CANVAS_MIN_WIDTH,
   ORG_CHART_CARD_TO_CHILDREN_GAP,
@@ -75,6 +85,7 @@ type WorkspaceOrgChartRosterProps = {
   isUpdatingOpAdvanceLabel?: string | null
   workspaceLabel: string
   layoutMode?: RosterPanelLayoutMode
+  zoom?: number
   showOpAdvanceLabels?: boolean
   positionMetaByName?: Record<string, WorkspacePositionMeta>
   onToggleEditIcs201: (position: string, enabled: boolean) => void
@@ -217,51 +228,6 @@ type OrgChartRenderProps = {
     value: string | null,
     scheduled: boolean
   ) => void
-}
-
-function filterVisibleOrgChartChildren(
-  children: OrgChartNode[],
-  visiblePositions: Set<string>,
-  displayFilters: RosterDisplayFilters
-): OrgChartNode[] {
-  return children.filter((child) => {
-    if (child.kind === 'asset') return true
-    if (child.kind === 'single_resource') {
-      return singleResourceNodeVisible(child.scheduled, displayFilters)
-    }
-    if (child.kind === 'stack' || child.kind === 'fork') {
-      return (
-        filterVisibleOrgChartChildren(child.children, visiblePositions, displayFilters).length > 0
-      )
-    }
-    if (child.kind === 'position') {
-      return (
-        visiblePositions.has(child.position) ||
-        filterVisibleOrgChartChildren(child.children ?? [], visiblePositions, displayFilters)
-          .length > 0
-      )
-    }
-    return false
-  })
-}
-
-function positionNodeIsVisible(
-  position: string,
-  children: OrgChartNode[],
-  visiblePositions: Set<string>,
-  displayFilters: RosterDisplayFilters
-): boolean {
-  if (visiblePositions.has(position)) return true
-  return filterVisibleOrgChartChildren(children, visiblePositions, displayFilters).length > 0
-}
-
-function orgChartNodeKey(node: OrgChartNode, index: number): string {
-  if (node.kind === 'asset') return node.assetKey
-  if (node.kind === 'single_resource') return node.memberId
-  if (node.kind === 'position') return node.position
-  if (node.kind === 'stack') return `stack-${index}`
-  if (node.kind === 'fork') return `fork-${index}`
-  return node.label
 }
 
 function isSubordinateRowChild(node: OrgChartNode): boolean {
@@ -409,11 +375,24 @@ function OrgChartChildNode({
   node,
   parentColor,
   renderProps,
+  suppressChildren = false,
+  connectorAnchorId,
 }: {
   node: OrgChartNode
   parentColor?: OrgChartColor
   renderProps: OrgChartRenderProps
+  suppressChildren?: boolean
+  connectorAnchorId?: string
 }) {
+  const wrapAnchor = (content: React.ReactNode, className?: string) =>
+    connectorAnchorId ? (
+      <OrgChartCardAnchor id={connectorAnchorId} className={className}>
+        {content}
+      </OrgChartCardAnchor>
+    ) : (
+      content
+    )
+
   if (node.kind === 'asset') {
     const asset = renderProps.assetsByKey[node.assetKey]
     if (!asset) return null
@@ -422,29 +401,31 @@ function OrgChartChildNode({
 
     return (
       <div className="flex w-full min-w-0 justify-start">
-        <OrgChartCollapsibleAssetCard
-          asset={asset}
-          color={node.color ?? parentColor}
-          scheduled={scheduled}
-          glassItemBorderClasses={renderProps.glassItemBorderClasses}
-          canManage={renderProps.canManageRoster}
-          pocMembers={renderProps.pocMembers}
-          removeLabel={
-            scheduled
-              ? `Remove ${asset.name} from next OP org chart schedule`
-              : `Remove ${asset.name} from org chart`
-          }
-          onOpenDetail={() => renderProps.onOpenOrgChartAssetDetail(asset.assetKey)}
-          onRemove={
-            renderProps.canManageRoster && renderProps.onRemoveAssetFromOrgChart
-              ? () => renderProps.onRemoveAssetFromOrgChart!(asset.assetKey)
-              : undefined
-          }
-          onFocusMap={
-            renderProps.onFocusAsset ? () => renderProps.onFocusAsset!(asset) : undefined
-          }
-          onUpdateAssetPointOfContact={renderProps.onUpdateAssetPointOfContact}
-        />
+        {wrapAnchor(
+          <OrgChartCollapsibleAssetCard
+            asset={asset}
+            color={node.color ?? parentColor}
+            scheduled={scheduled}
+            glassItemBorderClasses={renderProps.glassItemBorderClasses}
+            canManage={renderProps.canManageRoster}
+            pocMembers={renderProps.pocMembers}
+            removeLabel={
+              scheduled
+                ? `Remove ${asset.name} from next OP org chart schedule`
+                : `Remove ${asset.name} from org chart`
+            }
+            onOpenDetail={() => renderProps.onOpenOrgChartAssetDetail(asset.assetKey)}
+            onRemove={
+              renderProps.canManageRoster && renderProps.onRemoveAssetFromOrgChart
+                ? () => renderProps.onRemoveAssetFromOrgChart!(asset.assetKey)
+                : undefined
+            }
+            onFocusMap={
+              renderProps.onFocusAsset ? () => renderProps.onFocusAsset!(asset) : undefined
+            }
+            onUpdateAssetPointOfContact={renderProps.onUpdateAssetPointOfContact}
+          />
+        )}
       </div>
     )
   }
@@ -457,14 +438,16 @@ function OrgChartChildNode({
     if (!member) return null
     return (
       <div className={cn('flex w-full min-w-0 justify-start', ORG_CHART_POSITION_CARD_WIDTH)}>
-        <SingleResourceOrgChartCard
-          member={member}
-          color={node.color ?? parentColor}
-          scheduled={node.scheduled}
-          canManage={renderProps.canManageRoster}
-          onOpenDetail={() => renderProps.onOpenSingleResourceDetail(member.id)}
-          onRemoveFromOrgChart={renderProps.onRemoveSingleResourceFromOrgChart}
-        />
+        {wrapAnchor(
+          <SingleResourceOrgChartCard
+            member={member}
+            color={node.color ?? parentColor}
+            scheduled={node.scheduled}
+            canManage={renderProps.canManageRoster}
+            onOpenDetail={() => renderProps.onOpenSingleResourceDetail(member.id)}
+            onRemoveFromOrgChart={renderProps.onRemoveSingleResourceFromOrgChart}
+          />
+        )}
       </div>
     )
   }
@@ -486,6 +469,8 @@ function OrgChartChildNode({
       position={node.position}
       color={node.color ?? parentColor}
       children={node.children ?? []}
+      suppressChildren={suppressChildren}
+      connectorAnchorId={connectorAnchorId}
       {...renderProps}
     />
   )
@@ -496,6 +481,7 @@ function PositionNode({
   color,
   children = [],
   suppressChildren = false,
+  connectorAnchorId,
   layoutMode,
   entriesByPosition,
   assetsByKey,
@@ -565,6 +551,7 @@ function PositionNode({
   color?: OrgChartColor
   children?: OrgChartNode[]
   suppressChildren?: boolean
+  connectorAnchorId?: string
 } & OrgChartRenderProps) {
   if (
     !positionNodeIsVisible(position, children, visiblePositions, displayFilters)
@@ -658,74 +645,147 @@ function PositionNode({
         layoutMode === 'wide' && ORG_CHART_POSITION_CARD_MAX_WIDTH
       )}
     >
-      <PositionRosterCard
-        entry={entry}
-        assignable={assignableByPosition[position] ?? []}
-        scheduleAssignable={scheduleAssignableByPosition[position] ?? []}
-        scheduleUnassignable={scheduleUnassignableByPosition[position] ?? []}
-        canManageRoster={canManageRoster}
-        glassItemBorderClasses={glassItemBorderClasses}
-        isPermissionBusy={isUpdatingPermission === position}
-        isAssignBusy={isAssigningPosition === position}
-        variant="org"
-        color={color}
-        layoutMode={layoutMode}
-        showOpAdvanceLabels={showOpAdvanceLabels}
-        positionMeta={positionMetaByName[position]}
-        isUpdatingOpAdvanceLabel={isUpdatingOpAdvanceLabel === position}
-        onOpAdvanceLabelChange={
-          onOpAdvanceLabelChange
-            ? (label) => onOpAdvanceLabelChange(position, label)
-            : undefined
-        }
-        onToggleEditIcs201={onToggleEditIcs201}
-        onAssignExistingMember={onAssignExistingMember}
-        onSearchOrgMembers={onSearchOrgMembers}
-        onAssignOrgMember={onAssignOrgMember}
-        workspaceRosterMembers={workspaceRosterMembers}
-        onScheduleAssignMember={onScheduleAssignMember}
-        onScheduleUnassignMember={onScheduleUnassignMember}
-        onRemoveScheduledAssign={onRemoveScheduledAssign}
-        onRemoveScheduledUnassign={onRemoveScheduledUnassign}
-        onInviteToPosition={onInviteToPosition}
-        onUnassignMember={onUnassignMember}
-        inlinePositionInvite={inlinePositionInvite}
-        showCheckInStatus={showCheckInStatus}
-        canEditCheckInStatus={canEditCheckInStatus}
-        updatingCheckInMemberId={updatingCheckInMemberId}
-        onCheckInStatusChange={onCheckInStatusChange}
-        competencyOptions={competencyOptions}
-        canEditCompetencyFunction={canEditCompetencyFunction}
-        updatingCompetencyKey={updatingCompetencyKey}
-        memberScheduleCompetencyByKey={memberScheduleCompetencyByKey}
-        onMemberCompetencyFunctionChange={onMemberCompetencyFunctionChange}
-        onAssetCompetencyFunctionChange={onAssetCompetencyFunctionChange}
-        showAllowWorkAssignment={showAllowWorkAssignment}
-        onToggleAllowWorkAssignment={onToggleAllowWorkAssignment}
-        onPositionTypeChange={onPositionTypeChange}
-        showPositionAssets={showPositionAssets}
-        assignableAssets={assignableAssetsByPosition[position] ?? []}
-        scheduleAssignableAssets={scheduleAssignableAssetsByPosition[position] ?? []}
-        scheduleUnassignableAssets={scheduleUnassignableAssetsByPosition[position] ?? []}
-        pocMembers={pocMembers}
-        assetsByKey={assetsByKey}
-        onFocusAsset={onFocusAsset}
-        onAssignAsset={onAssignAsset}
-        onUnassignAsset={onUnassignAsset}
-        onScheduleAssignAsset={onScheduleAssignAsset}
-        onScheduleUnassignAsset={onScheduleUnassignAsset}
-        onRemoveScheduledAssignAsset={onRemoveScheduledAssignAsset}
-        onRemoveScheduledUnassignAsset={onRemoveScheduledUnassignAsset}
-        onUpdateAssetPointOfContact={onUpdateAssetPointOfContact}
-        canRemoveFromRoster={canRemove}
-        removalBlockedReason={removalBlockedReason}
-        isRemovingFromRoster={removingPositionFromRoster === position}
-        onRemoveFromRoster={
-          canManageRoster && onRemovePositionFromRoster
-            ? () => onRemovePositionFromRoster(position)
-            : undefined
-        }
-      />
+      {connectorAnchorId ? (
+        <OrgChartCardAnchor id={connectorAnchorId} className="w-full">
+          <PositionRosterCard
+            entry={entry}
+            assignable={assignableByPosition[position] ?? []}
+            scheduleAssignable={scheduleAssignableByPosition[position] ?? []}
+            scheduleUnassignable={scheduleUnassignableByPosition[position] ?? []}
+            canManageRoster={canManageRoster}
+            glassItemBorderClasses={glassItemBorderClasses}
+            isPermissionBusy={isUpdatingPermission === position}
+            isAssignBusy={isAssigningPosition === position}
+            variant="org"
+            color={color}
+            layoutMode={layoutMode}
+            showOpAdvanceLabels={showOpAdvanceLabels}
+            positionMeta={positionMetaByName[position]}
+            isUpdatingOpAdvanceLabel={isUpdatingOpAdvanceLabel === position}
+            onOpAdvanceLabelChange={
+              onOpAdvanceLabelChange
+                ? (label) => onOpAdvanceLabelChange(position, label)
+                : undefined
+            }
+            onToggleEditIcs201={onToggleEditIcs201}
+            onAssignExistingMember={onAssignExistingMember}
+            onSearchOrgMembers={onSearchOrgMembers}
+            onAssignOrgMember={onAssignOrgMember}
+            workspaceRosterMembers={workspaceRosterMembers}
+            onScheduleAssignMember={onScheduleAssignMember}
+            onScheduleUnassignMember={onScheduleUnassignMember}
+            onRemoveScheduledAssign={onRemoveScheduledAssign}
+            onRemoveScheduledUnassign={onRemoveScheduledUnassign}
+            onInviteToPosition={onInviteToPosition}
+            onUnassignMember={onUnassignMember}
+            inlinePositionInvite={inlinePositionInvite}
+            showCheckInStatus={showCheckInStatus}
+            canEditCheckInStatus={canEditCheckInStatus}
+            updatingCheckInMemberId={updatingCheckInMemberId}
+            onCheckInStatusChange={onCheckInStatusChange}
+            competencyOptions={competencyOptions}
+            canEditCompetencyFunction={canEditCompetencyFunction}
+            updatingCompetencyKey={updatingCompetencyKey}
+            memberScheduleCompetencyByKey={memberScheduleCompetencyByKey}
+            onMemberCompetencyFunctionChange={onMemberCompetencyFunctionChange}
+            onAssetCompetencyFunctionChange={onAssetCompetencyFunctionChange}
+            showAllowWorkAssignment={showAllowWorkAssignment}
+            onToggleAllowWorkAssignment={onToggleAllowWorkAssignment}
+            onPositionTypeChange={onPositionTypeChange}
+            showPositionAssets={showPositionAssets}
+            assignableAssets={assignableAssetsByPosition[position] ?? []}
+            scheduleAssignableAssets={scheduleAssignableAssetsByPosition[position] ?? []}
+            scheduleUnassignableAssets={scheduleUnassignableAssetsByPosition[position] ?? []}
+            pocMembers={pocMembers}
+            assetsByKey={assetsByKey}
+            onFocusAsset={onFocusAsset}
+            onAssignAsset={onAssignAsset}
+            onUnassignAsset={onUnassignAsset}
+            onScheduleAssignAsset={onScheduleAssignAsset}
+            onScheduleUnassignAsset={onScheduleUnassignAsset}
+            onRemoveScheduledAssignAsset={onRemoveScheduledAssignAsset}
+            onRemoveScheduledUnassignAsset={onRemoveScheduledUnassignAsset}
+            onUpdateAssetPointOfContact={onUpdateAssetPointOfContact}
+            canRemoveFromRoster={canRemove}
+            removalBlockedReason={removalBlockedReason}
+            isRemovingFromRoster={removingPositionFromRoster === position}
+            onRemoveFromRoster={
+              canManageRoster && onRemovePositionFromRoster
+                ? () => onRemovePositionFromRoster(position)
+                : undefined
+            }
+          />
+        </OrgChartCardAnchor>
+      ) : (
+        <PositionRosterCard
+          entry={entry}
+          assignable={assignableByPosition[position] ?? []}
+          scheduleAssignable={scheduleAssignableByPosition[position] ?? []}
+          scheduleUnassignable={scheduleUnassignableByPosition[position] ?? []}
+          canManageRoster={canManageRoster}
+          glassItemBorderClasses={glassItemBorderClasses}
+          isPermissionBusy={isUpdatingPermission === position}
+          isAssignBusy={isAssigningPosition === position}
+          variant="org"
+          color={color}
+          layoutMode={layoutMode}
+          showOpAdvanceLabels={showOpAdvanceLabels}
+          positionMeta={positionMetaByName[position]}
+          isUpdatingOpAdvanceLabel={isUpdatingOpAdvanceLabel === position}
+          onOpAdvanceLabelChange={
+            onOpAdvanceLabelChange
+              ? (label) => onOpAdvanceLabelChange(position, label)
+              : undefined
+          }
+          onToggleEditIcs201={onToggleEditIcs201}
+          onAssignExistingMember={onAssignExistingMember}
+          onSearchOrgMembers={onSearchOrgMembers}
+          onAssignOrgMember={onAssignOrgMember}
+          workspaceRosterMembers={workspaceRosterMembers}
+          onScheduleAssignMember={onScheduleAssignMember}
+          onScheduleUnassignMember={onScheduleUnassignMember}
+          onRemoveScheduledAssign={onRemoveScheduledAssign}
+          onRemoveScheduledUnassign={onRemoveScheduledUnassign}
+          onInviteToPosition={onInviteToPosition}
+          onUnassignMember={onUnassignMember}
+          inlinePositionInvite={inlinePositionInvite}
+          showCheckInStatus={showCheckInStatus}
+          canEditCheckInStatus={canEditCheckInStatus}
+          updatingCheckInMemberId={updatingCheckInMemberId}
+          onCheckInStatusChange={onCheckInStatusChange}
+          competencyOptions={competencyOptions}
+          canEditCompetencyFunction={canEditCompetencyFunction}
+          updatingCompetencyKey={updatingCompetencyKey}
+          memberScheduleCompetencyByKey={memberScheduleCompetencyByKey}
+          onMemberCompetencyFunctionChange={onMemberCompetencyFunctionChange}
+          onAssetCompetencyFunctionChange={onAssetCompetencyFunctionChange}
+          showAllowWorkAssignment={showAllowWorkAssignment}
+          onToggleAllowWorkAssignment={onToggleAllowWorkAssignment}
+          onPositionTypeChange={onPositionTypeChange}
+          showPositionAssets={showPositionAssets}
+          assignableAssets={assignableAssetsByPosition[position] ?? []}
+          scheduleAssignableAssets={scheduleAssignableAssetsByPosition[position] ?? []}
+          scheduleUnassignableAssets={scheduleUnassignableAssetsByPosition[position] ?? []}
+          pocMembers={pocMembers}
+          assetsByKey={assetsByKey}
+          onFocusAsset={onFocusAsset}
+          onAssignAsset={onAssignAsset}
+          onUnassignAsset={onUnassignAsset}
+          onScheduleAssignAsset={onScheduleAssignAsset}
+          onScheduleUnassignAsset={onScheduleUnassignAsset}
+          onRemoveScheduledAssignAsset={onRemoveScheduledAssignAsset}
+          onRemoveScheduledUnassignAsset={onRemoveScheduledUnassignAsset}
+          onUpdateAssetPointOfContact={onUpdateAssetPointOfContact}
+          canRemoveFromRoster={canRemove}
+          removalBlockedReason={removalBlockedReason}
+          isRemovingFromRoster={removingPositionFromRoster === position}
+          onRemoveFromRoster={
+            canManageRoster && onRemovePositionFromRoster
+              ? () => onRemovePositionFromRoster(position)
+              : undefined
+          }
+        />
+      )}
       {!suppressChildren ? (
         <OrgChartChildren
           children={children}
@@ -735,19 +795,6 @@ function PositionNode({
         />
       ) : null}
     </div>
-  )
-}
-
-function positionBranchIsVisible(
-  node: Extract<OrgChartNode, { kind: 'position' }>,
-  visiblePositions: Set<string>,
-  displayFilters: RosterDisplayFilters
-): boolean {
-  return positionNodeIsVisible(
-    node.position,
-    node.children ?? [],
-    visiblePositions,
-    displayFilters
   )
 }
 
@@ -1088,6 +1135,7 @@ export function WorkspaceOrgChartRoster({
   isUpdatingOpAdvanceLabel = null,
   workspaceLabel,
   layoutMode = 'wide',
+  zoom = 1,
   showOpAdvanceLabels = false,
   positionMetaByName = {},
   onToggleEditIcs201,
@@ -1249,6 +1297,19 @@ export function WorkspaceOrgChartRoster({
     onSingleResourceCompetencyFunctionChange,
   }
 
+  const wideRenderProps: OrgChartWideRenderProps = {
+    ...renderProps,
+    renderLeafNode: (node, options) => (
+      <OrgChartChildNode
+        node={node}
+        parentColor={options.parentColor}
+        renderProps={renderProps}
+        suppressChildren={options.suppressChildren}
+        connectorAnchorId={options.connectorAnchorId}
+      />
+    ),
+  }
+
   return (
     <div className="min-w-0 w-full max-w-full space-y-4 pt-px">
       <div className="space-y-1 text-center">
@@ -1272,30 +1333,34 @@ export function WorkspaceOrgChartRoster({
                 layoutMode === 'wide' && 'flex justify-center'
               )}
             >
-              <IncidentCommanderSubtree
-                orgChartLayout={orgChartLayout}
-                renderProps={renderProps}
-                visibleSectionBranches={visibleSectionBranches}
-                showCommandStaff={showCommandStaff}
-                visibleCommandStaff={visibleCommandStaff}
-              />
+              {layoutMode === 'wide' ? (
+                <OrgChartWideLayout
+                  orgChartLayout={orgChartLayout}
+                  renderProps={wideRenderProps}
+                  visibleSectionBranches={visibleSectionBranches}
+                  showCommandStaff={showCommandStaff}
+                  visibleCommandStaff={visibleCommandStaff}
+                  zoom={zoom}
+                />
+              ) : (
+                <IncidentCommanderSubtree
+                  orgChartLayout={orgChartLayout}
+                  renderProps={renderProps}
+                  visibleSectionBranches={visibleSectionBranches}
+                  showCommandStaff={showCommandStaff}
+                  visibleCommandStaff={visibleCommandStaff}
+                />
+              )}
             </div>
           ) : visibleSectionBranches.length > 0 ? (
             layoutMode === 'wide' ? (
-              <OrgChartCrossbarColumns
-                columnClassName={rosterOrgSectionColumnsClassName(layoutMode)}
-                columns={visibleSectionBranches.map((branch) => (
-                  <div
-                    key={branch.label}
-                    className={cn(
-                      'flex flex-col items-center',
-                      orgChartSectionColumnClassName(branch.label)
-                    )}
-                  >
-                    <GroupBranch node={branch} renderProps={renderProps} />
-                  </div>
-                ))}
-                showInboundStem={false}
+              <OrgChartWideLayout
+                orgChartLayout={orgChartLayout}
+                renderProps={wideRenderProps}
+                visibleSectionBranches={visibleSectionBranches}
+                showCommandStaff={false}
+                visibleCommandStaff={[]}
+                zoom={zoom}
               />
             ) : (
               <div
