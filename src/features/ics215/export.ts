@@ -40,6 +40,10 @@ export {
   paginateIcs215Export,
   type Ics215PhysicalPage,
 } from '@/features/ics215/export-download'
+export {
+  paginateIcs215TemplateExport,
+  type Ics215TemplatePagePlan,
+} from '@/features/ics215/export-template-pdf'
 
 export function buildIcs215ExportOptions(
   form: Ics215FormState,

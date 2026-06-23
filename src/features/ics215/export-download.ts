@@ -38,7 +38,9 @@ import {
   type Ics215LegacyBorderAfter,
 } from '@/features/ics215/export-legacy-geometry'
 import { ICS215_BOX_STACK } from '@/features/ics215/export-box-stack'
-import type { Ics215ResourceColumn } from '@/features/ics215/types'
+import { downloadIcs215TemplatePdf } from '@/features/ics215/export-template-pdf'
+import type { Ics215ExportContext } from '@/features/ics215/export-layout'
+import type { Ics215FormState, Ics215ResourceColumn } from '@/features/ics215/types'
 
 export { buildIcs215DocxXml } from '@/features/ics215/export-docx-layout'
 export {
@@ -1230,9 +1232,10 @@ function buildIcs215PdfBytes(pages: Ics215PhysicalPage[]): Uint8Array {
   return result
 }
 
-export function downloadIcs215Pdf(filename: string, blocks: Ics215ExportLayoutBlock[]): void {
-  const pages = paginateIcs215Export(blocks, { target: 'pdf' })
-  assertIcs215PaginationInvariants(pages)
-  const bytes = buildIcs215PdfBytes(pages)
-  triggerBlobDownload(new Blob([bytes.buffer as ArrayBuffer], { type: 'application/pdf' }), filename)
+export function downloadIcs215Pdf(
+  filename: string,
+  form: Ics215FormState,
+  context: Ics215ExportContext = {}
+): Promise<void> {
+  return downloadIcs215TemplatePdf(filename, form, context)
 }

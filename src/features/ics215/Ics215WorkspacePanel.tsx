@@ -166,13 +166,14 @@ export function Ics215WorkspacePanel({
     )
   }
 
-  const exportPdf = () => {
+  const exportPdf = async () => {
     const exportForm = getExportForm()
     if (!exportForm) return
     const stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-')
-    downloadIcs215Pdf(
+    await downloadIcs215Pdf(
       `ICS-215_${ics215ExportFilenameBase(exportForm)}_${stamp}.pdf`,
-      buildIcs215ExportLayout(exportForm, getExportContext())
+      exportForm,
+      getExportContext()
     )
   }
 
