@@ -20,17 +20,8 @@ export type OrgChartLayoutRect = {
 export const ORG_CHART_IC_BUS_OFFSET_PX = 22
 
 export function readOrgChartZoom(chart: HTMLElement): number {
-  const parsed = Number.parseFloat(chart.dataset.orgChartZoom ?? '')
-  if (Number.isFinite(parsed) && parsed > 0) return parsed
-
-  let node: HTMLElement | null = chart
-  while (node) {
-    const zoomValue = Number.parseFloat(node.style.zoom)
-    if (Number.isFinite(zoomValue) && zoomValue > 0) return zoomValue
-    node = node.parentElement
-  }
-
-  return 1
+  const parsed = Number.parseFloat(chart.dataset.orgChartZoom ?? '1')
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 1
 }
 
 /** Map viewport rects into the chart's layout coordinate space (CSS zoom aware). */

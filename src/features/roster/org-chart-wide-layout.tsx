@@ -6,7 +6,6 @@ import {
   useOrgChartConnectors,
 } from '@/features/roster/org-chart-connector-context'
 import type { OrgChartIcBusLink } from '@/features/roster/org-chart-connector-context.types'
-import { ORG_CHART_IC_BUS_LINKS_ATTR } from '@/features/roster/org-chart-connector-dom'
 import { OrgChartIcDirectReportsRow } from '@/features/roster/org-chart-ic-direct-reports'
 import {
   ORG_CHART_IC_CONNECTOR_ID,
@@ -171,23 +170,6 @@ function OrgChartWideLayoutBody({
 }) {
   const { chartRef } = useOrgChartConnectors()
 
-  const icBusLinksKey = icBusLinks
-    .map((link) => `${link.commanderId}:${link.headerIds.join('\0')}`)
-    .join('|')
-
-  useLayoutEffect(() => {
-    const chart = chartRef.current
-    if (!chart) return
-    if (icBusLinks.length === 0) {
-      chart.removeAttribute(ORG_CHART_IC_BUS_LINKS_ATTR)
-      return
-    }
-    chart.setAttribute(ORG_CHART_IC_BUS_LINKS_ATTR, JSON.stringify(icBusLinks))
-    return () => {
-      chart.removeAttribute(ORG_CHART_IC_BUS_LINKS_ATTR)
-    }
-  }, [chartRef, icBusLinksKey, icBusLinks])
-
   const sectionChiefsMarginClass =
     icDirectReportNodes.length > 0
       ? ORG_CHART_WIDE_GROUPS_ROW_MARGIN_TOP
@@ -202,6 +184,8 @@ function OrgChartWideLayoutBody({
       data-org-chart-zoom={zoom}
       className="relative flex w-full min-w-0 max-w-full flex-col items-center"
     >
+      <OrgChartConnectorOverlay zoom={zoom} />
+
       {icVisible ? (
         <div className="flex w-full flex-col items-center">
           {renderProps.renderLeafNode(
@@ -276,8 +260,6 @@ function OrgChartWideLayoutBody({
       ) : null}
 
       {icBusLinks.length > 0 ? <OrgChartIcBusesRegistrar links={icBusLinks} /> : null}
-
-      <OrgChartConnectorOverlay zoom={zoom} />
     </div>
   )
 }
