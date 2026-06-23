@@ -1,4 +1,24 @@
 import { ICS215_FORM_TITLE_LINES } from '@/features/ics215/constants'
+import {
+  ICS215_DOCX_CONTENT_WIDTH,
+  ICS215_DOCX_FOOTER_RESERVE_DXA,
+  ICS215_DOCX_HEADER_RESERVE_DXA,
+  ICS215_DOCX_PAGE,
+  ICS215_PDF_CONTENT_WIDTH,
+  ICS215_PDF_PAGE,
+  ICS215_PDF_PREPARED_BY_FOOTER_HEIGHT_PT,
+  ICS215_PDF_ICS_LINE_Y_PT,
+  ics215PdfPreparedByFooterTopY,
+} from '@/features/ics215/export-docx-constants'
+import {
+  ICS215_LEGACY_RHN_FIELDS,
+  ICS215_LEGACY_RHN_LABELS,
+  ICS215_LEGACY_TOTAL_ROWS,
+  buildIcs215LegacyTableColumnWidths,
+  ics215LegacyOverflowStartCol,
+  ics215LegacyResourceStartCol,
+  legacyResourceCellValue,
+} from '@/features/ics215/export-legacy-table'
 import type { Ics215HeaderCell, Ics215PreparedByFooter } from '@/features/ics215/export-layout'
 import type {
   Ics215PhysicalPage,
@@ -6,40 +26,17 @@ import type {
 } from '@/features/ics215/export-pagination'
 import type { Ics215ResourceColumn } from '@/features/ics215/types'
 
-export const ICS215_DOCX_PAGE = {
-  widthDxa: 12240,
-  heightDxa: 15840,
-  marginDxa: 720,
-} as const
-
-export const ICS215_DOCX_HEADER_RESERVE_DXA = 1680
-
-export const ICS215_DOCX_FOOTER_RESERVE_DXA = 1800
-
-export const ICS215_DOCX_CONTENT_WIDTH =
-  ICS215_DOCX_PAGE.widthDxa - ICS215_DOCX_PAGE.marginDxa * 2
-
-export const ICS215_PDF_PAGE = {
-  widthPt: 612,
-  heightPt: 792,
-  marginPt: 36,
-} as const
-
-export const ICS215_PDF_CONTENT_WIDTH =
-  ICS215_PDF_PAGE.widthPt - ICS215_PDF_PAGE.marginPt * 2
-
-export const ICS215_PDF_PREPARED_BY_FOOTER_HEIGHT_PT = 52
-
-export const ICS215_PDF_ICS_LINE_Y_PT = ICS215_PDF_PAGE.marginPt + 14
-
-export function ics215PdfPreparedByFooterTopY(): number {
-  return (
-    ICS215_PDF_ICS_LINE_Y_PT +
-    7 +
-    8 +
-    ICS215_PDF_PREPARED_BY_FOOTER_HEIGHT_PT
-  )
-}
+export {
+  ICS215_DOCX_CONTENT_WIDTH,
+  ICS215_DOCX_FOOTER_RESERVE_DXA,
+  ICS215_DOCX_HEADER_RESERVE_DXA,
+  ICS215_DOCX_PAGE,
+  ICS215_PDF_CONTENT_WIDTH,
+  ICS215_PDF_PAGE,
+  ICS215_PDF_PREPARED_BY_FOOTER_HEIGHT_PT,
+  ICS215_PDF_ICS_LINE_Y_PT,
+  ics215PdfPreparedByFooterTopY,
+} from '@/features/ics215/export-docx-constants'
 
 function allocateProportionalWidths(ratios: readonly number[], totalWidth: number): number[] {
   const ratioSum = ratios.reduce((sum, ratio) => sum + ratio, 0)
@@ -50,11 +47,7 @@ function allocateProportionalWidths(ratios: readonly number[], totalWidth: numbe
 }
 
 export function buildIcs215WorkTableColumnWidths(resourceColumns: Ics215ResourceColumn[]): number[] {
-  const resourceRatios = resourceColumns.flatMap(() => [3, 3, 3])
-  return allocateProportionalWidths(
-    [10, 16, ...resourceRatios, 10, 12, 12, 8],
-    ICS215_DOCX_CONTENT_WIDTH
-  )
+  return buildIcs215LegacyTableColumnWidths(resourceColumns)
 }
 
 function escapeXml(text: string): string {
@@ -130,13 +123,19 @@ function docxCellMargins(kind: 'normal' | 'tight' = 'normal'): string {
 function docxCell(
   widthDxa: number,
   inner: string,
-  opts: { gridSpan?: number; mar?: 'normal' | 'tight' } = {}
+  opts: {
+    gridSpan?: number
+    mar?: 'normal' | 'tight'
+    vMerge?: 'restart' | 'continue'
+  } = {}
 ): string {
   const gridSpan = opts.gridSpan ? `<w:gridSpan w:val="${opts.gridSpan}"/>` : ''
+  const vMerge = opts.vMerge ? `<w:vMerge w:val="${opts.vMerge}"/>` : ''
   return (
     `<w:tc><w:tcPr>` +
     `<w:tcW w:w="${widthDxa}" w:type="dxa"/>` +
     gridSpan +
+    vMerge +
     `<w:vAlign w:val="top"/>` +
     docxCellMargins(opts.mar) +
     `</w:tcPr>${inner}</w:tc>`
@@ -239,220 +238,155 @@ function renderIcsExpirationLineDocx(footerLeft: string): string {
   )
 }
 
-function resourceCellValue(
-  rowValues: Record<string, { required: string; have: string; need: string }>,
-  columnId: string,
-  field: 'required' | 'have' | 'need'
-): string {
-  return rowValues[columnId]?.[field]?.trim() || ' '
-}
-
 function renderWorkAssignmentsTableDocx(segment: Ics215WorkAssignmentsTableSegment): string {
-  const cols = buildIcs215WorkTableColumnWidths(segment.resourceColumns)
+  const cols = buildIcs215LegacyTableColumnWidths(segment.resourceColumns)
   const resourceCount = segment.resourceColumns.length
-  const fixedStart = 2
-  const fixedEndStart = fixedStart + resourceCount * 3
+  const resourceStart = ics215LegacyResourceStartCol()
+  const overflowStart = ics215LegacyOverflowStartCol(resourceCount)
 
   let headerRows = ''
   if (segment.showTableHeader) {
     const resourceSpanWidth =
       resourceCount > 0
-        ? cols.slice(fixedStart, fixedEndStart).reduce((sum, width) => sum + width, 0)
+        ? cols.slice(resourceStart, overflowStart).reduce((sum, width) => sum + width, 0)
         : 0
     let mainHeaderCells =
       docxCell(cols[0], docxParagraph('5. Division/Group/Other', { bold: true, size: 12 })) +
-      docxCell(cols[1], docxParagraph('6. Work Assignments', { bold: true, size: 12 }))
+      docxCell(cols[1], docxParagraph('6. Work Assignments', { bold: true, size: 12 })) +
+      docxCell(cols[2], docxParagraph(' ', { size: 10 }))
     if (resourceCount > 0) {
       mainHeaderCells += docxCell(
         resourceSpanWidth,
         docxParagraph('7. Kinds of Resources', { bold: true, size: 12, center: true }),
-        { gridSpan: resourceCount * 3 }
+        { gridSpan: resourceCount }
       )
     }
     mainHeaderCells +=
-      docxCell(cols[fixedEndStart], docxParagraph('8. Overhead Position(s)', { bold: true, size: 12 })) +
-      docxCell(cols[fixedEndStart + 1], docxParagraph('9. Special Equipment & Supplies', { bold: true, size: 12 })) +
-      docxCell(cols[fixedEndStart + 2], docxParagraph('10. Reporting Location', { bold: true, size: 12 })) +
-      docxCell(cols[fixedEndStart + 3], docxParagraph('11. Requested Arrival Time', { bold: true, size: 12 }))
+      docxCell(cols[overflowStart], docxParagraph('8. Overhead Position(s)', { bold: true, size: 12 })) +
+      docxCell(cols[overflowStart + 1], docxParagraph('9. Special Equipment & Supplies', { bold: true, size: 12 })) +
+      docxCell(cols[overflowStart + 2], docxParagraph('10. Reporting Location', { bold: true, size: 12 })) +
+      docxCell(cols[overflowStart + 3], docxParagraph('11. Requested Arrival Time', { bold: true, size: 12 }))
     headerRows += docxCantSplitRow(mainHeaderCells)
 
     let subHeaderCells =
       docxCell(cols[0], docxParagraph(' ', { size: 10 })) +
-      docxCell(cols[1], docxParagraph(' ', { size: 10 }))
+      docxCell(cols[1], docxParagraph(' ', { size: 10 })) +
+      docxCell(cols[2], docxParagraph(' ', { size: 10 }))
     segment.resourceColumns.forEach((column, index) => {
-      const baseIndex = fixedStart + index * 3
-      const spanWidth = cols[baseIndex] + cols[baseIndex + 1] + cols[baseIndex + 2]
       subHeaderCells += docxCell(
-        spanWidth,
-        docxLabelParagraph(column.label) +
-          docxParagraph('Req', { bold: true, size: 10, center: true, after: 0 }) +
-          docxParagraph('Have', { bold: true, size: 10, center: true, after: 0 }) +
-          docxParagraph('Need', { bold: true, size: 10, center: true, after: 0 }),
-        { gridSpan: 3 }
+        cols[resourceStart + index],
+        docxLabelParagraph(column.label),
+        { mar: 'tight' }
       )
     })
     subHeaderCells +=
-      docxCell(cols[fixedEndStart], docxParagraph(' ', { size: 10 })) +
-      docxCell(cols[fixedEndStart + 1], docxParagraph(' ', { size: 10 })) +
-      docxCell(cols[fixedEndStart + 2], docxParagraph(' ', { size: 10 })) +
-      docxCell(cols[fixedEndStart + 3], docxParagraph(' ', { size: 10 }))
+      docxCell(cols[overflowStart], docxParagraph(' ', { size: 10 })) +
+      docxCell(cols[overflowStart + 1], docxParagraph(' ', { size: 10 })) +
+      docxCell(cols[overflowStart + 2], docxParagraph(' ', { size: 10 })) +
+      docxCell(cols[overflowStart + 3], docxParagraph(' ', { size: 10 }))
     headerRows += docxCantSplitRow(subHeaderCells)
   }
 
-  const bodyRows =
-    segment.rows.length === 0
-      ? docxCantSplitRow(cols.map((width) => docxCell(width, docxParagraph(' ', { size: 14 }))).join(''))
-      : segment.rows
-          .map((row) => {
-            let cells =
-              docxCell(cols[0], docxMultilineParagraphs(row.assignee || ' ', 14)) +
-              docxCell(cols[1], docxMultilineParagraphs(row.workAssignment || ' ', 14))
-            segment.resourceColumns.forEach((column, index) => {
-              const baseIndex = fixedStart + index * 3
-              cells +=
-                docxCell(
-                  cols[baseIndex],
-                  docxParagraph(resourceCellValue(row.resourceValues, column.id, 'required'), {
-                    size: 14,
-                    center: true,
-                  })
-                ) +
-                docxCell(
-                  cols[baseIndex + 1],
-                  docxParagraph(resourceCellValue(row.resourceValues, column.id, 'have'), {
-                    size: 14,
-                    center: true,
-                  })
-                ) +
-                docxCell(
-                  cols[baseIndex + 2],
-                  docxParagraph(resourceCellValue(row.resourceValues, column.id, 'need'), {
-                    size: 14,
-                    center: true,
-                  })
-                )
-            })
-            cells +=
-              docxCell(cols[fixedEndStart], docxMultilineParagraphs(row.overheadPositions || ' ', 14)) +
-              docxCell(
-                cols[fixedEndStart + 1],
-                docxMultilineParagraphs(row.specialEquipmentSupplies || ' ', 14)
-              ) +
-              docxCell(cols[fixedEndStart + 2], docxMultilineParagraphs(row.reportingLocation || ' ', 14)) +
-              docxCell(
-                cols[fixedEndStart + 3],
-                docxMultilineParagraphs(row.requestedArrivalTime || ' ', 14)
-              )
-            return docxCantSplitRow(cells)
-          })
-          .join('')
-
-  let footerRows = ''
-  if (segment.showColumnTotals) {
-    let totalCells =
-      docxCell(cols[0], docxParagraph('Column Totals', { bold: true, size: 12 })) +
-      docxCell(cols[1], docxParagraph(' ', { size: 12 }))
-    segment.resourceColumns.forEach((column, index) => {
-      const baseIndex = fixedStart + index * 3
-      const totals = segment.columnTotals[column.id]
-      totalCells +=
-        docxCell(
-          cols[baseIndex],
-          docxParagraph(totals?.required?.trim() || ' ', { size: 12, center: true })
-        ) +
-        docxCell(
-          cols[baseIndex + 1],
-          docxParagraph(totals?.have?.trim() || ' ', { size: 12, center: true })
-        ) +
-        docxCell(
-          cols[baseIndex + 2],
-          docxParagraph(totals?.need?.trim() || ' ', { size: 12, center: true })
+  let bodyRows = ''
+  if (segment.rows.length === 0) {
+    bodyRows = docxCantSplitRow(
+      cols.map((width) => docxCell(width, docxParagraph(' ', { size: 14 }))).join('')
+    )
+  } else {
+    for (const row of segment.rows) {
+      ICS215_LEGACY_RHN_FIELDS.forEach((field, rhnIndex) => {
+        const isFirst = rhnIndex === 0
+        let cells = ''
+        if (isFirst) {
+          cells +=
+            docxCell(cols[0], docxMultilineParagraphs(row.assignee || ' ', 14), { vMerge: 'restart' }) +
+            docxCell(cols[1], docxMultilineParagraphs(row.workAssignment || ' ', 14), { vMerge: 'restart' })
+        } else {
+          cells +=
+            docxCell(cols[0], docxParagraph(' ', { size: 14 }), { vMerge: 'continue' }) +
+            docxCell(cols[1], docxParagraph(' ', { size: 14 }), { vMerge: 'continue' })
+        }
+        cells += docxCell(
+          cols[2],
+          docxParagraph(ICS215_LEGACY_RHN_LABELS[rhnIndex], { bold: true, size: 10, center: true })
         )
-    })
-    totalCells +=
-      docxCell(cols[fixedEndStart], docxParagraph(' ', { size: 12 })) +
-      docxCell(cols[fixedEndStart + 1], docxParagraph(' ', { size: 12 })) +
-      docxCell(cols[fixedEndStart + 2], docxParagraph(' ', { size: 12 })) +
-      docxCell(cols[fixedEndStart + 3], docxParagraph(' ', { size: 12 }))
-    footerRows += docxCantSplitRow(totalCells)
+        segment.resourceColumns.forEach((column, index) => {
+          cells += docxCell(
+            cols[resourceStart + index],
+            docxParagraph(legacyResourceCellValue(row.resourceValues, column.id, field), {
+              size: 14,
+              center: true,
+            })
+          )
+        })
+        if (isFirst) {
+          cells +=
+            docxCell(cols[overflowStart], docxMultilineParagraphs(row.overheadPositions || ' ', 14), {
+              vMerge: 'restart',
+            }) +
+            docxCell(
+              cols[overflowStart + 1],
+              docxMultilineParagraphs(row.specialEquipmentSupplies || ' ', 14),
+              { vMerge: 'restart' }
+            ) +
+            docxCell(
+              cols[overflowStart + 2],
+              docxMultilineParagraphs(row.reportingLocation || ' ', 14),
+              { vMerge: 'restart' }
+            ) +
+            docxCell(
+              cols[overflowStart + 3],
+              docxMultilineParagraphs(row.requestedArrivalTime || ' ', 14),
+              { vMerge: 'restart' }
+            )
+        } else {
+          cells +=
+            docxCell(cols[overflowStart], docxParagraph(' ', { size: 14 }), { vMerge: 'continue' }) +
+            docxCell(cols[overflowStart + 1], docxParagraph(' ', { size: 14 }), { vMerge: 'continue' }) +
+            docxCell(cols[overflowStart + 2], docxParagraph(' ', { size: 14 }), { vMerge: 'continue' }) +
+            docxCell(cols[overflowStart + 3], docxParagraph(' ', { size: 14 }), { vMerge: 'continue' })
+        }
+        bodyRows += docxCantSplitRow(cells)
+      })
+    }
   }
 
-  if (segment.showGrandTotals && segment.grandTotals) {
-    const labelSpan = cols[0] + cols[1]
-    const resourceSpanWidth =
-      resourceCount > 0
-        ? cols.slice(fixedStart, fixedEndStart).reduce((sum, width) => sum + width, 0)
-        : cols[fixedEndStart]
-    const valueSpan = resourceCount > 0 ? resourceCount * 3 : 1
-    footerRows += docxCantSplitRow(
-      docxCell(
-        labelSpan,
-        docxParagraph('12. Total Resources Required', { bold: true, size: 12 }),
-        { gridSpan: 2 }
-      ) +
+  let footerRows = ''
+  if (segment.showResourceTotalsFooter) {
+    ICS215_LEGACY_TOTAL_ROWS.forEach((totalRow) => {
+      let totalCells =
+        docxCell(cols[0] + cols[1], docxParagraph(totalRow.label, { bold: true, size: 12 }), {
+          gridSpan: 2,
+        }) +
         docxCell(
-          resourceSpanWidth,
-          docxParagraph(segment.grandTotals.totalResourcesRequired || ' ', {
-            size: 12,
-            center: true,
-          }),
-          { gridSpan: valueSpan }
-        ) +
-        docxCell(cols[fixedEndStart], docxParagraph(' ', { size: 12 })) +
-        docxCell(cols[fixedEndStart + 1], docxParagraph(' ', { size: 12 })) +
-        docxCell(cols[fixedEndStart + 2], docxParagraph(' ', { size: 12 })) +
-        docxCell(cols[fixedEndStart + 3], docxParagraph(' ', { size: 12 }))
-    )
-    footerRows += docxCantSplitRow(
-      docxCell(
-        labelSpan,
-        docxParagraph('13. Total Resources Have on Hand', { bold: true, size: 12 }),
-        { gridSpan: 2 }
-      ) +
-        docxCell(
-          resourceSpanWidth,
-          docxParagraph(segment.grandTotals.totalResourcesHaveOnHand || ' ', {
-            size: 12,
-            center: true,
-          }),
-          { gridSpan: valueSpan }
-        ) +
-        docxCell(cols[fixedEndStart], docxParagraph(' ', { size: 12 })) +
-        docxCell(cols[fixedEndStart + 1], docxParagraph(' ', { size: 12 })) +
-        docxCell(cols[fixedEndStart + 2], docxParagraph(' ', { size: 12 })) +
-        docxCell(cols[fixedEndStart + 3], docxParagraph(' ', { size: 12 }))
-    )
-    footerRows += docxCantSplitRow(
-      docxCell(
-        labelSpan,
-        docxParagraph('14. Total Resources Need to Order', { bold: true, size: 12 }),
-        { gridSpan: 2 }
-      ) +
-        docxCell(
-          resourceSpanWidth,
-          docxParagraph(segment.grandTotals.totalResourcesNeedToOrder || ' ', {
-            size: 12,
-            center: true,
-          }),
-          { gridSpan: valueSpan }
-        ) +
-        docxCell(cols[fixedEndStart], docxParagraph(' ', { size: 12 })) +
-        docxCell(cols[fixedEndStart + 1], docxParagraph(' ', { size: 12 })) +
-        docxCell(cols[fixedEndStart + 2], docxParagraph(' ', { size: 12 })) +
-        docxCell(cols[fixedEndStart + 3], docxParagraph(' ', { size: 12 }))
-    )
+          cols[2],
+          docxParagraph(
+            ICS215_LEGACY_RHN_LABELS[ICS215_LEGACY_RHN_FIELDS.indexOf(totalRow.field)],
+            { bold: true, size: 10, center: true }
+          )
+        )
+      segment.resourceColumns.forEach((column, index) => {
+        const totals = segment.columnTotals[column.id]
+        totalCells += docxCell(
+          cols[resourceStart + index],
+          docxParagraph(totals?.[totalRow.field]?.trim() || ' ', { size: 12, center: true })
+        )
+      })
+      totalCells +=
+        docxCell(cols[overflowStart], docxParagraph(' ', { size: 12 })) +
+        docxCell(cols[overflowStart + 1], docxParagraph(' ', { size: 12 })) +
+        docxCell(cols[overflowStart + 2], docxParagraph(' ', { size: 12 })) +
+        docxCell(cols[overflowStart + 3], docxParagraph(' ', { size: 12 }))
+      footerRows += docxCantSplitRow(totalCells)
+    })
   }
 
   const innerTable = docxFixedTable(cols, headerRows + bodyRows + footerRows)
-  return (
-    docxSectionSpacer() +
-    docxFixedTable(
-      [ICS215_DOCX_CONTENT_WIDTH],
-      docxCantSplitRow(
-        docxCell(ICS215_DOCX_CONTENT_WIDTH, docxLabelParagraph(segment.label) + innerTable)
-      )
-    ) +
-    docxSectionSpacer()
+  return docxFixedTable(
+    [ICS215_DOCX_CONTENT_WIDTH],
+    docxCantSplitRow(
+      docxCell(ICS215_DOCX_CONTENT_WIDTH, docxLabelParagraph(segment.label) + innerTable)
+    )
   )
 }
 
@@ -563,5 +497,8 @@ export function assertIcs215DocxLayoutConsistency(documentXml: string): void {
   }
   if (!documentXml.includes('<w:cantSplit/>')) {
     throw new Error('ICS-215 DOCX export missing cantSplit row guards on section tables.')
+  }
+  if (!documentXml.includes('<w:vMerge')) {
+    throw new Error('ICS-215 DOCX export missing legacy vertical merge cells.')
   }
 }

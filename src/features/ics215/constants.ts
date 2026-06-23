@@ -8,8 +8,8 @@ export const ICS215_FORM_TITLE_LINES = [
 
 export const ICS215_EXPORT_FOOTER_LEFT = 'ICS 215-CG (11/24)'
 
-/** Max resource kind columns (Req/Have/Need groups) per horizontal page slice. */
-export const ICS215_MAX_RESOURCE_COLUMNS_PER_PAGE = 2
+/** Max resource kind columns per horizontal page slice (legacy export = 1 col each). */
+export const ICS215_MAX_RESOURCE_COLUMNS_PER_PAGE = 8
 
 export const ICS215_DEFAULT_RESOURCE_COLUMNS: Ics215ResourceColumn[] = [
   { id: 'helicopter', label: 'Helicopter' },

@@ -26,6 +26,8 @@ import {
   extractIcs215PreparedByDraft,
   extractIcs215WorkAssignmentsDraft,
   appendIcs215ResourceColumn,
+  appendIcs215WorkAssignmentToDraft,
+  fillAllIcs215WorkAssignmentsHaveInDraft,
   normalizeIcs215WorkAssignmentsLayoutMode,
 } from '@/features/ics215/utils'
 import type { WorkAssignmentTargetOption } from '@/lib/work-assignment-target-options'
@@ -233,6 +235,39 @@ export function Ics215FormSections({
               />
               Auto-fill Have from assets
             </label>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-7 shrink-0 text-xs"
+              onClick={() =>
+                onPatchDraft(
+                  'work-assignments',
+                  appendIcs215WorkAssignmentToDraft(workAssignmentsDraft)
+                )
+              }
+            >
+              + Add Assignment
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-7 shrink-0 text-xs"
+              onClick={() => {
+                const result = fillAllIcs215WorkAssignmentsHaveInDraft(
+                  workAssignmentsDraft,
+                  workspaceAssets,
+                  true
+                )
+                onPatchDraft('work-assignments', result.draft)
+                if (result.filledCount > 0) {
+                  onHaveFillComplete?.(result.filledCount)
+                }
+              }}
+            >
+              Fill all Have from assets
+            </Button>
             <Button
               type="button"
               size="sm"

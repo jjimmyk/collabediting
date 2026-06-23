@@ -113,8 +113,6 @@ export function Ics215WorkAssignmentsLegacyTable({
     patchRow,
     patchResourceField,
     fillColumnHave,
-    fillAllColumnsHave,
-    addAssignment,
     deleteAssignment,
     deleteResourceColumn,
     patchColumnLabel,
@@ -420,22 +418,6 @@ export function Ics215WorkAssignmentsLegacyTable({
       <p className="text-[10px] text-muted-foreground">
         Scroll horizontally to view additional columns.
       </p>
-
-      {editing ? (
-        <div className="flex flex-wrap items-center gap-2">
-          <Button type="button" size="sm" variant="outline" onClick={addAssignment}>
-            + Add Assignment
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            onClick={() => fillAllColumnsHave(true)}
-          >
-            Fill all Have from assets
-          </Button>
-        </div>
-      ) : null}
     </div>
   )
 }

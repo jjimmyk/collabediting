@@ -1,3 +1,4 @@
+import { ICS215_BOX_STACK } from '@/features/ics215/export-box-stack'
 import {
   ICS215_DOCX_CONTENT_WIDTH,
   ICS215_DOCX_FOOTER_RESERVE_DXA,
@@ -5,7 +6,7 @@ import {
   ICS215_DOCX_PAGE,
   ICS215_PDF_PAGE,
   ics215PdfPreparedByFooterTopY,
-} from '@/features/ics215/export-docx-layout'
+} from '@/features/ics215/export-docx-constants'
 
 const PT_PER_DXA = 1 / 20
 const DOCX_BODY_LINE_PT = 11
@@ -22,8 +23,8 @@ export const ICS215_EXPORT_PAGE_METRICS = {
   wordHeaderReservePt: ICS215_DOCX_HEADER_RESERVE_DXA * PT_PER_DXA,
   wordFooterReservePt: ICS215_DOCX_FOOTER_RESERVE_DXA * PT_PER_DXA,
   boxPaddingPt: 100 * PT_PER_DXA * 2,
-  segmentGapPt: DOCX_SECTION_SPACER_PT,
-  sectionSpacerPt: DOCX_SECTION_SPACER_PT,
+  segmentGapPt: ICS215_BOX_STACK.segmentGapPt,
+  sectionSpacerPt: ICS215_BOX_STACK.sectionSpacerPt,
   contentWidthPt: ICS215_DOCX_CONTENT_WIDTH * PT_PER_DXA,
   sectionTableCellMarginPt: DOCX_SECTION_CELL_VERTICAL_MARGIN_PT,
   signatureTableCellMarginPt: DOCX_SIGNATURE_CELL_VERTICAL_MARGIN_PT,

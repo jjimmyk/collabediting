@@ -6,7 +6,6 @@ import {
   buildIcs215DocxFooterXml,
   buildIcs215DocxHeaderXml,
   buildIcs215DocxXml,
-  buildIcs215WorkTableColumnWidths,
   ICS215_PDF_CONTENT_WIDTH,
   ICS215_PDF_PAGE,
   ICS215_PDF_PREPARED_BY_FOOTER_HEIGHT_PT,
@@ -19,6 +18,16 @@ import {
   type Ics215PhysicalPage,
   type Ics215WorkAssignmentsTableSegment,
 } from '@/features/ics215/export-pagination'
+import {
+  ICS215_LEGACY_RHN_FIELDS,
+  ICS215_LEGACY_RHN_LABELS,
+  ICS215_LEGACY_TOTAL_ROWS,
+  buildIcs215LegacyTableColumnWidths,
+  ics215LegacyOverflowStartCol,
+  ics215LegacyResourceStartCol,
+  legacyResourceCellValue,
+} from '@/features/ics215/export-legacy-table'
+import { ICS215_BOX_STACK } from '@/features/ics215/export-box-stack'
 import type { Ics215ResourceColumn } from '@/features/ics215/types'
 
 export { buildIcs215DocxXml } from '@/features/ics215/export-docx-layout'
@@ -490,32 +499,25 @@ function drawPdfSectionWithInner(
   return { ops, height, lines: pdfLines }
 }
 
-function resourceCellValue(
-  rowValues: Record<string, { required: string; have: string; need: string }>,
-  columnId: string,
-  field: 'required' | 'have' | 'need'
-): string {
-  return rowValues[columnId]?.[field]?.trim() || ' '
-}
-
 function buildWorkAssignmentsTablePdfRows(segment: Ics215WorkAssignmentsTableSegment): PdfTableRow[] {
   const resourceCount = segment.resourceColumns.length
-  const fixedStart = 2
-  const fixedEndStart = fixedStart + resourceCount * 3
+  const resourceStart = ics215LegacyResourceStartCol()
+  const overflowStart = ics215LegacyOverflowStartCol(resourceCount)
   const headerHeight = 14
-  const subHeaderHeight = 18
-  const dataHeight = 14
+  const subHeaderHeight = 14
+  const dataHeight = 12
   const rows: PdfTableRow[] = []
 
   if (segment.showTableHeader) {
     const mainCells: PdfTableCell[] = [
       { col: 0, text: '5. Division/Group/Other', bold: true, fontSize: 6 },
       { col: 1, text: '6. Work Assignments', bold: true, fontSize: 6 },
+      { col: 2, text: ' ', fontSize: 6 },
     ]
     if (resourceCount > 0) {
       mainCells.push({
-        col: fixedStart,
-        colSpan: resourceCount * 3,
+        col: resourceStart,
+        colSpan: resourceCount,
         text: '7. Kinds of Resources',
         bold: true,
         center: true,
@@ -523,168 +525,130 @@ function buildWorkAssignmentsTablePdfRows(segment: Ics215WorkAssignmentsTableSeg
       })
     }
     mainCells.push(
-      { col: fixedEndStart, text: '8. Overhead Position(s)', bold: true, fontSize: 6 },
-      { col: fixedEndStart + 1, text: '9. Special Equipment & Supplies', bold: true, fontSize: 6 },
-      { col: fixedEndStart + 2, text: '10. Reporting Location', bold: true, fontSize: 6 },
-      { col: fixedEndStart + 3, text: '11. Requested Arrival Time', bold: true, fontSize: 6 }
+      { col: overflowStart, text: '8. Overhead Position(s)', bold: true, fontSize: 6 },
+      { col: overflowStart + 1, text: '9. Special Equipment & Supplies', bold: true, fontSize: 6 },
+      { col: overflowStart + 2, text: '10. Reporting Location', bold: true, fontSize: 6 },
+      { col: overflowStart + 3, text: '11. Requested Arrival Time', bold: true, fontSize: 6 }
     )
     rows.push({ height: headerHeight, cells: mainCells })
 
     const subCells: PdfTableCell[] = [
       { col: 0, text: ' ' },
       { col: 1, text: ' ' },
+      { col: 2, text: ' ' },
     ]
     segment.resourceColumns.forEach((column, index) => {
-      const baseCol = fixedStart + index * 3
       subCells.push({
-        col: baseCol,
-        colSpan: 3,
-        text: `${column.label}\nReq   Have   Need`,
+        col: resourceStart + index,
+        text: column.label,
         bold: true,
         center: true,
         fontSize: 6,
       })
     })
-    for (let col = fixedEndStart; col < fixedEndStart + 4; col += 1) {
+    for (let col = overflowStart; col < overflowStart + 4; col += 1) {
       subCells.push({ col, text: ' ' })
     }
     rows.push({ height: subHeaderHeight, cells: subCells })
   }
 
-  const bodyRows =
-    segment.rows.length === 0
-      ? [null]
-      : segment.rows
+  const bodyRows = segment.rows.length === 0 ? [null] : segment.rows
   for (const row of bodyRows) {
-    const cells: PdfTableCell[] = []
     if (!row) {
-      for (let col = 0; col < fixedEndStart + 4; col += 1) {
-        cells.push({ col, text: ' ' })
+      const emptyCells: PdfTableCell[] = []
+      for (let col = 0; col < overflowStart + 4; col += 1) {
+        emptyCells.push({ col, text: ' ' })
       }
-    } else {
-      cells.push({ col: 0, text: row.assignee || ' ', fontSize: 6.5 })
-      cells.push({ col: 1, text: row.workAssignment || ' ', fontSize: 6.5 })
+      rows.push({ height: dataHeight * 3, cells: emptyCells })
+      continue
+    }
+
+    ICS215_LEGACY_RHN_FIELDS.forEach((field, rhnIndex) => {
+      const isFirst = rhnIndex === 0
+      const cells: PdfTableCell[] = [
+        {
+          col: 0,
+          text: isFirst ? row.assignee || ' ' : ' ',
+          fontSize: 6.5,
+        },
+        {
+          col: 1,
+          text: isFirst ? row.workAssignment || ' ' : ' ',
+          fontSize: 6.5,
+        },
+        {
+          col: 2,
+          text: ICS215_LEGACY_RHN_LABELS[rhnIndex],
+          bold: true,
+          center: true,
+          fontSize: 6,
+        },
+      ]
       segment.resourceColumns.forEach((column, index) => {
-        const baseCol = fixedStart + index * 3
         cells.push({
-          col: baseCol,
-          text: resourceCellValue(row.resourceValues, column.id, 'required'),
-          center: true,
-          fontSize: 6.5,
-        })
-        cells.push({
-          col: baseCol + 1,
-          text: resourceCellValue(row.resourceValues, column.id, 'have'),
-          center: true,
-          fontSize: 6.5,
-        })
-        cells.push({
-          col: baseCol + 2,
-          text: resourceCellValue(row.resourceValues, column.id, 'need'),
+          col: resourceStart + index,
+          text: legacyResourceCellValue(row.resourceValues, column.id, field),
           center: true,
           fontSize: 6.5,
         })
       })
-      cells.push({ col: fixedEndStart, text: row.overheadPositions || ' ', fontSize: 6.5 })
-      cells.push({ col: fixedEndStart + 1, text: row.specialEquipmentSupplies || ' ', fontSize: 6.5 })
-      cells.push({ col: fixedEndStart + 2, text: row.reportingLocation || ' ', fontSize: 6.5 })
-      cells.push({ col: fixedEndStart + 3, text: row.requestedArrivalTime || ' ', fontSize: 6.5 })
-    }
-    rows.push({ height: dataHeight, cells })
-  }
-
-  if (segment.showColumnTotals) {
-    const totalCells: PdfTableCell[] = [
-      { col: 0, text: 'Column Totals', bold: true, fontSize: 6.5 },
-      { col: 1, text: ' ' },
-    ]
-    segment.resourceColumns.forEach((column, index) => {
-      const baseCol = fixedStart + index * 3
-      const totals = segment.columnTotals[column.id]
-      totalCells.push(
-        { col: baseCol, text: totals?.required?.trim() || ' ', center: true, fontSize: 6.5 },
-        { col: baseCol + 1, text: totals?.have?.trim() || ' ', center: true, fontSize: 6.5 },
-        { col: baseCol + 2, text: totals?.need?.trim() || ' ', center: true, fontSize: 6.5 }
+      cells.push(
+        {
+          col: overflowStart,
+          text: isFirst ? row.overheadPositions || ' ' : ' ',
+          fontSize: 6.5,
+        },
+        {
+          col: overflowStart + 1,
+          text: isFirst ? row.specialEquipmentSupplies || ' ' : ' ',
+          fontSize: 6.5,
+        },
+        {
+          col: overflowStart + 2,
+          text: isFirst ? row.reportingLocation || ' ' : ' ',
+          fontSize: 6.5,
+        },
+        {
+          col: overflowStart + 3,
+          text: isFirst ? row.requestedArrivalTime || ' ' : ' ',
+          fontSize: 6.5,
+        }
       )
+      rows.push({ height: dataHeight, cells })
     })
-    for (let col = fixedEndStart; col < fixedEndStart + 4; col += 1) {
-      totalCells.push({ col, text: ' ' })
-    }
-    rows.push({ height: dataHeight, cells: totalCells })
   }
 
-  if (segment.showGrandTotals && segment.grandTotals) {
-    const labelSpan = 2
-    const valueSpan = resourceCount > 0 ? resourceCount * 3 : 1
-    const valueCol = resourceCount > 0 ? fixedStart : fixedEndStart
-    rows.push({
-      height: dataHeight,
-      cells: [
+  if (segment.showResourceTotalsFooter) {
+    ICS215_LEGACY_TOTAL_ROWS.forEach((totalRow) => {
+      const totalCells: PdfTableCell[] = [
         {
           col: 0,
-          colSpan: labelSpan,
-          text: '12. Total Resources Required',
+          colSpan: 2,
+          text: totalRow.label,
           bold: true,
           fontSize: 6.5,
         },
         {
-          col: valueCol,
-          colSpan: valueSpan,
-          text: segment.grandTotals.totalResourcesRequired || ' ',
-          center: true,
-          fontSize: 6.5,
-        },
-        { col: fixedEndStart, text: ' ' },
-        { col: fixedEndStart + 1, text: ' ' },
-        { col: fixedEndStart + 2, text: ' ' },
-        { col: fixedEndStart + 3, text: ' ' },
-      ],
-    })
-    rows.push({
-      height: dataHeight,
-      cells: [
-        {
-          col: 0,
-          colSpan: labelSpan,
-          text: '13. Total Resources Have on Hand',
+          col: 2,
+          text: ICS215_LEGACY_RHN_LABELS[ICS215_LEGACY_RHN_FIELDS.indexOf(totalRow.field)],
           bold: true,
-          fontSize: 6.5,
+          center: true,
+          fontSize: 6,
         },
-        {
-          col: valueCol,
-          colSpan: valueSpan,
-          text: segment.grandTotals.totalResourcesHaveOnHand || ' ',
+      ]
+      segment.resourceColumns.forEach((column, index) => {
+        const totals = segment.columnTotals[column.id]
+        totalCells.push({
+          col: resourceStart + index,
+          text: totals?.[totalRow.field]?.trim() || ' ',
           center: true,
           fontSize: 6.5,
-        },
-        { col: fixedEndStart, text: ' ' },
-        { col: fixedEndStart + 1, text: ' ' },
-        { col: fixedEndStart + 2, text: ' ' },
-        { col: fixedEndStart + 3, text: ' ' },
-      ],
-    })
-    rows.push({
-      height: dataHeight,
-      cells: [
-        {
-          col: 0,
-          colSpan: labelSpan,
-          text: '14. Total Resources Need to Order',
-          bold: true,
-          fontSize: 6.5,
-        },
-        {
-          col: valueCol,
-          colSpan: valueSpan,
-          text: segment.grandTotals.totalResourcesNeedToOrder || ' ',
-          center: true,
-          fontSize: 6.5,
-        },
-        { col: fixedEndStart, text: ' ' },
-        { col: fixedEndStart + 1, text: ' ' },
-        { col: fixedEndStart + 2, text: ' ' },
-        { col: fixedEndStart + 3, text: ' ' },
-      ],
+        })
+      })
+      for (let col = overflowStart; col < overflowStart + 4; col += 1) {
+        totalCells.push({ col, text: ' ' })
+      }
+      rows.push({ height: dataHeight, cells: totalCells })
     })
   }
 
@@ -695,7 +659,7 @@ function buildPdfWorkTableColumnWidths(
   resourceColumns: Ics215ResourceColumn[],
   tableWidth: number
 ): number[] {
-  return scaleColumnWidthsToPdf(buildIcs215WorkTableColumnWidths(resourceColumns), tableWidth)
+  return scaleColumnWidthsToPdf(buildIcs215LegacyTableColumnWidths(resourceColumns), tableWidth)
 }
 
 function renderPdfWorkAssignmentsTable(
@@ -704,7 +668,7 @@ function renderPdfWorkAssignmentsTable(
   contentWidth: number,
   startY: number
 ): { ops: string; lines: PdfLine[]; nextY: number } {
-  const gap = 6
+  const gap = ICS215_BOX_STACK.segmentGapPt
   const innerWidth = contentWidth - 12
   const columnWidths = buildPdfWorkTableColumnWidths(segment.resourceColumns, innerWidth)
   const tableRows = buildWorkAssignmentsTablePdfRows(segment)

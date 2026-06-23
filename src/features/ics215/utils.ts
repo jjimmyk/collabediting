@@ -1,7 +1,10 @@
 import { ics201AuthorColorFromId } from '@/features/ics201/utils'
+import { fillHaveForResourceValue } from '@/features/resources/workspace-asset-have-lookup'
+import type { ResourceListItemData } from '@/features/resources/types'
 import {
   normalizeWorkAssignmentTargetValue,
 } from '@/lib/work-assignment-target'
+import type { WorkspaceRosterMember } from '@/lib/workspace-types'
 import {
   ICS215_DEFAULT_RESOURCE_COLUMNS,
   ICS215_DEFAULT_WORK_ASSIGNMENT_COUNT,
@@ -465,6 +468,58 @@ export function createNextIcs215ResourceColumnId(columns: Ics215ResourceColumn[]
 export function createNextIcs215WorkAssignmentId(rows: Ics215WorkAssignmentRow[]): number {
   if (rows.length === 0) return 1
   return Math.max(...rows.map((row) => row.id)) + 1
+}
+
+export function appendIcs215WorkAssignmentToDraft(
+  draft: Ics215WorkAssignmentsDraft,
+  options: { lockedAssignee?: string; roster?: WorkspaceRosterMember[] } = {}
+): Ics215WorkAssignmentsDraft {
+  const lockedTargetValue = normalizeWorkAssignmentTargetValue(
+    options.lockedAssignee ?? '',
+    options.roster ?? []
+  )
+  return {
+    resourceColumns: draft.resourceColumns,
+    workAssignments: [
+      ...draft.workAssignments,
+      {
+        id: createNextIcs215WorkAssignmentId(draft.workAssignments),
+        assignee: lockedTargetValue,
+        workAssignment: '',
+        resourceValues: createEmptyResourceValues(draft.resourceColumns),
+        overheadPositions: '',
+        specialEquipmentSupplies: '',
+        reportingLocation: '',
+        requestedArrivalTime: '',
+        status: '',
+      },
+    ],
+  }
+}
+
+export function fillAllIcs215WorkAssignmentsHaveInDraft(
+  draft: Ics215WorkAssignmentsDraft,
+  workspaceAssets: ResourceListItemData[],
+  overwrite: boolean
+): { draft: Ics215WorkAssignmentsDraft; filledCount: number } {
+  let filledCount = 0
+  const workAssignments = draft.workAssignments.map((row) => {
+    const resourceValues = { ...row.resourceValues }
+    for (const column of draft.resourceColumns) {
+      const current = resourceValues[column.id] ?? emptyResourceValue()
+      const result = fillHaveForResourceValue(current, column.label, workspaceAssets, {
+        overwrite,
+        onlyIfHaveEmpty: !overwrite,
+      })
+      if (result.filled) filledCount += 1
+      resourceValues[column.id] = result.value
+    }
+    return { ...row, resourceValues }
+  })
+  return {
+    draft: { resourceColumns: draft.resourceColumns, workAssignments },
+    filledCount,
+  }
 }
 
 export function appendIcs215ResourceColumn(

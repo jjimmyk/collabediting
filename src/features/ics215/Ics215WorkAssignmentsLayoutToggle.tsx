@@ -35,7 +35,7 @@ export function Ics215WorkAssignmentsLayoutToggle({
         </ToggleGroupItem>
       </ToggleGroup>
       <p className="text-[10px] text-muted-foreground">
-        Export uses standard spreadsheet layout.
+        Export uses legacy ICS layout.
       </p>
     </div>
   )

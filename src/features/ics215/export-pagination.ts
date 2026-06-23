@@ -6,11 +6,11 @@ import type {
   Ics215ExportLayoutBlock,
   Ics215HeaderCell,
   Ics215PreparedByFooter,
-  Ics215ResourceTotalsExport,
   Ics215WorkAssignmentExportRow,
   Ics215WorkAssignmentsTableBlock,
 } from '@/features/ics215/export-layout'
 import type { Ics215ResourceColumn, Ics215ResourceValue } from '@/features/ics215/types'
+import { ICS215_LEGACY_ASSIGNMENT_ROWS_PER_BLOCK, ICS215_LEGACY_TOTAL_FOOTER_ROWS } from '@/features/ics215/export-legacy-table'
 import {
   ICS215_EXPORT_PAGE_METRICS as PAGE,
   ics215DocxPageSegmentCapacityPt,
@@ -34,11 +34,9 @@ export type Ics215WorkAssignmentsTableSegment = {
   rows: Ics215WorkAssignmentExportRow[]
   resourceColumns: Ics215ResourceColumn[]
   columnTotals: Record<string, Ics215ResourceValue>
-  grandTotals: Ics215ResourceTotalsExport | null
   continued: boolean
   showTableHeader: boolean
-  showColumnTotals: boolean
-  showGrandTotals: boolean
+  showResourceTotalsFooter: boolean
 }
 
 export type Ics215PhysicalPageSegment = Ics215WorkAssignmentsTableSegment
@@ -154,25 +152,24 @@ function workTableShellHeight(showTableHeader: boolean): number {
   )
 }
 
-function estimateRowHeight(row: Ics215WorkAssignmentExportRow): number {
+function estimateAssignmentBlockHeight(row: Ics215WorkAssignmentExportRow): number {
   const workLines = Math.max(
     1,
     flattenWrappedBody(row.workAssignment, 24).length,
     flattenWrappedBody(row.assignee, 12).length
   )
-  return PAGE.tableRowHeightPt + (workLines - 1) * PAGE.paginationLineHeightPt
+  const singleRowHeight =
+    PAGE.tableRowHeightPt + (workLines - 1) * PAGE.paginationLineHeightPt
+  return singleRowHeight * ICS215_LEGACY_ASSIGNMENT_ROWS_PER_BLOCK
 }
 
 function estimateWorkAssignmentsTableSegmentHeight(segment: Ics215WorkAssignmentsTableSegment): number {
   let height = workTableShellHeight(segment.showTableHeader)
   for (const row of segment.rows) {
-    height += estimateRowHeight(row)
+    height += estimateAssignmentBlockHeight(row)
   }
-  if (segment.showColumnTotals) {
-    height += PAGE.tableRowHeightPt
-  }
-  if (segment.showGrandTotals) {
-    height += PAGE.tableRowHeightPt * 3
+  if (segment.showResourceTotalsFooter) {
+    height += PAGE.tableRowHeightPt * ICS215_LEGACY_TOTAL_FOOTER_ROWS
   }
   return height
 }
@@ -223,11 +220,9 @@ function paginateWorkAssignmentsTableBlock(
           rows: block.rows.slice(rowIndex, rowIndex + take),
           resourceColumns,
           columnTotals: block.columnTotals,
-          grandTotals: isLastColumnSlice && isLastRowChunk ? block.grandTotals : null,
           continued: isHorizontalContinued || isRowContinued,
           showTableHeader,
-          showColumnTotals: isLastColumnSlice && isLastRowChunk,
-          showGrandTotals: isLastColumnSlice && isLastRowChunk,
+          showResourceTotalsFooter: isLastColumnSlice && isLastRowChunk,
         }
         if (canFitSegment(draft, candidate)) {
           addSegmentToDraft(draft, candidate)
@@ -238,7 +233,24 @@ function paginateWorkAssignmentsTableBlock(
       }
 
       if (maxRows !== 0) {
-        startNewDraft()
+        const draft = getCurrentDraft()
+        const take = 1
+        const isLastRowChunk = rowIndex + take >= block.rows.length
+        const forced: Ics215WorkAssignmentsTableSegment = {
+          kind: 'work-assignments-table',
+          label: segmentLabel,
+          rows: block.rows.slice(rowIndex, rowIndex + take),
+          resourceColumns,
+          columnTotals: block.columnTotals,
+          continued: isHorizontalContinued || isRowContinued,
+          showTableHeader,
+          showResourceTotalsFooter: isLastColumnSlice && isLastRowChunk,
+        }
+        addSegmentToDraft(draft, forced)
+        rowIndex += take
+        if (!isLastRowChunk) {
+          startNewDraft()
+        }
       }
     }
   })
@@ -253,11 +265,9 @@ function paginateWorkAssignmentsTableBlock(
         rows: [],
         resourceColumns,
         columnTotals: block.columnTotals,
-        grandTotals: isLastColumnSlice ? block.grandTotals : null,
         continued: sliceIndex > 0,
         showTableHeader: sliceIndex === 0,
-        showColumnTotals: isLastColumnSlice,
-        showGrandTotals: isLastColumnSlice,
+        showResourceTotalsFooter: isLastColumnSlice,
       }
       if (!canFitSegment(draft, segment)) {
         startNewDraft()

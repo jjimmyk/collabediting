@@ -9,6 +9,15 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { ICS215_FORM_TITLE_LINES } from '@/features/ics215/constants'
+import {
+  ICS215_PREVIEW_STACK_CLASS,
+  ics215PreviewSegmentRowClass,
+} from '@/features/ics215/export-box-stack'
+import {
+  ICS215_LEGACY_RHN_FIELDS,
+  ICS215_LEGACY_RHN_LABELS,
+  ICS215_LEGACY_TOTAL_ROWS,
+} from '@/features/ics215/export-legacy-table'
 import type { Ics215PreparedByFooter } from '@/features/ics215/export-layout'
 import type {
   Ics215PhysicalPage,
@@ -24,156 +33,176 @@ type Ics215ExportPreviewDialogProps = {
   onExportPdf: () => void
 }
 
-function PreviewBox({
-  label,
-  children,
-}: {
-  label?: string
-  children: React.ReactNode
-}) {
-  return (
-    <div className="border border-zinc-900">
-      {label ? (
-        <div className="border-b border-zinc-900 px-2 py-1 text-[11px] font-semibold">{label}</div>
-      ) : null}
-      <div className="overflow-x-auto px-2 py-2">{children}</div>
-    </div>
-  )
-}
-
-function renderWorkAssignmentsTable(segment: Ics215WorkAssignmentsTableSegment, index: number) {
+function renderWorkAssignmentsTable(
+  segment: Ics215WorkAssignmentsTableSegment,
+  index: number,
+  isFirstInStack: boolean
+) {
   const resourceCount = segment.resourceColumns.length
   const gridTemplate =
     resourceCount > 0
-      ? `minmax(5rem,0.9fr) minmax(7rem,1.2fr) repeat(${resourceCount * 3}, minmax(2.5rem,0.55fr)) minmax(5rem,0.9fr) minmax(5rem,0.9fr) minmax(5rem,0.9fr) minmax(4rem,0.7fr)`
-      : 'minmax(5rem,0.9fr) minmax(7rem,1.2fr) minmax(5rem,0.9fr) minmax(5rem,0.9fr) minmax(5rem,0.9fr) minmax(4rem,0.7fr)'
+      ? `minmax(4.5rem,0.85fr) minmax(6rem,1.1fr) minmax(2rem,0.35fr) repeat(${resourceCount}, minmax(2.25rem,0.45fr)) minmax(4rem,0.75fr) minmax(4rem,0.75fr) minmax(4rem,0.75fr) minmax(3.5rem,0.6fr)`
+      : 'minmax(4.5rem,0.85fr) minmax(6rem,1.1fr) minmax(2rem,0.35fr) minmax(4rem,0.75fr) minmax(4rem,0.75fr) minmax(4rem,0.75fr) minmax(3.5rem,0.6fr)'
 
   return (
-    <PreviewBox key={`ics215-seg-${index}`} label={segment.label}>
-      {segment.showTableHeader ? (
-        <>
-          <div
-            className="mb-1 grid gap-1 text-[8px] font-semibold"
-            style={{ gridTemplateColumns: gridTemplate }}
-          >
-            <span>5. Division/Group</span>
-            <span>6. Work Assignments</span>
-            {resourceCount > 0 ? (
-              segment.resourceColumns.map((column) => (
-                <span key={column.id} className="col-span-3 text-center">
-                  7. {column.label}
-                </span>
-              ))
-            ) : null}
-            <span>8. Overhead</span>
-            <span>9. Special Equip</span>
-            <span>10. Reporting</span>
-            <span>11. Arrival</span>
-          </div>
-          {resourceCount > 0 ? (
-            <div
-              className="mb-1 grid gap-1 text-[8px] font-semibold"
-              style={{ gridTemplateColumns: gridTemplate }}
-            >
-              <span />
-              <span />
-              {segment.resourceColumns.flatMap((column) => [
-                <span key={`${column.id}-req`} className="text-center">
-                  Req
-                </span>,
-                <span key={`${column.id}-have`} className="text-center">
-                  Have
-                </span>,
-                <span key={`${column.id}-need`} className="text-center">
-                  Need
-                </span>,
-              ])}
-              <span />
-              <span />
-              <span />
-              <span />
-            </div>
-          ) : null}
-        </>
-      ) : null}
-      <div className="space-y-1">
-        {segment.rows.length === 0 ? (
-          <p className="min-h-[2rem] text-[10px]"> </p>
-        ) : (
-          segment.rows.map((row, rowIndex) => (
-            <div
-              key={`ics215-row-${rowIndex}`}
-              className="grid gap-1 text-[9px]"
-              style={{ gridTemplateColumns: gridTemplate }}
-            >
-              <span className="whitespace-pre-wrap">{row.assignee || ' '}</span>
-              <span className="whitespace-pre-wrap">{row.workAssignment || ' '}</span>
-              {segment.resourceColumns.flatMap((column) => {
-                const value = row.resourceValues[column.id]
-                return [
-                  <span key={`${column.id}-req`} className="text-center">
-                    {value?.required || ' '}
-                  </span>,
-                  <span key={`${column.id}-have`} className="text-center">
-                    {value?.have || ' '}
-                  </span>,
-                  <span key={`${column.id}-need`} className="text-center">
-                    {value?.need || ' '}
-                  </span>,
-                ]
-              })}
-              <span className="whitespace-pre-wrap">{row.overheadPositions || ' '}</span>
-              <span className="whitespace-pre-wrap">{row.specialEquipmentSupplies || ' '}</span>
-              <span className="whitespace-pre-wrap">{row.reportingLocation || ' '}</span>
-              <span className="whitespace-pre-wrap">{row.requestedArrivalTime || ' '}</span>
-            </div>
-          ))
-        )}
+    <div
+      key={`ics215-seg-${index}`}
+      className={ics215PreviewSegmentRowClass(isFirstInStack)}
+    >
+      <div className="border-b border-zinc-900 px-2 py-1 text-[11px] font-semibold">
+        {segment.label}
       </div>
-      {segment.showColumnTotals ? (
-        <div
-          className="mt-1 grid gap-1 border-t border-zinc-300 pt-1 text-[9px] font-semibold"
-          style={{ gridTemplateColumns: gridTemplate }}
-        >
-          <span>Column Totals</span>
-          <span />
-          {segment.resourceColumns.flatMap((column) => {
-            const totals = segment.columnTotals[column.id]
-            return [
-              <span key={`${column.id}-req-t`} className="text-center">
-                {totals?.required || ' '}
-              </span>,
-              <span key={`${column.id}-have-t`} className="text-center">
-                {totals?.have || ' '}
-              </span>,
-              <span key={`${column.id}-need-t`} className="text-center">
-                {totals?.need || ' '}
-              </span>,
-            ]
-          })}
-          <span />
-          <span />
-          <span />
-          <span />
+      <div className="overflow-x-auto p-2">
+        {segment.showTableHeader ? (
+          <>
+            <div
+              className="mb-0 grid gap-0 border-b border-zinc-900 text-[8px] font-semibold"
+              style={{ gridTemplateColumns: gridTemplate }}
+            >
+              <span className="border-r border-zinc-900 p-1">5. Division/Group</span>
+              <span className="border-r border-zinc-900 p-1">6. Work Assignments</span>
+              <span className="border-r border-zinc-900 p-1" />
+              {resourceCount > 0 ? (
+                <span
+                  className="border-r border-zinc-900 p-1 text-center"
+                  style={{ gridColumn: `span ${resourceCount}` }}
+                >
+                  7. Kinds of Resources
+                </span>
+              ) : null}
+              <span className="border-r border-zinc-900 p-1">8. Overhead</span>
+              <span className="border-r border-zinc-900 p-1">9. Special Equip</span>
+              <span className="border-r border-zinc-900 p-1">10. Reporting</span>
+              <span className="p-1">11. Arrival</span>
+            </div>
+            {resourceCount > 0 ? (
+              <div
+                className="mb-0 grid gap-0 border-b border-zinc-900 text-[8px] font-semibold"
+                style={{ gridTemplateColumns: gridTemplate }}
+              >
+                <span className="border-r border-zinc-900 p-1" />
+                <span className="border-r border-zinc-900 p-1" />
+                <span className="border-r border-zinc-900 p-1" />
+                {segment.resourceColumns.map((column) => (
+                  <span key={column.id} className="border-r border-zinc-900 p-1 text-center">
+                    {column.label}
+                  </span>
+                ))}
+                <span className="border-r border-zinc-900 p-1" />
+                <span className="border-r border-zinc-900 p-1" />
+                <span className="border-r border-zinc-900 p-1" />
+                <span className="p-1" />
+              </div>
+            ) : null}
+          </>
+        ) : null}
+        <div>
+          {segment.rows.length === 0 ? (
+            <p className="min-h-[2rem] p-1 text-[10px]"> </p>
+          ) : (
+            <table className="w-full border-collapse text-[9px]">
+              <tbody>
+                {segment.rows.flatMap((row, rowIndex) =>
+                  ICS215_LEGACY_RHN_FIELDS.map((field, rhnIndex) => (
+                    <tr
+                      key={`ics215-row-${rowIndex}-${field}`}
+                      className="border-b border-dashed border-zinc-400 last:border-solid last:border-zinc-900"
+                    >
+                      {rhnIndex === 0 ? (
+                        <td
+                          rowSpan={3}
+                          className="border-r border-zinc-900 p-1 align-top whitespace-pre-wrap"
+                        >
+                          {row.assignee || ' '}
+                        </td>
+                      ) : null}
+                      {rhnIndex === 0 ? (
+                        <td
+                          rowSpan={3}
+                          className="border-r border-zinc-900 p-1 align-top whitespace-pre-wrap"
+                        >
+                          {row.workAssignment || ' '}
+                        </td>
+                      ) : null}
+                      <td className="border-r border-zinc-900 bg-zinc-50 p-1 text-center font-semibold uppercase">
+                        {ICS215_LEGACY_RHN_LABELS[rhnIndex]}
+                      </td>
+                      {segment.resourceColumns.map((column) => {
+                        const value = row.resourceValues[column.id]
+                        return (
+                          <td
+                            key={`${column.id}-${field}`}
+                            className="border-r border-zinc-900 p-1 text-center"
+                          >
+                            {value?.[field]?.trim() || ' '}
+                          </td>
+                        )
+                      })}
+                      {rhnIndex === 0 ? (
+                        <>
+                          <td
+                            rowSpan={3}
+                            className="border-r border-zinc-900 p-1 align-top whitespace-pre-wrap"
+                          >
+                            {row.overheadPositions || ' '}
+                          </td>
+                          <td
+                            rowSpan={3}
+                            className="border-r border-zinc-900 p-1 align-top whitespace-pre-wrap"
+                          >
+                            {row.specialEquipmentSupplies || ' '}
+                          </td>
+                          <td
+                            rowSpan={3}
+                            className="border-r border-zinc-900 p-1 align-top whitespace-pre-wrap"
+                          >
+                            {row.reportingLocation || ' '}
+                          </td>
+                          <td rowSpan={3} className="p-1 align-top whitespace-pre-wrap">
+                            {row.requestedArrivalTime || ' '}
+                          </td>
+                        </>
+                      ) : null}
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          )}
         </div>
-      ) : null}
-      {segment.showGrandTotals && segment.grandTotals ? (
-        <div className="mt-2 space-y-1 border-t border-zinc-300 pt-1 text-[9px]">
-          <p>
-            <span className="font-semibold">12. Total Resources Required:</span>{' '}
-            {segment.grandTotals.totalResourcesRequired || ' '}
-          </p>
-          <p>
-            <span className="font-semibold">13. Total Resources Have on Hand:</span>{' '}
-            {segment.grandTotals.totalResourcesHaveOnHand || ' '}
-          </p>
-          <p>
-            <span className="font-semibold">14. Total Resources Need to Order:</span>{' '}
-            {segment.grandTotals.totalResourcesNeedToOrder || ' '}
-          </p>
-        </div>
-      ) : null}
-    </PreviewBox>
+        {segment.showResourceTotalsFooter ? (
+          <div>
+            {ICS215_LEGACY_TOTAL_ROWS.map((totalRow) => (
+              <div
+                key={totalRow.field}
+                className="grid gap-0 border-t border-dashed border-zinc-400 text-[9px] font-semibold last:border-solid last:border-zinc-900"
+                style={{ gridTemplateColumns: gridTemplate }}
+              >
+                <span className="col-span-2 border-r border-zinc-900 p-1">{totalRow.label}</span>
+                <span className="border-r border-zinc-900 bg-zinc-50 p-1 text-center uppercase">
+                  {ICS215_LEGACY_RHN_LABELS[ICS215_LEGACY_RHN_FIELDS.indexOf(totalRow.field)]}
+                </span>
+                {segment.resourceColumns.map((column) => {
+                  const totals = segment.columnTotals[column.id]
+                  return (
+                    <span
+                      key={`${column.id}-${totalRow.field}`}
+                      className="border-r border-zinc-900 p-1 text-center"
+                    >
+                      {totals?.[totalRow.field]?.trim() || ' '}
+                    </span>
+                  )
+                })}
+                <span className="border-r border-zinc-900 p-1" />
+                <span className="border-r border-zinc-900 p-1" />
+                <span className="border-r border-zinc-900 p-1" />
+                <span className="p-1" />
+              </div>
+            ))}
+          </div>
+        ) : null}
+      </div>
+    </div>
   )
 }
 
@@ -229,8 +258,10 @@ function renderPreviewPage(page: Ics215PhysicalPage) {
         <p className="font-semibold">4. Operational Period (Date/Time):</p>
         <p className="whitespace-pre-wrap">{page.operationalPeriod.trim() || ' '}</p>
       </div>
-      <div className="space-y-4">
-        {page.segments.map((segment, index) => renderWorkAssignmentsTable(segment, index))}
+      <div className={ICS215_PREVIEW_STACK_CLASS}>
+        {page.segments.map((segment, index) =>
+          renderWorkAssignmentsTable(segment, index, index === 0)
+        )}
       </div>
       {renderPreparedByFooter(page.preparedByFooter)}
       <div className="mt-3 flex items-center justify-between text-[9px] text-zinc-600">
@@ -260,8 +291,8 @@ export function Ics215ExportPreviewDialog({
             {title}
           </DialogTitle>
           <DialogDescription className="text-xs">
-            USCG ICS 215-CG boxed layout preview. Resource columns may continue on additional pages;
-            prepared-by and the ICS form line appear in the page footer on export.
+            USCG ICS 215-CG legacy layout preview. REQ / HAVE / NEED stack vertically per
+            assignment; resource kinds continue on additional pages when needed.
           </DialogDescription>
         </DialogHeader>
         <div className="max-h-[70vh] overflow-y-auto">
