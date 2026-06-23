@@ -1,5 +1,5 @@
 import { Eye, FileDown, Loader2, X } from 'lucide-react'
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -21,7 +21,7 @@ import {
   resolveIcs207PreparedByName,
 } from '@/features/ics207/export-layout'
 import {
-  downloadIcs207FromPreview,
+  downloadIcs207FromCapture,
   type ExportOrgChartIcs207BaseInput,
 } from '@/features/ics207/export-org-chart-ics207'
 import type { ExportOrgChartIcs207Input } from '@/features/ics207/export-org-chart-ics207'
@@ -32,7 +32,7 @@ import {
   ics202PreviewSegmentRowClass,
 } from '@/features/ics202/export-box-stack'
 import { ICS207_PDF_CHART_ASPECT_RATIO } from '@/features/ics207/export-template-constants'
-import { captureIcs207Box4ForPdf, pngBytesToDataUrl } from '@/features/roster/org-chart-export-capture'
+import { captureIcs207Box4ForPdf } from '@/features/roster/org-chart-export-capture'
 import type { OrgChartExportScope } from '@/features/roster/org-chart-export-scope'
 
 type OrgChartIcs207ExportDialogProps = {
@@ -156,9 +156,11 @@ export function OrgChartIcs207ExportDialog({
 }: OrgChartIcs207ExportDialogProps) {
   const [scope, setScope] = useState<OrgChartExportScope>('current_op')
   const [box4Container, setBox4Container] = useState<HTMLDivElement | null>(null)
+  const box4ContainerNodeRef = useRef<HTMLDivElement | null>(null)
   const [isExporting, setIsExporting] = useState(false)
   const [exportError, setExportError] = useState<string | null>(null)
   const box4ContainerRef = useCallback((node: HTMLDivElement | null) => {
+    box4ContainerNodeRef.current = node
     setBox4Container(node)
   }, [])
 
@@ -202,6 +204,7 @@ export function OrgChartIcs207ExportDialog({
       onOpenChange={(nextOpen) => {
         if (!nextOpen) {
           setScope('current_op')
+          box4ContainerNodeRef.current = null
           setBox4Container(null)
           setExportError(null)
         }
@@ -285,7 +288,10 @@ export function OrgChartIcs207ExportDialog({
           </div>
         </div>
 
-        <DialogFooter className="flex flex-row items-center justify-end gap-2 sm:justify-end">
+        <DialogFooter className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center sm:justify-end">
+          {exportError ? (
+            <p className="text-xs text-red-700 sm:mr-auto">{exportError}</p>
+          ) : null}
           <Button
             type="button"
             size="sm"
@@ -303,16 +309,20 @@ export function OrgChartIcs207ExportDialog({
             className="h-8 gap-1 bg-blue-600 text-xs text-white hover:bg-blue-700"
             disabled={!canExport}
             onClick={() => {
-              if (!context || !scopedExportInput || !box4Container) return
+              const container = box4ContainerNodeRef.current
+              if (!context || !scopedExportInput || !container) {
+                setExportError(
+                  'Preview is not ready. Wait for the org chart to load, then try again.'
+                )
+                return
+              }
               setExportError(null)
               setIsExporting(true)
-              void captureIcs207Box4ForPdf({ box4Container })
+              void captureIcs207Box4ForPdf({ box4Container: container })
                 .then((pngBytes) =>
-                  downloadIcs207FromPreview({
-                    scope,
+                  downloadIcs207FromCapture({
                     context,
                     pngBytes,
-                    pngDataUrl: pngBytesToDataUrl(pngBytes),
                   })
                 )
                 .then(() => {

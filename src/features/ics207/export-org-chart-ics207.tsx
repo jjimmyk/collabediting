@@ -1,8 +1,8 @@
 import { downloadIcs207Pdf } from '@/features/ics207/export-download'
+import type { Ics207ExportContext, Ics207ExportPreview } from '@/features/ics207/types'
 import {
   formatIcs207ExportTimestamp,
   ics207ExportFilenameBase,
-  type Ics207ExportPreview,
 } from '@/features/ics207/types'
 import type { RosterDisplayFilters } from '@/features/roster/roster-display-filters'
 import type { OrgChartExportScope } from '@/features/roster/org-chart-export-scope'
@@ -42,7 +42,17 @@ export type ExportOrgChartIcs207Input = {
 export type ExportOrgChartIcs207BaseInput = Omit<ExportOrgChartIcs207Input, 'scope'>
 
 export async function downloadIcs207FromPreview(preview: Ics207ExportPreview): Promise<string> {
-  const filename = `${ics207ExportFilenameBase(preview.context)}_${formatIcs207ExportTimestamp()}.pdf`
-  await downloadIcs207Pdf(filename, preview.pngBytes, preview.context)
+  return downloadIcs207FromCapture({
+    context: preview.context,
+    pngBytes: preview.pngBytes,
+  })
+}
+
+export async function downloadIcs207FromCapture(input: {
+  context: Ics207ExportContext
+  pngBytes: Uint8Array
+}): Promise<string> {
+  const filename = `${ics207ExportFilenameBase(input.context)}_${formatIcs207ExportTimestamp()}.pdf`
+  await downloadIcs207Pdf(filename, input.pngBytes, input.context)
   return filename
 }

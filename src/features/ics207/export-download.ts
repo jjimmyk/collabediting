@@ -324,8 +324,11 @@ function triggerBlobDownload(blob: Blob, filename: string): void {
   const anchor = document.createElement('a')
   anchor.href = url
   anchor.download = filename
+  anchor.style.display = 'none'
+  document.body.appendChild(anchor)
   anchor.click()
-  URL.revokeObjectURL(url)
+  anchor.remove()
+  globalThis.setTimeout(() => URL.revokeObjectURL(url), 0)
 }
 
 export async function buildIcs207PdfBytes(
@@ -354,7 +357,7 @@ export async function downloadIcs207Pdf(
   context: Ics207ExportContext
 ): Promise<void> {
   const bytes = await buildIcs207PdfBytes(chartPng, context)
-  triggerBlobDownload(new Blob([bytes.buffer as ArrayBuffer], { type: 'application/pdf' }), filename)
+  triggerBlobDownload(new Blob([new Uint8Array(bytes)], { type: 'application/pdf' }), filename)
 }
 
 export { buildIcs207PdfBytes as buildIcs207PdfBytesForTest }

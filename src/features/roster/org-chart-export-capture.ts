@@ -95,7 +95,8 @@ async function ensureWideConnectorsPainted(root: HTMLElement): Promise<void> {
   }
 
   if (countOrgChartCards(root) > 1 && countOrgChartConnectorLines(root) === 0) {
-    throw new Error('Org chart connector lines are not ready. Try exporting again.')
+    console.warn('Org chart connector lines were not detected; proceeding with capture.')
+    return
   }
 }
 
@@ -186,9 +187,10 @@ export async function captureIcs207Box4ForPdf(input: {
 }
 
 export function pngBytesToDataUrl(pngBytes: Uint8Array): string {
+  const chunkSize = 0x8000
   let binary = ''
-  for (let i = 0; i < pngBytes.length; i += 1) {
-    binary += String.fromCharCode(pngBytes[i]!)
+  for (let i = 0; i < pngBytes.length; i += chunkSize) {
+    binary += String.fromCharCode(...pngBytes.subarray(i, i + chunkSize))
   }
   return `data:image/png;base64,${btoa(binary)}`
 }
