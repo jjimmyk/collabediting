@@ -1,8 +1,9 @@
 import { captureOrgChartImage } from '@/features/roster/capture-org-chart-image'
 
-const MIN_CAPTURE_WIDTH_PX = 120
-const MIN_CAPTURE_HEIGHT_PX = 120
+const MIN_CAPTURE_WIDTH_PX = 80
+const MIN_CAPTURE_HEIGHT_PX = 80
 const MIN_PNG_BYTES = 8_000
+const CONNECTOR_FALLBACK_MS = 3_000
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => {
@@ -33,34 +34,47 @@ function countOrgChartCards(chartRoot: HTMLElement): number {
   return chartRoot.querySelectorAll('[data-org-chart-id]').length
 }
 
-function isCaptureTargetReady(chartRoot: HTMLElement): boolean {
-  if (chartRoot.offsetWidth < MIN_CAPTURE_WIDTH_PX) return false
-  if (chartRoot.offsetHeight < MIN_CAPTURE_HEIGHT_PX) return false
+function hasMinimumDimensions(chartRoot: HTMLElement): boolean {
+  return (
+    chartRoot.offsetWidth >= MIN_CAPTURE_WIDTH_PX &&
+    chartRoot.offsetHeight >= MIN_CAPTURE_HEIGHT_PX
+  )
+}
+
+function isCaptureTargetReady(
+  chartRoot: HTMLElement,
+  options: { requireConnectors: boolean }
+): boolean {
+  if (!hasMinimumDimensions(chartRoot)) return false
+  if (countOrgChartCards(chartRoot) === 0) return false
 
   const isWide = chartRoot.hasAttribute('data-org-chart-wide-root')
-  if (isWide) {
-    return countConnectorLines(chartRoot) > 0 && countOrgChartCards(chartRoot) > 0
+  if (isWide && options.requireConnectors) {
+    return countConnectorLines(chartRoot) > 0
   }
 
-  return countOrgChartCards(chartRoot) > 0
+  return true
 }
 
 export async function waitForOrgChartCaptureReady(
   container: HTMLElement,
   options: { timeoutMs?: number } = {}
 ): Promise<HTMLElement> {
-  const timeoutMs = options.timeoutMs ?? 10_000
+  const timeoutMs = options.timeoutMs ?? 15_000
   const started = Date.now()
 
   while (Date.now() - started < timeoutMs) {
     const target = resolveOrgChartCaptureTarget(container)
-    if (target && isCaptureTargetReady(target)) {
-      await nextFrames(3)
-      if (isCaptureTargetReady(target)) {
-        return target
+    if (target) {
+      const requireConnectors = Date.now() - started < CONNECTOR_FALLBACK_MS
+      if (isCaptureTargetReady(target, { requireConnectors })) {
+        await nextFrames(3)
+        if (isCaptureTargetReady(target, { requireConnectors: false })) {
+          return target
+        }
       }
     }
-    await sleep(60)
+    await sleep(80)
   }
 
   throw new Error('Org chart capture timed out before connectors and cards were ready.')
@@ -82,6 +96,13 @@ export async function captureOrgChartElement(
   })
   assertOrgChartCaptureNotBlank(pngBytes)
   return pngBytes
+}
+
+export async function captureOrgChartFromContainer(
+  container: HTMLElement
+): Promise<Uint8Array> {
+  const target = await waitForOrgChartCaptureReady(container)
+  return captureOrgChartElement(target)
 }
 
 export function pngBytesToDataUrl(pngBytes: Uint8Array): string {

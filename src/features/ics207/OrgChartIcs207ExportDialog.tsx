@@ -1,5 +1,5 @@
-import { FileDown, Loader2 } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { Eye, FileDown, Loader2, X } from 'lucide-react'
+import { useCallback, useMemo, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -11,12 +11,23 @@ import {
 } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
-import type { ExportOrgChartIcs207Input } from '@/features/ics207/export-org-chart-ics207'
 import {
-  downloadIcs207FromPreview,
-  generateIcs207OrgChartPreview,
-} from '@/features/ics207/export-org-chart-ics207'
-import type { Ics207ExportPreview } from '@/features/ics207/types'
+  ICS207_FORM_TITLE_LINES,
+  buildIcs207ExportLayout,
+  type Ics207ExportLayoutBlock,
+} from '@/features/ics207/export-layout-blocks'
+import {
+  buildIcs207ExportContext,
+  resolveIcs207PreparedByName,
+} from '@/features/ics207/export-layout'
+import { downloadIcs207FromPreview } from '@/features/ics207/export-org-chart-ics207'
+import type { ExportOrgChartIcs207Input } from '@/features/ics207/export-org-chart-ics207'
+import { Ics207PreviewOrgChartPanel } from '@/features/ics207/Ics207PreviewOrgChartPanel'
+import { useIcs207OrgChartCapture } from '@/features/ics207/use-ics207-org-chart-capture'
+import {
+  ICS202_PREVIEW_STACK_CLASS,
+  ics202PreviewSegmentRowClass,
+} from '@/features/ics202/export-box-stack'
 import type { OrgChartExportScope } from '@/features/roster/org-chart-export-scope'
 
 type OrgChartIcs207ExportDialogProps = {
@@ -27,72 +38,131 @@ type OrgChartIcs207ExportDialogProps = {
   onExportComplete?: () => void
 }
 
-function Ics207PreviewForm({ preview }: { preview: Ics207ExportPreview }) {
-  const { context, pngDataUrl } = preview
+function renderPreviewBlock(
+  block: Ics207ExportLayoutBlock,
+  index: number,
+  options: {
+    isFirstInStack: boolean
+    chartContainerRef: (node: HTMLDivElement | null) => void
+    showLiveChart: boolean
+    exportInput: ExportOrgChartIcs207Input | null
+    captureWaiting: boolean
+    captureError: string | null
+  }
+) {
+  const rowClass = ics202PreviewSegmentRowClass(options.isFirstInStack)
 
-  return (
-    <div className="overflow-hidden rounded-md border border-zinc-900 bg-white text-[11px] text-zinc-900">
-      <div className="border-b border-zinc-900 px-3 py-2 text-center">
-        <div>DEPARTMENT OF HOMELAND SECURITY</div>
-        <div className="font-semibold">U.S. COAST GUARD</div>
-        <div className="font-semibold">INCIDENT ORGANIZATION CHART (ICS 207-CG)</div>
-      </div>
-
-      <div className="grid grid-cols-3 border-b border-zinc-900">
-        <div className="border-r border-zinc-900 p-2">
-          <div className="font-semibold">1. Incident Name:</div>
-          <div className="mt-1 min-h-4">{context.incidentName}</div>
+  switch (block.kind) {
+    case 'form-title':
+      return (
+        <div key={`ics207-${index}`} className={`px-2 py-2 text-center ${rowClass}`}>
+          {ICS207_FORM_TITLE_LINES.map((line) => (
+            <div
+              key={line}
+              className={line.includes('INCIDENT ORGANIZATION') ? 'font-semibold' : undefined}
+            >
+              {line}
+            </div>
+          ))}
         </div>
-        <div className="border-r border-zinc-900 p-2">
-          <div className="font-semibold">2. Incident Location:</div>
-          <div className="mt-1 min-h-4">{context.incidentLocation || '—'}</div>
+      )
+    case 'header-row':
+      return (
+        <div key={`ics207-${index}`} className={`grid grid-cols-3 ${rowClass}`}>
+          {block.cells.map((cell) => (
+            <div
+              key={cell.label}
+              className="border-r border-zinc-900 p-2 last:border-r-0"
+            >
+              <div className="text-[10px] font-semibold">{cell.label}</div>
+              {cell.subFields ? (
+                <div className="mt-1 grid grid-cols-2 gap-2 text-[11px]">
+                  {cell.subFields.map((field) => (
+                    <div key={field.label}>
+                      <span className="font-semibold">{field.label} </span>
+                      {field.value || ' '}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="mt-1 min-h-[1rem] whitespace-pre-wrap text-[11px]">
+                  {cell.value || ' '}
+                </div>
+              )}
+            </div>
+          ))}
         </div>
-        <div className="p-2">
-          <div className="font-semibold">3. Operational Period (Date/Time):</div>
-          <div className="mt-1 grid grid-cols-2 gap-2">
+      )
+    case 'org-chart-image':
+      return (
+        <div key={`ics207-${index}`} className={`relative ${rowClass}`}>
+          <div className="absolute left-2 top-2 text-[10px] font-semibold">4.</div>
+          <div className="flex min-h-[280px] items-center justify-center bg-white p-3 pl-6">
+            {block.dataUrl ? (
+              <img
+                src={block.dataUrl}
+                alt={block.alt}
+                className="max-h-[420px] max-w-full object-contain"
+              />
+            ) : (
+              <span className="text-[11px] text-zinc-500"> </span>
+            )}
+          </div>
+        </div>
+      )
+    case 'org-chart-live':
+      return (
+        <div key={`ics207-${index}`} className={`relative ${rowClass}`}>
+          <div className="absolute left-2 top-2 z-10 text-[10px] font-semibold">4.</div>
+          <div
+            ref={options.showLiveChart ? options.chartContainerRef : undefined}
+            data-ics207-box-4-chart=""
+            className="relative min-h-[280px] overflow-auto bg-white p-3 pl-6"
+          >
+            {options.exportInput ? (
+              <>
+                <Ics207PreviewOrgChartPanel exportInput={options.exportInput} />
+                {options.captureError ? (
+                  <div className="absolute inset-0 flex items-center justify-center bg-white/90 p-4 text-center text-[11px] text-red-700">
+                    {options.captureError}
+                  </div>
+                ) : options.captureWaiting ? (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-white/70 text-[11px] text-zinc-600">
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                    Capturing org chart at 60% zoom…
+                  </div>
+                ) : null}
+              </>
+            ) : null}
+          </div>
+        </div>
+      )
+    case 'prepared-by':
+      return (
+        <div key={`ics207-${index}`} className={`p-2 ${rowClass}`}>
+          <div className="mb-1 text-[10px] font-semibold">5. Prepared By:</div>
+          <div className="grid grid-cols-4 gap-2 text-[11px]">
             <div>
-              <span className="font-semibold">Date: </span>
-              {context.operationalPeriodDate || '—'}
+              <span className="font-semibold">Name: </span>
+              {block.fields.name || ' '}
             </div>
             <div>
-              <span className="font-semibold">Time: </span>
-              {context.operationalPeriodTime || '—'}
+              <span className="font-semibold">Position Title: </span>
+              {block.fields.positionTitle || ' '}
+            </div>
+            <div>
+              <span className="font-semibold">Signature: </span>
+            </div>
+            <div>
+              <span className="font-semibold">Date/Time: </span>
+              {block.fields.dateTime || ' '}
             </div>
           </div>
         </div>
-      </div>
-
-      <div className="relative border-b border-zinc-900">
-        <div className="absolute left-2 top-2 font-semibold">4.</div>
-        <div className="flex min-h-[280px] items-center justify-center bg-white p-3 pl-6">
-          <img
-            src={pngDataUrl}
-            alt="Org chart preview"
-            className="max-h-[360px] max-w-full object-contain"
-          />
-        </div>
-      </div>
-
-      <div className="grid grid-cols-4 gap-2 p-2">
-        <div className="col-span-4 font-semibold">5. Prepared By:</div>
-        <div>
-          <span className="font-semibold">Name: </span>
-          {context.preparedByName || '—'}
-        </div>
-        <div>
-          <span className="font-semibold">Position Title: </span>
-          {context.preparedByPositionTitle || '—'}
-        </div>
-        <div>
-          <span className="font-semibold">Signature: </span>
-        </div>
-        <div>
-          <span className="font-semibold">Date/Time: </span>
-          {context.preparedByDateTime}
-        </div>
-      </div>
-    </div>
-  )
+      )
+    default:
+      return null
+  }
 }
 
 export function OrgChartIcs207ExportDialog({
@@ -103,64 +173,68 @@ export function OrgChartIcs207ExportDialog({
   onExportComplete,
 }: OrgChartIcs207ExportDialogProps) {
   const [scope, setScope] = useState<OrgChartExportScope>('current_op')
-  const [preview, setPreview] = useState<Ics207ExportPreview | null>(null)
-  const [previewScope, setPreviewScope] = useState<OrgChartExportScope | null>(null)
-  const [previewLoading, setPreviewLoading] = useState(false)
-  const [previewError, setPreviewError] = useState<string | null>(null)
+  const [chartContainer, setChartContainer] = useState<HTMLDivElement | null>(null)
   const [isExporting, setIsExporting] = useState(false)
-  const requestIdRef = useRef(0)
+  const chartContainerRef = useCallback((node: HTMLDivElement | null) => {
+    setChartContainer(node)
+  }, [])
 
-  useEffect(() => {
-    if (!open) {
-      setPreview(null)
-      setPreviewScope(null)
-      setPreviewError(null)
-      setPreviewLoading(false)
-      setScope('current_op')
-      return
-    }
+  const scopedExportInput = useMemo<ExportOrgChartIcs207Input | null>(() => {
+    if (!exportInput) return null
+    return { ...exportInput, scope }
+  }, [exportInput, scope])
 
-    if (!exportInput) return
+  const context = useMemo(() => {
+    if (!scopedExportInput) return null
+    return buildIcs207ExportContext({
+      scope: scopedExportInput.scope,
+      incidentName: scopedExportInput.incidentName,
+      incidentLocation: scopedExportInput.incidentLocation,
+      operationalPeriodFrom: scopedExportInput.operationalPeriodFrom,
+      operationalPeriodTo: scopedExportInput.operationalPeriodTo,
+      preparedByName: resolveIcs207PreparedByName(
+        scopedExportInput.profileEmail,
+        scopedExportInput.profileDisplayName
+      ),
+      preparedByPositionTitle: scopedExportInput.preparedByPositionTitle,
+    })
+  }, [scopedExportInput])
 
-    const requestId = requestIdRef.current + 1
-    requestIdRef.current = requestId
-    setPreviewLoading(true)
-    setPreviewError(null)
-    setPreview(null)
-    setPreviewScope(null)
+  const captureKey = `${scope}-${open ? 'open' : 'closed'}`
+  const capture = useIcs207OrgChartCapture(chartContainer, captureKey, open && chartContainer !== null)
 
-    void generateIcs207OrgChartPreview({ ...exportInput, scope })
-      .then((nextPreview) => {
-        if (requestIdRef.current !== requestId) return
-        setPreview(nextPreview)
-        setPreviewScope(scope)
-        setPreviewError(null)
-      })
-      .catch((error: unknown) => {
-        if (requestIdRef.current !== requestId) return
-        setPreview(null)
-        setPreviewScope(null)
-        setPreviewError(
-          error instanceof Error ? error.message : 'Could not capture org chart preview.'
-        )
-      })
-      .finally(() => {
-        if (requestIdRef.current !== requestId) return
-        setPreviewLoading(false)
-      })
-  }, [open, exportInput, scope])
+  const showCapturedImage = capture.status === 'ready'
+  const capturedDataUrl = capture.status === 'ready' ? capture.pngDataUrl : undefined
+  const layoutBlocks = useMemo(() => {
+    if (!context) return []
+    return buildIcs207ExportLayout(
+      context,
+      capturedDataUrl ? { dataUrl: capturedDataUrl } : undefined
+    )
+  }, [capturedDataUrl, context])
 
-  const previewMatchesScope = preview !== null && previewScope === scope
-  const canExport = previewMatchesScope && !previewLoading && !isExporting
+  const canExport = showCapturedImage && !isExporting
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex max-h-[90vh] max-w-4xl flex-col gap-4 overflow-hidden sm:max-w-4xl">
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen) {
+          setScope('current_op')
+          setChartContainer(null)
+        }
+        onOpenChange(nextOpen)
+      }}
+    >
+      <DialogContent className="!w-[70vw] !max-w-[70vw] sm:!max-w-[70vw]">
         <DialogHeader>
-          <DialogTitle>Export ICS-207</DialogTitle>
-          <DialogDescription>
-            Preview the ICS 207-CG form with a 60% zoom org chart screenshot in box 4, then export
-            the PDF.
+          <DialogTitle className="flex items-center gap-2 text-sm font-semibold">
+            <Eye className="h-4 w-4" />
+            Export ICS-207
+          </DialogTitle>
+          <DialogDescription className="text-xs">
+            USCG ICS 207-CG boxed layout preview. Box 4 renders the org chart at 60% zoom, then
+            captures it for PDF export.
           </DialogDescription>
         </DialogHeader>
 
@@ -208,49 +282,63 @@ export function OrgChartIcs207ExportDialog({
           </div>
         </RadioGroup>
 
-        <div className="min-h-0 flex-1 overflow-auto rounded-md border bg-muted/20 p-2">
-          {previewLoading ? (
-            <div className="flex min-h-[320px] flex-col items-center justify-center gap-3 text-sm text-muted-foreground">
-              <Loader2 className="h-6 w-6 animate-spin" />
-              Capturing org chart at 60% zoom…
-            </div>
-          ) : previewError ? (
-            <div className="flex min-h-[320px] items-center justify-center p-6 text-center text-sm text-destructive">
-              {previewError}
-            </div>
-          ) : previewMatchesScope && preview ? (
-            <Ics207PreviewForm preview={preview} />
-          ) : (
-            <div className="flex min-h-[320px] items-center justify-center text-sm text-muted-foreground">
-              Select a scope to generate preview.
-            </div>
-          )}
+        <div className="max-h-[70vh] overflow-y-auto">
+          <div className="mx-auto w-full max-w-5xl text-[13px] leading-relaxed text-zinc-900">
+            {!context || layoutBlocks.length === 0 ? (
+              <div className="py-8 text-center text-sm text-zinc-500">Nothing to preview yet.</div>
+            ) : (
+              <div className={`${ICS202_PREVIEW_STACK_CLASS} bg-white`}>
+                {layoutBlocks.map((block, index) =>
+                  renderPreviewBlock(block, index, {
+                    isFirstInStack: index === 0,
+                    chartContainerRef,
+                    showLiveChart: !showCapturedImage,
+                    exportInput: scopedExportInput,
+                    captureWaiting: capture.status === 'waiting' && !showCapturedImage,
+                    captureError: capture.status === 'error' ? capture.message : null,
+                  })
+                )}
+              </div>
+            )}
+          </div>
         </div>
 
-        <DialogFooter>
-          <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isExporting}>
-            Cancel
+        <DialogFooter className="flex flex-row items-center justify-end gap-2 sm:justify-end">
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-8 gap-1 text-xs"
+            onClick={() => onOpenChange(false)}
+            disabled={isExporting}
+          >
+            <X className="h-3.5 w-3.5" />
+            Close
           </Button>
           <Button
             type="button"
+            size="sm"
+            className="h-8 gap-1 bg-blue-600 text-xs text-white hover:bg-blue-700"
             disabled={!canExport}
             onClick={() => {
-              if (!preview || !previewMatchesScope) return
+              if (capture.status !== 'ready' || !context) return
               setIsExporting(true)
-              void downloadIcs207FromPreview(preview)
+              void downloadIcs207FromPreview({
+                scope,
+                context,
+                pngBytes: capture.pngBytes,
+                pngDataUrl: capture.pngDataUrl,
+              })
                 .then(() => {
                   onExportComplete?.()
                   onOpenChange(false)
-                })
-                .catch(() => {
-                  setPreviewError('Could not export ICS-207 PDF. Try again.')
                 })
                 .finally(() => {
                   setIsExporting(false)
                 })
             }}
           >
-            <FileDown className="mr-2 h-4 w-4" />
+            <FileDown className="h-3.5 w-3.5" />
             {isExporting ? 'Exporting…' : 'Export PDF'}
           </Button>
         </DialogFooter>
