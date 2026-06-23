@@ -144,6 +144,7 @@ type WorkspaceOrgChartRosterProps = {
     positionType: WorkspacePositionType | null,
     customTypeLabel: string | null
   ) => void
+  exportMode?: boolean
 } & Partial<PositionRosterAssetHandlers>
 
 type OrgChartRenderProps = {
@@ -206,6 +207,7 @@ type OrgChartRenderProps = {
     positionType: WorkspacePositionType | null,
     customTypeLabel: string | null
   ) => void
+  exportMode?: boolean
   onOpenOrgChartAssetDetail: (assetKey: string) => void
   onOpenSingleResourceDetail: (memberId: string) => void
   competencyOptions: string[]
@@ -1130,6 +1132,7 @@ export function WorkspaceOrgChartRoster({
   canRemovePositionFromRoster,
   positionRemovalBlockedReason,
   onPositionTypeChange,
+  exportMode = false,
 }: WorkspaceOrgChartRosterProps) {
   const [selectedAssetKey, setSelectedAssetKey] = useState<string | null>(null)
   const [selectedSingleResourceMemberId, setSelectedSingleResourceMemberId] = useState<string | null>(
@@ -1232,8 +1235,9 @@ export function WorkspaceOrgChartRoster({
     canRemovePositionFromRoster,
     positionRemovalBlockedReason,
     onPositionTypeChange,
-    onOpenOrgChartAssetDetail: setSelectedAssetKey,
-    onOpenSingleResourceDetail: setSelectedSingleResourceMemberId,
+    exportMode,
+    onOpenOrgChartAssetDetail: exportMode ? () => undefined : setSelectedAssetKey,
+    onOpenSingleResourceDetail: exportMode ? () => undefined : setSelectedSingleResourceMemberId,
     competencyOptions,
     canEditCompetencyFunction,
     updatingCompetencyKey,
@@ -1257,15 +1261,19 @@ export function WorkspaceOrgChartRoster({
   }
 
   return (
-    <div className="min-w-0 w-full max-w-full space-y-4 pt-px">
-      <div className="space-y-1 text-center">
-        <h3 className="text-sm font-semibold">{workspaceLabel} Roster</h3>
-        <p className="text-xs text-muted-foreground">
-          Organizational Chart — Incident Command Structure
-        </p>
-      </div>
+    <div
+      className={cn('min-w-0 w-full max-w-full', exportMode ? 'space-y-0 pt-0' : 'space-y-4 pt-px')}
+    >
+      {exportMode ? null : (
+        <div className="space-y-1 text-center">
+          <h3 className="text-sm font-semibold">{workspaceLabel} Roster</h3>
+          <p className="text-xs text-muted-foreground">
+            Organizational Chart — Incident Command Structure
+          </p>
+        </div>
+      )}
 
-      <div className="min-w-0 w-full max-w-full">
+      <div className={cn('min-w-0 w-full max-w-full', exportMode && 'pointer-events-none')}>
         <div
           className={cn(
             'inline-flex w-max min-w-full flex-col items-center px-4 pb-2',
@@ -1332,6 +1340,8 @@ export function WorkspaceOrgChartRoster({
         </div>
       </div>
 
+      {exportMode ? null : (
+        <>
       <OrgChartNodeDetailDialog
         open={selectedAsset !== null}
         onOpenChange={(open) => {
@@ -1442,6 +1452,8 @@ export function WorkspaceOrgChartRoster({
           />
         ) : null}
       </OrgChartNodeDetailDialog>
+        </>
+      )}
     </div>
   )
 }
