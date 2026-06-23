@@ -555,16 +555,29 @@ assert(
   'org chart should render subordinates with right-indent connector layout'
 )
 assert(
-  connectorSource.includes('absolute right-0 top-0 bottom-0') &&
-    connectorSource.includes('ORG_CHART_SUBORDINATE_ARM_OFFSET') &&
-    !connectorSource.includes('-left-4 top-1/2'),
-  'right-indent arms should align to trunk vertical without overshooting left'
+  connectorSource.includes('ORG_CHART_SUBORDINATE_ARM_CHANNEL_WIDTH') &&
+    connectorSource.includes('OrgChartSpineTeeRow') &&
+    connectorSource.includes('OrgChartCenterSpine') &&
+    !connectorSource.includes('ORG_CHART_SUBORDINATE_ARM_OFFSET'),
+  'org chart connectors should use arm channels and ICS spine layout'
 )
 assert(
   orgChartRosterSource.includes('OrgChartRightIndentStack') &&
     !orgChartRosterSource.includes('OrgChartVerticalStack') &&
-    orgChartRosterSource.includes('ORG_CHART_CARD_TO_CHILDREN_GAP'),
-  'org chart roster should use right-indent stacks and consistent card-to-children spacing'
+    orgChartRosterSource.includes('ORG_CHART_CARD_TO_CHILDREN_GAP') &&
+    orgChartRosterSource.includes('IncidentCommanderSpine') &&
+    orgChartRosterSource.includes('OrgChartSpineTeeRow'),
+  'org chart roster should use spine hub and consistent spacing'
+)
+
+const icsStructureSource = readFileSync(
+  join(process.cwd(), 'src/features/roster/ics-org-chart-structure.ts'),
+  'utf8'
+)
+assert(
+  icsStructureSource.includes('ICS_COMMAND_STAFF_SPINE_LEFT') &&
+    icsStructureSource.includes('partitionCommandStaffForSpine'),
+  'ICS org chart should define command staff spine sides'
 )
 
 const layoutTokensSource = readFileSync(
@@ -573,9 +586,10 @@ const layoutTokensSource = readFileSync(
 )
 assert(
   layoutTokensSource.includes('ORG_CHART_CARD_TO_CHILDREN_GAP') &&
-    layoutTokensSource.includes('ORG_CHART_CONNECTOR_STEM_HEIGHT') &&
+    layoutTokensSource.includes('ORG_CHART_SUBORDINATE_ARM_CHANNEL_WIDTH') &&
+    layoutTokensSource.includes('ORG_CHART_CARD_LAYER_CLASS') &&
     layoutTokensSource.includes('orgChartCrossbarBarInsetClassName'),
-  'org chart layout tokens should centralize spacing and crossbar insets'
+  'org chart layout tokens should centralize spacing, arm channels, and card layers'
 )
 
 assert(

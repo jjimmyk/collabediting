@@ -62,6 +62,39 @@ export const ICS_ORG_CHART_COMMAND_STAFF_POSITIONS = [
   'Legal Officer',
 ] as const
 
+/** ICS 207 spine layout — command staff on left/right of the center spine. */
+export const ICS_COMMAND_STAFF_SPINE_LEFT = [
+  'Public Information Officer',
+  'Legal Officer',
+] as const
+
+export const ICS_COMMAND_STAFF_SPINE_RIGHT = [
+  'Liaison Officer',
+  'Safety Officer',
+] as const
+
+export function partitionCommandStaffForSpine(positions: string[]): {
+  left: string[]
+  right: string[]
+} {
+  const visible = new Set(positions)
+  const left: string[] = ICS_COMMAND_STAFF_SPINE_LEFT.filter((position) =>
+    visible.has(position)
+  )
+  const right: string[] = ICS_COMMAND_STAFF_SPINE_RIGHT.filter((position) =>
+    visible.has(position)
+  )
+  for (const position of positions) {
+    if (
+      !(ICS_COMMAND_STAFF_SPINE_LEFT as readonly string[]).includes(position) &&
+      !(ICS_COMMAND_STAFF_SPINE_RIGHT as readonly string[]).includes(position)
+    ) {
+      right.push(position)
+    }
+  }
+  return { left, right }
+}
+
 export const ICS_ORG_CHART_COMMAND_STAFF_BRANCH: Extract<OrgChartNode, { kind: 'group' }> = {
   kind: 'group',
   label: 'Command Staff',

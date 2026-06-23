@@ -9,20 +9,20 @@ export const ORG_CHART_CONNECTOR_STEM_HEIGHT = 'h-4'
 /** Vertical drop from a crossbar into each column. */
 export const ORG_CHART_CONNECTOR_DROP_HEIGHT = 'h-4'
 
-/** Width of the shared vertical trunk beside right-indented subordinates. */
-export const ORG_CHART_SUBORDINATE_TRUNK_WIDTH = 'w-4'
+/** Vertical trunk gutter beside right-indented subordinates. */
+export const ORG_CHART_SUBORDINATE_TRUNK_WIDTH = 'w-2'
 
-/** Horizontal connector arm from the trunk into each subordinate card row. */
-export const ORG_CHART_SUBORDINATE_ARM_WIDTH = 'w-4'
-
-/** Aligns arm left edge with the trunk vertical's left edge (matches line width). */
-export const ORG_CHART_SUBORDINATE_ARM_OFFSET = '-ml-0.5'
+/** Horizontal channel between trunk and card — arms span this, cards start after it. */
+export const ORG_CHART_SUBORDINATE_ARM_CHANNEL_WIDTH = 'w-6'
 
 /** Vertical gap between stacked subordinate rows (Food → Medical reference spacing). */
 export const ORG_CHART_SUBORDINATE_ROW_GAP = 'gap-2'
 
 /** Gap between a position card and its child subtree — matches subordinate row gap. */
 export const ORG_CHART_CARD_TO_CHILDREN_GAP = 'gap-2'
+
+/** Renders org chart cards above connector lines. */
+export const ORG_CHART_CARD_LAYER_CLASS = 'relative z-10 bg-background'
 
 export const ORG_CHART_POSITION_CARD_MIN_WIDTH = 'min-w-[10rem]'
 export const ORG_CHART_POSITION_CARD_MAX_WIDTH = 'max-w-[12rem]'

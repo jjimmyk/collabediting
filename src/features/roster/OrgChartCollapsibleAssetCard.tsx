@@ -4,7 +4,7 @@ import {
   orgChartColorClasses,
   type OrgChartColor,
 } from '@/features/roster/ics-org-chart-structure'
-import { ORG_CHART_ASSET_CARD_WIDTH } from '@/features/roster/org-chart-layout-tokens'
+import { ORG_CHART_ASSET_CARD_WIDTH, ORG_CHART_CARD_LAYER_CLASS } from '@/features/roster/org-chart-layout-tokens'
 import type { WorkspaceRosterMember } from '@/lib/workspace-types'
 import { cn } from '@/lib/utils'
 
@@ -39,6 +39,7 @@ export function OrgChartCollapsibleAssetCard({
     <button
       type="button"
       className={cn(
+        ORG_CHART_CARD_LAYER_CLASS,
         'block w-full min-w-0 text-left outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
         ORG_CHART_ASSET_CARD_WIDTH
       )}

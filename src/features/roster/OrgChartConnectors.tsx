@@ -7,8 +7,7 @@ import {
   ORG_CHART_CONNECTOR_STEM_HEIGHT,
   ORG_CHART_FORK_BRANCH_COLUMN_MIN_WIDTH,
   ORG_CHART_LOGISTICS_FORK_MIN_WIDTH,
-  ORG_CHART_SUBORDINATE_ARM_OFFSET,
-  ORG_CHART_SUBORDINATE_ARM_WIDTH,
+  ORG_CHART_SUBORDINATE_ARM_CHANNEL_WIDTH,
   ORG_CHART_SUBORDINATE_ROW_GAP,
   ORG_CHART_SUBORDINATE_TRUNK_WIDTH,
   orgChartCrossbarBarInsetClassName,
@@ -60,6 +59,85 @@ export function OrgChartInboundStem({
 /** Connects a parent card wrapper to its child subtree. */
 export function OrgChartParentChildLink({ children }: { children: ReactNode }) {
   return <OrgChartInboundStem>{children}</OrgChartInboundStem>
+}
+
+/** Segment of the center spine below Incident Commander. */
+export function OrgChartCenterSpine({
+  heightClassName = ORG_CHART_CONNECTOR_STEM_HEIGHT,
+}: {
+  heightClassName?: string
+}) {
+  return <OrgChartVerticalLine heightClassName={heightClassName} />
+}
+
+/**
+ * ICS 207 command-staff row — center spine with horizontal arms to left/right columns.
+ * Arms terminate at the arm channel edge; cards sit outside the channel.
+ */
+export function OrgChartSpineTeeRow({
+  left,
+  right,
+}: {
+  left: ReactNode[]
+  right: ReactNode[]
+}) {
+  if (left.length === 0 && right.length === 0) return null
+
+  return (
+    <div className="relative flex w-full min-w-0 flex-row items-stretch">
+      <div
+        className={cn(
+          'flex min-w-0 flex-1 flex-col justify-center',
+          ORG_CHART_SUBORDINATE_ROW_GAP,
+          'items-end'
+        )}
+      >
+        {left.map((node, index) => (
+          <div key={index} className="flex max-w-full flex-row items-center">
+            {node}
+            <div
+              className={cn(
+                'flex shrink-0 items-center',
+                ORG_CHART_SUBORDINATE_ARM_CHANNEL_WIDTH
+              )}
+            >
+              <OrgChartHorizontalLine className="w-full" />
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="relative mx-0 w-0.5 shrink-0 self-stretch" aria-hidden>
+        <div
+          className={cn(
+            'absolute inset-y-0 left-0',
+            ORG_CHART_CONNECTOR_LINE_WIDTH,
+            ORG_CHART_CONNECTOR_CLASS
+          )}
+        />
+      </div>
+      <div
+        className={cn(
+          'flex min-w-0 flex-1 flex-col justify-center',
+          ORG_CHART_SUBORDINATE_ROW_GAP,
+          'items-start'
+        )}
+      >
+        {right.map((node, index) => (
+          <div key={index} className="flex max-w-full flex-row items-center">
+            <div
+              className={cn(
+                'flex shrink-0 items-center',
+                ORG_CHART_SUBORDINATE_ARM_CHANNEL_WIDTH
+              )}
+            >
+              <OrgChartHorizontalLine className="w-full" />
+            </div>
+            {node}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
 }
 
 /** Shared horizontal crossbar with vertical drops into each column. */
@@ -120,10 +198,16 @@ export function OrgChartVerticalStack({ children }: { children: ReactNode[] }) {
 }
 
 /**
- * ICS-style subordinate layout: vertical trunk down from the superior, horizontal
- * arms to the right into each indented child card (Planning/Finance unit stacks, etc.).
+ * ICS-style subordinate layout: vertical trunk, arm channel, then card column.
+ * Horizontal arms never overlap card borders.
  */
-export function OrgChartRightIndentStack({ children }: { children: ReactNode[] }) {
+export function OrgChartRightIndentStack({
+  children,
+  connectFromParent = false,
+}: {
+  children: ReactNode[]
+  connectFromParent?: boolean
+}) {
   if (children.length === 0) return null
 
   return (
@@ -131,29 +215,34 @@ export function OrgChartRightIndentStack({ children }: { children: ReactNode[] }
       className="flex w-full min-w-0 flex-row items-stretch self-start"
       data-org-chart-layout="right-indent"
     >
-      <div
-        className={cn('relative shrink-0', ORG_CHART_SUBORDINATE_TRUNK_WIDTH)}
-        aria-hidden
-      >
+      <div className={cn('relative shrink-0', ORG_CHART_SUBORDINATE_TRUNK_WIDTH)} aria-hidden>
+        {connectFromParent ? (
+          <OrgChartVerticalLine
+            heightClassName={ORG_CHART_CONNECTOR_STEM_HEIGHT}
+            className="absolute left-1/2 top-0 -translate-x-1/2"
+          />
+        ) : null}
         <div
           className={cn(
-            'absolute right-0 top-0 bottom-0',
+            'absolute right-0',
             ORG_CHART_CONNECTOR_LINE_WIDTH,
-            ORG_CHART_CONNECTOR_CLASS
+            ORG_CHART_CONNECTOR_CLASS,
+            connectFromParent ? 'top-4 bottom-0' : 'inset-y-0'
           )}
         />
       </div>
-      <div className={cn('flex min-w-0 flex-1 flex-col', ORG_CHART_SUBORDINATE_ROW_GAP)}>
+      <div className={cn('flex min-w-0 flex-col', ORG_CHART_SUBORDINATE_ROW_GAP)}>
         {children.map((child, index) => (
-          <div key={index} className="relative flex min-w-0 items-center">
-            <OrgChartHorizontalLine
+          <div key={index} className="flex min-w-0 flex-row items-center">
+            <div
               className={cn(
-                'absolute left-0 top-1/2 -translate-y-1/2',
-                ORG_CHART_SUBORDINATE_ARM_OFFSET,
-                ORG_CHART_SUBORDINATE_ARM_WIDTH
+                'flex shrink-0 items-center',
+                ORG_CHART_SUBORDINATE_ARM_CHANNEL_WIDTH
               )}
-            />
-            <div className="min-w-0 flex-1">{child}</div>
+            >
+              <OrgChartHorizontalLine className="w-full" />
+            </div>
+            <div className="min-w-0 shrink-0">{child}</div>
           </div>
         ))}
       </div>

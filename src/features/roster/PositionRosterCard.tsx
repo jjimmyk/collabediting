@@ -32,6 +32,7 @@ import type { ResourceListItemData } from '@/features/resources/types'
 import type { PositionRosterAssetHandlers } from '@/features/roster/PositionRosterAssetSections'
 import type { WorkspacePositionMeta } from '@/features/roster/workspace-positions'
 import {
+  ORG_CHART_CARD_LAYER_CLASS,
   ORG_CHART_POSITION_CARD_MAX_WIDTH,
   ORG_CHART_POSITION_CARD_MIN_WIDTH,
 } from '@/features/roster/org-chart-layout-tokens'
@@ -225,6 +226,7 @@ export function PositionRosterCard({
           aria-expanded={orgModalOpen}
           onClick={() => setOrgModalOpen(true)}
           className={cn(
+            ORG_CHART_CARD_LAYER_CLASS,
             'flex min-w-0 flex-col items-stretch rounded-lg border p-0 text-left shadow-sm outline-none transition',
             'hover:ring-2 hover:ring-ring/40 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50',
             'w-full max-w-full min-w-0 overflow-hidden',
