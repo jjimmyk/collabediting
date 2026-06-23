@@ -11,6 +11,8 @@ export type Ics215ResourceColumn = {
   label: string
 }
 
+export type Ics215WorkAssignmentsLayoutMode = 'spreadsheet' | 'legacy'
+
 /** @deprecated Legacy per-row resource line — migrated to resourceValues on load */
 export type Ics215ResourceLine = {
   id: number
@@ -42,6 +44,8 @@ export type Ics215FormState = {
   operationalPeriodTimeTo: string
   resourceColumns: Ics215ResourceColumn[]
   workAssignments: Ics215WorkAssignmentRow[]
+  /** Workspace table layout; export always uses spreadsheet layout. */
+  workAssignmentsLayoutMode?: Ics215WorkAssignmentsLayoutMode
   totalResourcesRequired: string
   totalResourcesHaveOnHand: string
   totalResourcesNeedToOrder: string

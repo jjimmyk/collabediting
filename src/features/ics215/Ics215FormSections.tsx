@@ -9,6 +9,7 @@ import {
 import type { Ics204AssignedUnitOption } from '@/features/ics204/ics204-assigned-unit-options'
 import { ICS215_SECTION_LABELS } from '@/features/ics215/constants'
 import { Ics215WorkAssignmentsTable } from '@/features/ics215/Ics215WorkAssignmentsTable'
+import { Ics215WorkAssignmentsLayoutToggle } from '@/features/ics215/Ics215WorkAssignmentsLayoutToggle'
 import { Ics215Ics204WorkAssignmentsSyncTooltip } from '@/features/ics204/Ics215Ics204WorkAssignmentsSyncTooltip'
 import type { Ics215Ics204WorkSyncTooltipState } from '@/features/ics204/sync-ics215-work-assignments'
 import type { ResourceListItemData } from '@/features/resources/types'
@@ -18,12 +19,14 @@ import type {
   Ics215IncidentInfoDraft,
   Ics215SectionId,
   Ics215WorkAssignmentsDraft,
+  Ics215WorkAssignmentsLayoutMode,
 } from '@/features/ics215/types'
 import {
   extractIcs215IncidentInfoDraft,
   extractIcs215PreparedByDraft,
   extractIcs215WorkAssignmentsDraft,
   appendIcs215ResourceColumn,
+  normalizeIcs215WorkAssignmentsLayoutMode,
 } from '@/features/ics215/utils'
 import type { WorkAssignmentTargetOption } from '@/lib/work-assignment-target-options'
 import type { WorkspaceRosterMember } from '@/lib/workspace-types'
@@ -44,6 +47,7 @@ type Ics215FormSectionsProps = {
   autoFillHaveFromAssets?: boolean
   onAutoFillHaveFromAssetsChange?: (enabled: boolean) => void
   onHaveFillComplete?: (filledCount: number) => void
+  onWorkAssignmentsLayoutModeChange?: (mode: Ics215WorkAssignmentsLayoutMode) => void
   editingSections: Partial<Record<Ics215SectionId, boolean>>
   drafts: Ics215FormSectionDrafts
   onStartSectionEdit: (section: Ics215SectionId) => void
@@ -86,6 +90,7 @@ export function Ics215FormSections({
   autoFillHaveFromAssets = false,
   onAutoFillHaveFromAssetsChange,
   onHaveFillComplete,
+  onWorkAssignmentsLayoutModeChange,
 }: Ics215FormSectionsProps) {
   const incidentInfo =
     isSectionEditing(editingSections, 'incident-info') && drafts['incident-info']
@@ -197,7 +202,11 @@ export function Ics215FormSections({
 
       {renderSectionShell(
         'work-assignments',
-        <div className="min-w-0 w-full max-w-full">
+        <div className="min-w-0 w-full max-w-full space-y-2">
+          <Ics215WorkAssignmentsLayoutToggle
+            value={normalizeIcs215WorkAssignmentsLayoutMode(form.workAssignmentsLayoutMode)}
+            onChange={(mode) => onWorkAssignmentsLayoutModeChange?.(mode)}
+          />
           <Ics215WorkAssignmentsTable
             resourceColumns={workAssignmentsDraft.resourceColumns}
             workAssignments={workAssignmentsDraft.workAssignments}
@@ -206,6 +215,7 @@ export function Ics215FormSections({
             competencyOptions={competencyOptions}
             workspaceAssets={workspaceAssets}
             autoFillHaveFromAssets={autoFillHaveFromAssets}
+            layoutMode={normalizeIcs215WorkAssignmentsLayoutMode(form.workAssignmentsLayoutMode)}
             editing={isSectionEditing(editingSections, 'work-assignments')}
             onChange={(next) => onPatchDraft('work-assignments', next)}
             onHaveFillComplete={onHaveFillComplete}

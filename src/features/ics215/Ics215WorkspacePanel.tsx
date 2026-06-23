@@ -45,6 +45,7 @@ import type {
   Ics215FormState,
   Ics215SectionId,
   Ics215Version,
+  Ics215WorkAssignmentsLayoutMode,
 } from '@/features/ics215/types'
 import { cloneIcs215FormState, getIcs215FormForExport } from '@/features/ics215/utils'
 import { cn } from '@/lib/utils'
@@ -78,6 +79,7 @@ type Ics215WorkspacePanelProps = {
   autoFillHaveFromAssets?: boolean
   onAutoFillHaveFromAssetsChange?: (enabled: boolean) => void
   onHaveFillComplete?: (filledCount: number) => void
+  onWorkAssignmentsLayoutModeChange?: (mode: Ics215WorkAssignmentsLayoutMode) => void
   onAppendVersion: (
     form: Ics215FormState,
     signatures?: Ics201VersionSignature[],
@@ -116,6 +118,7 @@ export function Ics215WorkspacePanel({
   autoFillHaveFromAssets = false,
   onAutoFillHaveFromAssetsChange,
   onHaveFillComplete,
+  onWorkAssignmentsLayoutModeChange,
   onAppendVersion,
   onSignReview,
 }: Ics215WorkspacePanelProps) {
@@ -499,6 +502,7 @@ export function Ics215WorkspacePanel({
             autoFillHaveFromAssets={autoFillHaveFromAssets}
             onAutoFillHaveFromAssetsChange={onAutoFillHaveFromAssetsChange}
             onHaveFillComplete={onHaveFillComplete}
+            onWorkAssignmentsLayoutModeChange={onWorkAssignmentsLayoutModeChange}
           />
         </div>
 

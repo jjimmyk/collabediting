@@ -20,6 +20,7 @@ import type {
   Ics215VersionRow,
   Ics215WorkAssignmentRow,
   Ics215WorkAssignmentsDraft,
+  Ics215WorkAssignmentsLayoutMode,
 } from '@/features/ics215/types'
 
 type LegacyWorkAssignmentRow = Ics215WorkAssignmentRow & {
@@ -202,6 +203,12 @@ function normalizeWorkAssignmentRow(
   }
 }
 
+export function normalizeIcs215WorkAssignmentsLayoutMode(
+  mode: Ics215WorkAssignmentsLayoutMode | undefined
+): Ics215WorkAssignmentsLayoutMode {
+  return mode === 'legacy' ? 'legacy' : 'spreadsheet'
+}
+
 function parseNumericTotal(value: string): number {
   const parsed = Number.parseFloat(value.trim())
   return Number.isFinite(parsed) ? parsed : 0
@@ -288,6 +295,9 @@ export function normalizeIcs215FormState(form: Ics215FormState): Ics215FormState
     operationalPeriodTimeTo: String(form.operationalPeriodTimeTo ?? ''),
     resourceColumns,
     workAssignments,
+    workAssignmentsLayoutMode: normalizeIcs215WorkAssignmentsLayoutMode(
+      form.workAssignmentsLayoutMode
+    ),
     ...syncedTotals,
     preparedByName: String(form.preparedByName ?? ''),
     preparedByPositionTitle: String(form.preparedByPositionTitle ?? ''),

@@ -362,6 +362,7 @@ import type {
   Ics215FormState,
   Ics215SectionId,
   Ics215Version,
+  Ics215WorkAssignmentsLayoutMode,
 } from '@/features/ics215/types'
 import {
   applyIcs215SectionDraft,
@@ -23366,6 +23367,20 @@ function App() {
       )
     })
   }
+  const handleIcs215WorkAssignmentsLayoutModeChange = (
+    mode: Ics215WorkAssignmentsLayoutMode
+  ) => {
+    if (!ics215Form) return
+    const nextForm = cloneIcs215FormState({
+      ...ics215Form,
+      workAssignmentsLayoutMode: mode,
+    })
+    setIcs215Form(nextForm)
+    const latestVersion = ics215Versions[ics215Versions.length - 1]
+    if (latestVersion && latestVersion.signatures.length === 0) {
+      handleIcs215SaveDraft(nextForm, latestVersion)
+    }
+  }
   const handleIcs215AppendVersion = (
     form: Ics215FormState,
     signatures: Ics201VersionSignature[] = [],
@@ -35274,6 +35289,7 @@ function App() {
                     autoFillHaveFromAssets={autoFillHaveFromWorkspaceAssets}
                     onAutoFillHaveFromAssetsChange={setAutoFillHaveFromWorkspaceAssets}
                     onHaveFillComplete={handleHaveFillComplete}
+                    onWorkAssignmentsLayoutModeChange={handleIcs215WorkAssignmentsLayoutModeChange}
                     onAppendVersion={handleIcs215AppendVersion}
                     onSignReview={handleIcs215SignReview}
                   />
