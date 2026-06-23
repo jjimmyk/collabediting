@@ -11,6 +11,7 @@ import type {
 } from '@/features/ics215/export-layout'
 import type { Ics215ResourceColumn, Ics215ResourceValue } from '@/features/ics215/types'
 import { ICS215_LEGACY_ASSIGNMENT_ROWS_PER_BLOCK, ICS215_LEGACY_TOTAL_FOOTER_ROWS } from '@/features/ics215/export-legacy-table'
+import { ICS215_PREPARED_BY_FOOTER_HEIGHT_PT } from '@/features/ics215/export-legacy-geometry'
 import {
   ICS215_EXPORT_PAGE_METRICS as PAGE,
   ics215DocxPageSegmentCapacityPt,
@@ -37,6 +38,7 @@ export type Ics215WorkAssignmentsTableSegment = {
   continued: boolean
   showTableHeader: boolean
   showResourceTotalsFooter: boolean
+  showPreparedByFooter: boolean
 }
 
 export type Ics215PhysicalPageSegment = Ics215WorkAssignmentsTableSegment
@@ -168,6 +170,9 @@ function estimateWorkAssignmentsTableSegmentHeight(segment: Ics215WorkAssignment
   if (segment.showResourceTotalsFooter) {
     height += PAGE.tableRowHeightPt * ICS215_LEGACY_TOTAL_FOOTER_ROWS
   }
+  if (segment.showPreparedByFooter) {
+    height += ICS215_PREPARED_BY_FOOTER_HEIGHT_PT
+  }
   return height
 }
 
@@ -220,6 +225,7 @@ function paginateWorkAssignmentsTableBlock(
           continued: isHorizontalContinued || isRowContinued,
           showTableHeader,
           showResourceTotalsFooter: isLastColumnSlice && isLastRowChunk,
+          showPreparedByFooter: isLastColumnSlice && isLastRowChunk,
         }
         if (canFitSegment(draft, candidate)) {
           addSegmentToDraft(draft, candidate)
@@ -242,6 +248,7 @@ function paginateWorkAssignmentsTableBlock(
           continued: isHorizontalContinued || isRowContinued,
           showTableHeader,
           showResourceTotalsFooter: isLastColumnSlice && isLastRowChunk,
+          showPreparedByFooter: isLastColumnSlice && isLastRowChunk,
         }
         addSegmentToDraft(draft, forced)
         rowIndex += take
@@ -265,6 +272,7 @@ function paginateWorkAssignmentsTableBlock(
         continued: sliceIndex > 0,
         showTableHeader: sliceIndex === 0,
         showResourceTotalsFooter: isLastColumnSlice,
+        showPreparedByFooter: isLastColumnSlice,
       }
       if (!canFitSegment(draft, segment)) {
         startNewDraft()

@@ -40,7 +40,8 @@ const verticalHeaderClass =
 function renderWorkAssignmentsTable(
   segment: Ics215WorkAssignmentsTableSegment,
   index: number,
-  isFirstInStack: boolean
+  isFirstInStack: boolean,
+  preparedByFooter?: Ics215PreparedByFooter
 ) {
   const resourceCount = segment.resourceColumns.length
   const gridTemplate =
@@ -91,7 +92,7 @@ function renderWorkAssignmentsTable(
                   ICS215_LEGACY_RHN_FIELDS.map((field, rhnIndex) => (
                     <tr
                       key={`ics215-row-${rowIndex}-${field}`}
-                      className="border-b border-dashed border-zinc-400 last:border-solid last:border-zinc-900"
+                      className="border-b border-solid border-zinc-900"
                     >
                       {rhnIndex === 0 ? (
                         <td
@@ -190,26 +191,57 @@ function renderWorkAssignmentsTable(
             ))}
           </div>
         ) : null}
+        {segment.showPreparedByFooter && preparedByFooter ? (
+          <div
+            className="grid gap-0 border border-t-0 border-zinc-900 text-[9px]"
+            style={{ gridTemplateColumns: gridTemplate }}
+          >
+            <span
+              className="border-r border-zinc-900 p-1"
+              style={{ gridColumn: `span ${4 + resourceCount}` }}
+            />
+            <span
+              className="col-span-4 border-zinc-900 p-2"
+              style={{ gridColumn: `span 4` }}
+            >
+              <p className="font-semibold">{preparedByFooter.label}</p>
+              <p className="font-semibold">Name:</p>
+              <p className="whitespace-pre-wrap">{preparedByFooter.name.trim() || ' '}</p>
+              <p className="font-semibold">Position/Title:</p>
+              <p className="whitespace-pre-wrap">{preparedByFooter.positionTitle.trim() || ' '}</p>
+              <p className="font-semibold">Date/Time:</p>
+              <p className="whitespace-pre-wrap">{preparedByFooter.dateTime.trim() || ' '}</p>
+            </span>
+          </div>
+        ) : null}
       </div>
     </div>
   )
 }
 
-function renderPreparedByFooter(footer: Ics215PreparedByFooter) {
+function renderHeaderInfoGrid(page: Ics215PhysicalPage) {
   return (
-    <div className="mt-4 grid grid-cols-3 gap-2 border border-zinc-900 text-[9px]">
-      <div className="border-r border-zinc-900 p-2">
-        <p className="font-semibold">{footer.label}</p>
-        <p className="mt-1 font-semibold">Name:</p>
-        <p className="whitespace-pre-wrap">{footer.name.trim() || ' '}</p>
+    <div className="mb-0 border border-b-0 border-zinc-900 text-[10px]">
+      <div className="grid grid-cols-[2fr_1fr_1fr] border-b border-zinc-900">
+        <div className="border-r border-zinc-900 p-2">
+          <p className="font-semibold">{page.headerCells[0].label}</p>
+          <p className="whitespace-pre-wrap">{page.headerCells[0].value.trim() || ' '}</p>
+        </div>
+        <div className="border-r border-zinc-900 p-2">
+          <p className="font-semibold">{page.headerCells[2].label}</p>
+          <p className="whitespace-pre-wrap">{page.headerCells[2].value.trim() || ' '}</p>
+        </div>
+        <div className="p-2">
+          <p className="font-semibold">4. Operational Period (Date/Time):</p>
+          <p className="whitespace-pre-wrap">{page.operationalPeriod.trim() || ' '}</p>
+        </div>
       </div>
-      <div className="border-r border-zinc-900 p-2">
-        <p className="font-semibold">Position/Title:</p>
-        <p className="whitespace-pre-wrap">{footer.positionTitle.trim() || ' '}</p>
-      </div>
-      <div className="p-2">
-        <p className="font-semibold">Date/Time:</p>
-        <p className="whitespace-pre-wrap">{footer.dateTime.trim() || ' '}</p>
+      <div className="grid grid-cols-[2fr_1fr_1fr]">
+        <div className="border-r border-zinc-900 p-2">
+          <p className="font-semibold">{page.headerCells[1].label}</p>
+          <p className="whitespace-pre-wrap">{page.headerCells[1].value.trim() || ' '}</p>
+        </div>
+        <div className="col-span-2 p-2" />
       </div>
     </div>
   )
@@ -235,24 +267,12 @@ function renderPreviewPage(page: Ics215PhysicalPage) {
           </p>
         ))}
       </div>
-      <div className="mb-3 grid grid-cols-3 gap-2 border border-zinc-900 text-[10px]">
-        {page.headerCells.map((cell) => (
-          <div key={cell.label} className="border-r border-zinc-900 p-2 last:border-r-0">
-            <p className="font-semibold">{cell.label}</p>
-            <p className="whitespace-pre-wrap">{cell.value.trim() || ' '}</p>
-          </div>
-        ))}
-      </div>
-      <div className="mb-4 border border-zinc-900 p-2 text-[10px]">
-        <p className="font-semibold">4. Operational Period (Date/Time):</p>
-        <p className="whitespace-pre-wrap">{page.operationalPeriod.trim() || ' '}</p>
-      </div>
+      {renderHeaderInfoGrid(page)}
       <div className={ICS215_PREVIEW_STACK_CLASS}>
         {page.segments.map((segment, index) =>
-          renderWorkAssignmentsTable(segment, index, index === 0)
+          renderWorkAssignmentsTable(segment, index, index === 0, page.preparedByFooter)
         )}
       </div>
-      {renderPreparedByFooter(page.preparedByFooter)}
       <div className="mt-3 flex items-center justify-between text-[9px] text-zinc-600">
         <span>{page.footerLeft}</span>
         <span>

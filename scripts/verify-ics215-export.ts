@@ -99,11 +99,18 @@ assert(
   'Header should include ICS-215 title'
 )
 assert(
-  buildIcs215DocxFooterXml(emptyPages[0].preparedByFooter, emptyPages[0].footerLeft).includes(
+  buildIcs215DocxHeaderXml(emptyPages[0].headerCells, emptyPages[0].operationalPeriod).includes(
+    '2. Incident Location:'
+  ),
+  'Header should use two-row boxes 1–4 layout'
+)
+assert(
+  !buildIcs215DocxFooterXml(emptyPages[0].preparedByFooter, emptyPages[0].footerLeft).includes(
     '15. Prepared By:'
   ),
-  'Footer should include prepared-by box'
+  'Word footer should not include prepared-by box'
 )
+assert(documentXml.includes('15. Prepared By:'), 'Document body should include box 15')
 assert(
   buildIcs215DocxDocumentRelsXml(emptyPages.length).includes('footer1.xml'),
   'Document rels should include footer parts'
@@ -114,6 +121,10 @@ const lastSegment = lastPage.segments[lastPage.segments.length - 1]
 assert(
   lastSegment.showResourceTotalsFooter === true,
   'Final segment should show legacy resource totals footer'
+)
+assert(
+  lastSegment.showPreparedByFooter === true,
+  'Final segment should show inline prepared-by box 15'
 )
 assert(
   ics215LegacyTotalColCount(lastSegment.resourceColumns.length) ===

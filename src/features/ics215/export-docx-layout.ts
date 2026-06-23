@@ -22,6 +22,7 @@ import {
   ics215LegacyRhnCol,
   legacyResourceCellValue,
 } from '@/features/ics215/export-legacy-table'
+import { buildIcs215HeaderInfoColumnWidths } from '@/features/ics215/export-legacy-geometry'
 import type { Ics215HeaderCell, Ics215PreparedByFooter } from '@/features/ics215/export-layout'
 import type {
   Ics215PhysicalPage,
@@ -195,60 +196,67 @@ function renderHeaderContentDocx(
     })
   ).join('')
 
-  const col = ICS215_DOCX_CONTENT_WIDTH / 3
-  const cells = headerCells
-    .map((cell) =>
-      docxCell(
-        col,
-        docxLabelParagraph(cell.label) + docxMultilineParagraphs(cell.value || ' ', 18),
-        { mar: 'tight' }
-      )
-    )
-    .join('')
+  const colWidths = buildIcs215HeaderInfoColumnWidths(ICS215_DOCX_CONTENT_WIDTH)
+  const incidentName = headerCells[0]
+  const incidentLocation = headerCells[1]
+  const dateTimePrepared = headerCells[2]
 
-  const operationalPeriodRow = docxCantSplitRow(
+  const row1 =
     docxCell(
-      ICS215_DOCX_CONTENT_WIDTH,
+      colWidths[0],
+      docxLabelParagraph(incidentName.label) + docxMultilineParagraphs(incidentName.value || ' ', 18),
+      { mar: 'tight' }
+    ) +
+    docxCell(
+      colWidths[1],
+      docxLabelParagraph(dateTimePrepared.label) +
+        docxMultilineParagraphs(dateTimePrepared.value || ' ', 18),
+      { mar: 'tight' }
+    ) +
+    docxCell(
+      colWidths[2],
       docxLabelParagraph('4. Operational Period (Date/Time):') +
         docxMultilineParagraphs(operationalPeriod || ' ', 18),
       { mar: 'tight' }
     )
-  )
 
-  return (
-    title +
-    docxSectionSpacer() +
-    docxFixedTable([col, col, col], `<w:tr>${cells}</w:tr>`) +
-    docxSectionSpacer() +
-    docxFixedTable([ICS215_DOCX_CONTENT_WIDTH], operationalPeriodRow) +
-    docxSectionSpacer()
-  )
+  const row2 =
+    docxCell(
+      colWidths[0],
+      docxLabelParagraph(incidentLocation.label) +
+        docxMultilineParagraphs(incidentLocation.value || ' ', 18),
+      { mar: 'tight' }
+    ) +
+    docxCell(colWidths[1] + colWidths[2], docxParagraph(' ', { size: 10 }), { gridSpan: 2 })
+
+  return title + docxFixedTable(colWidths, docxCantSplitRow(row1) + docxCantSplitRow(row2))
 }
 
 function renderPreparedByFooterTableDocx(footer: Ics215PreparedByFooter): string {
-  const col = ICS215_DOCX_CONTENT_WIDTH / 3
-  const cols = [col, col, col]
-  const row =
-    `<w:tr>` +
-    docxCell(
-      col,
-      docxLabelParagraph(footer.label) +
-        docxLabelParagraph('Name:') +
-        docxMultilineParagraphs(footer.name, 16),
-      { mar: 'tight' }
-    ) +
-    docxCell(
-      col,
-      docxLabelParagraph('Position/Title:') + docxMultilineParagraphs(footer.positionTitle, 16),
-      { mar: 'tight' }
-    ) +
-    docxCell(
-      col,
-      docxLabelParagraph('Date/Time:') + docxMultilineParagraphs(footer.dateTime, 16),
-      { mar: 'tight' }
-    ) +
-    `</w:tr>`
-  return docxSectionSpacer() + docxFixedTable(cols, row) + docxSectionSpacer()
+  return docxParagraph(' ', { size: 4, after: 0 })
+}
+
+function renderPreparedByInlineRowDocx(
+  cols: number[],
+  overflowStart: number,
+  footer: Ics215PreparedByFooter
+): string {
+  const overflowWidth = cols.slice(overflowStart).reduce((sum, width) => sum + width, 0)
+  const leftWidth = cols.slice(0, overflowStart).reduce((sum, width) => sum + width, 0)
+  return docxCantSplitRow(
+    docxCell(leftWidth, docxParagraph(' ', { size: 12 }), { gridSpan: overflowStart }) +
+      docxCell(
+        overflowWidth,
+        docxLabelParagraph(footer.label) +
+          docxLabelParagraph('Name:') +
+          docxMultilineParagraphs(footer.name, 16) +
+          docxLabelParagraph('Position/Title:') +
+          docxMultilineParagraphs(footer.positionTitle, 16) +
+          docxLabelParagraph('Date/Time:') +
+          docxMultilineParagraphs(footer.dateTime, 16),
+        { gridSpan: 4, mar: 'tight' }
+      )
+  )
 }
 
 function renderIcsExpirationLineDocx(footerLeft: string): string {
@@ -259,7 +267,10 @@ function renderIcsExpirationLineDocx(footerLeft: string): string {
   )
 }
 
-function renderWorkAssignmentsTableDocx(segment: Ics215WorkAssignmentsTableSegment): string {
+function renderWorkAssignmentsTableDocx(
+  segment: Ics215WorkAssignmentsTableSegment,
+  preparedByFooter?: Ics215PreparedByFooter
+): string {
   const cols = buildIcs215LegacyTableColumnWidths(segment.resourceColumns)
   const resourceCount = segment.resourceColumns.length
   const kindsCol = ics215LegacyKindsCol()
@@ -410,6 +421,10 @@ function renderWorkAssignmentsTableDocx(segment: Ics215WorkAssignmentsTableSegme
     })
   }
 
+  if (segment.showPreparedByFooter && preparedByFooter) {
+    footerRows += renderPreparedByInlineRowDocx(cols, overflowStart, preparedByFooter)
+  }
+
   const innerTable = docxFixedTable(cols, headerRows + bodyRows + footerRows)
   if (segment.label.includes('(Continued)')) {
     return docxLabelParagraph(segment.label) + innerTable
@@ -418,7 +433,9 @@ function renderWorkAssignmentsTableDocx(segment: Ics215WorkAssignmentsTableSegme
 }
 
 function renderPhysicalPageBodyDocx(page: Ics215PhysicalPage): string {
-  return page.segments.map(renderWorkAssignmentsTableDocx).join('')
+  return page.segments
+    .map((segment) => renderWorkAssignmentsTableDocx(segment, page.preparedByFooter))
+    .join('')
 }
 
 function buildSectionPropertiesXml(footerRelationshipId: string, nextPage: boolean): string {
@@ -519,8 +536,8 @@ export function assertIcs215DocxLayoutConsistency(documentXml: string): void {
   if (documentXml.includes('OPERATIONAL PLANNING WORKSHEET (ICS 215-CG)')) {
     throw new Error('ICS-215 DOCX body should not duplicate header title content.')
   }
-  if (documentXml.includes('15. Prepared By:')) {
-    throw new Error('ICS-215 prepared-by footer must render in Word footer parts, not document body.')
+  if (!documentXml.includes('15. Prepared By:')) {
+    throw new Error('ICS-215 prepared-by must render in document body.')
   }
   if (!documentXml.includes('<w:cantSplit/>')) {
     throw new Error('ICS-215 DOCX export missing cantSplit row guards on section tables.')

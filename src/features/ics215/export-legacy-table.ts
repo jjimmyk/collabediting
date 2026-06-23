@@ -67,16 +67,12 @@ export function legacyResourceCellValue(
   return rowValues[columnId]?.[field]?.trim() || ' '
 }
 
-/** Characters ordered bottom-to-top for vertical column headers (ICS 215-CG paper form). */
-export function legacyVerticalHeaderChars(text: string): string[] {
-  return text.trim().split('')
-}
-
 export function estimateLegacyVerticalHeaderHeight(
   text: string,
   fontSize: number,
   minHeight = 44
 ): number {
-  const charCount = Math.max(text.trim().length, 1)
-  return Math.max(minHeight, charCount * (fontSize + 1.5) + 8)
+  const trimmed = text.trim()
+  const approxWidth = trimmed.length * fontSize * 0.53
+  return Math.max(minHeight, approxWidth + 10)
 }

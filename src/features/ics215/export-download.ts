@@ -8,9 +8,7 @@ import {
   buildIcs215DocxXml,
   ICS215_PDF_CONTENT_WIDTH,
   ICS215_PDF_PAGE,
-  ICS215_PDF_PREPARED_BY_FOOTER_HEIGHT_PT,
   ICS215_PDF_ICS_LINE_Y_PT,
-  ics215PdfPreparedByFooterTopY,
 } from '@/features/ics215/export-docx-layout'
 import {
   assertIcs215PaginationInvariants,
@@ -30,8 +28,14 @@ import {
   ics215LegacyResourceStartCol,
   ics215LegacyRhnCol,
   legacyResourceCellValue,
-  legacyVerticalHeaderChars,
 } from '@/features/ics215/export-legacy-table'
+import {
+  buildIcs215HeaderInfoColumnWidths,
+  ICS215_PREPARED_BY_FOOTER_HEIGHT_PT,
+  legacyResourceZoneLeftX,
+  legacyResourceZoneRightX,
+  type Ics215LegacyBorderAfter,
+} from '@/features/ics215/export-legacy-geometry'
 import { ICS215_BOX_STACK } from '@/features/ics215/export-box-stack'
 import type { Ics215ResourceColumn } from '@/features/ics215/types'
 
@@ -396,6 +400,7 @@ function drawPdfTable(
 type PdfTableCell = {
   col: number
   colSpan?: number
+  rowSpan?: number
   text: string
   bold?: boolean
   center?: boolean
@@ -409,8 +414,33 @@ type PdfTableCell = {
 type PdfTableRow = {
   height: number
   cells: PdfTableCell[]
-  /** When true, omit the horizontal rule below this row (legacy REQ/HAVE/NEED groups). */
-  suppressBorderAfter?: boolean
+  borderAfter?: Ics215LegacyBorderAfter
+}
+
+type DrawPdfTableOptions = {
+  drawTop?: boolean
+  resourceCount?: number
+}
+
+function pdfRotatedTextOps(
+  text: string,
+  centerX: number,
+  centerY: number,
+  fontSize: number,
+  bold: boolean
+): string {
+  const sanitized = sanitizeForPdf(text.trim() || ' ')
+  const font = bold ? '/F2' : '/F1'
+  const textWidth = estimatePdfTextWidth(sanitized, fontSize, bold)
+  return (
+    'q\n' +
+    `1 0 0 1 ${centerX.toFixed(2)} ${centerY.toFixed(2)} cm\n` +
+    `0 1 -1 0 0 0 cm\n` +
+    `BT\n${font} ${fontSize} Tf\n` +
+    `${(-textWidth / 2).toFixed(2)} ${(-fontSize * 0.35).toFixed(2)} Td\n` +
+    `(${escapePdfString(sanitized)}) Tj\nET\n` +
+    'Q\n'
+  )
 }
 
 function pdfCellTextLines(
@@ -464,31 +494,12 @@ function pdfPlaceCellTextLines(
   })
 }
 
-function pdfPlaceVerticalCellText(
-  text: string,
-  rowTop: number,
-  rowHeight: number,
-  cellX: number,
-  cellWidth: number,
-  fontSize: number,
-  bold: boolean
-): PdfLine[] {
-  const chars = legacyVerticalHeaderChars(text)
-  const charStep = fontSize + 1.5
-  const blockHeight = chars.length * charStep
-  const bottomY = rowTop - rowHeight + (rowHeight - blockHeight) / 2 + fontSize * 0.2
-  return chars.map((char, index) => {
-    const textWidth = estimatePdfTextWidth(char, fontSize, bold)
-    const x = cellX + (cellWidth - textWidth) / 2
-    return {
-      text: char,
-      font: bold ? 'F2' : 'F1',
-      size: fontSize,
-      x,
-      y: bottomY + index * charStep,
-      bold,
-    }
-  })
+function rowSpanBlockHeight(rows: PdfTableRow[], rowIndex: number, rowSpan: number): number {
+  let height = 0
+  for (let i = 0; i < rowSpan && rowIndex + i < rows.length; i += 1) {
+    height += rows[rowIndex + i].height
+  }
+  return height
 }
 
 function drawPdfTableWithSpans(
@@ -496,12 +507,20 @@ function drawPdfTableWithSpans(
   topY: number,
   tableWidth: number,
   columnWidths: number[],
-  rows: PdfTableRow[]
+  rows: PdfTableRow[],
+  options: DrawPdfTableOptions = {}
 ): { ops: string; lines: PdfLine[]; height: number } {
+  const drawTop = options.drawTop ?? true
+  const resourceCount = options.resourceCount ?? 0
   const totalHeight = rows.reduce((sum, row) => sum + row.height, 0)
   const bottomY = topY - totalHeight
   let ops = '0.75 w\n'
-  ops += `${leftX.toFixed(2)} ${bottomY.toFixed(2)} ${tableWidth.toFixed(2)} ${totalHeight.toFixed(2)} re S\n`
+  if (drawTop) {
+    ops += `${leftX.toFixed(2)} ${topY.toFixed(2)} m ${(leftX + tableWidth).toFixed(2)} ${topY.toFixed(2)} l S\n`
+  }
+  ops += `${leftX.toFixed(2)} ${bottomY.toFixed(2)} m ${(leftX + tableWidth).toFixed(2)} ${bottomY.toFixed(2)} l S\n`
+  ops += `${leftX.toFixed(2)} ${bottomY.toFixed(2)} m ${leftX.toFixed(2)} ${topY.toFixed(2)} l S\n`
+  ops += `${(leftX + tableWidth).toFixed(2)} ${bottomY.toFixed(2)} m ${(leftX + tableWidth).toFixed(2)} ${topY.toFixed(2)} l S\n`
 
   let xOffset = leftX
   for (let col = 1; col < columnWidths.length; col += 1) {
@@ -509,19 +528,29 @@ function drawPdfTableWithSpans(
     ops += `${xOffset.toFixed(2)} ${bottomY.toFixed(2)} m ${xOffset.toFixed(2)} ${topY.toFixed(2)} l S\n`
   }
 
+  const zoneLeft = legacyResourceZoneLeftX(columnWidths, leftX)
+  const zoneRight = legacyResourceZoneRightX(columnWidths, leftX, resourceCount)
+
   let rowTop = topY
-  for (let rowIndex = 0; rowIndex < rows.length - 1; rowIndex += 1) {
-    rowTop -= rows[rowIndex].height
-    if (!rows[rowIndex].suppressBorderAfter) {
+  for (let rowIndex = 0; rowIndex < rows.length; rowIndex += 1) {
+    const row = rows[rowIndex]
+    rowTop -= row.height
+    if (rowIndex === rows.length - 1) break
+    const borderAfter = row.borderAfter ?? 'none'
+    if (borderAfter === 'full') {
       ops += `${leftX.toFixed(2)} ${rowTop.toFixed(2)} m ${(leftX + tableWidth).toFixed(2)} ${rowTop.toFixed(2)} l S\n`
+    } else if (borderAfter === 'resource-zone' && resourceCount >= 0) {
+      ops += `${zoneLeft.toFixed(2)} ${rowTop.toFixed(2)} m ${zoneRight.toFixed(2)} ${rowTop.toFixed(2)} l S\n`
     }
   }
 
   const lines: PdfLine[] = []
   rowTop = topY
-  for (const row of rows) {
+  for (let rowIndex = 0; rowIndex < rows.length; rowIndex += 1) {
+    const row = rows[rowIndex]
     for (const cell of row.cells) {
       const colSpan = cell.colSpan ?? 1
+      const rowSpan = cell.rowSpan ?? 1
       let cellX = leftX
       for (let i = 0; i < cell.col; i += 1) {
         cellX += columnWidths[i]
@@ -533,25 +562,19 @@ function drawPdfTableWithSpans(
       const fontSize = cell.fontSize ?? 7
       const bold = cell.bold ?? false
       const vAlign = cell.vAlign ?? (cell.center ? 'middle' : 'top')
+      const cellHeight = rowSpan > 1 ? rowSpanBlockHeight(rows, rowIndex, rowSpan) : row.height
+      const cellTop = rowTop
+      const cellCenterY = cellTop - cellHeight / 2
+
       if (cell.vertical) {
-        lines.push(
-          ...pdfPlaceVerticalCellText(
-            cell.text,
-            rowTop,
-            row.height,
-            cellX,
-            cellWidth,
-            fontSize,
-            bold
-          )
-        )
+        ops += pdfRotatedTextOps(cell.text, cellX + cellWidth / 2, cellCenterY, fontSize, bold)
       } else {
-        const textLines = pdfCellTextLines(cell, cellWidth, fontSize, bold)
+        const textLines = pdfCellTextLines({ ...cell, maxLines: cell.maxLines }, cellWidth, fontSize, bold)
         lines.push(
           ...pdfPlaceCellTextLines(
             textLines,
-            rowTop,
-            row.height,
+            cellTop,
+            cellHeight,
             cellX,
             cellWidth,
             fontSize,
@@ -640,7 +663,8 @@ function estimateLegacyAssignmentBlockHeight(
 
 function buildWorkAssignmentsTablePdfRows(
   segment: Ics215WorkAssignmentsTableSegment,
-  columnWidths: number[]
+  columnWidths: number[],
+  preparedByFooter?: Ics215PreparedByFooter
 ): PdfTableRow[] {
   const resourceCount = segment.resourceColumns.length
   const kindsCol = ics215LegacyKindsCol()
@@ -713,7 +737,7 @@ function buildWorkAssignmentsTablePdfRows(
         vAlign: 'middle',
       }
     )
-    rows.push({ height: headerHeight, cells: headerCells })
+    rows.push({ height: headerHeight, cells: headerCells, borderAfter: 'full' })
   }
 
   const bodyRows = segment.rows.length === 0 ? [null] : segment.rows
@@ -723,7 +747,7 @@ function buildWorkAssignmentsTablePdfRows(
       for (let col = 0; col < overflowStart + 4; col += 1) {
         emptyCells.push({ col, text: ' ' })
       }
-      rows.push({ height: 36, cells: emptyCells })
+      rows.push({ height: 36, cells: emptyCells, borderAfter: 'full' })
       continue
     }
 
@@ -733,31 +757,39 @@ function buildWorkAssignmentsTablePdfRows(
     ICS215_LEGACY_RHN_FIELDS.forEach((field, rhnIndex) => {
       const isFirst = rhnIndex === 0
       const isLast = rhnIndex === ICS215_LEGACY_RHN_FIELDS.length - 1
-      const cells: PdfTableCell[] = [
-        {
-          col: 0,
-          text: isFirst ? row.assignee || ' ' : ' ',
-          fontSize: 6.5,
-          vAlign: 'top',
-          maxLines: isFirst ? 6 : 1,
-        },
-        {
-          col: 1,
-          text: isFirst ? row.workAssignment || ' ' : ' ',
-          fontSize: 6.5,
-          vAlign: 'top',
-          maxLines: isFirst ? 8 : 1,
-        },
-        { col: kindsCol, text: ' ', fontSize: 6.5 },
-        {
-          col: rhnCol,
-          text: ICS215_LEGACY_RHN_LABELS[rhnIndex],
-          bold: true,
-          right: true,
-          fontSize: 6,
-          vAlign: 'middle',
-        },
-      ]
+      const cells: PdfTableCell[] = []
+
+      if (isFirst) {
+        cells.push(
+          {
+            col: 0,
+            rowSpan: ICS215_LEGACY_RHN_FIELDS.length,
+            text: row.assignee || ' ',
+            fontSize: 6.5,
+            vAlign: 'top',
+            maxLines: 6,
+          },
+          {
+            col: 1,
+            rowSpan: ICS215_LEGACY_RHN_FIELDS.length,
+            text: row.workAssignment || ' ',
+            fontSize: 6.5,
+            vAlign: 'top',
+            maxLines: 8,
+          },
+          { col: kindsCol, rowSpan: ICS215_LEGACY_RHN_FIELDS.length, text: ' ', fontSize: 6.5 }
+        )
+      }
+
+      cells.push({
+        col: rhnCol,
+        text: ICS215_LEGACY_RHN_LABELS[rhnIndex],
+        bold: true,
+        right: true,
+        fontSize: 6,
+        vAlign: 'middle',
+      })
+
       segment.resourceColumns.forEach((column, index) => {
         cells.push({
           col: resourceStart + index,
@@ -767,47 +799,55 @@ function buildWorkAssignmentsTablePdfRows(
           vAlign: 'middle',
         })
       })
-      cells.push(
-        {
-          col: overflowStart,
-          text: isFirst ? row.overheadPositions || ' ' : ' ',
-          fontSize: 6.5,
-          vAlign: 'top',
-          maxLines: isFirst ? 4 : 1,
-        },
-        {
-          col: overflowStart + 1,
-          text: isFirst ? row.specialEquipmentSupplies || ' ' : ' ',
-          fontSize: 6.5,
-          vAlign: 'top',
-          maxLines: isFirst ? 4 : 1,
-        },
-        {
-          col: overflowStart + 2,
-          text: isFirst ? row.reportingLocation || ' ' : ' ',
-          fontSize: 6.5,
-          vAlign: 'top',
-          maxLines: isFirst ? 3 : 1,
-        },
-        {
-          col: overflowStart + 3,
-          text: isFirst ? row.requestedArrivalTime || ' ' : ' ',
-          fontSize: 6.5,
-          vAlign: 'middle',
-          maxLines: isFirst ? 2 : 1,
-        }
-      )
+
+      if (isFirst) {
+        cells.push(
+          {
+            col: overflowStart,
+            rowSpan: ICS215_LEGACY_RHN_FIELDS.length,
+            text: row.overheadPositions || ' ',
+            fontSize: 6.5,
+            vAlign: 'top',
+            maxLines: 4,
+          },
+          {
+            col: overflowStart + 1,
+            rowSpan: ICS215_LEGACY_RHN_FIELDS.length,
+            text: row.specialEquipmentSupplies || ' ',
+            fontSize: 6.5,
+            vAlign: 'top',
+            maxLines: 4,
+          },
+          {
+            col: overflowStart + 2,
+            rowSpan: ICS215_LEGACY_RHN_FIELDS.length,
+            text: row.reportingLocation || ' ',
+            fontSize: 6.5,
+            vAlign: 'top',
+            maxLines: 3,
+          },
+          {
+            col: overflowStart + 3,
+            rowSpan: ICS215_LEGACY_RHN_FIELDS.length,
+            text: row.requestedArrivalTime || ' ',
+            fontSize: 6.5,
+            vAlign: 'middle',
+            maxLines: 2,
+          }
+        )
+      }
+
       rows.push({
         height: subRowHeight,
         cells,
-        suppressBorderAfter: !isLast,
+        borderAfter: isLast ? 'full' : 'resource-zone',
       })
     })
   }
 
   if (segment.showResourceTotalsFooter) {
     const footerHeight = 14
-    ICS215_LEGACY_TOTAL_ROWS.forEach((totalRow) => {
+    ICS215_LEGACY_TOTAL_ROWS.forEach((totalRow, totalIndex) => {
       const totalCells: PdfTableCell[] = [
         {
           col: 0,
@@ -840,7 +880,40 @@ function buildWorkAssignmentsTablePdfRows(
       for (let col = overflowStart; col < overflowStart + 4; col += 1) {
         totalCells.push({ col, text: ' ' })
       }
-      rows.push({ height: footerHeight, cells: totalCells })
+      rows.push({
+        height: footerHeight,
+        cells: totalCells,
+        borderAfter: totalIndex === ICS215_LEGACY_TOTAL_ROWS.length - 1 ? 'none' : 'full',
+      })
+    })
+  }
+
+  if (segment.showPreparedByFooter && preparedByFooter) {
+    const overflowSpan = 4
+    rows.push({
+      height: ICS215_PREPARED_BY_FOOTER_HEIGHT_PT,
+      cells: [
+        {
+          col: 0,
+          colSpan: overflowStart,
+          text: ' ',
+          fontSize: 6.5,
+        },
+        {
+          col: overflowStart,
+          colSpan: overflowSpan,
+          text: [
+            preparedByFooter.label,
+            `Name: ${preparedByFooter.name.trim() || ' '}`,
+            `Position/Title: ${preparedByFooter.positionTitle.trim() || ' '}`,
+            `Date/Time: ${preparedByFooter.dateTime.trim() || ' '}`,
+          ].join('\n'),
+          fontSize: 6.5,
+          vAlign: 'top',
+          maxLines: 5,
+        },
+      ],
+      borderAfter: 'none',
     })
   }
 
@@ -854,18 +927,107 @@ function buildPdfWorkTableColumnWidths(
   return scaleColumnWidthsToPdf(buildIcs215LegacyTableColumnWidths(resourceColumns), tableWidth)
 }
 
+function renderPdfHeaderInfoGrid(
+  page: Ics215PhysicalPage,
+  margin: number,
+  contentWidth: number,
+  topY: number
+): { ops: string; lines: PdfLine[]; height: number; bottomY: number } {
+  const colWidths = buildIcs215HeaderInfoColumnWidths(contentWidth)
+  const row1Height = 34
+  const row2Height = 34
+  const height = row1Height + row2Height
+  const bottomY = topY - height
+  const rowMidY = topY - row1Height
+  let ops = '0.75 w\n'
+  ops += `${margin.toFixed(2)} ${topY.toFixed(2)} m ${(margin + contentWidth).toFixed(2)} ${topY.toFixed(2)} l S\n`
+  ops += `${margin.toFixed(2)} ${bottomY.toFixed(2)} m ${(margin + contentWidth).toFixed(2)} ${bottomY.toFixed(2)} l S\n`
+  ops += `${margin.toFixed(2)} ${bottomY.toFixed(2)} m ${margin.toFixed(2)} ${topY.toFixed(2)} l S\n`
+  ops += `${(margin + contentWidth).toFixed(2)} ${bottomY.toFixed(2)} m ${(margin + contentWidth).toFixed(2)} ${topY.toFixed(2)} l S\n`
+  ops += `${margin.toFixed(2)} ${rowMidY.toFixed(2)} m ${(margin + contentWidth).toFixed(2)} ${rowMidY.toFixed(2)} l S\n`
+
+  let x = margin
+  for (let i = 1; i < colWidths.length; i += 1) {
+    x += colWidths[i - 1]
+    ops += `${x.toFixed(2)} ${bottomY.toFixed(2)} m ${x.toFixed(2)} ${topY.toFixed(2)} l S\n`
+  }
+
+  const lines: PdfLine[] = []
+  const pad = 4
+  const labelSize = 7
+  const valueSize = 8.5
+
+  const incidentName = page.headerCells[0]
+  const incidentLocation = page.headerCells[1]
+  const dateTimePrepared = page.headerCells[2]
+
+  const drawHeaderCell = (
+    cellIndex: number,
+    rowTop: number,
+    rowHeight: number,
+    label: string,
+    value: string,
+    colSpan = 1
+  ) => {
+    let cellX = margin
+    for (let i = 0; i < cellIndex; i += 1) {
+      cellX += colWidths[i]
+    }
+    let cellWidth = 0
+    for (let i = cellIndex; i < cellIndex + colSpan; i += 1) {
+      cellWidth += colWidths[i]
+    }
+    let cy = rowTop - pad - labelSize
+    lines.push({
+      text: sanitizeForPdf(label),
+      font: 'F2',
+      size: labelSize,
+      x: cellX + pad,
+      y: cy,
+      bold: true,
+    })
+    cy -= 10
+    wrapPdfText(sanitizeForPdf(value || ' '), cellWidth - pad * 2, valueSize, false).forEach((line) => {
+      lines.push({ text: line, font: 'F1', size: valueSize, x: cellX + pad, y: cy })
+      cy -= 10
+    })
+  }
+
+  drawHeaderCell(0, topY, row1Height, incidentName.label, incidentName.value)
+  drawHeaderCell(1, topY, row1Height, dateTimePrepared.label, dateTimePrepared.value)
+  drawHeaderCell(
+    2,
+    topY,
+    row1Height,
+    '4. Operational Period (Date/Time):',
+    page.operationalPeriod
+  )
+  drawHeaderCell(0, rowMidY, row2Height, incidentLocation.label, incidentLocation.value)
+
+  return { ops, lines, height, bottomY }
+}
+
 function renderPdfWorkAssignmentsTable(
   segment: Ics215WorkAssignmentsTableSegment,
   margin: number,
   contentWidth: number,
-  startY: number
+  startY: number,
+  preparedByFooter: Ics215PreparedByFooter | undefined,
+  drawTop: boolean
 ): { ops: string; lines: PdfLine[]; nextY: number } {
   const gap = ICS215_BOX_STACK.segmentGapPt
   const continuedLead = segment.label.includes('(Continued)') ? 12 : 0
   const tableTopY = startY - continuedLead
   const columnWidths = buildPdfWorkTableColumnWidths(segment.resourceColumns, contentWidth)
-  const tableRows = buildWorkAssignmentsTablePdfRows(segment, columnWidths)
-  const inner = drawPdfTableWithSpans(margin, tableTopY, contentWidth, columnWidths, tableRows)
+  const tableRows = buildWorkAssignmentsTablePdfRows(
+    segment,
+    columnWidths,
+    segment.showPreparedByFooter ? preparedByFooter : undefined
+  )
+  const inner = drawPdfTableWithSpans(margin, tableTopY, contentWidth, columnWidths, tableRows, {
+    drawTop,
+    resourceCount: segment.resourceColumns.length,
+  })
 
   const lines: PdfLine[] = []
   if (continuedLead > 0) {
@@ -889,7 +1051,7 @@ function renderPdfPageHeader(
   contentWidth: number,
   startY: number
 ): { ops: string; lines: PdfLine[]; nextY: number } {
-  const gap = 6
+  const titleGap = 4
   let y = startY
   let ops = ''
   const lines: PdfLine[] = []
@@ -903,148 +1065,13 @@ function renderPdfPageHeader(
     y -= size + 4
     lines.push({ text: sanitizeForPdf(line), font: bold ? 'F2' : 'F1', size, x, y, bold })
   }
-  y -= gap
+  y -= titleGap
 
-  const cellW = contentWidth / page.headerCells.length
-  const cellHeights = page.headerCells.map((cell) => {
-    const labelH = 12
-    const valueLines = wrapPdfText(sanitizeForPdf(cell.value || ' '), cellW - 8, 8.5, false)
-    return labelH + valueLines.length * 10 + 10
-  })
-  const height = Math.max(...cellHeights, 36)
-  const bottomY = y - height
-  ops += '0.75 w\n'
-  ops += `${margin.toFixed(2)} ${bottomY.toFixed(2)} ${contentWidth.toFixed(2)} ${height.toFixed(2)} re S\n`
-  for (let i = 1; i < page.headerCells.length; i += 1) {
-    const x = margin + cellW * i
-    ops += `${x.toFixed(2)} ${bottomY.toFixed(2)} m ${x.toFixed(2)} ${y.toFixed(2)} l S\n`
-  }
-  page.headerCells.forEach((cell, index) => {
-    const x = margin + cellW * index + 4
-    let cy = y - 8
-    lines.push({
-      text: sanitizeForPdf(cell.label),
-      font: 'F2',
-      size: 7,
-      x,
-      y: cy,
-      bold: true,
-    })
-    cy -= 10
-    wrapPdfText(sanitizeForPdf(cell.value || ' '), cellW - 8, 8.5, false).forEach((line) => {
-      lines.push({ text: line, font: 'F1', size: 8.5, x, y: cy })
-      cy -= 10
-    })
-  })
-  y = bottomY - gap
+  const headerGrid = renderPdfHeaderInfoGrid(page, margin, contentWidth, y)
+  ops += headerGrid.ops
+  lines.push(...headerGrid.lines)
 
-  const operationalPeriodBox = drawBoxExact(
-    margin,
-    y,
-    contentWidth,
-    '4. Operational Period (Date/Time):',
-    wrapPdfText(sanitizeForPdf(page.operationalPeriod || ' '), contentWidth - 12, 8.5, false),
-    8.5,
-    7,
-    1
-  )
-  ops += operationalPeriodBox.ops
-  lines.push(...operationalPeriodBox.lines)
-  y -= operationalPeriodBox.height + gap
-
-  return { ops, lines, nextY: y }
-}
-
-function renderPdfPreparedByFooterCell(
-  footer: Ics215PreparedByFooter,
-  leftX: number,
-  cellW: number,
-  topY: number
-): PdfLine[] {
-  return [
-    {
-      text: sanitizeForPdf(footer.label),
-      font: 'F2',
-      size: 7,
-      x: leftX + 4,
-      y: topY - 8,
-      bold: true,
-    },
-    {
-      text: sanitizeForPdf('Name:'),
-      font: 'F2',
-      size: 6.5,
-      x: leftX + 4,
-      y: topY - 18,
-      bold: true,
-    },
-    ...wrapPdfText(sanitizeForPdf(footer.name || ' '), cellW - 8, 7, false)
-      .slice(0, 2)
-      .map((line, index) => ({
-        text: line,
-        font: 'F1' as const,
-        size: 7,
-        x: leftX + 4,
-        y: topY - 28 - index * 9,
-      })),
-  ]
-}
-
-function renderPdfPagePreparedByFooter(
-  preparedByFooter: Ics215PreparedByFooter,
-  margin: number,
-  contentWidth: number,
-  topY: number
-): { ops: string; lines: PdfLine[] } {
-  const cellW = contentWidth / 3
-  const height = ICS215_PDF_PREPARED_BY_FOOTER_HEIGHT_PT
-  const y = topY
-  const bottomY = y - height
-  let ops = '0.75 w\n'
-  ops += `${margin.toFixed(2)} ${bottomY.toFixed(2)} ${contentWidth.toFixed(2)} ${height.toFixed(2)} re S\n`
-  for (let i = 1; i < 3; i += 1) {
-    const x = margin + cellW * i
-    ops += `${x.toFixed(2)} ${bottomY.toFixed(2)} m ${x.toFixed(2)} ${y.toFixed(2)} l S\n`
-  }
-
-  const lines: PdfLine[] = [
-    ...renderPdfPreparedByFooterCell(preparedByFooter, margin, cellW, y),
-    {
-      text: sanitizeForPdf('Position/Title:'),
-      font: 'F2',
-      size: 6.5,
-      x: margin + cellW + 4,
-      y: y - 8,
-      bold: true,
-    },
-    ...wrapPdfText(sanitizeForPdf(preparedByFooter.positionTitle || ' '), cellW - 8, 7, false)
-      .slice(0, 2)
-      .map((line, index) => ({
-        text: line,
-        font: 'F1' as const,
-        size: 7,
-        x: margin + cellW + 4,
-        y: y - 18 - index * 9,
-      })),
-    {
-      text: sanitizeForPdf('Date/Time:'),
-      font: 'F2',
-      size: 6.5,
-      x: margin + cellW * 2 + 4,
-      y: y - 8,
-      bold: true,
-    },
-    ...wrapPdfText(sanitizeForPdf(preparedByFooter.dateTime || ' '), cellW - 8, 7, false)
-      .slice(0, 2)
-      .map((line, index) => ({
-        text: line,
-        font: 'F1' as const,
-        size: 7,
-        x: margin + cellW * 2 + 4,
-        y: y - 18 - index * 9,
-      })),
-  ]
-  return { ops, lines }
+  return { ops, lines, nextY: headerGrid.bottomY }
 }
 
 function renderPdfPageFooter(
@@ -1081,7 +1108,6 @@ function buildIcs215PdfBytes(pages: Ics215PhysicalPage[]): Uint8Array {
   const margin = ICS215_PDF_PAGE.marginPt
   const contentWidth = ICS215_PDF_CONTENT_WIDTH
   const contentTop = pageHeight - margin
-  const preparedByFooterTopY = ics215PdfPreparedByFooterTopY()
 
   const pdfPages: Array<{ ops: string; lines: PdfLine[] }> = pages.map((page) => {
     let ops = ''
@@ -1090,20 +1116,20 @@ function buildIcs215PdfBytes(pages: Ics215PhysicalPage[]): Uint8Array {
     ops += header.ops
     lines.push(...header.lines)
     let y = header.nextY
-    for (const segment of page.segments) {
-      const rendered = renderPdfWorkAssignmentsTable(segment, margin, contentWidth, y)
+    page.segments.forEach((segment, segmentIndex) => {
+      const drawTop = !(segmentIndex === 0 && segment.showTableHeader)
+      const rendered = renderPdfWorkAssignmentsTable(
+        segment,
+        margin,
+        contentWidth,
+        y,
+        page.preparedByFooter,
+        drawTop
+      )
       ops += rendered.ops
       lines.push(...rendered.lines)
       y = rendered.nextY
-    }
-    const preparedByFooter = renderPdfPagePreparedByFooter(
-      page.preparedByFooter,
-      margin,
-      contentWidth,
-      preparedByFooterTopY
-    )
-    ops += preparedByFooter.ops
-    lines.push(...preparedByFooter.lines)
+    })
     const footer = renderPdfPageFooter(page, margin, contentWidth)
     ops += footer.ops
     lines.push(...footer.lines)

@@ -37,6 +37,8 @@ export const ICS215_EXPORT_PAGE_METRICS = {
   tableSubHeaderHeightPt: DOCX_SMALL_LINE_PT + 4,
   /** Single legacy IA header row with vertical kinds/resource labels. */
   tableLegacyVerticalHeaderHeightPt: 48,
+  /** Boxes 1–4 two-row header grid. */
+  tableLegacyHeaderInfoHeightPt: 68,
   legacyContinuedLabelHeightPt: 12,
   minBodyLines: 1,
   pageLayoutBufferPt: 40,
@@ -44,7 +46,7 @@ export const ICS215_EXPORT_PAGE_METRICS = {
   tinyContinuationLineThreshold: 3,
 } as const
 
-const ICS215_PDF_HEADER_ESTIMATE_PT = 132
+const ICS215_PDF_HEADER_ESTIMATE_PT = 148
 const ICS215_PDF_PAGE_LAYOUT_BUFFER_PT = 24
 
 export function ics215DocxPageSegmentCapacityPt(): number {
