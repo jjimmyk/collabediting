@@ -395,11 +395,63 @@ type PdfTableCell = {
   bold?: boolean
   center?: boolean
   fontSize?: number
+  vAlign?: 'top' | 'middle'
+  maxLines?: number
 }
 
 type PdfTableRow = {
   height: number
   cells: PdfTableCell[]
+  /** When true, omit the horizontal rule below this row (legacy REQ/HAVE/NEED groups). */
+  suppressBorderAfter?: boolean
+}
+
+function pdfCellTextLines(
+  cell: PdfTableCell,
+  cellWidth: number,
+  fontSize: number,
+  bold: boolean
+): string[] {
+  const pad = 3
+  const maxLines = cell.maxLines ?? (cell.vAlign === 'top' ? 6 : 3)
+  return wrapPdfText(sanitizeForPdf(cell.text || ' '), cellWidth - pad * 2, fontSize, bold).slice(
+    0,
+    maxLines
+  )
+}
+
+function pdfPlaceCellTextLines(
+  textLines: string[],
+  rowTop: number,
+  rowHeight: number,
+  cellX: number,
+  cellWidth: number,
+  fontSize: number,
+  bold: boolean,
+  center: boolean,
+  vAlign: 'top' | 'middle'
+): PdfLine[] {
+  const pad = 3
+  const lineHeight = fontSize + 2
+  const blockHeight = textLines.length * lineHeight
+  const topY =
+    vAlign === 'middle'
+      ? rowTop - (rowHeight - blockHeight) / 2 - fontSize
+      : rowTop - pad - fontSize
+  return textLines.map((line, lineIndex) => {
+    const textWidth = estimatePdfTextWidth(line, fontSize, bold)
+    const x = center
+      ? cellX + pad + Math.max(0, (cellWidth - pad * 2 - textWidth) / 2)
+      : cellX + pad
+    return {
+      text: line,
+      font: bold ? 'F2' : 'F1',
+      size: fontSize,
+      x,
+      y: topY - lineIndex * lineHeight,
+      bold,
+    }
+  })
 }
 
 function drawPdfTableWithSpans(
@@ -423,7 +475,9 @@ function drawPdfTableWithSpans(
   let rowTop = topY
   for (let rowIndex = 0; rowIndex < rows.length - 1; rowIndex += 1) {
     rowTop -= rows[rowIndex].height
-    ops += `${leftX.toFixed(2)} ${rowTop.toFixed(2)} m ${(leftX + tableWidth).toFixed(2)} ${rowTop.toFixed(2)} l S\n`
+    if (!rows[rowIndex].suppressBorderAfter) {
+      ops += `${leftX.toFixed(2)} ${rowTop.toFixed(2)} m ${(leftX + tableWidth).toFixed(2)} ${rowTop.toFixed(2)} l S\n`
+    }
   }
 
   const lines: PdfLine[] = []
@@ -441,22 +495,21 @@ function drawPdfTableWithSpans(
       }
       const fontSize = cell.fontSize ?? 7
       const bold = cell.bold ?? false
-      const pad = 3
-      const textLines = wrapPdfText(sanitizeForPdf(cell.text || ' '), cellWidth - pad * 2, fontSize, bold).slice(0, 3)
-      textLines.forEach((line, lineIndex) => {
-        const textWidth = estimatePdfTextWidth(line, fontSize, bold)
-        const x = cell.center
-          ? cellX + pad + Math.max(0, (cellWidth - pad * 2 - textWidth) / 2)
-          : cellX + pad
-        lines.push({
-          text: line,
-          font: bold ? 'F2' : 'F1',
-          size: fontSize,
-          x,
-          y: rowTop - 9 - lineIndex * 9,
+      const vAlign = cell.vAlign ?? (cell.center ? 'middle' : 'top')
+      const textLines = pdfCellTextLines(cell, cellWidth, fontSize, bold)
+      lines.push(
+        ...pdfPlaceCellTextLines(
+          textLines,
+          rowTop,
+          row.height,
+          cellX,
+          cellWidth,
+          fontSize,
           bold,
-        })
-      })
+          cell.center ?? false,
+          vAlign
+        )
+      )
     }
     rowTop -= row.height
   }
@@ -499,19 +552,62 @@ function drawPdfSectionWithInner(
   return { ops, height, lines: pdfLines }
 }
 
-function buildWorkAssignmentsTablePdfRows(segment: Ics215WorkAssignmentsTableSegment): PdfTableRow[] {
+function estimateLegacyAssignmentBlockHeight(
+  row: NonNullable<Ics215WorkAssignmentsTableSegment['rows'][number]>,
+  columnWidths: number[],
+  resourceCount: number
+): number {
+  const pad = 6
+  const minBlockHeight = 36
+  const lineHeight = 8.5
+  const measure = (text: string, colIndex: number, maxLines: number) =>
+    wrapPdfText(sanitizeForPdf(text || ' '), columnWidths[colIndex] - pad, 6.5, false).slice(
+      0,
+      maxLines
+    ).length
+
+  const overflowCol = ics215LegacyOverflowStartCol(resourceCount)
+
+  const assigneeLines = measure(row.assignee, 0, 4)
+  const workLines = measure(row.workAssignment, 1, 6)
+  const overheadLines = measure(row.overheadPositions, overflowCol, 3)
+  const specialLines = measure(row.specialEquipmentSupplies, overflowCol + 1, 3)
+  const reportingLines = measure(row.reportingLocation, overflowCol + 2, 2)
+  const arrivalLines = measure(row.requestedArrivalTime, overflowCol + 3, 2)
+  const maxLines = Math.max(
+    assigneeLines,
+    workLines,
+    overheadLines,
+    specialLines,
+    reportingLines,
+    arrivalLines,
+    1
+  )
+  return Math.max(minBlockHeight, maxLines * lineHeight + 10)
+}
+
+function buildWorkAssignmentsTablePdfRows(
+  segment: Ics215WorkAssignmentsTableSegment,
+  columnWidths: number[]
+): PdfTableRow[] {
   const resourceCount = segment.resourceColumns.length
   const resourceStart = ics215LegacyResourceStartCol()
   const overflowStart = ics215LegacyOverflowStartCol(resourceCount)
-  const headerHeight = 14
-  const subHeaderHeight = 14
-  const dataHeight = 12
+  const headerHeight = 16
+  const subHeaderHeight = Math.max(
+    16,
+    ...segment.resourceColumns.map((column) =>
+      wrapPdfText(sanitizeForPdf(column.label), columnWidths[resourceStart] - 6, 6, true).length > 1
+        ? 22
+        : 16
+    )
+  )
   const rows: PdfTableRow[] = []
 
   if (segment.showTableHeader) {
     const mainCells: PdfTableCell[] = [
-      { col: 0, text: '5. Division/Group/Other', bold: true, fontSize: 6 },
-      { col: 1, text: '6. Work Assignments', bold: true, fontSize: 6 },
+      { col: 0, text: '5. Division/Group/Other', bold: true, fontSize: 6, vAlign: 'middle' },
+      { col: 1, text: '6. Work Assignments', bold: true, fontSize: 6, vAlign: 'middle' },
       { col: 2, text: ' ', fontSize: 6 },
     ]
     if (resourceCount > 0) {
@@ -522,13 +618,38 @@ function buildWorkAssignmentsTablePdfRows(segment: Ics215WorkAssignmentsTableSeg
         bold: true,
         center: true,
         fontSize: 6,
+        vAlign: 'middle',
       })
     }
     mainCells.push(
-      { col: overflowStart, text: '8. Overhead Position(s)', bold: true, fontSize: 6 },
-      { col: overflowStart + 1, text: '9. Special Equipment & Supplies', bold: true, fontSize: 6 },
-      { col: overflowStart + 2, text: '10. Reporting Location', bold: true, fontSize: 6 },
-      { col: overflowStart + 3, text: '11. Requested Arrival Time', bold: true, fontSize: 6 }
+      {
+        col: overflowStart,
+        text: '8. Overhead Position(s)',
+        bold: true,
+        fontSize: 6,
+        vAlign: 'middle',
+      },
+      {
+        col: overflowStart + 1,
+        text: '9. Special Equipment & Supplies',
+        bold: true,
+        fontSize: 6,
+        vAlign: 'middle',
+      },
+      {
+        col: overflowStart + 2,
+        text: '10. Reporting Location',
+        bold: true,
+        fontSize: 6,
+        vAlign: 'middle',
+      },
+      {
+        col: overflowStart + 3,
+        text: '11. Requested Arrival Time',
+        bold: true,
+        fontSize: 6,
+        vAlign: 'middle',
+      }
     )
     rows.push({ height: headerHeight, cells: mainCells })
 
@@ -544,6 +665,8 @@ function buildWorkAssignmentsTablePdfRows(segment: Ics215WorkAssignmentsTableSeg
         bold: true,
         center: true,
         fontSize: 6,
+        vAlign: 'middle',
+        maxLines: 2,
       })
     })
     for (let col = overflowStart; col < overflowStart + 4; col += 1) {
@@ -559,22 +682,30 @@ function buildWorkAssignmentsTablePdfRows(segment: Ics215WorkAssignmentsTableSeg
       for (let col = 0; col < overflowStart + 4; col += 1) {
         emptyCells.push({ col, text: ' ' })
       }
-      rows.push({ height: dataHeight * 3, cells: emptyCells })
+      rows.push({ height: 36, cells: emptyCells })
       continue
     }
 
+    const blockHeight = estimateLegacyAssignmentBlockHeight(row, columnWidths, resourceCount)
+    const subRowHeight = blockHeight / ICS215_LEGACY_RHN_FIELDS.length
+
     ICS215_LEGACY_RHN_FIELDS.forEach((field, rhnIndex) => {
       const isFirst = rhnIndex === 0
+      const isLast = rhnIndex === ICS215_LEGACY_RHN_FIELDS.length - 1
       const cells: PdfTableCell[] = [
         {
           col: 0,
           text: isFirst ? row.assignee || ' ' : ' ',
           fontSize: 6.5,
+          vAlign: 'top',
+          maxLines: isFirst ? 6 : 1,
         },
         {
           col: 1,
           text: isFirst ? row.workAssignment || ' ' : ' ',
           fontSize: 6.5,
+          vAlign: 'top',
+          maxLines: isFirst ? 8 : 1,
         },
         {
           col: 2,
@@ -582,6 +713,7 @@ function buildWorkAssignmentsTablePdfRows(segment: Ics215WorkAssignmentsTableSeg
           bold: true,
           center: true,
           fontSize: 6,
+          vAlign: 'middle',
         },
       ]
       segment.resourceColumns.forEach((column, index) => {
@@ -590,6 +722,7 @@ function buildWorkAssignmentsTablePdfRows(segment: Ics215WorkAssignmentsTableSeg
           text: legacyResourceCellValue(row.resourceValues, column.id, field),
           center: true,
           fontSize: 6.5,
+          vAlign: 'middle',
         })
       })
       cells.push(
@@ -597,28 +730,41 @@ function buildWorkAssignmentsTablePdfRows(segment: Ics215WorkAssignmentsTableSeg
           col: overflowStart,
           text: isFirst ? row.overheadPositions || ' ' : ' ',
           fontSize: 6.5,
+          vAlign: 'top',
+          maxLines: isFirst ? 4 : 1,
         },
         {
           col: overflowStart + 1,
           text: isFirst ? row.specialEquipmentSupplies || ' ' : ' ',
           fontSize: 6.5,
+          vAlign: 'top',
+          maxLines: isFirst ? 4 : 1,
         },
         {
           col: overflowStart + 2,
           text: isFirst ? row.reportingLocation || ' ' : ' ',
           fontSize: 6.5,
+          vAlign: 'top',
+          maxLines: isFirst ? 3 : 1,
         },
         {
           col: overflowStart + 3,
           text: isFirst ? row.requestedArrivalTime || ' ' : ' ',
           fontSize: 6.5,
+          vAlign: 'middle',
+          maxLines: isFirst ? 2 : 1,
         }
       )
-      rows.push({ height: dataHeight, cells })
+      rows.push({
+        height: subRowHeight,
+        cells,
+        suppressBorderAfter: !isLast,
+      })
     })
   }
 
   if (segment.showResourceTotalsFooter) {
+    const footerHeight = 14
     ICS215_LEGACY_TOTAL_ROWS.forEach((totalRow) => {
       const totalCells: PdfTableCell[] = [
         {
@@ -627,6 +773,7 @@ function buildWorkAssignmentsTablePdfRows(segment: Ics215WorkAssignmentsTableSeg
           text: totalRow.label,
           bold: true,
           fontSize: 6.5,
+          vAlign: 'middle',
         },
         {
           col: 2,
@@ -634,6 +781,7 @@ function buildWorkAssignmentsTablePdfRows(segment: Ics215WorkAssignmentsTableSeg
           bold: true,
           center: true,
           fontSize: 6,
+          vAlign: 'middle',
         },
       ]
       segment.resourceColumns.forEach((column, index) => {
@@ -643,12 +791,13 @@ function buildWorkAssignmentsTablePdfRows(segment: Ics215WorkAssignmentsTableSeg
           text: totals?.[totalRow.field]?.trim() || ' ',
           center: true,
           fontSize: 6.5,
+          vAlign: 'middle',
         })
       })
       for (let col = overflowStart; col < overflowStart + 4; col += 1) {
         totalCells.push({ col, text: ' ' })
       }
-      rows.push({ height: dataHeight, cells: totalCells })
+      rows.push({ height: footerHeight, cells: totalCells })
     })
   }
 
@@ -669,18 +818,43 @@ function renderPdfWorkAssignmentsTable(
   startY: number
 ): { ops: string; lines: PdfLine[]; nextY: number } {
   const gap = ICS215_BOX_STACK.segmentGapPt
-  const innerWidth = contentWidth - 12
+  const pad = 6
+  const innerWidth = contentWidth - pad * 2
+  const leftX = margin + pad
   const columnWidths = buildPdfWorkTableColumnWidths(segment.resourceColumns, innerWidth)
-  const tableRows = buildWorkAssignmentsTablePdfRows(segment)
-  const inner = drawPdfTableWithSpans(
-    margin + 6,
-    startY - 24,
-    innerWidth,
-    columnWidths,
-    tableRows
+  const tableRows = buildWorkAssignmentsTablePdfRows(segment, columnWidths)
+
+  const labelSize = 7
+  const labelLead = 10
+  const labelLines = wrapPdfText(
+    sanitizeForPdf(segment.label),
+    contentWidth - pad * 2,
+    labelSize,
+    true
   )
-  const box = drawPdfSectionWithInner(margin, startY, contentWidth, segment.label, inner)
-  return { ops: box.ops, lines: box.lines, nextY: startY - box.height - gap }
+  const labelBlockHeight = labelLines.length * labelLead + 4
+  const innerPad = 4
+  const tableHeight = tableRows.reduce((sum, row) => sum + row.height, 0)
+  const totalHeight = pad + labelBlockHeight + innerPad + tableHeight + pad
+  const boxTop = startY
+  const boxBottom = boxTop - totalHeight
+  const tableTopY = boxTop - pad - labelBlockHeight - innerPad
+
+  let ops = '0.75 w\n'
+  ops += `${margin.toFixed(2)} ${boxBottom.toFixed(2)} ${contentWidth.toFixed(2)} ${totalHeight.toFixed(2)} re S\n`
+
+  const inner = drawPdfTableWithSpans(leftX, tableTopY, innerWidth, columnWidths, tableRows)
+  ops += inner.ops
+
+  const lines: PdfLine[] = []
+  let labelY = boxTop - pad - labelSize
+  for (const line of labelLines) {
+    lines.push({ text: line, font: 'F2', size: labelSize, x: margin + pad, y: labelY, bold: true })
+    labelY -= labelLead
+  }
+  lines.push(...inner.lines)
+
+  return { ops, lines, nextY: boxBottom - gap }
 }
 
 function renderPdfPageHeader(
