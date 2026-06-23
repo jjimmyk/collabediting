@@ -150,7 +150,6 @@ export function useIcs215WorkAssignmentsTable({
 
   const addAssignment = () => {
     patchRows([
-      ...workAssignments,
       {
         id: createNextIcs215WorkAssignmentId(workAssignments),
         assignee: lockedTargetValue,
@@ -162,6 +161,7 @@ export function useIcs215WorkAssignmentsTable({
         requestedArrivalTime: '',
         status: '',
       },
+      ...workAssignments,
     ])
   }
 

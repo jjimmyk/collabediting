@@ -481,7 +481,6 @@ export function appendIcs215WorkAssignmentToDraft(
   return {
     resourceColumns: draft.resourceColumns,
     workAssignments: [
-      ...draft.workAssignments,
       {
         id: createNextIcs215WorkAssignmentId(draft.workAssignments),
         assignee: lockedTargetValue,
@@ -493,6 +492,7 @@ export function appendIcs215WorkAssignmentToDraft(
         requestedArrivalTime: '',
         status: '',
       },
+      ...draft.workAssignments,
     ],
   }
 }
