@@ -30,7 +30,6 @@ export type ExportOrgChartIcs207Input = {
   layoutMode: RosterPanelLayoutMode
   glassItemBorderClasses: string
   visualSnapshot: Ics207OrgChartVisualSnapshot
-  getLiveCaptureRoot?: () => HTMLElement | null
   incidentName: string
   incidentLocation?: string | null
   operationalPeriodFrom?: string | null
@@ -40,10 +39,7 @@ export type ExportOrgChartIcs207Input = {
   preparedByPositionTitle?: string | null
 }
 
-export type ExportOrgChartIcs207BaseInput = Omit<
-  ExportOrgChartIcs207Input,
-  'scope' | 'getLiveCaptureRoot'
->
+export type ExportOrgChartIcs207BaseInput = Omit<ExportOrgChartIcs207Input, 'scope'>
 
 export async function downloadIcs207FromPreview(preview: Ics207ExportPreview): Promise<string> {
   const filename = `${ics207ExportFilenameBase(preview.context)}_${formatIcs207ExportTimestamp()}.pdf`

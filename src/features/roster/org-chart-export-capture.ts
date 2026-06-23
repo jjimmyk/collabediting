@@ -1,5 +1,6 @@
 import {
   captureOrgChartImageWithFallbacks,
+  countOrgChartConnectorLines,
   type CaptureOrgChartImageOptions,
 } from '@/features/roster/capture-org-chart-image'
 
@@ -12,6 +13,7 @@ const MIN_CAPTURE_HEIGHT_PX = 1
 const MIN_PNG_BYTES = 1_024
 const PAINT_WAIT_MS = 2_000
 const CAPTURE_TIMEOUT_MS = 8_000
+const CONNECTOR_RETRY_MS = 1_500
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => {
@@ -50,17 +52,14 @@ export function withTimeout<T>(
 }
 
 export function resolveIcs207CaptureRoot(container: HTMLElement): HTMLElement | null {
-  const dedicated = container.closest<HTMLElement>(`[${ICS207_CAPTURE_ROOT_ATTR}]`)
-  if (dedicated) return dedicated
-
-  const nested = container.querySelector<HTMLElement>(`[${ICS207_CAPTURE_ROOT_ATTR}]`)
-  if (nested) return nested
-
-  const liveRoot = container.closest<HTMLElement>(`[${ROSTER_ORG_CHART_LIVE_ROOT_ATTR}]`)
-  if (liveRoot) return liveRoot
-
   const wideRoot = container.querySelector<HTMLElement>('[data-org-chart-wide-root]')
   if (wideRoot) return wideRoot
+
+  const dedicated = container.querySelector<HTMLElement>(`[${ICS207_CAPTURE_ROOT_ATTR}]`)
+  if (dedicated) return dedicated
+
+  const liveRoot = container.querySelector<HTMLElement>(`[${ROSTER_ORG_CHART_LIVE_ROOT_ATTR}]`)
+  if (liveRoot) return liveRoot
 
   return container.querySelector<HTMLElement>('[data-org-chart-export-root]')
 }
@@ -79,6 +78,27 @@ function isPaintComplete(root: HTMLElement): boolean {
   return root.hasAttribute(ORG_CHART_PAINT_COMPLETE_ATTR)
 }
 
+function isWideOrgChart(root: HTMLElement): boolean {
+  return root.hasAttribute('data-org-chart-wide-root')
+}
+
+async function ensureWideConnectorsPainted(root: HTMLElement): Promise<void> {
+  if (!isWideOrgChart(root)) return
+
+  const started = Date.now()
+  while (Date.now() - started < CONNECTOR_RETRY_MS) {
+    if (countOrgChartConnectorLines(root) > 0) {
+      await nextFrames(2)
+      return
+    }
+    await sleep(50)
+  }
+
+  if (countOrgChartCards(root) > 1 && countOrgChartConnectorLines(root) === 0) {
+    throw new Error('Org chart connector lines are not ready. Try exporting again.')
+  }
+}
+
 export async function waitForOrgChartPainted(
   container: HTMLElement,
   options: { timeoutMs?: number } = {}
@@ -91,11 +111,13 @@ export async function waitForOrgChartPainted(
     if (root) {
       if (isPaintComplete(root)) {
         await nextFrames(2)
+        await ensureWideConnectorsPainted(root)
         return root
       }
 
       if (countOrgChartCards(root) > 0 && hasMinimumDimensions(root)) {
         await nextFrames(2)
+        await ensureWideConnectorsPainted(root)
         return root
       }
     }
@@ -103,7 +125,10 @@ export async function waitForOrgChartPainted(
   }
 
   const root = resolveIcs207CaptureRoot(container)
-  if (root) return root
+  if (root) {
+    await ensureWideConnectorsPainted(root)
+    return root
+  }
 
   throw new Error('Org chart preview is not ready to export.')
 }
@@ -125,11 +150,13 @@ export async function captureOrgChartElement(
   target: HTMLElement,
   options: Omit<CaptureOrgChartImageOptions, 'root'> = {}
 ): Promise<Uint8Array> {
+  await ensureWideConnectorsPainted(target)
+
   const pngBytes = await withTimeout(
     captureOrgChartImageWithFallbacks({
       root: target,
       backgroundColor: options.backgroundColor ?? '#ffffff',
-      pixelRatio: options.pixelRatio ?? 2,
+      pixelRatio: options.pixelRatio ?? 1.5,
     }),
     CAPTURE_TIMEOUT_MS,
     'Org chart screenshot timed out.'
@@ -147,22 +174,8 @@ export async function captureOrgChartFromContainer(
 
 export async function captureIcs207Box4ForPdf(input: {
   box4Container: HTMLElement
-  scope: 'current_op' | 'next_op'
-  getLiveCaptureRoot?: () => HTMLElement | null
 }): Promise<Uint8Array> {
   await waitForOrgChartPainted(input.box4Container)
-
-  if (input.scope === 'current_op' && input.getLiveCaptureRoot) {
-    const liveRoot = input.getLiveCaptureRoot()
-    if (liveRoot) {
-      try {
-        const target = resolveIcs207CaptureRoot(liveRoot) ?? liveRoot
-        return await captureOrgChartElement(target)
-      } catch {
-        // Fall back to the dialog preview tree.
-      }
-    }
-  }
 
   const target = resolveIcs207CaptureRoot(input.box4Container)
   if (!target) {

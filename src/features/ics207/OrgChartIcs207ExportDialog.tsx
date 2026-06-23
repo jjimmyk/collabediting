@@ -31,6 +31,7 @@ import {
   ICS202_PREVIEW_STACK_CLASS,
   ics202PreviewSegmentRowClass,
 } from '@/features/ics202/export-box-stack'
+import { ICS207_PDF_CHART_ASPECT_RATIO } from '@/features/ics207/export-template-constants'
 import { captureIcs207Box4ForPdf, pngBytesToDataUrl } from '@/features/roster/org-chart-export-capture'
 import type { OrgChartExportScope } from '@/features/roster/org-chart-export-scope'
 
@@ -39,7 +40,6 @@ type OrgChartIcs207ExportDialogProps = {
   onOpenChange: (open: boolean) => void
   operationalPeriodsEnabled: boolean
   exportInput: ExportOrgChartIcs207BaseInput | null
-  getLiveCaptureRoot?: () => HTMLElement | null
   onExportComplete?: () => void
 }
 
@@ -102,6 +102,7 @@ function renderPreviewBlock(
             ref={options.box4ContainerRef}
             data-ics207-box-4-chart=""
             className="relative min-h-[280px] overflow-auto bg-white p-3 pl-6"
+            style={{ aspectRatio: ICS207_PDF_CHART_ASPECT_RATIO }}
           >
             {options.exportInput ? (
               <Ics207PreviewOrgChartPanel exportInput={options.exportInput} />
@@ -151,7 +152,6 @@ export function OrgChartIcs207ExportDialog({
   onOpenChange,
   operationalPeriodsEnabled,
   exportInput,
-  getLiveCaptureRoot,
   onExportComplete,
 }: OrgChartIcs207ExportDialogProps) {
   const [scope, setScope] = useState<OrgChartExportScope>('current_op')
@@ -164,12 +164,8 @@ export function OrgChartIcs207ExportDialog({
 
   const scopedExportInput = useMemo<ExportOrgChartIcs207Input | null>(() => {
     if (!exportInput) return null
-    return {
-      ...exportInput,
-      scope,
-      getLiveCaptureRoot,
-    }
-  }, [exportInput, getLiveCaptureRoot, scope])
+    return { ...exportInput, scope }
+  }, [exportInput, scope])
 
   const context = useMemo(() => {
     if (!scopedExportInput) return null
@@ -310,11 +306,7 @@ export function OrgChartIcs207ExportDialog({
               if (!context || !scopedExportInput || !box4Container) return
               setExportError(null)
               setIsExporting(true)
-              void captureIcs207Box4ForPdf({
-                box4Container,
-                scope,
-                getLiveCaptureRoot,
-              })
+              void captureIcs207Box4ForPdf({ box4Container })
                 .then((pngBytes) =>
                   downloadIcs207FromPreview({
                     scope,

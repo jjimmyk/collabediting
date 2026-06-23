@@ -14708,10 +14708,6 @@ function App() {
     })
     setIsIcs207ExportDialogOpen(true)
   }, [rosterDisplayFilters, rosterPanelLayoutMode, rosterZoomLevel])
-  const getLiveOrgChartCaptureRoot = useCallback(
-    () => rosterOrgChartLiveRootRef.current,
-    []
-  )
   const assignableByPosition = useMemo(() => {
     const map: Record<string, WorkspaceRosterMember[]> = {}
     for (const position of workspacePositionCatalog.rosterPositionNames) {
@@ -39717,7 +39713,6 @@ function App() {
         }}
         operationalPeriodsEnabled={operationalPeriodsEnabled}
         exportInput={ics207ExportBaseInput}
-        getLiveCaptureRoot={getLiveOrgChartCaptureRoot}
         onExportComplete={() => {
           toast.success('ICS-207 exported.')
         }}

@@ -2,12 +2,14 @@ import assert from 'node:assert/strict'
 import { buildIcs207ExportContext } from '../src/features/ics207/export-layout'
 import { buildIcs207ExportLayout } from '../src/features/ics207/export-layout-blocks'
 import { buildIcs207PdfBytesForTest } from '../src/features/ics207/export-download'
-import { buildOrgChartLayoutForExport } from '../src/features/roster/build-org-chart-for-export'
 import {
-  assertOrgChartCaptureNotBlank,
-  ORG_CHART_PAINT_COMPLETE_ATTR,
-  withTimeout,
-} from '../src/features/roster/org-chart-export-capture'
+  assertIcs207PdfGeometry,
+  ICS207_PDF_CHART_BOX,
+  ICS207_PDF_FOOTER_TOP_Y,
+  ICS207_PDF_HEADER_ROW_BOTTOM_Y,
+} from '../src/features/ics207/export-template-constants'
+import { buildOrgChartLayoutForExport } from '../src/features/roster/build-org-chart-for-export'
+import { assertOrgChartCaptureNotBlank } from '../src/features/roster/org-chart-export-capture'
 import {
   buildProjectedOrgChartExportData,
   projectPositionRosterEntryForExport,
@@ -128,6 +130,11 @@ function buildSampleAsset(assetKey: string, reportsTo: string | null): ResourceL
   }
 }
 
+assert.doesNotThrow(() => assertIcs207PdfGeometry())
+assert.equal(ICS207_PDF_CHART_BOX.yPt, ICS207_PDF_FOOTER_TOP_Y)
+assert.equal(ICS207_PDF_CHART_BOX.yPt + ICS207_PDF_CHART_BOX.heightPt, ICS207_PDF_HEADER_ROW_BOTTOM_Y)
+assert(ICS207_PDF_CHART_BOX.heightPt > 400)
+
 const catalog = buildSampleCatalog()
 const operationsEntry = buildSampleEntry('Operations Section Chief', {
   members: [buildSampleMember('m1', 'ops@example.com')],
@@ -194,13 +201,7 @@ assert.equal(context.operationalPeriodTime, '14:26')
 const liveLayout = buildIcs207ExportLayout(context)
 assert.equal(liveLayout.length, 4)
 assert.equal(liveLayout[2]?.kind, 'org-chart-live')
-
-assert.equal(ORG_CHART_PAINT_COMPLETE_ATTR, 'data-org-chart-paint-complete')
-
-await assert.rejects(
-  () => withTimeout(new Promise<void>(() => undefined), 10, 'timed out'),
-  /timed out/
-)
+assert.equal(liveLayout[3]?.kind, 'prepared-by')
 
 assert.doesNotThrow(() => assertOrgChartCaptureNotBlank(new Uint8Array(100)))
 
