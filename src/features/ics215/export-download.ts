@@ -19,13 +19,18 @@ import {
   type Ics215WorkAssignmentsTableSegment,
 } from '@/features/ics215/export-pagination'
 import {
+  ICS215_LEGACY_KINDS_HEADER_LABEL,
   ICS215_LEGACY_RHN_FIELDS,
   ICS215_LEGACY_RHN_LABELS,
   ICS215_LEGACY_TOTAL_ROWS,
   buildIcs215LegacyTableColumnWidths,
+  estimateLegacyVerticalHeaderHeight,
+  ics215LegacyKindsCol,
   ics215LegacyOverflowStartCol,
   ics215LegacyResourceStartCol,
+  ics215LegacyRhnCol,
   legacyResourceCellValue,
+  legacyVerticalHeaderChars,
 } from '@/features/ics215/export-legacy-table'
 import { ICS215_BOX_STACK } from '@/features/ics215/export-box-stack'
 import type { Ics215ResourceColumn } from '@/features/ics215/types'
@@ -394,6 +399,8 @@ type PdfTableCell = {
   text: string
   bold?: boolean
   center?: boolean
+  right?: boolean
+  vertical?: boolean
   fontSize?: number
   vAlign?: 'top' | 'middle'
   maxLines?: number
@@ -429,6 +436,7 @@ function pdfPlaceCellTextLines(
   fontSize: number,
   bold: boolean,
   center: boolean,
+  right: boolean,
   vAlign: 'top' | 'middle'
 ): PdfLine[] {
   const pad = 3
@@ -442,13 +450,42 @@ function pdfPlaceCellTextLines(
     const textWidth = estimatePdfTextWidth(line, fontSize, bold)
     const x = center
       ? cellX + pad + Math.max(0, (cellWidth - pad * 2 - textWidth) / 2)
-      : cellX + pad
+      : right
+        ? cellX + cellWidth - pad - textWidth
+        : cellX + pad
     return {
       text: line,
       font: bold ? 'F2' : 'F1',
       size: fontSize,
       x,
       y: topY - lineIndex * lineHeight,
+      bold,
+    }
+  })
+}
+
+function pdfPlaceVerticalCellText(
+  text: string,
+  rowTop: number,
+  rowHeight: number,
+  cellX: number,
+  cellWidth: number,
+  fontSize: number,
+  bold: boolean
+): PdfLine[] {
+  const chars = legacyVerticalHeaderChars(text)
+  const charStep = fontSize + 1.5
+  const blockHeight = chars.length * charStep
+  const bottomY = rowTop - rowHeight + (rowHeight - blockHeight) / 2 + fontSize * 0.2
+  return chars.map((char, index) => {
+    const textWidth = estimatePdfTextWidth(char, fontSize, bold)
+    const x = cellX + (cellWidth - textWidth) / 2
+    return {
+      text: char,
+      font: bold ? 'F2' : 'F1',
+      size: fontSize,
+      x,
+      y: bottomY + index * charStep,
       bold,
     }
   })
@@ -496,20 +533,35 @@ function drawPdfTableWithSpans(
       const fontSize = cell.fontSize ?? 7
       const bold = cell.bold ?? false
       const vAlign = cell.vAlign ?? (cell.center ? 'middle' : 'top')
-      const textLines = pdfCellTextLines(cell, cellWidth, fontSize, bold)
-      lines.push(
-        ...pdfPlaceCellTextLines(
-          textLines,
-          rowTop,
-          row.height,
-          cellX,
-          cellWidth,
-          fontSize,
-          bold,
-          cell.center ?? false,
-          vAlign
+      if (cell.vertical) {
+        lines.push(
+          ...pdfPlaceVerticalCellText(
+            cell.text,
+            rowTop,
+            row.height,
+            cellX,
+            cellWidth,
+            fontSize,
+            bold
+          )
         )
-      )
+      } else {
+        const textLines = pdfCellTextLines(cell, cellWidth, fontSize, bold)
+        lines.push(
+          ...pdfPlaceCellTextLines(
+            textLines,
+            rowTop,
+            row.height,
+            cellX,
+            cellWidth,
+            fontSize,
+            bold,
+            cell.center ?? false,
+            cell.right ?? false,
+            vAlign
+          )
+        )
+      }
     }
     rowTop -= row.height
   }
@@ -591,88 +643,77 @@ function buildWorkAssignmentsTablePdfRows(
   columnWidths: number[]
 ): PdfTableRow[] {
   const resourceCount = segment.resourceColumns.length
+  const kindsCol = ics215LegacyKindsCol()
+  const rhnCol = ics215LegacyRhnCol()
   const resourceStart = ics215LegacyResourceStartCol()
   const overflowStart = ics215LegacyOverflowStartCol(resourceCount)
-  const headerHeight = 16
-  const subHeaderHeight = Math.max(
-    16,
-    ...segment.resourceColumns.map((column) =>
-      wrapPdfText(sanitizeForPdf(column.label), columnWidths[resourceStart] - 6, 6, true).length > 1
-        ? 22
-        : 16
-    )
+  const headerFontSize = 6
+  const headerHeight = Math.max(
+    48,
+    estimateLegacyVerticalHeaderHeight(ICS215_LEGACY_KINDS_HEADER_LABEL, headerFontSize),
+    resourceCount > 0
+      ? Math.max(
+          ...segment.resourceColumns.map((column) =>
+            estimateLegacyVerticalHeaderHeight(column.label, headerFontSize, 36)
+          )
+        )
+      : 36
   )
   const rows: PdfTableRow[] = []
 
   if (segment.showTableHeader) {
-    const mainCells: PdfTableCell[] = [
-      { col: 0, text: '5. Division/Group/Other', bold: true, fontSize: 6, vAlign: 'middle' },
-      { col: 1, text: '6. Work Assignments', bold: true, fontSize: 6, vAlign: 'middle' },
-      { col: 2, text: ' ', fontSize: 6 },
-    ]
-    if (resourceCount > 0) {
-      mainCells.push({
-        col: resourceStart,
-        colSpan: resourceCount,
-        text: '7. Kinds of Resources',
+    const headerCells: PdfTableCell[] = [
+      { col: 0, text: '5. Division/Group/Other', bold: true, fontSize: headerFontSize, vAlign: 'middle' },
+      { col: 1, text: '6. Work Assignments', bold: true, fontSize: headerFontSize, vAlign: 'middle' },
+      {
+        col: kindsCol,
+        text: ICS215_LEGACY_KINDS_HEADER_LABEL,
         bold: true,
-        center: true,
-        fontSize: 6,
-        vAlign: 'middle',
+        fontSize: headerFontSize,
+        vertical: true,
+      },
+      { col: rhnCol, text: ' ', fontSize: headerFontSize },
+    ]
+    segment.resourceColumns.forEach((column, index) => {
+      headerCells.push({
+        col: resourceStart + index,
+        text: column.label,
+        bold: true,
+        fontSize: headerFontSize,
+        vertical: true,
       })
-    }
-    mainCells.push(
+    })
+    headerCells.push(
       {
         col: overflowStart,
         text: '8. Overhead Position(s)',
         bold: true,
-        fontSize: 6,
+        fontSize: headerFontSize,
         vAlign: 'middle',
       },
       {
         col: overflowStart + 1,
         text: '9. Special Equipment & Supplies',
         bold: true,
-        fontSize: 6,
+        fontSize: headerFontSize,
         vAlign: 'middle',
       },
       {
         col: overflowStart + 2,
         text: '10. Reporting Location',
         bold: true,
-        fontSize: 6,
+        fontSize: headerFontSize,
         vAlign: 'middle',
       },
       {
         col: overflowStart + 3,
         text: '11. Requested Arrival Time',
         bold: true,
-        fontSize: 6,
+        fontSize: headerFontSize,
         vAlign: 'middle',
       }
     )
-    rows.push({ height: headerHeight, cells: mainCells })
-
-    const subCells: PdfTableCell[] = [
-      { col: 0, text: ' ' },
-      { col: 1, text: ' ' },
-      { col: 2, text: ' ' },
-    ]
-    segment.resourceColumns.forEach((column, index) => {
-      subCells.push({
-        col: resourceStart + index,
-        text: column.label,
-        bold: true,
-        center: true,
-        fontSize: 6,
-        vAlign: 'middle',
-        maxLines: 2,
-      })
-    })
-    for (let col = overflowStart; col < overflowStart + 4; col += 1) {
-      subCells.push({ col, text: ' ' })
-    }
-    rows.push({ height: subHeaderHeight, cells: subCells })
+    rows.push({ height: headerHeight, cells: headerCells })
   }
 
   const bodyRows = segment.rows.length === 0 ? [null] : segment.rows
@@ -707,11 +748,12 @@ function buildWorkAssignmentsTablePdfRows(
           vAlign: 'top',
           maxLines: isFirst ? 8 : 1,
         },
+        { col: kindsCol, text: ' ', fontSize: 6.5 },
         {
-          col: 2,
+          col: rhnCol,
           text: ICS215_LEGACY_RHN_LABELS[rhnIndex],
           bold: true,
-          center: true,
+          right: true,
           fontSize: 6,
           vAlign: 'middle',
         },
@@ -775,11 +817,12 @@ function buildWorkAssignmentsTablePdfRows(
           fontSize: 6.5,
           vAlign: 'middle',
         },
+        { col: kindsCol, text: ' ', fontSize: 6.5 },
         {
-          col: 2,
+          col: rhnCol,
           text: ICS215_LEGACY_RHN_LABELS[ICS215_LEGACY_RHN_FIELDS.indexOf(totalRow.field)],
           bold: true,
-          center: true,
+          right: true,
           fontSize: 6,
           vAlign: 'middle',
         },
@@ -818,43 +861,26 @@ function renderPdfWorkAssignmentsTable(
   startY: number
 ): { ops: string; lines: PdfLine[]; nextY: number } {
   const gap = ICS215_BOX_STACK.segmentGapPt
-  const pad = 6
-  const innerWidth = contentWidth - pad * 2
-  const leftX = margin + pad
-  const columnWidths = buildPdfWorkTableColumnWidths(segment.resourceColumns, innerWidth)
+  const continuedLead = segment.label.includes('(Continued)') ? 12 : 0
+  const tableTopY = startY - continuedLead
+  const columnWidths = buildPdfWorkTableColumnWidths(segment.resourceColumns, contentWidth)
   const tableRows = buildWorkAssignmentsTablePdfRows(segment, columnWidths)
-
-  const labelSize = 7
-  const labelLead = 10
-  const labelLines = wrapPdfText(
-    sanitizeForPdf(segment.label),
-    contentWidth - pad * 2,
-    labelSize,
-    true
-  )
-  const labelBlockHeight = labelLines.length * labelLead + 4
-  const innerPad = 4
-  const tableHeight = tableRows.reduce((sum, row) => sum + row.height, 0)
-  const totalHeight = pad + labelBlockHeight + innerPad + tableHeight + pad
-  const boxTop = startY
-  const boxBottom = boxTop - totalHeight
-  const tableTopY = boxTop - pad - labelBlockHeight - innerPad
-
-  let ops = '0.75 w\n'
-  ops += `${margin.toFixed(2)} ${boxBottom.toFixed(2)} ${contentWidth.toFixed(2)} ${totalHeight.toFixed(2)} re S\n`
-
-  const inner = drawPdfTableWithSpans(leftX, tableTopY, innerWidth, columnWidths, tableRows)
-  ops += inner.ops
+  const inner = drawPdfTableWithSpans(margin, tableTopY, contentWidth, columnWidths, tableRows)
 
   const lines: PdfLine[] = []
-  let labelY = boxTop - pad - labelSize
-  for (const line of labelLines) {
-    lines.push({ text: line, font: 'F2', size: labelSize, x: margin + pad, y: labelY, bold: true })
-    labelY -= labelLead
+  if (continuedLead > 0) {
+    lines.push({
+      text: sanitizeForPdf(segment.label),
+      font: 'F2',
+      size: 7,
+      x: margin,
+      y: startY - 7,
+      bold: true,
+    })
   }
   lines.push(...inner.lines)
 
-  return { ops, lines, nextY: boxBottom - gap }
+  return { ops: inner.ops, lines, nextY: tableTopY - inner.height - gap }
 }
 
 function renderPdfPageHeader(

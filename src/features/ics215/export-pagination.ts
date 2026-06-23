@@ -143,13 +143,10 @@ function addSegmentToDraft(draft: PageDraft, segment: Ics215PhysicalPageSegment)
   addUsedHeight(draft, estimateWorkAssignmentsTableSegmentHeight(segment))
 }
 
-function workTableShellHeight(showTableHeader: boolean): number {
-  return (
-    PAGE.sectionSpacerPt * 2 +
-    PAGE.sectionTableCellMarginPt * 2 +
-    PAGE.labelLineHeightPt +
-    (showTableHeader ? PAGE.tableHeaderHeightPt + PAGE.tableSubHeaderHeightPt : 0)
-  )
+function workTableShellHeight(showTableHeader: boolean, continued: boolean): number {
+  const continuedLead = continued ? PAGE.legacyContinuedLabelHeightPt : 0
+  const headerHeight = showTableHeader ? PAGE.tableLegacyVerticalHeaderHeightPt : 0
+  return continuedLead + headerHeight
 }
 
 function estimateAssignmentBlockHeight(row: Ics215WorkAssignmentExportRow): number {
@@ -164,7 +161,7 @@ function estimateAssignmentBlockHeight(row: Ics215WorkAssignmentExportRow): numb
 }
 
 function estimateWorkAssignmentsTableSegmentHeight(segment: Ics215WorkAssignmentsTableSegment): number {
-  let height = workTableShellHeight(segment.showTableHeader)
+  let height = workTableShellHeight(segment.showTableHeader, segment.continued)
   for (const row of segment.rows) {
     height += estimateAssignmentBlockHeight(row)
   }

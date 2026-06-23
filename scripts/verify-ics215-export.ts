@@ -117,8 +117,12 @@ assert(
 )
 assert(
   ics215LegacyTotalColCount(lastSegment.resourceColumns.length) ===
-    3 + lastSegment.resourceColumns.length + 4,
-  'Legacy column count should be assignee + work + stub + resources + overflow'
+    4 + lastSegment.resourceColumns.length + 4,
+  'Legacy column count should be assignee + work + kinds + rhn + resources + overflow'
+)
+assert(
+  documentXml.includes('<w:textDirection w:val="tbRl"/>'),
+  'Legacy DOCX should use vertical text for kinds/resource headers'
 )
 assert(
   ICS215_LEGACY_ASSIGNMENT_ROWS_PER_BLOCK === 3,

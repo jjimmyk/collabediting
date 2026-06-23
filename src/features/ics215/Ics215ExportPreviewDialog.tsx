@@ -14,6 +14,7 @@ import {
   ics215PreviewSegmentRowClass,
 } from '@/features/ics215/export-box-stack'
 import {
+  ICS215_LEGACY_KINDS_HEADER_LABEL,
   ICS215_LEGACY_RHN_FIELDS,
   ICS215_LEGACY_RHN_LABELS,
   ICS215_LEGACY_TOTAL_ROWS,
@@ -33,6 +34,9 @@ type Ics215ExportPreviewDialogProps = {
   onExportPdf: () => void
 }
 
+const verticalHeaderClass =
+  '[writing-mode:vertical-rl] [text-orientation:mixed] inline-flex items-center justify-center px-0.5 py-2'
+
 function renderWorkAssignmentsTable(
   segment: Ics215WorkAssignmentsTableSegment,
   index: number,
@@ -41,66 +45,47 @@ function renderWorkAssignmentsTable(
   const resourceCount = segment.resourceColumns.length
   const gridTemplate =
     resourceCount > 0
-      ? `minmax(4.5rem,0.85fr) minmax(6rem,1.1fr) minmax(2rem,0.35fr) repeat(${resourceCount}, minmax(2.25rem,0.45fr)) minmax(4rem,0.75fr) minmax(4rem,0.75fr) minmax(4rem,0.75fr) minmax(3.5rem,0.6fr)`
-      : 'minmax(4.5rem,0.85fr) minmax(6rem,1.1fr) minmax(2rem,0.35fr) minmax(4rem,0.75fr) minmax(4rem,0.75fr) minmax(4rem,0.75fr) minmax(3.5rem,0.6fr)'
+      ? `minmax(4.5rem,0.85fr) minmax(6rem,1.1fr) minmax(1.25rem,0.25fr) minmax(1.25rem,0.25fr) repeat(${resourceCount}, minmax(1.25rem,0.25fr)) minmax(4rem,0.75fr) minmax(4rem,0.75fr) minmax(4rem,0.75fr) minmax(3.5rem,0.6fr)`
+      : 'minmax(4.5rem,0.85fr) minmax(6rem,1.1fr) minmax(1.25rem,0.25fr) minmax(1.25rem,0.25fr) minmax(4rem,0.75fr) minmax(4rem,0.75fr) minmax(4rem,0.75fr) minmax(3.5rem,0.6fr)'
+
+  const showContinuedLabel = segment.label.includes('(Continued)')
 
   return (
     <div
       key={`ics215-seg-${index}`}
       className={ics215PreviewSegmentRowClass(isFirstInStack)}
     >
-      <div className="border-b border-zinc-900 px-2 py-1 text-[11px] font-semibold">
-        {segment.label}
-      </div>
-      <div className="overflow-x-auto p-2">
+      {showContinuedLabel ? (
+        <div className="mb-1 px-1 text-[10px] font-semibold">{segment.label}</div>
+      ) : null}
+      <div className="overflow-x-auto">
         {segment.showTableHeader ? (
-          <>
-            <div
-              className="mb-0 grid gap-0 border-b border-zinc-900 text-[8px] font-semibold"
-              style={{ gridTemplateColumns: gridTemplate }}
-            >
-              <span className="border-r border-zinc-900 p-1">5. Division/Group</span>
-              <span className="border-r border-zinc-900 p-1">6. Work Assignments</span>
-              <span className="border-r border-zinc-900 p-1" />
-              {resourceCount > 0 ? (
-                <span
-                  className="border-r border-zinc-900 p-1 text-center"
-                  style={{ gridColumn: `span ${resourceCount}` }}
-                >
-                  7. Kinds of Resources
-                </span>
-              ) : null}
-              <span className="border-r border-zinc-900 p-1">8. Overhead</span>
-              <span className="border-r border-zinc-900 p-1">9. Special Equip</span>
-              <span className="border-r border-zinc-900 p-1">10. Reporting</span>
-              <span className="p-1">11. Arrival</span>
-            </div>
-            {resourceCount > 0 ? (
-              <div
-                className="mb-0 grid gap-0 border-b border-zinc-900 text-[8px] font-semibold"
-                style={{ gridTemplateColumns: gridTemplate }}
-              >
-                <span className="border-r border-zinc-900 p-1" />
-                <span className="border-r border-zinc-900 p-1" />
-                <span className="border-r border-zinc-900 p-1" />
-                {segment.resourceColumns.map((column) => (
-                  <span key={column.id} className="border-r border-zinc-900 p-1 text-center">
-                    {column.label}
-                  </span>
-                ))}
-                <span className="border-r border-zinc-900 p-1" />
-                <span className="border-r border-zinc-900 p-1" />
-                <span className="border-r border-zinc-900 p-1" />
-                <span className="p-1" />
-              </div>
-            ) : null}
-          </>
+          <div
+            className="grid gap-0 border border-b-0 border-zinc-900 text-[8px] font-semibold"
+            style={{ gridTemplateColumns: gridTemplate }}
+          >
+            <span className="border-r border-zinc-900 p-1">5. Division/Group</span>
+            <span className="border-r border-zinc-900 p-1">6. Work Assignments</span>
+            <span className={`border-r border-zinc-900 ${verticalHeaderClass}`}>
+              {ICS215_LEGACY_KINDS_HEADER_LABEL}
+            </span>
+            <span className="border-r border-zinc-900 p-1" />
+            {segment.resourceColumns.map((column) => (
+              <span key={column.id} className={`border-r border-zinc-900 ${verticalHeaderClass}`}>
+                {column.label}
+              </span>
+            ))}
+            <span className="border-r border-zinc-900 p-1">8. Overhead</span>
+            <span className="border-r border-zinc-900 p-1">9. Special Equip</span>
+            <span className="border-r border-zinc-900 p-1">10. Reporting</span>
+            <span className="p-1">11. Arrival</span>
+          </div>
         ) : null}
         <div>
           {segment.rows.length === 0 ? (
-            <p className="min-h-[2rem] p-1 text-[10px]"> </p>
+            <p className="min-h-[2rem] border border-zinc-900 p-1 text-[10px]"> </p>
           ) : (
-            <table className="w-full border-collapse text-[9px]">
+            <table className="w-full border-collapse border border-zinc-900 text-[9px]">
               <tbody>
                 {segment.rows.flatMap((row, rowIndex) =>
                   ICS215_LEGACY_RHN_FIELDS.map((field, rhnIndex) => (
@@ -124,7 +109,10 @@ function renderWorkAssignmentsTable(
                           {row.workAssignment || ' '}
                         </td>
                       ) : null}
-                      <td className="border-r border-zinc-900 bg-zinc-50 p-1 text-center font-semibold uppercase">
+                      {rhnIndex === 0 ? (
+                        <td rowSpan={3} className="border-r border-zinc-900 p-1" />
+                      ) : null}
+                      <td className="border-r border-zinc-900 bg-zinc-50 p-1 text-right font-semibold uppercase">
                         {ICS215_LEGACY_RHN_LABELS[rhnIndex]}
                       </td>
                       {segment.resourceColumns.map((column) => {
@@ -175,11 +163,12 @@ function renderWorkAssignmentsTable(
             {ICS215_LEGACY_TOTAL_ROWS.map((totalRow) => (
               <div
                 key={totalRow.field}
-                className="grid gap-0 border-t border-dashed border-zinc-400 text-[9px] font-semibold last:border-solid last:border-zinc-900"
+                className="grid gap-0 border border-t-0 border-zinc-900 text-[9px] font-semibold last:border-t"
                 style={{ gridTemplateColumns: gridTemplate }}
               >
                 <span className="col-span-2 border-r border-zinc-900 p-1">{totalRow.label}</span>
-                <span className="border-r border-zinc-900 bg-zinc-50 p-1 text-center uppercase">
+                <span className="border-r border-zinc-900 p-1" />
+                <span className="border-r border-zinc-900 bg-zinc-50 p-1 text-right uppercase">
                   {ICS215_LEGACY_RHN_LABELS[ICS215_LEGACY_RHN_FIELDS.indexOf(totalRow.field)]}
                 </span>
                 {segment.resourceColumns.map((column) => {

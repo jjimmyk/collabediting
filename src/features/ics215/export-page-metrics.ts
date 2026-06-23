@@ -35,6 +35,9 @@ export const ICS215_EXPORT_PAGE_METRICS = {
   tableRowHeightPt: DOCX_BODY_LINE_PT + 4,
   tableHeaderHeightPt: DOCX_LABEL_LINE_PT + 4,
   tableSubHeaderHeightPt: DOCX_SMALL_LINE_PT + 4,
+  /** Single legacy IA header row with vertical kinds/resource labels. */
+  tableLegacyVerticalHeaderHeightPt: 48,
+  legacyContinuedLabelHeightPt: 12,
   minBodyLines: 1,
   pageLayoutBufferPt: 40,
   capacitySafetyFactor: 0.52,

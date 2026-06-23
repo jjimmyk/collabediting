@@ -8,6 +8,8 @@ export type Ics215LegacyRhnField = (typeof ICS215_LEGACY_RHN_FIELDS)[number]
 
 export const ICS215_LEGACY_RHN_LABELS = ['REQ', 'HAVE', 'NEED'] as const
 
+export const ICS215_LEGACY_KINDS_HEADER_LABEL = '7. Kinds of Resources'
+
 export const ICS215_LEGACY_TOTAL_ROWS = [
   { field: 'required' as const, label: '12. Total Resources Required' },
   { field: 'have' as const, label: '13. Total Resources Have on Hand' },
@@ -26,19 +28,27 @@ function allocateProportionalWidths(ratios: readonly number[], totalWidth: numbe
   return widths
 }
 
-/** Legacy IA: assignee | work | R/H/N stub | one col per resource | overhead × 4 */
+/** Legacy IA: assignee | work | kinds (vertical) | R/H/N | one col per resource | overhead × 4 */
 export function buildIcs215LegacyTableColumnWidths(
   resourceColumns: Ics215ResourceColumn[]
 ): number[] {
-  const resourceRatios = resourceColumns.map(() => 4)
+  const resourceRatios = resourceColumns.map(() => 2)
   return allocateProportionalWidths(
-    [10, 16, 4, ...resourceRatios, 10, 12, 12, 8],
+    [10, 16, 4, 4, ...resourceRatios, 10, 12, 12, 8],
     ICS215_LEGACY_DOCX_CONTENT_WIDTH
   )
 }
 
-export function ics215LegacyResourceStartCol(): number {
+export function ics215LegacyKindsCol(): number {
+  return 2
+}
+
+export function ics215LegacyRhnCol(): number {
   return 3
+}
+
+export function ics215LegacyResourceStartCol(): number {
+  return 4
 }
 
 export function ics215LegacyOverflowStartCol(resourceCount: number): number {
@@ -55,4 +65,18 @@ export function legacyResourceCellValue(
   field: Ics215LegacyRhnField
 ): string {
   return rowValues[columnId]?.[field]?.trim() || ' '
+}
+
+/** Characters ordered bottom-to-top for vertical column headers (ICS 215-CG paper form). */
+export function legacyVerticalHeaderChars(text: string): string[] {
+  return text.trim().split('')
+}
+
+export function estimateLegacyVerticalHeaderHeight(
+  text: string,
+  fontSize: number,
+  minHeight = 44
+): number {
+  const charCount = Math.max(text.trim().length, 1)
+  return Math.max(minHeight, charCount * (fontSize + 1.5) + 8)
 }
