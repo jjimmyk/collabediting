@@ -27,8 +27,11 @@ import {
 } from '@/features/roster/OrgChartConnectors'
 import {
   ORG_CHART_CANVAS_MIN_WIDTH,
+  ORG_CHART_CARD_TO_CHILDREN_GAP,
+  ORG_CHART_CONNECTOR_STEM_HEIGHT,
   ORG_CHART_POSITION_CARD_MAX_WIDTH,
   ORG_CHART_POSITION_CARD_WIDTH,
+  ORG_CHART_SUBORDINATE_ROW_GAP,
   orgChartSectionColumnClassName,
 } from '@/features/roster/org-chart-layout-tokens'
 import type { RosterDisplayFilters } from '@/features/roster/roster-display-filters'
@@ -350,7 +353,12 @@ function OrgChartChildren({
   }
 
   return (
-    <div className="flex w-full min-w-0 flex-col items-center gap-2">
+    <div
+      className={cn(
+        'flex w-full min-w-0 flex-col items-center',
+        ORG_CHART_SUBORDINATE_ROW_GAP
+      )}
+    >
       {visibleChildren.map((child, index) => {
         if (child.kind === 'stack') {
           return (
@@ -365,7 +373,7 @@ function OrgChartChildren({
 
         if (child.kind === 'fork') {
           return (
-            <OrgChartInboundStem key={orgChartNodeKey(child, index)} heightClassName="h-5">
+            <OrgChartInboundStem key={orgChartNodeKey(child, index)}>
               <OrgChartLayoutNode
                 node={child}
                 parentColor={parentColor}
@@ -376,7 +384,7 @@ function OrgChartChildren({
         }
 
         return (
-          <OrgChartInboundStem key={orgChartNodeKey(child, index)} heightClassName="h-5">
+          <OrgChartInboundStem key={orgChartNodeKey(child, index)}>
             <OrgChartLayoutNode
               node={child}
               parentColor={parentColor}
@@ -636,7 +644,9 @@ function PositionNode({
     <div
       className={cn(
         'flex w-full min-w-0 flex-col',
-        hasVisibleChildren ? 'items-start' : 'items-center',
+        hasVisibleChildren
+          ? ['items-start', ORG_CHART_CARD_TO_CHILDREN_GAP]
+          : 'items-center',
         layoutMode === 'wide' && ORG_CHART_POSITION_CARD_MAX_WIDTH
       )}
     >
@@ -864,7 +874,7 @@ function IncidentCommanderSubtree({
           ) : (
             <>
               {(visibleCommandStaff.length > 0 || orgChartLayout.rootChildren.length > 0) && (
-                <OrgChartVerticalLine heightClassName="h-5" />
+                <OrgChartVerticalLine heightClassName={ORG_CHART_CONNECTOR_STEM_HEIGHT} />
               )}
               <div
                 className={cn(
@@ -941,7 +951,7 @@ function IncidentCommanderSubtree({
           />
         ) : (
           <>
-            <OrgChartVerticalLine heightClassName="h-5" />
+            <OrgChartVerticalLine heightClassName={ORG_CHART_CONNECTOR_STEM_HEIGHT} />
             <div
               className={cn(
                 'grid w-max min-w-full gap-x-4 gap-y-6',

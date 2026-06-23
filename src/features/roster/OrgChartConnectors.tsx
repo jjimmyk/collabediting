@@ -2,23 +2,34 @@ import type { ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 import {
   ORG_CHART_CONNECTOR_CLASS,
+  ORG_CHART_CONNECTOR_DROP_HEIGHT,
+  ORG_CHART_CONNECTOR_LINE_WIDTH,
+  ORG_CHART_CONNECTOR_STEM_HEIGHT,
   ORG_CHART_FORK_BRANCH_COLUMN_MIN_WIDTH,
   ORG_CHART_LOGISTICS_FORK_MIN_WIDTH,
+  ORG_CHART_SUBORDINATE_ARM_OFFSET,
   ORG_CHART_SUBORDINATE_ARM_WIDTH,
   ORG_CHART_SUBORDINATE_ROW_GAP,
   ORG_CHART_SUBORDINATE_TRUNK_WIDTH,
+  orgChartCrossbarBarInsetClassName,
 } from '@/features/roster/org-chart-layout-tokens'
 
 export function OrgChartVerticalLine({
   className,
-  heightClassName = 'h-4',
+  heightClassName = ORG_CHART_CONNECTOR_STEM_HEIGHT,
 }: {
   className?: string
   heightClassName?: string
 }) {
   return (
     <div
-      className={cn('w-0.5 shrink-0', ORG_CHART_CONNECTOR_CLASS, heightClassName, className)}
+      className={cn(
+        ORG_CHART_CONNECTOR_LINE_WIDTH,
+        'shrink-0',
+        ORG_CHART_CONNECTOR_CLASS,
+        heightClassName,
+        className
+      )}
       aria-hidden
     />
   )
@@ -33,7 +44,7 @@ export function OrgChartHorizontalLine({ className }: { className?: string }) {
 /** Short vertical stem above a child node (parent → child edge). */
 export function OrgChartInboundStem({
   children,
-  heightClassName = 'h-4',
+  heightClassName = ORG_CHART_CONNECTOR_STEM_HEIGHT,
 }: {
   children: ReactNode
   heightClassName?: string
@@ -48,14 +59,14 @@ export function OrgChartInboundStem({
 
 /** Connects a parent card wrapper to its child subtree. */
 export function OrgChartParentChildLink({ children }: { children: ReactNode }) {
-  return <OrgChartInboundStem heightClassName="h-5">{children}</OrgChartInboundStem>
+  return <OrgChartInboundStem>{children}</OrgChartInboundStem>
 }
 
 /** Shared horizontal crossbar with vertical drops into each column. */
 export function OrgChartCrossbarColumns({
   columns,
   className,
-  barInsetClassName = 'left-[4%] right-[4%]',
+  barInsetClassName,
   columnClassName,
   showInboundStem = true,
 }: {
@@ -67,17 +78,25 @@ export function OrgChartCrossbarColumns({
 }) {
   if (columns.length === 0) return null
 
+  const resolvedBarInset =
+    barInsetClassName ?? orgChartCrossbarBarInsetClassName(columns.length)
+
   return (
     <div className={cn('relative flex w-full min-w-0 flex-col items-center', className)}>
-      {showInboundStem ? <OrgChartVerticalLine heightClassName="h-5" /> : null}
+      {showInboundStem ? (
+        <OrgChartVerticalLine heightClassName={ORG_CHART_CONNECTOR_STEM_HEIGHT} />
+      ) : null}
       <div className="relative flex w-full min-w-0 flex-col items-center">
         <OrgChartHorizontalLine
-          className={cn('absolute top-0 -translate-y-1/2', barInsetClassName)}
+          className={cn('absolute top-0 -translate-y-1/2', resolvedBarInset)}
         />
         <div className={cn('grid w-max min-w-full gap-x-4', columnClassName)}>
           {columns.map((column, index) => (
             <div key={index} className="flex min-w-0 flex-col items-center">
-              <OrgChartVerticalLine heightClassName="h-4" className="-mt-px" />
+              <OrgChartVerticalLine
+                heightClassName={ORG_CHART_CONNECTOR_DROP_HEIGHT}
+                className="-mt-px"
+              />
               {column}
             </div>
           ))}
@@ -92,7 +111,7 @@ export function OrgChartVerticalStack({ children }: { children: ReactNode[] }) {
   if (children.length === 0) return null
 
   return (
-    <div className="flex w-full min-w-0 flex-col items-center gap-2">
+    <div className={cn('flex w-full min-w-0 flex-col items-center', ORG_CHART_SUBORDINATE_ROW_GAP)}>
       {children.map((child, index) => (
         <OrgChartInboundStem key={index}>{child}</OrgChartInboundStem>
       ))}
@@ -104,13 +123,7 @@ export function OrgChartVerticalStack({ children }: { children: ReactNode[] }) {
  * ICS-style subordinate layout: vertical trunk down from the superior, horizontal
  * arms to the right into each indented child card (Planning/Finance unit stacks, etc.).
  */
-export function OrgChartRightIndentStack({
-  children,
-  connectFromParent = true,
-}: {
-  children: ReactNode[]
-  connectFromParent?: boolean
-}) {
+export function OrgChartRightIndentStack({ children }: { children: ReactNode[] }) {
   if (children.length === 0) return null
 
   return (
@@ -119,21 +132,15 @@ export function OrgChartRightIndentStack({
       data-org-chart-layout="right-indent"
     >
       <div
-        className={cn(
-          'relative flex shrink-0 flex-col items-center',
-          ORG_CHART_SUBORDINATE_TRUNK_WIDTH
-        )}
+        className={cn('relative shrink-0', ORG_CHART_SUBORDINATE_TRUNK_WIDTH)}
+        aria-hidden
       >
-        {connectFromParent ? (
-          <OrgChartVerticalLine heightClassName="h-4" className="shrink-0" />
-        ) : null}
         <div
           className={cn(
-            'absolute left-1/2 w-0.5 -translate-x-1/2',
-            ORG_CHART_CONNECTOR_CLASS,
-            connectFromParent ? 'top-4 bottom-0' : 'top-0 bottom-0'
+            'absolute right-0 top-0 bottom-0',
+            ORG_CHART_CONNECTOR_LINE_WIDTH,
+            ORG_CHART_CONNECTOR_CLASS
           )}
-          aria-hidden
         />
       </div>
       <div className={cn('flex min-w-0 flex-1 flex-col', ORG_CHART_SUBORDINATE_ROW_GAP)}>
@@ -141,7 +148,8 @@ export function OrgChartRightIndentStack({
           <div key={index} className="relative flex min-w-0 items-center">
             <OrgChartHorizontalLine
               className={cn(
-                'absolute -left-4 top-1/2 -translate-y-1/2',
+                'absolute left-0 top-1/2 -translate-y-1/2',
+                ORG_CHART_SUBORDINATE_ARM_OFFSET,
                 ORG_CHART_SUBORDINATE_ARM_WIDTH
               )}
             />
@@ -165,11 +173,9 @@ export function OrgChartFork({
 
   if (layout === 'vertical') {
     return (
-      <div className="flex w-full min-w-0 flex-col items-center gap-y-4">
+      <div className={cn('flex w-full min-w-0 flex-col items-center', ORG_CHART_SUBORDINATE_ROW_GAP)}>
         {children.map((child, index) => (
-          <OrgChartInboundStem key={index} heightClassName="h-5">
-            {child}
-          </OrgChartInboundStem>
+          <OrgChartInboundStem key={index}>{child}</OrgChartInboundStem>
         ))}
       </div>
     )
@@ -189,7 +195,6 @@ export function OrgChartFork({
         </div>
       ))}
       className={cn('w-full', ORG_CHART_LOGISTICS_FORK_MIN_WIDTH)}
-      barInsetClassName="left-[4%] right-[4%]"
       columnClassName="grid-cols-2 gap-x-8"
       showInboundStem
     />

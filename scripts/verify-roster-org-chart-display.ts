@@ -555,9 +555,27 @@ assert(
   'org chart should render subordinates with right-indent connector layout'
 )
 assert(
+  connectorSource.includes('absolute right-0 top-0 bottom-0') &&
+    connectorSource.includes('ORG_CHART_SUBORDINATE_ARM_OFFSET') &&
+    !connectorSource.includes('-left-4 top-1/2'),
+  'right-indent arms should align to trunk vertical without overshooting left'
+)
+assert(
   orgChartRosterSource.includes('OrgChartRightIndentStack') &&
-    !orgChartRosterSource.includes('OrgChartVerticalStack'),
-  'org chart roster should use right-indent stacks for subordinate rows'
+    !orgChartRosterSource.includes('OrgChartVerticalStack') &&
+    orgChartRosterSource.includes('ORG_CHART_CARD_TO_CHILDREN_GAP'),
+  'org chart roster should use right-indent stacks and consistent card-to-children spacing'
+)
+
+const layoutTokensSource = readFileSync(
+  join(process.cwd(), 'src/features/roster/org-chart-layout-tokens.ts'),
+  'utf8'
+)
+assert(
+  layoutTokensSource.includes('ORG_CHART_CARD_TO_CHILDREN_GAP') &&
+    layoutTokensSource.includes('ORG_CHART_CONNECTOR_STEM_HEIGHT') &&
+    layoutTokensSource.includes('orgChartCrossbarBarInsetClassName'),
+  'org chart layout tokens should centralize spacing and crossbar insets'
 )
 
 assert(
