@@ -44,7 +44,7 @@ function OrgChartIcBusRegistrar({
   useLayoutEffect(() => {
     registerIcBus(headerIds.length > 0 ? { commanderId, headerIds } : null)
     return () => registerIcBus(null)
-  }, [commanderId, headerIds.join('\0'), headerIds, registerIcBus])
+  }, [commanderId, headerIds.join('\0'), registerIcBus])
 
   return null
 }

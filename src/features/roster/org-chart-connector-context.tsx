@@ -53,9 +53,11 @@ export function OrgChartConnectorProvider({ children }: { children: ReactNode })
   const listenersRef = useRef(new Set<RedrawListener>())
 
   const notifyRedraw = useCallback(() => {
-    for (const listener of listenersRef.current) {
-      listener()
-    }
+    requestAnimationFrame(() => {
+      for (const listener of listenersRef.current) {
+        listener()
+      }
+    })
   }, [])
 
   const subscribeRedraw = useCallback((listener: RedrawListener) => {

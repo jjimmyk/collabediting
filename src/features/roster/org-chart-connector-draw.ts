@@ -6,26 +6,62 @@ export type OrgChartSvgLine = {
   thick?: boolean
 }
 
+export type OrgChartLayoutRect = {
+  left: number
+  top: number
+  width: number
+  height: number
+  right: number
+  bottom: number
+  cx: number
+  cy: number
+}
+
 export const ORG_CHART_IC_BUS_OFFSET_PX = 22
 
+export function readOrgChartZoom(chart: HTMLElement): number {
+  const parsed = Number.parseFloat(chart.dataset.orgChartZoom ?? '1')
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 1
+}
+
+/** Map viewport rects into the chart's layout coordinate space (CSS zoom aware). */
+export function orgChartLayoutRect(
+  chart: HTMLElement,
+  element: HTMLElement,
+  zoom = readOrgChartZoom(chart)
+): OrgChartLayoutRect {
+  const chartRect = chart.getBoundingClientRect()
+  const rect = element.getBoundingClientRect()
+  const scale = zoom > 0 ? zoom : 1
+  const left = (rect.left - chartRect.left) / scale
+  const top = (rect.top - chartRect.top) / scale
+  const width = rect.width / scale
+  const height = rect.height / scale
+  return {
+    left,
+    top,
+    width,
+    height,
+    right: left + width,
+    bottom: top + height,
+    cx: left + width / 2,
+    cy: top + height / 2,
+  }
+}
+
 export function spineConnectLines(
-  chartRect: DOMRect,
+  chart: HTMLElement,
   parentEl: HTMLElement,
   childEls: HTMLElement[],
-  anchorRatio: number
+  anchorRatio: number,
+  zoom = readOrgChartZoom(chart)
 ): OrgChartSvgLine[] {
   if (childEls.length === 0) return []
 
-  const parent = parentEl.getBoundingClientRect()
-  const spineX = parent.left - chartRect.left + parent.width * anchorRatio
-  const spineTop = parent.bottom - chartRect.top
-  const childRects = childEls.map((child) => {
-    const rect = child.getBoundingClientRect()
-    return {
-      left: rect.left - chartRect.left,
-      cy: rect.top - chartRect.top + rect.height / 2,
-    }
-  })
+  const parent = orgChartLayoutRect(chart, parentEl, zoom)
+  const spineX = parent.left + parent.width * anchorRatio
+  const spineTop = parent.bottom
+  const childRects = childEls.map((child) => orgChartLayoutRect(chart, child, zoom))
   const spineBottom = childRects[childRects.length - 1].cy
 
   return [
@@ -40,25 +76,19 @@ export function spineConnectLines(
 }
 
 export function icBusConnectLines(
-  chartRect: DOMRect,
+  chart: HTMLElement,
   commanderEl: HTMLElement,
   headerEls: HTMLElement[],
-  busOffsetPx = ORG_CHART_IC_BUS_OFFSET_PX
+  busOffsetPx = ORG_CHART_IC_BUS_OFFSET_PX,
+  zoom = readOrgChartZoom(chart)
 ): OrgChartSvgLine[] {
   if (headerEls.length === 0) return []
 
-  const commander = commanderEl.getBoundingClientRect()
-  const cmdCx = commander.left - chartRect.left + commander.width / 2
-  const cmdBottom = commander.bottom - chartRect.top
+  const commander = orgChartLayoutRect(chart, commanderEl, zoom)
+  const cmdCx = commander.cx
+  const cmdBottom = commander.bottom
 
-  const headers = headerEls.map((el) => {
-    const rect = el.getBoundingClientRect()
-    return {
-      cx: rect.left - chartRect.left + rect.width / 2,
-      top: rect.top - chartRect.top,
-    }
-  })
-
+  const headers = headerEls.map((el) => orgChartLayoutRect(chart, el, zoom))
   const busY = headers[0].top - busOffsetPx
 
   return [
@@ -79,3 +109,4 @@ export function icBusConnectLines(
     })),
   ]
 }
+

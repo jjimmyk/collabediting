@@ -5,6 +5,7 @@ import {
   ORG_CHART_SPINE_ANCHOR_RATIO,
   ORG_CHART_SUBORDINATE_ROW_GAP,
 } from '@/features/roster/org-chart-layout-tokens'
+import { readOrgChartZoom } from '@/features/roster/org-chart-connector-draw'
 
 export function OrgChartSpineRegister({
   parentId,
@@ -138,12 +139,15 @@ export function OrgChartSubHierarchyColumn({
     const align = () => {
       const header = getCardElement(headerId)
       if (!header) return
+      const chartZoom = readOrgChartZoom(chart as HTMLElement)
       const chartRect = chart.getBoundingClientRect()
       const headerRect = header.getBoundingClientRect()
       const columnRect = column.getBoundingClientRect()
+      const scale = chartZoom > 0 ? chartZoom : 1
       const anchor =
-        headerRect.left - chartRect.left + headerRect.width * ORG_CHART_SPINE_ANCHOR_RATIO
-      const columnLeft = columnRect.left - chartRect.left
+        (headerRect.left - chartRect.left + headerRect.width * ORG_CHART_SPINE_ANCHOR_RATIO) /
+        scale
+      const columnLeft = (columnRect.left - chartRect.left) / scale
       column.style.transform = `translateX(${anchor - columnLeft}px)`
     }
 
