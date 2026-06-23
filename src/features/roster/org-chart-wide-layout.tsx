@@ -6,12 +6,12 @@ import {
   useOrgChartConnectors,
 } from '@/features/roster/org-chart-connector-context'
 import type { OrgChartIcBusLink } from '@/features/roster/org-chart-connector-context.types'
+import { OrgChartIcDirectReportsRow } from '@/features/roster/org-chart-ic-direct-reports'
 import {
   ORG_CHART_IC_CONNECTOR_ID,
   orgChartPositionConnectorId,
 } from '@/features/roster/org-chart-node-id'
 import {
-  ORG_CHART_SUBORDINATE_ROW_GAP,
   ORG_CHART_WIDE_COMMAND_STAFF_MARGIN_TOP,
   ORG_CHART_WIDE_GROUPS_ROW_MARGIN_TOP,
   ORG_CHART_WIDE_SUB_HIERARCHY_MARGIN_TOP,
@@ -21,10 +21,11 @@ import { OrgChartSubHierarchyColumn } from '@/features/roster/org-chart-spine-la
 import { OrgChartWideSpineTree } from '@/features/roster/org-chart-wide-spine-tree'
 import type { OrgChartWideRenderProps } from '@/features/roster/org-chart-wide-layout.types'
 import {
+  buildIcDirectReportNodes,
   filterVisibleOrgChartChildren,
-  orgChartNodeKey,
   positionBranchIsVisible,
   positionNodeIsVisible,
+  resolveOrgChartNodeConnectorId,
 } from '@/features/roster/org-chart-visibility'
 import type { OrgChartNode } from '@/features/roster/ics-org-chart-structure'
 import type { WorkspaceOrgChartLayout } from '@/features/roster/workspace-positions'
@@ -96,28 +97,32 @@ export function OrgChartWideLayout({
       } => entry.chief !== null
     )
 
-  const commandStaffNodes = visibleCommandStaff
-    .map((position) =>
-      orgChartLayout.commandStaffBranch.children.find(
-        (child): child is Extract<OrgChartNode, { kind: 'position' }> =>
-          child.kind === 'position' && child.position === position
-      )
-    )
-    .filter((node): node is Extract<OrgChartNode, { kind: 'position' }> => node !== undefined)
+  const commandStaffNodes = showCommandStaff
+    ? visibleCommandStaff
+        .map((position) =>
+          orgChartLayout.commandStaffBranch.children.find(
+            (child): child is Extract<OrgChartNode, { kind: 'position' }> =>
+              child.kind === 'position' && child.position === position
+          )
+        )
+        .filter((node): node is Extract<OrgChartNode, { kind: 'position' }> => node !== undefined)
+    : []
 
-  const commandStaffConnectorIds = commandStaffNodes.map((node) =>
-    orgChartPositionConnectorId(node.position)
-  )
+  const icDirectReportNodes = buildIcDirectReportNodes(commandStaffNodes, visibleRootChildren)
+  const icDirectReportConnectorIds = icDirectReportNodes
+    .map((node) => resolveOrgChartNodeConnectorId(node, renderProps))
+    .filter((id): id is string => id !== null)
+
   const sectionChiefConnectorIds = sectionChiefs.map(({ chief }) =>
     orgChartPositionConnectorId(chief.position)
   )
 
   const icBusLinks: OrgChartIcBusLink[] = []
   if (icVisible) {
-    if (commandStaffConnectorIds.length > 0) {
+    if (icDirectReportConnectorIds.length > 0) {
       icBusLinks.push({
         commanderId: ORG_CHART_IC_CONNECTOR_ID,
-        headerIds: commandStaffConnectorIds,
+        headerIds: icDirectReportConnectorIds,
       })
     }
     if (sectionChiefConnectorIds.length > 0) {
@@ -134,10 +139,8 @@ export function OrgChartWideLayout({
         icVisible={icVisible}
         orgChartLayout={orgChartLayout}
         renderProps={renderProps}
-        visibleRootChildren={visibleRootChildren}
+        icDirectReportNodes={icDirectReportNodes}
         sectionChiefs={sectionChiefs}
-        showCommandStaff={showCommandStaff}
-        commandStaffNodes={commandStaffNodes}
         icBusLinks={icBusLinks}
         zoom={zoom}
       />
@@ -149,30 +152,26 @@ function OrgChartWideLayoutBody({
   icVisible,
   orgChartLayout,
   renderProps,
-  visibleRootChildren,
+  icDirectReportNodes,
   sectionChiefs,
-  showCommandStaff,
-  commandStaffNodes,
   icBusLinks,
   zoom,
 }: {
   icVisible: boolean
   orgChartLayout: WorkspaceOrgChartLayout
   renderProps: OrgChartWideRenderProps
-  visibleRootChildren: OrgChartNode[]
+  icDirectReportNodes: OrgChartNode[]
   sectionChiefs: {
     branch: Extract<OrgChartNode, { kind: 'group' }>
     chief: Extract<OrgChartNode, { kind: 'position' }>
   }[]
-  showCommandStaff: boolean
-  commandStaffNodes: Extract<OrgChartNode, { kind: 'position' }>[]
   icBusLinks: OrgChartIcBusLink[]
   zoom: number
 }) {
   const { chartRef } = useOrgChartConnectors()
 
   const sectionChiefsMarginClass =
-    showCommandStaff && commandStaffNodes.length > 0
+    icDirectReportNodes.length > 0
       ? ORG_CHART_WIDE_GROUPS_ROW_MARGIN_TOP
       : icVisible
         ? ORG_CHART_WIDE_COMMAND_STAFF_MARGIN_TOP
@@ -196,52 +195,16 @@ function OrgChartWideLayoutBody({
             },
             { suppressChildren: true, connectorAnchorId: ORG_CHART_IC_CONNECTOR_ID }
           )}
-          {visibleRootChildren.length > 0 ? (
-            <div
-              className={cn(
-                'mt-4 flex w-full flex-col items-center',
-                ORG_CHART_SUBORDINATE_ROW_GAP
-              )}
-            >
-              {visibleRootChildren.map((child, index) => (
-                <div key={orgChartNodeKey(child, index)} className="w-full max-w-full">
-                  {renderProps.renderLeafNode(child, { suppressChildren: false })}
-                </div>
-              ))}
-            </div>
-          ) : null}
         </div>
       ) : null}
 
-      {showCommandStaff && commandStaffNodes.length > 0 ? (
-        <div
-          className={cn(
-            'flex w-full flex-wrap items-start justify-center gap-x-8 gap-y-4',
-            icVisible || visibleRootChildren.length > 0
-              ? ORG_CHART_WIDE_COMMAND_STAFF_MARGIN_TOP
-              : 'mt-4'
-          )}
-        >
-          {commandStaffNodes.map((node) => {
-            const connectorId = orgChartPositionConnectorId(node.position)
-            return (
-              <div key={node.position} className="flex flex-col items-center">
-                {renderProps.renderLeafNode(node, {
-                  parentColor: 'neutral',
-                  suppressChildren: true,
-                  connectorAnchorId: connectorId,
-                })}
-                <OrgChartWideSpineTree
-                  parentId={connectorId}
-                  nodes={node.children ?? []}
-                  parentColor="neutral"
-                  renderProps={renderProps}
-                />
-              </div>
-            )
-          })}
-        </div>
-      ) : null}
+      <OrgChartIcDirectReportsRow
+        nodes={icDirectReportNodes}
+        renderProps={renderProps}
+        marginClassName={
+          icVisible ? ORG_CHART_WIDE_COMMAND_STAFF_MARGIN_TOP : 'mt-4'
+        }
+      />
 
       {sectionChiefs.length > 0 ? (
         <>

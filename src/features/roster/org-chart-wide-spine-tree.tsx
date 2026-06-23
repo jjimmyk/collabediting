@@ -1,4 +1,3 @@
-import { orgChartNodeConnectorId } from '@/features/roster/org-chart-node-id'
 import {
   OrgChartSpineChildren,
   OrgChartSpineNode,
@@ -6,7 +5,7 @@ import {
 import {
   filterVisibleOrgChartChildren,
   orgChartNodeKey,
-  positionNodeIsVisible,
+  resolveOrgChartNodeConnectorId,
 } from '@/features/roster/org-chart-visibility'
 import type { OrgChartColor, OrgChartNode } from '@/features/roster/ics-org-chart-structure'
 import type { OrgChartWideRenderProps } from '@/features/roster/org-chart-wide-layout.types'
@@ -17,37 +16,10 @@ function collectSpineChildIds(
 ): string[] {
   const ids: string[] = []
   for (const node of nodes) {
-    const id = resolveSpineNodeConnectorId(node, renderProps)
+    const id = resolveOrgChartNodeConnectorId(node, renderProps)
     if (id) ids.push(id)
   }
   return ids
-}
-
-function resolveSpineNodeConnectorId(
-  node: OrgChartNode,
-  renderProps: OrgChartWideRenderProps
-): string | null {
-  if (node.kind === 'asset') {
-    return renderProps.assetsByKey[node.assetKey] ? orgChartNodeConnectorId(node) : null
-  }
-  if (node.kind === 'single_resource') {
-    return renderProps.rosterById[node.memberId] ? orgChartNodeConnectorId(node) : null
-  }
-  if (node.kind === 'position') {
-    if (
-      !positionNodeIsVisible(
-        node.position,
-        node.children ?? [],
-        renderProps.visiblePositions,
-        renderProps.displayFilters
-      )
-    ) {
-      return null
-    }
-    if (!renderProps.entriesByPosition[node.position]) return null
-    return orgChartNodeConnectorId(node)
-  }
-  return null
 }
 
 function flattenWideSpineNodes(
@@ -116,7 +88,7 @@ function OrgChartWideSpineNode({
   parentColor?: OrgChartColor
   renderProps: OrgChartWideRenderProps
 }) {
-  const connectorId = resolveSpineNodeConnectorId(node, renderProps)
+  const connectorId = resolveOrgChartNodeConnectorId(node, renderProps)
   if (!connectorId) return null
 
   const card = renderProps.renderLeafNode(node, {

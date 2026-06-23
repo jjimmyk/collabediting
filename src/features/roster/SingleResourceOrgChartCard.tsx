@@ -2,7 +2,7 @@ import { X } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { orgChartColorClasses, type OrgChartColor } from '@/features/roster/ics-org-chart-structure'
-import { ORG_CHART_CARD_LAYER_CLASS } from '@/features/roster/org-chart-layout-tokens'
+import { ORG_CHART_CARD_LAYER_CLASS, ORG_CHART_POSITION_CARD_WIDTH } from '@/features/roster/org-chart-layout-tokens'
 import type { WorkspaceRosterMember } from '@/lib/workspace-types'
 import { cn } from '@/lib/utils'
 
@@ -28,7 +28,8 @@ export function SingleResourceOrgChartCard({
     <div
       className={cn(
         ORG_CHART_CARD_LAYER_CLASS,
-        'w-full min-w-0 rounded-md border px-2 py-2 shadow-sm',
+        ORG_CHART_POSITION_CARD_WIDTH,
+        'rounded-md border px-2 py-2 shadow-sm',
         scheduled ? 'border-dashed opacity-90' : 'border-dashed',
         orgChartColorClasses(color ?? 'neutral')
       )}

@@ -6,12 +6,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { cn } from '@/lib/utils'
 
 type OrgChartNodeDetailDialogProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
   title: string
   description?: string
+  contentClassName?: string
   children: ReactNode
 }
 
@@ -20,11 +22,17 @@ export function OrgChartNodeDetailDialog({
   onOpenChange,
   title,
   description,
+  contentClassName,
   children,
 }: OrgChartNodeDetailDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[min(85vh,48rem)] max-w-2xl overflow-y-auto">
+      <DialogContent
+        className={cn(
+          'max-h-[min(85vh,48rem)] max-w-2xl overflow-y-auto',
+          contentClassName
+        )}
+      >
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           {description ? <DialogDescription>{description}</DialogDescription> : null}

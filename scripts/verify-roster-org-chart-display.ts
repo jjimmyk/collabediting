@@ -462,8 +462,8 @@ assert(
 )
 
 assert(
-  ORG_CHART_ASSET_CARD_MAX_WIDTH.includes('36rem'),
-  'org chart asset cards should use 4x width (36rem max)'
+  ORG_CHART_ASSET_CARD_MAX_WIDTH.includes('12rem'),
+  'org chart asset cards should match position card width (12rem max)'
 )
 assert(
   ORG_CHART_CANVAS_MIN_WIDTH.includes('84rem'),
@@ -574,12 +574,10 @@ const wideLayoutSource = readFileSync(
   'utf8'
 )
 assert(
-  wideLayoutSource.includes('data-org-chart-wide-root') &&
-    wideLayoutSource.includes('OrgChartSubHierarchyColumn') &&
-    wideLayoutSource.includes('OrgChartIcBusesRegistrar') &&
-    wideLayoutSource.includes('ORG_CHART_WIDE_COMMAND_STAFF_MARGIN_TOP') &&
+  wideLayoutSource.includes('OrgChartIcDirectReportsRow') &&
+    wideLayoutSource.includes('buildIcDirectReportNodes') &&
     !wideLayoutSource.includes('CommandStaffHeaderCard'),
-  'wide org chart layout should center command staff under IC and omit the command staff badge'
+  'wide org chart layout should merge IC direct reports with command staff under the commander'
 )
 
 const connectorOverlaySource = readFileSync(

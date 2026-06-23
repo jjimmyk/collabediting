@@ -1,6 +1,10 @@
 import type { OrgChartNode } from '@/features/roster/ics-org-chart-structure'
 import type { RosterDisplayFilters } from '@/features/roster/roster-display-filters'
 import { singleResourceNodeVisible } from '@/features/roster/roster-display-filters'
+import { orgChartNodeConnectorId } from '@/features/roster/org-chart-node-id'
+import type { ResourceListItemData } from '@/features/resources/types'
+import type { WorkspaceRosterMember } from '@/lib/workspace-types'
+import type { PositionRosterEntry } from '@/features/roster/workspace-position-roster'
 
 export function filterVisibleOrgChartChildren(
   children: OrgChartNode[],
@@ -58,4 +62,45 @@ export function positionBranchIsVisible(
     visiblePositions,
     displayFilters
   )
+}
+
+export function resolveOrgChartNodeConnectorId(
+  node: OrgChartNode,
+  context: {
+    entriesByPosition: Record<string, PositionRosterEntry>
+    assetsByKey: Record<string, ResourceListItemData>
+    rosterById: Record<string, WorkspaceRosterMember>
+    visiblePositions: Set<string>
+    displayFilters: RosterDisplayFilters
+  }
+): string | null {
+  if (node.kind === 'asset') {
+    return context.assetsByKey[node.assetKey] ? orgChartNodeConnectorId(node) : null
+  }
+  if (node.kind === 'single_resource') {
+    if (!singleResourceNodeVisible(node.scheduled, context.displayFilters)) return null
+    return context.rosterById[node.memberId] ? orgChartNodeConnectorId(node) : null
+  }
+  if (node.kind === 'position') {
+    if (
+      !positionNodeIsVisible(
+        node.position,
+        node.children ?? [],
+        context.visiblePositions,
+        context.displayFilters
+      )
+    ) {
+      return null
+    }
+    if (!context.entriesByPosition[node.position]) return null
+    return orgChartNodeConnectorId(node)
+  }
+  return null
+}
+
+export function buildIcDirectReportNodes(
+  commandStaffNodes: Extract<OrgChartNode, { kind: 'position' }>[],
+  rootChildren: OrgChartNode[]
+): OrgChartNode[] {
+  return [...commandStaffNodes, ...rootChildren]
 }

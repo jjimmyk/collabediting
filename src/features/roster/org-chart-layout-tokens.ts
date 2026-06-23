@@ -55,11 +55,14 @@ export const ORG_CHART_LOGISTICS_COLUMN_MIN_WIDTH = 'min-w-[28rem]'
 export const ORG_CHART_FORK_BRANCH_COLUMN_MIN_WIDTH = 'min-w-[12rem]'
 export const ORG_CHART_LOGISTICS_FORK_MIN_WIDTH = 'min-w-[26rem]'
 
-/** ~4× prior org-chart asset footprint (7–9rem → 28–36rem). */
-export const ORG_CHART_ASSET_CARD_MIN_WIDTH = 'min-w-[28rem]'
-export const ORG_CHART_ASSET_CARD_MAX_WIDTH = 'max-w-[36rem]'
+/** Org chart cards for assets and single resources — match position card width. */
+export const ORG_CHART_ASSET_CARD_MIN_WIDTH = ORG_CHART_POSITION_CARD_MIN_WIDTH
+export const ORG_CHART_ASSET_CARD_MAX_WIDTH = ORG_CHART_POSITION_CARD_MAX_WIDTH
 export const ORG_CHART_ASSET_CARD_WIDTH =
   `${ORG_CHART_ASSET_CARD_MIN_WIDTH} ${ORG_CHART_ASSET_CARD_MAX_WIDTH}`
+
+/** @deprecated Org chart assets now use position card width; kept for verify compatibility. */
+export const ORG_CHART_ASSET_CARD_LEGACY_MAX_WIDTH = 'max-w-[36rem]'
 
 export const LOGISTICS_SECTION_LABEL = 'Logistics Section'
 

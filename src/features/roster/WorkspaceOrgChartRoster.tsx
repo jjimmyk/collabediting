@@ -24,7 +24,6 @@ import {
   OrgChartFork,
   OrgChartInboundStem,
   OrgChartRightIndentStack,
-  OrgChartSpineTeeRow,
   OrgChartVerticalLine,
 } from '@/features/roster/OrgChartConnectors'
 import { OrgChartCardAnchor } from '@/features/roster/org-chart-card-anchor'
@@ -32,6 +31,7 @@ import { orgChartNodeConnectorId } from '@/features/roster/org-chart-node-id'
 import { OrgChartWideLayout } from '@/features/roster/org-chart-wide-layout'
 import type { OrgChartWideRenderProps } from '@/features/roster/org-chart-wide-layout.types'
 import {
+  buildIcDirectReportNodes,
   filterVisibleOrgChartChildren,
   orgChartNodeKey,
   positionBranchIsVisible,
@@ -63,7 +63,6 @@ import {
 } from '@/features/roster/roster-layout'
 import {
   ICS_ORG_CHART_COMMAND_STAFF_POSITIONS,
-  partitionCommandStaffForSpine,
   type OrgChartColor,
   type OrgChartNode,
 } from '@/features/roster/ics-org-chart-structure'
@@ -400,7 +399,7 @@ function OrgChartChildNode({
     const scheduled = node.scheduled ?? false
 
     return (
-      <div className="flex w-full min-w-0 justify-start">
+      <div className={cn('flex w-full min-w-0 justify-center', ORG_CHART_POSITION_CARD_WIDTH)}>
         {wrapAnchor(
           <OrgChartCollapsibleAssetCard
             asset={asset}
@@ -437,7 +436,7 @@ function OrgChartChildNode({
     const member = renderProps.rosterById[node.memberId]
     if (!member) return null
     return (
-      <div className={cn('flex w-full min-w-0 justify-start', ORG_CHART_POSITION_CARD_WIDTH)}>
+      <div className={cn('flex w-full min-w-0 justify-center', ORG_CHART_POSITION_CARD_WIDTH)}>
         {wrapAnchor(
           <SingleResourceOrgChartCard
             member={member}
@@ -868,40 +867,6 @@ function CommandStaffPositionNode({
   )
 }
 
-function RootChildrenOnSpine({
-  children,
-  renderProps,
-}: {
-  children: OrgChartNode[]
-  renderProps: OrgChartRenderProps
-}) {
-  const visibleChildren = filterVisibleOrgChartChildren(
-    children,
-    renderProps.visiblePositions,
-    renderProps.displayFilters
-  )
-  if (visibleChildren.length === 0) return null
-
-  return (
-    <div
-      className={cn(
-        'flex w-full min-w-0 flex-col items-center',
-        ORG_CHART_SUBORDINATE_ROW_GAP
-      )}
-    >
-      {visibleChildren.map((child, index) => (
-        <OrgChartInboundStem key={orgChartNodeKey(child, index)}>
-          <OrgChartLayoutNode
-            node={child}
-            renderProps={renderProps}
-            stackConnectFromParent={child.kind === 'stack'}
-          />
-        </OrgChartInboundStem>
-      ))}
-    </div>
-  )
-}
-
 function SectionBranchesCrossbar({
   visibleSectionBranches,
   layoutMode,
@@ -983,68 +948,51 @@ function IncidentCommanderSpine({
     renderProps.visiblePositions,
     renderProps.displayFilters
   )
-  const hasRootChildren = visibleRootChildren.length > 0
   const hasSections = visibleSectionBranches.length > 0
-  const useSpineTee = layoutMode === 'wide' && showCommandStaff
+  const commandStaffNodes = showCommandStaff
+    ? visibleCommandStaff
+        .map((position) =>
+          orgChartLayout.commandStaffBranch.children.find(
+            (child): child is Extract<OrgChartNode, { kind: 'position' }> =>
+              child.kind === 'position' && child.position === position
+          )
+        )
+        .filter((node): node is Extract<OrgChartNode, { kind: 'position' }> => node !== undefined)
+    : []
+  const icDirectReportNodes = buildIcDirectReportNodes(commandStaffNodes, visibleRootChildren)
+  const hasIcDirectReports = icDirectReportNodes.length > 0
 
-  if (!showCommandStaff && !hasRootChildren && !hasSections) {
+  if (!hasIcDirectReports && !hasSections) {
     return null
   }
 
-  const { left: commandStaffLeft, right: commandStaffRight } =
-    partitionCommandStaffForSpine(visibleCommandStaff)
-
-  const renderCommandStaff = () => {
-    if (!showCommandStaff) return null
-    if (useSpineTee) {
-      return (
-        <OrgChartSpineTeeRow
-          left={commandStaffLeft.map((position) => (
-            <CommandStaffPositionNode
-              key={position}
-              commandStaffBranch={orgChartLayout.commandStaffBranch}
-              position={position}
-              renderProps={renderProps}
-            />
-          ))}
-          right={commandStaffRight.map((position) => (
-            <CommandStaffPositionNode
-              key={position}
-              commandStaffBranch={orgChartLayout.commandStaffBranch}
-              position={position}
-              renderProps={renderProps}
-            />
-          ))}
-        />
-      )
-    }
-    return (
-      <OrgChartCrossbarColumns
-        columnClassName={rosterOrgCommandStaffCrossbarClassName(layoutMode)}
-        columns={visibleCommandStaff.map((position) => (
-          <CommandStaffPositionNode
-            key={position}
-            commandStaffBranch={orgChartLayout.commandStaffBranch}
-            position={position}
-            renderProps={renderProps}
-          />
-        ))}
-        showInboundStem={false}
-      />
-    )
-  }
-
-  const spineAboveSections = connectFromParent || showCommandStaff || hasRootChildren
+  const spineAboveSections = connectFromParent || hasIcDirectReports
 
   return (
     <>
       {connectFromParent ? <OrgChartCenterSpine /> : null}
-      {showCommandStaff ? renderCommandStaff() : null}
-      {hasRootChildren ? (
-        <>
-          {showCommandStaff ? <OrgChartCenterSpine /> : null}
-          <RootChildrenOnSpine children={orgChartLayout.rootChildren} renderProps={renderProps} />
-        </>
+      {hasIcDirectReports ? (
+        <OrgChartCrossbarColumns
+          columnClassName={rosterOrgCommandStaffCrossbarClassName(layoutMode)}
+          columns={[
+            ...visibleCommandStaff.map((position) => (
+              <CommandStaffPositionNode
+                key={position}
+                commandStaffBranch={orgChartLayout.commandStaffBranch}
+                position={position}
+                renderProps={renderProps}
+              />
+            )),
+            ...visibleRootChildren.map((child, index) => (
+              <OrgChartLayoutNode
+                key={orgChartNodeKey(child, index)}
+                node={child}
+                renderProps={renderProps}
+              />
+            )),
+          ]}
+          showInboundStem={false}
+        />
       ) : null}
       {hasSections ? (
         <SectionBranchesCrossbar
@@ -1393,6 +1341,7 @@ export function WorkspaceOrgChartRoster({
         }}
         title={selectedAsset?.name ?? 'Org chart asset'}
         description="Org chart asset details"
+        contentClassName="max-w-[84rem]"
       >
         {selectedAsset ? (
           <RosterAssetResourceListItem
