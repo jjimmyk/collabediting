@@ -1,8 +1,5 @@
-import { useLayoutEffect, useRef } from 'react'
+import { useRef } from 'react'
 import { buildOrgChartLayoutForExport } from '@/features/roster/build-org-chart-for-export'
-import {
-  ORG_CHART_PAINT_COMPLETE_ATTR,
-} from '@/features/roster/org-chart-export-capture'
 import { resolveVisibleRosterPositions } from '@/features/roster/roster-display-filters'
 import type { RosterPanelLayoutMode } from '@/features/roster/roster-layout'
 import type { PositionRosterEntry } from '@/features/roster/workspace-position-roster'
@@ -30,23 +27,6 @@ export type OrgChartExportCaptureTreeProps = {
   visualSnapshot: Ics207OrgChartVisualSnapshot
 }
 
-function OrgChartExportPaintMarker({ rootRef }: { rootRef: React.RefObject<HTMLDivElement | null> }) {
-  useLayoutEffect(() => {
-    const root = rootRef.current
-    if (!root) return
-
-    const markPainted = () => {
-      root.setAttribute(ORG_CHART_PAINT_COMPLETE_ATTR, 'true')
-    }
-
-    markPainted()
-    const frame = requestAnimationFrame(markPainted)
-    return () => cancelAnimationFrame(frame)
-  }, [rootRef])
-
-  return null
-}
-
 export function OrgChartExportCaptureTree({
   catalog,
   entries,
@@ -69,7 +49,6 @@ export function OrgChartExportCaptureTree({
 
   return (
     <div ref={rootRef} data-ics207-capture-root="" className="inline-block bg-white text-foreground">
-      <OrgChartExportPaintMarker rootRef={rootRef} />
       <RosterZoomContainer
         zoom={visualSnapshot.zoom}
         centerScroll={false}
