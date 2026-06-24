@@ -9,23 +9,33 @@ import type { PositionRosterEntry } from '@/features/roster/workspace-position-r
 export function filterVisibleOrgChartChildren(
   children: OrgChartNode[],
   visiblePositions: Set<string>,
-  displayFilters: RosterDisplayFilters
+  displayFilters: RosterDisplayFilters,
+  isProjected = false
 ): OrgChartNode[] {
   return children.filter((child) => {
     if (child.kind === 'asset') return true
     if (child.kind === 'single_resource') {
-      return singleResourceNodeVisible(child.scheduled, displayFilters)
+      return singleResourceNodeVisible(child.scheduled, displayFilters, isProjected)
     }
     if (child.kind === 'stack' || child.kind === 'fork') {
       return (
-        filterVisibleOrgChartChildren(child.children, visiblePositions, displayFilters).length > 0
+        filterVisibleOrgChartChildren(
+          child.children,
+          visiblePositions,
+          displayFilters,
+          isProjected
+        ).length > 0
       )
     }
     if (child.kind === 'position') {
       return (
         visiblePositions.has(child.position) ||
-        filterVisibleOrgChartChildren(child.children ?? [], visiblePositions, displayFilters)
-          .length > 0
+        filterVisibleOrgChartChildren(
+          child.children ?? [],
+          visiblePositions,
+          displayFilters,
+          isProjected
+        ).length > 0
       )
     }
     return false
@@ -36,10 +46,12 @@ export function positionNodeIsVisible(
   position: string,
   children: OrgChartNode[],
   visiblePositions: Set<string>,
-  displayFilters: RosterDisplayFilters
+  displayFilters: RosterDisplayFilters,
+  isProjected = false
 ): boolean {
   if (visiblePositions.has(position)) return true
-  return filterVisibleOrgChartChildren(children, visiblePositions, displayFilters).length > 0
+  return filterVisibleOrgChartChildren(children, visiblePositions, displayFilters, isProjected)
+    .length > 0
 }
 
 export function orgChartNodeKey(node: OrgChartNode, index: number): string {
@@ -54,13 +66,15 @@ export function orgChartNodeKey(node: OrgChartNode, index: number): string {
 export function positionBranchIsVisible(
   node: Extract<OrgChartNode, { kind: 'position' }>,
   visiblePositions: Set<string>,
-  displayFilters: RosterDisplayFilters
+  displayFilters: RosterDisplayFilters,
+  isProjected = false
 ): boolean {
   return positionNodeIsVisible(
     node.position,
     node.children ?? [],
     visiblePositions,
-    displayFilters
+    displayFilters,
+    isProjected
   )
 }
 

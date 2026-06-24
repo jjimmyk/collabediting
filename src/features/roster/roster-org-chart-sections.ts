@@ -5,7 +5,10 @@ import {
   collectOrgChartPositions,
   type OrgChartNode,
 } from '@/features/roster/ics-org-chart-structure'
-import type { RosterDisplayFilters } from '@/features/roster/roster-display-filters'
+import type {
+  RosterBooleanDisplayFilterKey,
+  RosterDisplayFilters,
+} from '@/features/roster/roster-display-filters'
 import type { WorkspacePositionCatalog } from '@/features/roster/workspace-positions'
 
 export type RosterOrgChartSectionKey =
@@ -29,7 +32,7 @@ export const ROSTER_ORG_CHART_SECTION_LABELS: Record<RosterOrgChartSectionKey, s
 
 export const ROSTER_ORG_CHART_SECTION_FILTER_KEYS: Record<
   RosterOrgChartSectionKey,
-  keyof RosterDisplayFilters
+  RosterBooleanDisplayFilterKey
 > = {
   incidentCommander: 'showIncidentCommander',
   commandStaff: 'showCommandStaff',

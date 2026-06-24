@@ -56,6 +56,7 @@ import {
 import type { WorkspacePositionType } from '@/features/roster/workspace-position-type'
 import { SingleResourceOrgChartCard } from '@/features/roster/SingleResourceOrgChartCard'
 import type { WorkspaceOrgChartLayout, WorkspacePositionMeta, WorkspacePositionCatalog } from '@/features/roster/workspace-positions'
+import type { OrgChartExportScope } from '@/features/roster/org-chart-export-scope'
 
 import {
   rosterOrgCommandStaffCrossbarClassName,
@@ -161,6 +162,9 @@ type WorkspaceOrgChartRosterProps = {
     scheduled: boolean
   ) => void
   exportMode?: boolean
+  isProjected?: boolean
+  rosterTimeHorizon?: OrgChartExportScope
+  managementEntriesByPosition?: Record<string, PositionRosterEntry>
 } & Partial<PositionRosterAssetHandlers>
 
 type OrgChartRenderProps = {
@@ -232,6 +236,9 @@ type OrgChartRenderProps = {
     reportsTo?: string
   }) => void | Promise<void>
   exportMode?: boolean
+  isProjected: boolean
+  rosterTimeHorizon: OrgChartExportScope
+  managementEntriesByPosition?: Record<string, PositionRosterEntry>
   onOpenOrgChartAssetDetail: (assetKey: string) => void
   onOpenSingleResourceDetail: (memberId: string) => void
   competencyOptions: string[]
@@ -275,7 +282,8 @@ function OrgChartLayoutNode({
     const visibleChildren = filterVisibleOrgChartChildren(
       node.children,
       renderProps.visiblePositions,
-      renderProps.displayFilters
+      renderProps.displayFilters,
+      renderProps.isProjected
     )
     if (visibleChildren.length === 0) return null
     return (
@@ -296,7 +304,8 @@ function OrgChartLayoutNode({
     const visibleChildren = filterVisibleOrgChartChildren(
       node.children,
       renderProps.visiblePositions,
-      renderProps.displayFilters
+      renderProps.displayFilters,
+      renderProps.isProjected
     )
     if (visibleChildren.length === 0) return null
     return (
@@ -332,7 +341,8 @@ function OrgChartChildren({
   const visibleChildren = filterVisibleOrgChartChildren(
     children,
     renderProps.visiblePositions,
-    renderProps.displayFilters
+    renderProps.displayFilters,
+    renderProps.isProjected
   )
   if (visibleChildren.length === 0) return null
 
@@ -454,7 +464,7 @@ function OrgChartChildNode({
   }
 
   if (node.kind === 'single_resource') {
-    if (!singleResourceNodeVisible(node.scheduled, renderProps.displayFilters)) {
+    if (!singleResourceNodeVisible(node.scheduled, renderProps.displayFilters, renderProps.isProjected)) {
       return null
     }
     const member = renderProps.rosterById[node.memberId]
@@ -465,7 +475,7 @@ function OrgChartChildNode({
           <SingleResourceOrgChartCard
             member={member}
             color={node.color ?? parentColor}
-            scheduled={node.scheduled}
+            scheduled={renderProps.isProjected ? false : node.scheduled}
             canManage={renderProps.canManageRoster}
             onOpenDetail={() => renderProps.onOpenSingleResourceDetail(member.id)}
             onRemoveFromOrgChart={renderProps.onRemoveSingleResourceFromOrgChart}
@@ -481,7 +491,8 @@ function OrgChartChildNode({
       node.position,
       node.children ?? [],
       renderProps.visiblePositions,
-      renderProps.displayFilters
+      renderProps.displayFilters,
+      renderProps.isProjected
     )
   ) {
     return null
@@ -572,6 +583,9 @@ function PositionNode({
   memberScheduleCompetencyByKey,
   onAssetCompetencyFunctionChange,
   onSingleResourceCompetencyFunctionChange,
+  isProjected = false,
+  rosterTimeHorizon = 'current_op',
+  managementEntriesByPosition,
 }: {
   position: string
   color?: OrgChartColor
@@ -580,12 +594,13 @@ function PositionNode({
   connectorAnchorId?: string
 } & OrgChartRenderProps) {
   if (
-    !positionNodeIsVisible(position, children, visiblePositions, displayFilters)
+    !positionNodeIsVisible(position, children, visiblePositions, displayFilters, isProjected)
   ) {
     return null
   }
   const entry = entriesByPosition[position]
   if (!entry) return null
+  const managementEntry = managementEntriesByPosition?.[position]
 
   const renderProps: OrgChartRenderProps = {
     layoutMode,
@@ -594,6 +609,9 @@ function PositionNode({
     rosterById,
     visiblePositions,
     displayFilters,
+    isProjected,
+    rosterTimeHorizon,
+    managementEntriesByPosition,
     assignableByPosition,
     scheduleAssignableByPosition,
     scheduleUnassignableByPosition,
@@ -658,11 +676,12 @@ function PositionNode({
   }
 
   const canRemove =
-    canRemovePositionFromRoster?.(entry) ?? false
-  const removalBlockedReason = positionRemovalBlockedReason?.(entry) ?? null
+    canRemovePositionFromRoster?.(managementEntry ?? entry) ?? false
+  const removalBlockedReason = positionRemovalBlockedReason?.(managementEntry ?? entry) ?? null
   const hasVisibleChildren =
     !suppressChildren &&
-    filterVisibleOrgChartChildren(children, visiblePositions, displayFilters).length > 0
+    filterVisibleOrgChartChildren(children, visiblePositions, displayFilters, isProjected).length >
+      0
 
   return (
     <div
@@ -678,6 +697,8 @@ function PositionNode({
         <OrgChartCardAnchor id={connectorAnchorId} className="w-full">
           <PositionRosterCard
             entry={entry}
+            managementEntry={managementEntry}
+            rosterTimeHorizon={rosterTimeHorizon}
             assignable={assignableByPosition[position] ?? []}
             scheduleAssignable={scheduleAssignableByPosition[position] ?? []}
             scheduleUnassignable={scheduleUnassignableByPosition[position] ?? []}
@@ -751,6 +772,8 @@ function PositionNode({
       ) : (
         <PositionRosterCard
           entry={entry}
+          managementEntry={managementEntry}
+          rosterTimeHorizon={rosterTimeHorizon}
           assignable={assignableByPosition[position] ?? []}
           scheduleAssignable={scheduleAssignableByPosition[position] ?? []}
           scheduleUnassignable={scheduleUnassignableByPosition[position] ?? []}
@@ -843,7 +866,12 @@ function GroupBranch({
   const chief = node.children.find(
     (child): child is Extract<OrgChartNode, { kind: 'position' }> =>
       child.kind === 'position' &&
-      positionBranchIsVisible(child, renderProps.visiblePositions, renderProps.displayFilters)
+      positionBranchIsVisible(
+        child,
+        renderProps.visiblePositions,
+        renderProps.displayFilters,
+        renderProps.isProjected
+      )
   )
   if (!chief) return null
 
@@ -872,12 +900,13 @@ function getCommandStaffPositionNode(
 function getVisibleCommandStaffPositions(
   commandStaffBranch: Extract<OrgChartNode, { kind: 'group' }>,
   visiblePositions: Set<string>,
-  displayFilters: RosterDisplayFilters
+  displayFilters: RosterDisplayFilters,
+  isProjected = false
 ): string[] {
   return ICS_ORG_CHART_COMMAND_STAFF_POSITIONS.filter((position) => {
     const node = getCommandStaffPositionNode(commandStaffBranch, position)
     if (!node) return false
-    return positionBranchIsVisible(node, visiblePositions, displayFilters)
+    return positionBranchIsVisible(node, visiblePositions, displayFilters, isProjected)
   })
 }
 
@@ -982,7 +1011,8 @@ function IncidentCommanderSpine({
   const visibleRootChildren = filterVisibleOrgChartChildren(
     orgChartLayout.rootChildren,
     renderProps.visiblePositions,
-    renderProps.displayFilters
+    renderProps.displayFilters,
+    renderProps.isProjected
   )
   const hasSections = visibleSectionBranches.length > 0
   const commandStaffNodes = showCommandStaff
@@ -1062,7 +1092,8 @@ function IncidentCommanderSubtree({
       orgChartLayout.rootPosition,
       orgChartLayout.rootChildren,
       renderProps.visiblePositions,
-      renderProps.displayFilters
+      renderProps.displayFilters,
+      renderProps.isProjected
     )
 
   if (!icVisible) {
@@ -1176,6 +1207,9 @@ export function WorkspaceOrgChartRoster({
   isUpdatingSingleResourcePlacement = null,
   onSingleResourceOrgChartPlacementChange,
   exportMode = false,
+  isProjected = false,
+  rosterTimeHorizon = 'current_op',
+  managementEntriesByPosition,
 }: WorkspaceOrgChartRosterProps) {
   const [selectedAssetKey, setSelectedAssetKey] = useState<string | null>(null)
   const [selectedSingleResourceMemberId, setSelectedSingleResourceMemberId] = useState<string | null>(
@@ -1194,14 +1228,15 @@ export function WorkspaceOrgChartRoster({
     return branch.children.some(
       (child) =>
         child.kind === 'position' &&
-        positionBranchIsVisible(child, visiblePositions, displayFilters)
+        positionBranchIsVisible(child, visiblePositions, displayFilters, isProjected)
     )
   })
   const visibleCommandStaff = displayFilters.showCommandStaff
     ? getVisibleCommandStaffPositions(
         orgChartLayout.commandStaffBranch,
         visiblePositions,
-        displayFilters
+        displayFilters,
+        isProjected
       )
     : []
   const showCommandStaff = visibleCommandStaff.length > 0
@@ -1213,12 +1248,14 @@ export function WorkspaceOrgChartRoster({
         orgChartLayout.rootPosition,
         orgChartLayout.rootChildren,
         visiblePositions,
-        displayFilters
+        displayFilters,
+        isProjected
       )) ||
     filterVisibleOrgChartChildren(
       orgChartLayout.rootChildren,
       visiblePositions,
-      displayFilters
+      displayFilters,
+      isProjected
     ).length > 0
   const showIcCard = renderIcPosition
 
@@ -1229,6 +1266,9 @@ export function WorkspaceOrgChartRoster({
     rosterById,
     visiblePositions,
     displayFilters,
+    isProjected,
+    rosterTimeHorizon,
+    managementEntriesByPosition,
     assignableByPosition,
     scheduleAssignableByPosition,
     scheduleUnassignableByPosition,

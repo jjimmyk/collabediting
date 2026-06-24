@@ -590,6 +590,7 @@ import { RosterZoomControls } from '@/features/roster/RosterZoomControls'
 import { RosterZoomContainer } from '@/features/roster/RosterZoomContainer'
 import {
   DEFAULT_ROSTER_DISPLAY_FILTERS,
+  resolveEffectiveRosterTimeHorizon,
   resolveVisibleRosterPositions,
   type RosterDisplayFilters,
 } from '@/features/roster/roster-display-filters'
@@ -622,7 +623,8 @@ import {
   AddWorkspaceMemberDialog,
   type AddWorkspaceMemberSubmitInput,
 } from '@/features/roster/AddWorkspaceMemberDialog'
-import { buildDynamicOrgChart } from '@/features/roster/build-dynamic-org-chart'
+import { buildRosterDisplayProjection } from '@/features/roster/build-roster-display-projection'
+import { RosterTimeHorizonBanner } from '@/features/roster/RosterTimeHorizonBanner'
 import { countAssetsReportingToPosition } from '@/features/roster/workspace-asset-org-chart'
 import { useWorkspaceCustomPositions } from '@/hooks/useWorkspaceCustomPositions'
 import { useRosterCompetencyControls } from '@/hooks/useRosterCompetencyControls'
@@ -12399,15 +12401,6 @@ function App() {
           activeLocalRosterPlan
         )
       : []
-  const workspaceOrgChartLayout = useMemo(
-    () =>
-      buildDynamicOrgChart(
-        workspacePositionCatalog,
-        workspaceAssignedAssetsWithPending,
-        activeWorkspaceRoster
-      ),
-    [workspacePositionCatalog, workspaceAssignedAssetsWithPending, activeWorkspaceRoster]
-  )
   const workspaceRosterById = useMemo(
     () => Object.fromEntries(activeWorkspaceRoster.map((member) => [member.id, member])),
     [activeWorkspaceRoster]
@@ -14482,6 +14475,34 @@ function App() {
     () => Object.fromEntries(positionRosterEntries.map((entry) => [entry.position, entry])),
     [positionRosterEntries]
   )
+  const effectiveRosterTimeHorizon = useMemo(
+    () =>
+      resolveEffectiveRosterTimeHorizon(
+        rosterDisplayFilters,
+        operationalPeriodsEnabled,
+        isViewingHistoricalRoster
+      ),
+    [rosterDisplayFilters, operationalPeriodsEnabled, isViewingHistoricalRoster]
+  )
+  const displayRosterProjection = useMemo(
+    () =>
+      buildRosterDisplayProjection({
+        horizon: effectiveRosterTimeHorizon,
+        catalog: workspacePositionCatalog,
+        entries: positionRosterEntries,
+        roster: activeWorkspaceRoster,
+        assets: workspaceAssignedAssetsWithPending,
+      }),
+    [
+      effectiveRosterTimeHorizon,
+      workspacePositionCatalog,
+      positionRosterEntries,
+      activeWorkspaceRoster,
+      workspaceAssignedAssetsWithPending,
+    ]
+  )
+  const displayPositionRosterEntries = displayRosterProjection.entries
+  const displayPositionRosterEntriesByPosition = displayRosterProjection.entriesByPosition
   const canRemovePositionFromRoster = useCallback(
     (entry: (typeof positionRosterEntries)[number]) =>
       positionCanBeRemovedFromRoster(
@@ -14657,11 +14678,11 @@ function App() {
   const visibleRosterPositions = useMemo(
     () =>
       resolveVisibleRosterPositions(
-        positionRosterEntries,
+        displayPositionRosterEntries,
         rosterDisplayFilters,
         workspacePositionCatalog
       ),
-    [positionRosterEntries, rosterDisplayFilters, workspacePositionCatalog]
+    [displayPositionRosterEntries, rosterDisplayFilters, workspacePositionCatalog]
   )
   const ics207ExportBaseInput = useMemo<ExportOrgChartIcs207BaseInput | null>(() => {
     if (!isInIncidentWorkspace && !isInExerciseWorkspace) return null
@@ -26800,6 +26821,7 @@ function App() {
                     <RosterDisplayFiltersMenu
                       filters={rosterDisplayFilters}
                       onChange={setRosterDisplayFilters}
+                      operationalPeriodsEnabled={operationalPeriodsEnabled}
                     />
                     <RosterZoomControls zoom={rosterZoomLevel} onZoomChange={handleRosterZoomChange} />
                     <ToggleGroup
@@ -30115,7 +30137,7 @@ function App() {
                           <ItemDescription>Fetching workspace members from Supabase.</ItemDescription>
                         </ItemContent>
                       </Item>
-                    ) : positionRosterEntries.length === 0 ? (
+                    ) : displayPositionRosterEntries.length === 0 ? (
                       <Item variant="outline" className={glassItemBorderClasses}>
                         <ItemContent>
                           <ItemTitle>No matching positions</ItemTitle>
@@ -30123,6 +30145,10 @@ function App() {
                         </ItemContent>
                       </Item>
                     ) : (
+                      <>
+                      {displayRosterProjection.isProjected ? (
+                        <RosterTimeHorizonBanner />
+                      ) : null}
                       <RosterZoomContainer
                         ref={rosterOrgChartScrollRef}
                         zoom={rosterZoomLevel}
@@ -30138,12 +30164,19 @@ function App() {
                           className="inline-block"
                         >
                         <WorkspaceOrgChartRoster
-                      orgChartLayout={workspaceOrgChartLayout}
-                      entriesByPosition={positionRosterEntriesByPosition}
-                      assetsByKey={workspaceAssetsByKey}
-                      rosterById={workspaceRosterById}
+                      orgChartLayout={displayRosterProjection.orgChartLayout}
+                      entriesByPosition={displayPositionRosterEntriesByPosition}
+                      assetsByKey={displayRosterProjection.assetsByKey}
+                      rosterById={displayRosterProjection.rosterById}
                       visiblePositions={visibleRosterPositions}
                       displayFilters={rosterDisplayFilters}
+                      isProjected={displayRosterProjection.isProjected}
+                      rosterTimeHorizon={effectiveRosterTimeHorizon}
+                      managementEntriesByPosition={
+                        displayRosterProjection.isProjected
+                          ? positionRosterEntriesByPosition
+                          : undefined
+                      }
                       assignableByPosition={assignableByPosition}
                       scheduleAssignableByPosition={scheduleAssignableByPosition}
                       scheduleUnassignableByPosition={scheduleUnassignableByPosition}
@@ -30286,7 +30319,7 @@ function App() {
                         </div>
                       ) : (
                         <WorkspacePositionRosterTable
-                      entries={positionRosterEntries}
+                      entries={displayPositionRosterEntries}
                       displayFilters={rosterDisplayFilters}
                       positionCatalog={workspacePositionCatalog}
                       assignableByPosition={assignableByPosition}
@@ -30404,6 +30437,7 @@ function App() {
                     />
                       )}
                       </RosterZoomContainer>
+                      </>
                     )}
                   </OperationalPeriodHistoricalRosterShell>
                 )}

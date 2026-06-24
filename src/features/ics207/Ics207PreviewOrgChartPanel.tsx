@@ -52,6 +52,8 @@ export function Ics207PreviewOrgChartPanel({ exportInput }: Ics207PreviewOrgChar
       layoutMode={exportInput.visualSnapshot.layoutMode}
       glassItemBorderClasses={exportInput.glassItemBorderClasses}
       visualSnapshot={exportInput.visualSnapshot}
+      isProjected={exportInput.scope === 'next_op'}
+      rosterTimeHorizon={exportInput.scope}
     />
   )
 }

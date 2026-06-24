@@ -42,6 +42,8 @@ import {
 } from '@/features/roster/ics-org-chart-structure'
 import type { RosterPanelLayoutMode } from '@/features/roster/roster-layout'
 import type { WorkspacePositionType } from '@/features/roster/workspace-position-type'
+import { PositionOrgChartAssigneeSummary } from '@/features/roster/PositionOrgChartAssigneeSummary'
+import type { OrgChartExportScope } from '@/features/roster/org-chart-export-scope'
 
 type PositionRosterCardProps = {
   entry: PositionRosterEntry
@@ -109,6 +111,8 @@ type PositionRosterCardProps = {
     name?: string
     reportsTo?: string
   }) => void | Promise<void>
+  rosterTimeHorizon?: OrgChartExportScope
+  managementEntry?: PositionRosterEntry
 } & Partial<PositionRosterAssetHandlers>
 
 export function PositionRosterCard({
@@ -173,13 +177,15 @@ export function PositionRosterCard({
   positionCatalog,
   isUpdatingPositionIdentity = false,
   onSaveCustomPosition,
+  rosterTimeHorizon = 'current_op',
+  managementEntry,
 }: PositionRosterCardProps) {
   const [orgModalOpen, setOrgModalOpen] = useState(false)
-  const leaderEmail = entry.members[0]?.email ?? null
   const isOrg = variant === 'org'
+  const modalEntry = managementEntry ?? entry
 
   const panelProps = {
-    entry,
+    entry: modalEntry,
     assignable,
     scheduleAssignable,
     scheduleUnassignable,
@@ -254,16 +260,7 @@ export function PositionRosterCard({
             <div className="space-y-1">
               <ItemTitle className="text-xs leading-snug">{entry.position}</ItemTitle>
               <PositionLifecycleBadges entry={entry} size="org" />
-              <ItemDescription className="text-[10px]">
-                {entry.members.length === 0
-                  ? '0 assigned'
-                  : `${entry.members.length} assigned`}
-              </ItemDescription>
-              {leaderEmail ? (
-                <p className="truncate text-[10px] text-muted-foreground">
-                  Leader: {leaderEmail}
-                </p>
-              ) : null}
+              <PositionOrgChartAssigneeSummary entry={entry} horizon={rosterTimeHorizon} />
               {entry.positionTypeLabel ? (
                 <p className="truncate text-[10px] text-muted-foreground">
                   Type: {entry.positionTypeLabel}

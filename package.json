@@ -22,6 +22,7 @@
     "verify:create-organization-asset": "npx vite-node scripts/verify-create-organization-asset.ts",
     "verify:add-asset-effective-when": "npx vite-node scripts/verify-add-asset-effective-when.ts",
     "verify:roster-org-chart-display": "npx vite-node scripts/verify-roster-org-chart-display.ts",
+    "verify:org-chart-time-horizon": "npx vite-node scripts/verify-org-chart-time-horizon.ts",
     "verify:ics207-export": "npx vite-node scripts/verify-ics207-export.ts",
     "verify:ics207-export-connectors": "npx vite-node scripts/verify-ics207-export-connectors.ts",
     "verify:org-chart-spine-geometry": "npx vite-node scripts/verify-org-chart-spine-geometry.ts",

@@ -281,7 +281,11 @@ export function BuildTeamRosterStep({
           {draft.draftMembers.length} draft invite{draft.draftMembers.length === 1 ? '' : 's'}
         </Badge>
         <div className="flex flex-wrap items-center gap-2">
-          <RosterDisplayFiltersMenu filters={rosterDisplayFilters} onChange={setRosterDisplayFilters} />
+          <RosterDisplayFiltersMenu
+            filters={rosterDisplayFilters}
+            onChange={setRosterDisplayFilters}
+            operationalPeriodsEnabled={false}
+          />
           <RosterZoomControls zoom={rosterZoomLevel} onZoomChange={setRosterZoomLevel} />
           <ToggleGroup
             type="single"

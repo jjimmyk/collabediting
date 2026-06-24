@@ -1,5 +1,5 @@
 import { Eye, FileDown, Loader2, X } from 'lucide-react'
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -170,6 +170,16 @@ export function OrgChartIcs207ExportDialog({
     box4ContainerNodeRef.current = node
     setBox4Container(node)
   }, [])
+
+  useEffect(() => {
+    if (!open || !exportInput) return
+    const horizon = exportInput.visualSnapshot.displayFilters.rosterTimeHorizon
+    if (horizon === 'next_op' && operationalPeriodsEnabled) {
+      setScope('next_op')
+    } else {
+      setScope('current_op')
+    }
+  }, [open, exportInput, operationalPeriodsEnabled])
 
   const scopedExportInput = useMemo<ExportOrgChartIcs207Input | null>(() => {
     if (!exportInput) return null

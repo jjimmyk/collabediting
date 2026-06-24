@@ -311,7 +311,7 @@ assert(
   'positions should hide when both scheduled toggles are off'
 )
 assert(
-  summarizeActiveDisplayFilters(DEFAULT_ROSTER_DISPLAY_FILTERS).totalCount === 13,
+  summarizeActiveDisplayFilters(DEFAULT_ROSTER_DISPLAY_FILTERS).totalCount === 14,
   'display filters should include assignee and section toggles'
 )
 assert(
@@ -523,7 +523,7 @@ assert(
 
 const defaultFilterSummary = summarizeActiveDisplayFilters(DEFAULT_ROSTER_DISPLAY_FILTERS)
 assert(defaultFilterSummary.isDefault, 'default display filters should report isDefault')
-assert(defaultFilterSummary.activeCount === 13, 'default display filters should have 13 active toggles')
+assert(defaultFilterSummary.activeCount === 14, 'default display filters should have 14 active toggles')
 assert(
   defaultFilterSummary.inactiveLabels.length === 0,
   'default display filters should have no inactive labels'

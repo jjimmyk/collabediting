@@ -25,6 +25,8 @@ export type OrgChartExportCaptureTreeProps = {
   layoutMode: RosterPanelLayoutMode
   glassItemBorderClasses: string
   visualSnapshot: Ics207OrgChartVisualSnapshot
+  isProjected?: boolean
+  rosterTimeHorizon?: OrgChartExportScope
 }
 
 export function OrgChartExportCaptureTree({
@@ -38,6 +40,8 @@ export function OrgChartExportCaptureTree({
   layoutMode,
   glassItemBorderClasses,
   visualSnapshot,
+  isProjected = false,
+  rosterTimeHorizon = 'current_op',
 }: OrgChartExportCaptureTreeProps) {
   const rootRef = useRef<HTMLDivElement | null>(null)
 
@@ -63,6 +67,8 @@ export function OrgChartExportCaptureTree({
           rosterById={rosterById}
           visiblePositions={visiblePositions}
           displayFilters={visualSnapshot.displayFilters}
+          isProjected={isProjected}
+          rosterTimeHorizon={rosterTimeHorizon}
           assignableByPosition={{}}
           scheduleAssignableByPosition={{}}
           scheduleUnassignableByPosition={{}}
