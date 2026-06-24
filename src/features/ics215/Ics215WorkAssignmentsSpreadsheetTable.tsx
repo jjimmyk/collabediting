@@ -5,7 +5,7 @@ import { Ics202ReadOnlyField } from '@/features/ics202/Ics202SectionToolbar'
 import { WorkAssignmentTargetPicker } from '@/features/work-assignments/WorkAssignmentTargetPicker'
 import { ResourceHaveFillButton } from '@/features/resources/ResourceHaveFillButton'
 import { Ics215HaveAssetLinkDialog } from '@/features/ics215/Ics215HaveAssetLinkDialog'
-import { Ics215HaveCell } from '@/features/ics215/Ics215HaveCell'
+import { Ics215HaveCell, HaveLinkSparkleButton } from '@/features/ics215/Ics215HaveCell'
 import type { Ics215ResourceValue } from '@/features/ics215/types'
 import {
   EMPTY_RESOURCE_VALUE,
@@ -31,6 +31,7 @@ type Ics215WorkAssignmentsSpreadsheetTableProps = Ics215WorkAssignmentsTableBase
 function ResourceValueCell({
   value,
   editing,
+  canLinkAssets = false,
   columnLabel,
   onChange,
   onManualHaveChange,
@@ -38,6 +39,7 @@ function ResourceValueCell({
 }: {
   value: Ics215ResourceValue
   editing: boolean
+  canLinkAssets?: boolean
   columnLabel: string
   onChange: (next: Ics215ResourceValue) => void
   onManualHaveChange: (have: string) => void
@@ -48,16 +50,34 @@ function ResourceValueCell({
     const display = formatResourceValueDisplay(value)
     if (linked && value.have.trim().length > 0) {
       return (
-        <button
-          type="button"
-          className="block w-full px-1 py-1 text-left text-[11px] leading-tight underline decoration-dotted underline-offset-2 hover:bg-muted/40"
-          onClick={onOpenHaveLinkDialog}
-        >
-          {display}
-        </button>
+        <div className="flex items-start gap-0.5">
+          {canLinkAssets ? (
+            <HaveLinkSparkleButton
+              columnLabel={columnLabel}
+              onOpenLinkDialog={onOpenHaveLinkDialog}
+            />
+          ) : null}
+          <button
+            type="button"
+            className="block min-w-0 flex-1 px-1 py-1 text-left text-[11px] leading-tight underline decoration-dotted underline-offset-2 hover:bg-muted/40"
+            onClick={onOpenHaveLinkDialog}
+          >
+            {display}
+          </button>
+        </div>
       )
     }
-    return <span className="block px-1 py-1 text-[11px] leading-tight">{display}</span>
+    return (
+      <div className="flex items-start gap-0.5">
+        {canLinkAssets ? (
+          <HaveLinkSparkleButton
+            columnLabel={columnLabel}
+            onOpenLinkDialog={onOpenHaveLinkDialog}
+          />
+        ) : null}
+        <span className="block min-w-0 flex-1 px-1 py-1 text-[11px] leading-tight">{display}</span>
+      </div>
+    )
   }
 
   return (
@@ -68,6 +88,7 @@ function ResourceValueCell({
             key={field}
             value={value}
             editing={editing}
+            canLinkAssets={canLinkAssets}
             columnLabel={columnLabel}
             onManualChange={onManualHaveChange}
             onOpenLinkDialog={onOpenHaveLinkDialog}
@@ -100,6 +121,8 @@ export function Ics215WorkAssignmentsSpreadsheetTable({
   autoFillHaveFromAssets = false,
   lockedAssignee,
   editing,
+  canLinkAssets = false,
+  onRequestEdit,
   onChange,
   onHaveFillComplete,
 }: Ics215WorkAssignmentsSpreadsheetTableProps) {
@@ -138,6 +161,17 @@ export function Ics215WorkAssignmentsSpreadsheetTable({
     getAccessToken,
     patchResourceValue,
   })
+
+  const openHaveLinkWithEdit = (
+    params: Parameters<typeof haveLink.openHaveLinkDialog>[0]
+  ) => {
+    if (!editing) {
+      onRequestEdit?.()
+    }
+    window.setTimeout(() => {
+      void haveLink.openHaveLinkDialog(params)
+    }, 0)
+  }
 
   const buildWorkAssignmentContext = (assignee: string, workAssignment: string) => {
     const assigneeLabel =
@@ -206,7 +240,16 @@ export function Ics215WorkAssignmentsSpreadsheetTable({
                             ) : null}
                           </div>
                         ) : (
-                          <span className="block normal-case">{column.label}</span>
+                          <div className="flex items-center gap-1 normal-case">
+                            <span className="block">{column.label}</span>
+                            {canLinkAssets ? (
+                              <ResourceHaveFillButton
+                                resourceName={column.label}
+                                workspaceAssets={workspaceAssets}
+                                onFill={() => haveLink.previewColumnMatches(column.label)}
+                              />
+                            ) : null}
+                          </div>
                         )}
                         <div className="grid grid-cols-3 gap-1 text-[9px] font-normal normal-case">
                           <span>Req</span>
@@ -303,13 +346,14 @@ export function Ics215WorkAssignmentsSpreadsheetTable({
                             <ResourceValueCell
                               value={row.resourceValues[column.id] ?? EMPTY_RESOURCE_VALUE}
                               editing={editing}
+                              canLinkAssets={canLinkAssets}
                               columnLabel={column.label}
                               onChange={(value) => patchResourceValue(row.id, column.id, value)}
                               onManualHaveChange={(have) =>
                                 haveLink.patchManualHave(row.id, column.id, have)
                               }
                               onOpenHaveLinkDialog={() =>
-                                void haveLink.openHaveLinkDialog({
+                                openHaveLinkWithEdit({
                                   rowId: row.id,
                                   columnId: column.id,
                                   columnLabel: column.label,

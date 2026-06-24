@@ -228,6 +228,8 @@ export function Ics215FormSections({
             autoFillHaveFromAssets={autoFillHaveFromAssets}
             layoutMode={normalizeIcs215WorkAssignmentsLayoutMode(form.workAssignmentsLayoutMode)}
             editing={isSectionEditing(editingSections, 'work-assignments')}
+            canLinkAssets={canEdit && !formIsLocked}
+            onRequestEdit={() => onStartSectionEdit('work-assignments')}
             onChange={(next) => onPatchDraft('work-assignments', next)}
             onHaveFillComplete={onHaveFillComplete}
           />

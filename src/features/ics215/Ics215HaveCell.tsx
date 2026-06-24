@@ -14,15 +14,53 @@ import { cn } from '@/lib/utils'
 type Ics215HaveCellProps = {
   value: Ics215ResourceValue
   editing: boolean
+  canLinkAssets?: boolean
   disabled?: boolean
   columnLabel: string
   onManualChange: (have: string) => void
   onOpenLinkDialog: () => void
 }
 
+export function HaveLinkSparkleButton({
+  columnLabel,
+  disabled,
+  onOpenLinkDialog,
+}: {
+  columnLabel: string
+  disabled?: boolean
+  onOpenLinkDialog: () => void
+}) {
+  return (
+    <TooltipProvider delayDuration={150}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            disabled={disabled || columnLabel.trim().length < 2}
+            aria-label={`Link assets to Have for ${columnLabel}`}
+            className="h-6 w-6 shrink-0 text-muted-foreground hover:text-foreground"
+            onClick={(event) => {
+              event.stopPropagation()
+              onOpenLinkDialog()
+            }}
+          >
+            <Sparkles className="h-3 w-3" />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent className="max-w-xs">
+          Link workspace assets to Have for “{columnLabel.trim() || 'resource'}”.
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  )
+}
+
 export function Ics215HaveCell({
   value,
   editing,
+  canLinkAssets = false,
   disabled = false,
   columnLabel,
   onManualChange,
@@ -30,55 +68,56 @@ export function Ics215HaveCell({
 }: Ics215HaveCellProps) {
   const linked = isHaveLinkedToAssets(value)
   const displayValue = value.have.trim()
+  const showLinkSparkle = editing || canLinkAssets
 
   if (!editing) {
     if (linked && displayValue.length > 0) {
       return (
-        <button
-          type="button"
-          className={cn(
-            'w-full rounded px-1 py-1 text-left text-[11px] leading-tight underline decoration-dotted underline-offset-2',
-            'hover:bg-muted/40'
-          )}
-          title={`${displayValue} assets linked — click to review`}
-          onClick={onOpenLinkDialog}
-        >
-          {displayValue}
-        </button>
+        <div className="flex items-center gap-0.5">
+          {showLinkSparkle ? (
+            <HaveLinkSparkleButton
+              columnLabel={columnLabel}
+              disabled={disabled}
+              onOpenLinkDialog={onOpenLinkDialog}
+            />
+          ) : null}
+          <button
+            type="button"
+            className={cn(
+              'min-w-0 flex-1 rounded px-1 py-1 text-left text-[11px] leading-tight underline decoration-dotted underline-offset-2',
+              'hover:bg-muted/40'
+            )}
+            title={`${displayValue} assets linked — click to review`}
+            onClick={onOpenLinkDialog}
+          >
+            {displayValue}
+          </button>
+        </div>
       )
     }
     return (
-      <span className="block px-1 py-1 text-[11px] leading-tight">
-        {displayValue.length > 0 ? displayValue : '—'}
-      </span>
+      <div className="flex items-center gap-0.5">
+        {showLinkSparkle ? (
+          <HaveLinkSparkleButton
+            columnLabel={columnLabel}
+            disabled={disabled}
+            onOpenLinkDialog={onOpenLinkDialog}
+          />
+        ) : null}
+        <span className="block min-w-0 flex-1 px-1 py-1 text-[11px] leading-tight">
+          {displayValue.length > 0 ? displayValue : '—'}
+        </span>
+      </div>
     )
   }
 
   return (
     <div className="flex items-center gap-0.5">
-      <TooltipProvider delayDuration={150}>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              disabled={disabled || columnLabel.trim().length < 2}
-              aria-label={`Link assets to Have for ${columnLabel}`}
-              className="h-6 w-6 shrink-0 text-muted-foreground hover:text-foreground"
-              onClick={(event) => {
-                event.stopPropagation()
-                onOpenLinkDialog()
-              }}
-            >
-              <Sparkles className="h-3 w-3" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent className="max-w-xs">
-            Link workspace assets to Have for “{columnLabel.trim() || 'resource'}”.
-          </TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
+      <HaveLinkSparkleButton
+        columnLabel={columnLabel}
+        disabled={disabled}
+        onOpenLinkDialog={onOpenLinkDialog}
+      />
       <input
         value={value.have}
         onChange={(event) => onManualChange(event.target.value)}

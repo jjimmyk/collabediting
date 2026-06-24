@@ -43,6 +43,7 @@ function LegacyResourceValueCell({
   value,
   field,
   editing,
+  canLinkAssets = false,
   columnLabel,
   onChange,
   onManualHaveChange,
@@ -51,6 +52,7 @@ function LegacyResourceValueCell({
   value: Ics215ResourceValue
   field: 'required' | 'have' | 'need'
   editing: boolean
+  canLinkAssets?: boolean
   columnLabel: string
   onChange: (nextValue: string) => void
   onManualHaveChange?: (have: string) => void
@@ -61,6 +63,7 @@ function LegacyResourceValueCell({
       <Ics215HaveCell
         value={value}
         editing={editing}
+        canLinkAssets={canLinkAssets}
         columnLabel={columnLabel}
         onManualChange={onManualHaveChange ?? onChange}
         onOpenLinkDialog={onOpenHaveLinkDialog ?? (() => undefined)}
@@ -129,6 +132,8 @@ export function Ics215WorkAssignmentsLegacyTable({
   autoFillHaveFromAssets = false,
   lockedAssignee,
   editing,
+  canLinkAssets = false,
+  onRequestEdit,
   onChange,
   onHaveFillComplete,
 }: Ics215WorkAssignmentsLegacyTableProps) {
@@ -170,6 +175,17 @@ export function Ics215WorkAssignmentsLegacyTable({
     getAccessToken,
     patchResourceValue,
   })
+
+  const openHaveLinkWithEdit = (
+    params: Parameters<typeof haveLink.openHaveLinkDialog>[0]
+  ) => {
+    if (!editing) {
+      onRequestEdit?.()
+    }
+    window.setTimeout(() => {
+      void haveLink.openHaveLinkDialog(params)
+    }, 0)
+  }
 
   const buildWorkAssignmentContext = (assignee: string, workAssignment: string) => {
     const assigneeLabel =
@@ -275,7 +291,16 @@ export function Ics215WorkAssignmentsLegacyTable({
                           </div>
                         </div>
                       ) : (
-                        <span className="block normal-case">{column.label}</span>
+                        <div className="flex items-center justify-center gap-0.5 normal-case">
+                          <span className="block">{column.label}</span>
+                          {canLinkAssets ? (
+                            <ResourceHaveFillButton
+                              resourceName={column.label}
+                              workspaceAssets={workspaceAssets}
+                              onFill={() => haveLink.previewColumnMatches(column.label)}
+                            />
+                          ) : null}
+                        </div>
                       )}
                     </th>
                   ))}
@@ -376,6 +401,7 @@ export function Ics215WorkAssignmentsLegacyTable({
                               value={value}
                               field={rhnRow.field}
                               editing={editing}
+                              canLinkAssets={canLinkAssets}
                               columnLabel={column.label}
                               onChange={(nextValue) =>
                                 patchResourceField(row.id, column.id, rhnRow.field, nextValue)
@@ -384,7 +410,7 @@ export function Ics215WorkAssignmentsLegacyTable({
                                 haveLink.patchManualHave(row.id, column.id, have)
                               }
                               onOpenHaveLinkDialog={() =>
-                                void haveLink.openHaveLinkDialog({
+                                openHaveLinkWithEdit({
                                   rowId: row.id,
                                   columnId: column.id,
                                   columnLabel: column.label,

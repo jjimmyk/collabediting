@@ -38,6 +38,8 @@ export type Ics215WorkAssignmentsTableBaseProps = {
   lockedAssignee?: string
   roster?: WorkspaceRosterMember[]
   editing: boolean
+  canLinkAssets?: boolean
+  onRequestEdit?: () => void
   onChange: (next: {
     resourceColumns: Ics215ResourceColumn[]
     workAssignments: Ics215WorkAssignmentRow[]
