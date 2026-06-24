@@ -22,6 +22,7 @@ import {
   resolvePositionOrgChartSection,
 } from '../src/features/roster/roster-org-chart-sections'
 import {
+  buildWorkspacePositionCatalog,
   emptyWorkspacePositionCatalog,
 } from '../src/features/roster/workspace-positions'
 import {
@@ -48,10 +49,6 @@ import {
   orgChartSectionColumnClassName,
   LOGISTICS_SECTION_LABEL,
 } from '../src/features/roster/org-chart-layout-tokens'
-import {
-  buildWorkspacePositionCatalog,
-  emptyWorkspacePositionCatalog,
-} from '../src/features/roster/workspace-positions'
 import { buildPositionRosterEntries, type PositionRosterEntry } from '../src/features/roster/workspace-position-roster'
 import type { ResourceListItemData } from '../src/features/resources/types'
 import type { WorkspaceRosterMember } from '../src/lib/workspace-types'
@@ -576,8 +573,23 @@ const wideLayoutSource = readFileSync(
 assert(
   wideLayoutSource.includes('OrgChartIcDirectReportsRow') &&
     wideLayoutSource.includes('buildIcDirectReportNodes') &&
-    !wideLayoutSource.includes('CommandStaffHeaderCard'),
-  'wide org chart layout should merge IC direct reports with command staff under the commander'
+    wideLayoutSource.includes('OrgChartSectionColumn') &&
+    wideLayoutSource.includes('OrgChartSectionSubHierarchy') &&
+    !wideLayoutSource.includes('CommandStaffHeaderCard') &&
+    !wideLayoutSource.includes('OrgChartSubHierarchyColumn') &&
+    !wideLayoutSource.includes('ORG_CHART_WIDE_SUB_HIERARCHY_MARGIN_TOP'),
+  'wide org chart layout should use single-column section chiefs with structural spine indent'
+)
+
+const spineLayoutSource = readFileSync(
+  join(process.cwd(), 'src/features/roster/org-chart-spine-layout.tsx'),
+  'utf8'
+)
+assert(
+  spineLayoutSource.includes('orgChartNestedSpineIndentPaddingStyle') &&
+    spineLayoutSource.includes('orgChartSpineAnchorPaddingStyle') &&
+    !spineLayoutSource.includes('translateX'),
+  'spine layout should use structural padding instead of transform alignment'
 )
 
 const connectorOverlaySource = readFileSync(
@@ -608,6 +620,8 @@ const layoutTokensSource = readFileSync(
 assert(
   layoutTokensSource.includes('ORG_CHART_CARD_TO_CHILDREN_GAP') &&
     layoutTokensSource.includes('ORG_CHART_SUBORDINATE_ARM_CHANNEL_WIDTH') &&
+    layoutTokensSource.includes('ORG_CHART_SUBORDINATE_ARM_CHANNEL_PX') &&
+    layoutTokensSource.includes('orgChartNestedSpineIndentPaddingStyle') &&
     layoutTokensSource.includes('ORG_CHART_CARD_LAYER_CLASS') &&
     layoutTokensSource.includes('ORG_CHART_CONNECTOR_BORDER_WIDTH') &&
     layoutTokensSource.includes('ORG_CHART_SPINE_ANCHOR_RATIO') &&

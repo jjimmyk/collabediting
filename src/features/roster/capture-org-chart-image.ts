@@ -63,6 +63,7 @@ export function measureOrgChartCaptureSize(root: HTMLElement): { width: number; 
   const elements = [
     ...root.querySelectorAll('[data-org-chart-id]'),
     ...root.querySelectorAll('[data-org-chart-connectors]'),
+    ...root.querySelectorAll('[data-ics207-export-connectors]'),
   ]
 
   if (elements.length === 0) {

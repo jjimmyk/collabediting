@@ -19,11 +19,17 @@ export const ORG_CHART_SUBORDINATE_TRUNK_WIDTH = 'w-2'
 /** Horizontal channel between trunk and card — arms span this, cards start after it. */
 export const ORG_CHART_SUBORDINATE_ARM_CHANNEL_WIDTH = 'w-6'
 
+/** Horizontal arm channel in layout pixels (matches w-6 / 1.5rem at 16px root). */
+export const ORG_CHART_SUBORDINATE_ARM_CHANNEL_PX = 24
+
 /** Vertical gap between stacked subordinate rows (Food → Medical reference spacing). */
 export const ORG_CHART_SUBORDINATE_ROW_GAP = 'gap-2'
 
 /** Gap between a position card and its child subtree — matches subordinate row gap. */
 export const ORG_CHART_CARD_TO_CHILDREN_GAP = 'gap-2'
+
+/** Card-to-children gap in layout pixels (matches gap-2 / 0.5rem at 16px root). */
+export const ORG_CHART_CARD_TO_CHILDREN_GAP_PX = 8
 
 /** Renders org chart cards above connector lines. */
 export const ORG_CHART_CARD_LAYER_CLASS = 'relative z-10 bg-background'
@@ -31,11 +37,11 @@ export const ORG_CHART_CARD_LAYER_CLASS = 'relative z-10 bg-background'
 /** Horizontal anchor for spine connectors — 10% from card left edge (ICS 207 reference). */
 export const ORG_CHART_SPINE_ANCHOR_RATIO = 0.1
 
+/** Fallback card width when --org-chart-card-width is not yet measured. */
+export const ORG_CHART_DEFAULT_CARD_WIDTH_PX = 160
+
 /** Gap between IC / root children and centered command staff row. */
 export const ORG_CHART_WIDE_COMMAND_STAFF_MARGIN_TOP = 'mt-10'
-
-/** Gap between section header row and sub-hierarchy row in wide layout. */
-export const ORG_CHART_WIDE_SUB_HIERARCHY_MARGIN_TOP = 'mt-14'
 
 /** Gap between command staff (or IC) and section header row in wide layout. */
 export const ORG_CHART_WIDE_GROUPS_ROW_MARGIN_TOP = 'mt-12'
@@ -65,6 +71,31 @@ export const ORG_CHART_ASSET_CARD_WIDTH =
 export const ORG_CHART_ASSET_DETAIL_MODAL_CLASS = 'sm:max-w-[84rem]'
 
 export const LOGISTICS_SECTION_LABEL = 'Logistics Section'
+
+export function orgChartSpineAnchorPx(cardWidthPx: number): number {
+  return cardWidthPx * ORG_CHART_SPINE_ANCHOR_RATIO
+}
+
+/** Nested subordinate indent: spine anchor + horizontal arm channel. */
+export function orgChartSubordinateIndentPx(cardWidthPx: number): number {
+  return orgChartSpineAnchorPx(cardWidthPx) + ORG_CHART_SUBORDINATE_ARM_CHANNEL_PX
+}
+
+export function orgChartSpineAnchorPaddingStyle(): {
+  paddingLeft: string
+} {
+  return {
+    paddingLeft: `calc(var(--org-chart-card-width, ${ORG_CHART_DEFAULT_CARD_WIDTH_PX}px) * ${ORG_CHART_SPINE_ANCHOR_RATIO})`,
+  }
+}
+
+export function orgChartNestedSpineIndentPaddingStyle(): {
+  paddingLeft: string
+} {
+  return {
+    paddingLeft: `calc(var(--org-chart-card-width, ${ORG_CHART_DEFAULT_CARD_WIDTH_PX}px) * ${ORG_CHART_SPINE_ANCHOR_RATIO} + ${ORG_CHART_SUBORDINATE_ARM_CHANNEL_PX}px)`,
+  }
+}
 
 export function orgChartSectionColumnClassName(sectionLabel: string): string {
   return sectionLabel === LOGISTICS_SECTION_LABEL

@@ -1,11 +1,29 @@
-import { useLayoutEffect, useRef, type ReactNode } from 'react'
+import { useLayoutEffect, useRef, type ReactNode, type RefObject } from 'react'
 import { cn } from '@/lib/utils'
 import { useOrgChartConnectors } from '@/features/roster/org-chart-connector-context'
 import {
-  ORG_CHART_SPINE_ANCHOR_RATIO,
+  ORG_CHART_CARD_TO_CHILDREN_GAP,
+  orgChartNestedSpineIndentPaddingStyle,
+  orgChartSpineAnchorPaddingStyle,
+  ORG_CHART_SUBORDINATE_ARM_CHANNEL_WIDTH,
   ORG_CHART_SUBORDINATE_ROW_GAP,
 } from '@/features/roster/org-chart-layout-tokens'
-import { readOrgChartZoom } from '@/features/roster/org-chart-connector-draw'
+
+export function useOrgChartCardWidthVar(ref: RefObject<HTMLElement | null>): void {
+  useLayoutEffect(() => {
+    const el = ref.current
+    if (!el) return
+
+    const apply = () => {
+      el.style.setProperty('--org-chart-card-width', `${el.offsetWidth}px`)
+    }
+
+    apply()
+    const observer = new ResizeObserver(apply)
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [ref])
+}
 
 export function OrgChartSpineRegister({
   parentId,
@@ -59,21 +77,20 @@ export function OrgChartSpineNode({
   nested?: ReactNode
   className?: string
 }) {
+  const nodeRef = useRef<HTMLDivElement>(null)
   const cardRef = useRef<HTMLDivElement>(null)
-  const groupRef = useRef<HTMLDivElement>(null)
 
   useLayoutEffect(() => {
-    if (!nested) return
+    const node = nodeRef.current
     const cardEl = cardRef.current
-    const groupEl = groupRef.current
-    if (!cardEl || !groupEl) return
+    if (!node || !cardEl || !nested) return
 
-    const applyMargin = () => {
-      groupEl.style.marginLeft = `${cardEl.offsetWidth * ORG_CHART_SPINE_ANCHOR_RATIO}px`
+    const apply = () => {
+      node.style.setProperty('--org-chart-card-width', `${cardEl.offsetWidth}px`)
     }
 
-    applyMargin()
-    const observer = new ResizeObserver(applyMargin)
+    apply()
+    const observer = new ResizeObserver(apply)
     observer.observe(cardEl)
     return () => observer.disconnect()
   }, [nested])
@@ -87,14 +104,15 @@ export function OrgChartSpineNode({
   }
 
   return (
-    <div data-org-chart-spine-node className={cn('flex flex-col', className)}>
-      <div ref={cardRef}>{card}</div>
+    <div ref={nodeRef} data-org-chart-spine-node className={cn('flex flex-col', className)}>
+      <div ref={cardRef} data-org-chart-card className="w-full">
+        {card}
+      </div>
       <div
-        ref={groupRef}
         data-org-chart-spine-group
-        className="mt-2.5 flex flex-row items-start"
+        className={cn('flex w-full flex-col items-start', ORG_CHART_CARD_TO_CHILDREN_GAP)}
+        style={orgChartNestedSpineIndentPaddingStyle()}
       >
-        <div className="w-7 shrink-0" aria-hidden />
         {nested}
       </div>
     </div>
@@ -110,13 +128,40 @@ export function OrgChartSpineGroup({
   className?: string
 }) {
   return (
-    <div data-org-chart-spine-group className={cn('flex flex-row items-start', className)}>
-      <div className="w-7 shrink-0" aria-hidden />
+    <div
+      data-org-chart-spine-group
+      className={cn('flex flex-row items-start', className)}
+      style={orgChartNestedSpineIndentPaddingStyle()}
+    >
+      <div className={cn('shrink-0', ORG_CHART_SUBORDINATE_ARM_CHANNEL_WIDTH)} aria-hidden />
       {children}
     </div>
   )
 }
 
+/** Structural sub-hierarchy under a section chief — anchor indent only, no transform. */
+export function OrgChartSectionSubHierarchy({
+  headerId,
+  children,
+  className,
+}: {
+  headerId: string
+  children: ReactNode
+  className?: string
+}) {
+  return (
+    <div
+      data-org-chart-sub-hierarchy
+      data-org-chart-sub-hierarchy-for={headerId}
+      className={cn('flex w-full flex-col items-start', ORG_CHART_CARD_TO_CHILDREN_GAP, className)}
+      style={orgChartSpineAnchorPaddingStyle()}
+    >
+      {children}
+    </div>
+  )
+}
+
+/** @deprecated Use OrgChartSectionSubHierarchy — transform alignment removed. */
 export function OrgChartSubHierarchyColumn({
   headerId,
   children,
@@ -126,50 +171,9 @@ export function OrgChartSubHierarchyColumn({
   children: ReactNode
   className?: string
 }) {
-  const columnRef = useRef<HTMLDivElement>(null)
-  const { getCardElement, subscribeRedraw } = useOrgChartConnectors()
-
-  useLayoutEffect(() => {
-    const column = columnRef.current
-    if (!column) return
-
-    const chart = column.closest('[data-org-chart-wide-root]')
-    if (!chart) return
-
-    const align = () => {
-      const header = getCardElement(headerId)
-      if (!header) return
-      const chartZoom = readOrgChartZoom(chart as HTMLElement)
-      const chartRect = chart.getBoundingClientRect()
-      const headerRect = header.getBoundingClientRect()
-      const columnRect = column.getBoundingClientRect()
-      const scale = chartZoom > 0 ? chartZoom : 1
-      const anchor =
-        (headerRect.left - chartRect.left + headerRect.width * ORG_CHART_SPINE_ANCHOR_RATIO) /
-        scale
-      const columnLeft = (columnRect.left - chartRect.left) / scale
-      column.style.transform = `translateX(${anchor - columnLeft}px)`
-    }
-
-    align()
-    const observer = new ResizeObserver(align)
-    observer.observe(chart)
-    observer.observe(column)
-    const unsubscribe = subscribeRedraw(align)
-    return () => {
-      observer.disconnect()
-      unsubscribe()
-    }
-  }, [getCardElement, headerId, subscribeRedraw])
-
   return (
-    <div
-      ref={columnRef}
-      data-org-chart-sub-hierarchy
-      data-org-chart-sub-hierarchy-for={headerId}
-      className={cn('relative flex flex-row items-start', className)}
-    >
+    <OrgChartSectionSubHierarchy headerId={headerId} className={className}>
       {children}
-    </div>
+    </OrgChartSectionSubHierarchy>
   )
 }

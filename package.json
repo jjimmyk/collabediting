@@ -23,6 +23,7 @@
     "verify:roster-org-chart-display": "npx vite-node scripts/verify-roster-org-chart-display.ts",
     "verify:ics207-export": "npx vite-node scripts/verify-ics207-export.ts",
     "verify:ics207-export-connectors": "npx vite-node scripts/verify-ics207-export-connectors.ts",
+    "verify:org-chart-spine-geometry": "npx vite-node scripts/verify-org-chart-spine-geometry.ts",
     "verify:asset-workspace-assignment-display": "npx vite-node scripts/verify-asset-workspace-assignment-display.ts",
     "verify:ics215-work-assignments": "npx vite-node scripts/verify-ics215-work-assignments.ts",
     "verify:ics215-export": "npx vite-node scripts/verify-ics215-export.ts",

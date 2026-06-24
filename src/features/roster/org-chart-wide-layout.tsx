@@ -1,4 +1,4 @@
-import { useLayoutEffect } from 'react'
+import { useLayoutEffect, useRef } from 'react'
 import { cn } from '@/lib/utils'
 import { OrgChartConnectorOverlay } from '@/features/roster/org-chart-connector-overlay'
 import {
@@ -14,10 +14,11 @@ import {
 import {
   ORG_CHART_WIDE_COMMAND_STAFF_MARGIN_TOP,
   ORG_CHART_WIDE_GROUPS_ROW_MARGIN_TOP,
-  ORG_CHART_WIDE_SUB_HIERARCHY_MARGIN_TOP,
   orgChartSectionColumnClassName,
 } from '@/features/roster/org-chart-layout-tokens'
-import { OrgChartSubHierarchyColumn } from '@/features/roster/org-chart-spine-layout'
+import {
+  OrgChartSectionSubHierarchy,
+} from '@/features/roster/org-chart-spine-layout'
 import { OrgChartWideSpineTree } from '@/features/roster/org-chart-wide-spine-tree'
 import type { OrgChartWideRenderProps } from '@/features/roster/org-chart-wide-layout.types'
 import {
@@ -54,6 +55,61 @@ function getSectionChief(
       positionBranchIsVisible(child, renderProps.visiblePositions, renderProps.displayFilters)
   )
   return chief ?? null
+}
+
+function OrgChartSectionColumn({
+  branch,
+  chief,
+  renderProps,
+}: {
+  branch: Extract<OrgChartNode, { kind: 'group' }>
+  chief: Extract<OrgChartNode, { kind: 'position' }>
+  renderProps: OrgChartWideRenderProps
+}) {
+  const columnRef = useRef<HTMLDivElement>(null)
+  const chiefCardRef = useRef<HTMLDivElement>(null)
+  const chiefId = orgChartPositionConnectorId(chief.position)
+
+  useLayoutEffect(() => {
+    const column = columnRef.current
+    const chiefCard = chiefCardRef.current
+    if (!column || !chiefCard) return
+
+    const apply = () => {
+      column.style.setProperty('--org-chart-card-width', `${chiefCard.offsetWidth}px`)
+    }
+
+    apply()
+    const observer = new ResizeObserver(apply)
+    observer.observe(chiefCard)
+    return () => observer.disconnect()
+  }, [])
+
+  return (
+    <div
+      ref={columnRef}
+      className={cn(
+        'flex flex-col items-start',
+        orgChartSectionColumnClassName(branch.label)
+      )}
+    >
+      <div ref={chiefCardRef} className="w-full" data-org-chart-section-chief>
+        {renderProps.renderLeafNode(chief, {
+          parentColor: chief.color ?? branch.color,
+          suppressChildren: true,
+          connectorAnchorId: chiefId,
+        })}
+      </div>
+      <OrgChartSectionSubHierarchy headerId={chiefId}>
+        <OrgChartWideSpineTree
+          parentId={chiefId}
+          nodes={chief.children ?? []}
+          parentColor={chief.color ?? branch.color}
+          renderProps={renderProps}
+        />
+      </OrgChartSectionSubHierarchy>
+    </div>
+  )
 }
 
 type OrgChartWideLayoutProps = {
@@ -210,56 +266,21 @@ function OrgChartWideLayoutBody({
       />
 
       {sectionChiefs.length > 0 ? (
-        <>
-          <div
-            className={cn(
-              'flex w-full items-end justify-center gap-10',
-              sectionChiefsMarginClass
-            )}
-          >
-            {sectionChiefs.map(({ branch, chief }) => (
-              <div
-                key={branch.label}
-                className={cn(
-                  'flex flex-1 flex-col items-center',
-                  orgChartSectionColumnClassName(branch.label)
-                )}
-              >
-                {renderProps.renderLeafNode(chief, {
-                  parentColor: chief.color ?? branch.color,
-                  suppressChildren: true,
-                  connectorAnchorId: orgChartPositionConnectorId(chief.position),
-                })}
-              </div>
-            ))}
-          </div>
-
-          <div
-            className={cn(
-              'flex w-full items-start justify-center gap-12',
-              ORG_CHART_WIDE_SUB_HIERARCHY_MARGIN_TOP
-            )}
-          >
-            {sectionChiefs.map(({ branch, chief }) => {
-              const chiefId = orgChartPositionConnectorId(chief.position)
-              return (
-                <div
-                  key={`${branch.label}-sub`}
-                  className={orgChartSectionColumnClassName(branch.label)}
-                >
-                  <OrgChartSubHierarchyColumn headerId={chiefId}>
-                    <OrgChartWideSpineTree
-                      parentId={chiefId}
-                      nodes={chief.children ?? []}
-                      parentColor={chief.color ?? branch.color}
-                      renderProps={renderProps}
-                    />
-                  </OrgChartSubHierarchyColumn>
-                </div>
-              )
-            })}
-          </div>
-        </>
+        <div
+          className={cn(
+            'flex w-full items-start justify-center gap-10',
+            sectionChiefsMarginClass
+          )}
+        >
+          {sectionChiefs.map(({ branch, chief }) => (
+            <OrgChartSectionColumn
+              key={branch.label}
+              branch={branch}
+              chief={chief}
+              renderProps={renderProps}
+            />
+          ))}
+        </div>
       ) : null}
 
       {icBusLinks.length > 0 ? <OrgChartIcBusesRegistrar links={icBusLinks} /> : null}

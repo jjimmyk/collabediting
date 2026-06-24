@@ -1,3 +1,9 @@
+import {
+  ORG_CHART_CARD_TO_CHILDREN_GAP_PX,
+  ORG_CHART_SPINE_ANCHOR_RATIO,
+  ORG_CHART_SUBORDINATE_ARM_CHANNEL_PX,
+} from '@/features/roster/org-chart-layout-tokens'
+
 export type OrgChartSvgLine = {
   x1: number
   y1: number
@@ -20,11 +26,36 @@ export type OrgChartLayoutRect = {
 export const ORG_CHART_IC_BUS_OFFSET_PX = 22
 
 export function readOrgChartZoom(chart: HTMLElement): number {
-  const parsed = Number.parseFloat(chart.dataset.orgChartZoom ?? '1')
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : 1
+  const fromDataset = Number.parseFloat(chart.dataset.orgChartZoom ?? '')
+  if (Number.isFinite(fromDataset) && fromDataset > 0) {
+    return fromDataset
+  }
+
+  let node: HTMLElement | null = chart.parentElement
+  while (node) {
+    const zoom = node.style.zoom
+    if (zoom && zoom !== '1' && zoom !== 'normal') {
+      const parsed = Number.parseFloat(zoom)
+      if (Number.isFinite(parsed) && parsed > 0) {
+        return parsed
+      }
+    }
+    node = node.parentElement
+  }
+
+  return 1
 }
 
 /** Map viewport rects into the chart's layout coordinate space (CSS zoom aware). */
+export function toLayoutSpace(
+  chart: HTMLElement,
+  element: HTMLElement,
+  zoom = readOrgChartZoom(chart)
+): OrgChartLayoutRect {
+  return orgChartLayoutRect(chart, element, zoom)
+}
+
+/** @deprecated Prefer toLayoutSpace — kept for existing call sites. */
 export function orgChartLayoutRect(
   chart: HTMLElement,
   element: HTMLElement,
@@ -49,6 +80,21 @@ export function orgChartLayoutRect(
   }
 }
 
+export function measureOrgChartCardRect(
+  chart: HTMLElement,
+  cardEl: HTMLElement,
+  zoom = readOrgChartZoom(chart)
+): OrgChartLayoutRect {
+  return toLayoutSpace(chart, cardEl, zoom)
+}
+
+export function resolveSpineAnchorX(
+  parentRect: OrgChartLayoutRect,
+  anchorRatio = ORG_CHART_SPINE_ANCHOR_RATIO
+): number {
+  return parentRect.left + parentRect.width * anchorRatio
+}
+
 export function spineConnectLines(
   chart: HTMLElement,
   parentEl: HTMLElement,
@@ -58,10 +104,10 @@ export function spineConnectLines(
 ): OrgChartSvgLine[] {
   if (childEls.length === 0) return []
 
-  const parent = orgChartLayoutRect(chart, parentEl, zoom)
-  const spineX = parent.left + parent.width * anchorRatio
-  const spineTop = parent.bottom
-  const childRects = childEls.map((child) => orgChartLayoutRect(chart, child, zoom))
+  const parent = measureOrgChartCardRect(chart, parentEl, zoom)
+  const spineX = resolveSpineAnchorX(parent, anchorRatio)
+  const spineTop = parent.bottom + ORG_CHART_CARD_TO_CHILDREN_GAP_PX
+  const childRects = childEls.map((child) => measureOrgChartCardRect(chart, child, zoom))
   const spineBottom = childRects[childRects.length - 1].cy
 
   return [
@@ -84,11 +130,11 @@ export function icBusConnectLines(
 ): OrgChartSvgLine[] {
   if (headerEls.length === 0) return []
 
-  const commander = orgChartLayoutRect(chart, commanderEl, zoom)
+  const commander = measureOrgChartCardRect(chart, commanderEl, zoom)
   const cmdCx = commander.cx
   const cmdBottom = commander.bottom
 
-  const headers = headerEls.map((el) => orgChartLayoutRect(chart, el, zoom))
+  const headers = headerEls.map((el) => measureOrgChartCardRect(chart, el, zoom))
   const busY = headers[0].top - busOffsetPx
 
   return [
@@ -110,3 +156,7 @@ export function icBusConnectLines(
   ]
 }
 
+/** Expected horizontal arm length from spine anchor to nested child left edge. */
+export function expectedSpineHorizontalArmLengthPx(): number {
+  return ORG_CHART_SUBORDINATE_ARM_CHANNEL_PX
+}

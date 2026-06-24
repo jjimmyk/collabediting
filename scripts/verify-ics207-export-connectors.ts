@@ -7,7 +7,10 @@ import {
   icBusConnectLines,
   spineConnectLines,
 } from '../src/features/roster/org-chart-connector-draw'
-import { ORG_CHART_SPINE_ANCHOR_RATIO } from '../src/features/roster/org-chart-layout-tokens'
+import {
+  ORG_CHART_CARD_TO_CHILDREN_GAP_PX,
+  ORG_CHART_SPINE_ANCHOR_RATIO,
+} from '../src/features/roster/org-chart-layout-tokens'
 import { ORG_CHART_IC_CONNECTOR_ID } from '../src/features/roster/org-chart-node-id'
 import type { PositionRosterEntry } from '../src/features/roster/workspace-position-roster'
 import type { WorkspaceRosterMember } from '../src/lib/workspace-types'
@@ -130,6 +133,11 @@ const spineLines = spineConnectLines(
   1
 )
 assert.equal(spineLines.length, 2, 'spine connector geometry should emit vertical and horizontal segments')
+assert.equal(
+  spineLines[0].y1,
+  120 + ORG_CHART_CARD_TO_CHILDREN_GAP_PX,
+  'spine vertical segment should start after card-to-children gap'
+)
 
 const busLines = icBusConnectLines(mockChart, mockParent, [mockChild, mockChild], undefined, 1)
 assert(busLines.length >= 3, 'IC bus geometry should emit trunk, crossbar, and drops')
