@@ -1,12 +1,17 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import { PDFDocument } from 'pdf-lib'
+import { PDFDocument, StandardFonts } from 'pdf-lib'
+import { ics215TemplateResourceField } from '../src/features/ics215/export-template-fields'
 import {
   assertIcs215TemplatePaginationInvariants,
   paginateIcs215TemplateExport,
 } from '../src/features/ics215/export-template-pagination'
 import { fillIcs215TemplatePdfFromBytes } from '../src/features/ics215/export-template-pdf'
 import { createEmptyIcs215Form, createEmptyResourceValues } from '../src/features/ics215/utils'
+import {
+  getPdfTextFieldWidgetRect,
+  resolveFontSizeForWidgetRect,
+} from '../src/lib/pdf-template-utils'
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message)
@@ -31,6 +36,16 @@ function extractPdfTextRough(pdfBytes: Uint8Array): string {
 }
 
 const templateBytes = fs.readFileSync(path.resolve('public/ics-215-cg-template.pdf'))
+const templateDoc = await PDFDocument.load(templateBytes)
+const templateForm = templateDoc.getForm()
+const templateFont = await templateDoc.embedFont(StandardFonts.Helvetica)
+const reqRect = getPdfTextFieldWidgetRect(templateForm, ics215TemplateResourceField('required', 1, 1) ?? '')
+assert(reqRect, 'REQ Row 1 widget rect should exist')
+const reqLayout = resolveFontSizeForWidgetRect(reqRect, templateFont, '11', { fontSize: 7 })
+assert(
+  reqRect.y + reqRect.height - reqLayout.padding - reqLayout.fontSize >= reqRect.y + reqLayout.padding,
+  'REQ/HAVE/NEED cells should fit at least one line after adaptive layout'
+)
 
 const emptyForm = createEmptyIcs215Form('fixture-template-export')
 const emptyPages = paginateIcs215TemplateExport(emptyForm)
@@ -89,5 +104,28 @@ assert(widePages[1].resourceColumns.length === 3, 'Second slice should contain t
 const filledPdf = await fillIcs215TemplatePdfFromBytes(templateBytes, mediumForm)
 const filledDoc = await PDFDocument.load(filledPdf)
 assert(filledDoc.getPageCount() === 2, 'Filled medium export should contain two form pages')
+
+const rhnForm = createEmptyIcs215Form('fixture-rhn')
+const firstColumn = rhnForm.resourceColumns[0]
+const secondColumn = rhnForm.resourceColumns[1]
+const rhnValues = createEmptyResourceValues(rhnForm.resourceColumns)
+rhnValues[firstColumn.id] = { required: '11', have: '22', need: '33' }
+rhnValues[secondColumn.id] = { required: '44', have: '55', need: '66' }
+rhnForm.workAssignments = [
+  {
+    id: 1,
+    assignee: 'Division Alpha',
+    workAssignment: 'Verify REQ/HAVE/NEED export rendering',
+    resourceValues: rhnValues,
+    overheadPositions: '',
+    specialEquipmentSupplies: '',
+    reportingLocation: '',
+    requestedArrivalTime: '',
+    status: 'Planned',
+  },
+]
+const rhnPdf = await fillIcs215TemplatePdfFromBytes(templateBytes, rhnForm)
+const rhnDoc = await PDFDocument.load(rhnPdf)
+assert(rhnDoc.getPageCount() === 1, 'RHN fixture export should produce one form page')
 
 console.log('verify-ics215-template-export: all checks passed')

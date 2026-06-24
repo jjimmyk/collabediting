@@ -85,16 +85,47 @@ export function splitTextForWidgetRect(
   return splitWrappedLinesIntoChunks(lines, maxLines).map((chunk) => chunk.join('\n'))
 }
 
+export function resolveAdaptiveWidgetPadding(rect: PdfWidgetRect, preferred = 4): number {
+  return Math.max(0.75, Math.min(preferred, rect.height * 0.12, rect.width * 0.12))
+}
+
+export function resolveFontSizeForWidgetRect(
+  rect: PdfWidgetRect,
+  font: PDFFont,
+  text: string,
+  options: { fontSize?: number; padding?: number } = {}
+): { fontSize: number; padding: number; lineHeight: number } {
+  const preferredFontSize = options.fontSize ?? 9
+  const padding = options.padding ?? resolveAdaptiveWidgetPadding(rect)
+  const maxByHeight = Math.max(4, rect.height - padding * 2)
+  let fontSize = Math.min(preferredFontSize, maxByHeight)
+  const maxWidth = Math.max(1, rect.width - padding * 2)
+  const trimmed = text.trim()
+
+  while (fontSize > 4) {
+    const firstLineY = rect.y + rect.height - padding - fontSize
+    const minY = rect.y + padding
+    const lineWidth = trimmed.length > 0 ? font.widthOfTextAtSize(trimmed, fontSize) : 0
+    if (firstLineY >= minY && lineWidth <= maxWidth) {
+      break
+    }
+    fontSize -= 0.5
+  }
+
+  return {
+    fontSize,
+    padding,
+    lineHeight: Math.max(fontSize + 0.5, Math.min(fontSize * 1.15, rect.height - padding * 2)),
+  }
+}
+
 export function drawTextInWidgetRect(
   page: PDFPage,
   font: PDFFont,
   rect: PdfWidgetRect,
   text: string,
-  options: { fontSize?: number; lineHeight?: number; maskBackground?: boolean } = {}
+  options: { fontSize?: number; lineHeight?: number; padding?: number; maskBackground?: boolean } = {}
 ): void {
-  const fontSize = options.fontSize ?? 9
-  const lineHeight = options.lineHeight ?? 11
-  const padding = 4
   const trimmed = text.trim()
 
   if (options.maskBackground) {
@@ -110,16 +141,18 @@ export function drawTextInWidgetRect(
 
   if (trimmed.length === 0) return
 
-  const maxWidth = Math.max(1, rect.width - padding * 2)
-  const lines = wrapPdfLinesForWidth(trimmed, font, fontSize, maxWidth)
-  let y = rect.y + rect.height - padding - fontSize
-  const minY = rect.y + padding
+  const layout = resolveFontSizeForWidgetRect(rect, font, trimmed, options)
+  const lineHeight = options.lineHeight ?? layout.lineHeight
+  const maxWidth = Math.max(1, rect.width - layout.padding * 2)
+  const lines = wrapPdfLinesForWidth(trimmed, font, layout.fontSize, maxWidth)
+  let y = rect.y + rect.height - layout.padding - layout.fontSize
+  const minY = rect.y + layout.padding
   for (const line of lines) {
     if (y < minY) break
     page.drawText(line, {
-      x: rect.x + padding,
+      x: rect.x + layout.padding,
       y,
-      size: fontSize,
+      size: layout.fontSize,
       font,
       color: rgb(0, 0, 0),
     })

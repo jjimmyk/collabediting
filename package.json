@@ -29,6 +29,7 @@
     "verify:asset-workspace-assignment-display": "npx vite-node scripts/verify-asset-workspace-assignment-display.ts",
     "verify:ics215-work-assignments": "npx vite-node scripts/verify-ics215-work-assignments.ts",
     "verify:ics215-export": "npx vite-node scripts/verify-ics215-export.ts",
+    "verify:ics215-template-export": "npx vite-node scripts/verify-ics215-template-export.ts",
     "verify:hub-aor-search": "npx vite-node scripts/verify-hub-aor-search.ts",
     "verify:ics204-template-export": "npx vite-node scripts/verify-ics204-template-export.ts",
     "lint": "eslint .",
