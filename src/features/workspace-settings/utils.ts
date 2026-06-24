@@ -6,6 +6,7 @@ import {
 import {
   INCIDENT_TEMPLATE_OPTIONS,
   INCIDENT_WORKFLOW_OPTIONS,
+  EXERCISE_WORKFLOW_OPTIONS,
 } from '@/features/workspace-settings/constants'
 import type { WorkspaceMetadataRecord } from '@/lib/workspace-types'
 import type {
@@ -310,5 +311,9 @@ export function mergeWorkspaceMetadataFromAccessible<T extends WorkspaceListItem
 }
 
 export function getWorkflowLabel(workflow: string): string {
-  return INCIDENT_WORKFLOW_OPTIONS.find((option) => option.value === workflow)?.label ?? workflow
+  return (
+    INCIDENT_WORKFLOW_OPTIONS.find((option) => option.value === workflow)?.label ??
+    EXERCISE_WORKFLOW_OPTIONS.find((option) => option.value === workflow)?.label ??
+    workflow
+  )
 }

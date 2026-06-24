@@ -1050,6 +1050,7 @@ export type CreatedWorkspace = {
   incidentComplexity: string | null
   hasSequentialWorkflow: boolean
   sequentialWorkflowType: string | null
+  metadata?: WorkspaceMetadataRecord
 }
 
 export async function createWorkspace(params: {
@@ -1059,8 +1060,9 @@ export async function createWorkspace(params: {
   region?: string
   summary?: string
   workspaceFormat?: string
-  incidentComplexity?: string
+  incidentComplexity?: string | null
   organizationId?: string
+  metadata?: WorkspaceMetadataRecord
 }): Promise<{ ok: true; workspace: CreatedWorkspace } | { ok: false; message: string }> {
   if (!isSupabaseConfigured) {
     return { ok: false, message: 'Supabase is not configured.' }
@@ -1080,6 +1082,7 @@ export async function createWorkspace(params: {
       workspaceFormat: params.workspaceFormat,
       incidentComplexity: params.incidentComplexity,
       organizationId: params.organizationId,
+      metadata: params.metadata,
     }),
   })
 

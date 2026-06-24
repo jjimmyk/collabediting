@@ -17,6 +17,7 @@ import {
   INCIDENT_CATEGORY_OPTIONS,
   INCIDENT_TEMPLATE_OPTIONS,
   INCIDENT_WORKFLOW_OPTIONS,
+  EXERCISE_WORKFLOW_OPTIONS,
 } from '@/features/workspace-settings/constants'
 import type { WorkspaceNameLocationDraft } from '@/features/workspace-settings/types'
 import {
@@ -58,10 +59,13 @@ export function WorkspaceNameLocationFields({
 }: WorkspaceNameLocationFieldsProps) {
   const [previewTemplateId, setPreviewTemplateId] = useState<string | null>(null)
 
-  const complexityOptions = useMemo(
-    () => getIncidentComplexityOptionsForWorkflow(draft.workflow),
-    [draft.workflow]
-  )
+  const complexityOptions = useMemo(() => {
+    const options = getIncidentComplexityOptionsForWorkflow(draft.workflow)
+    return options
+  }, [draft.workflow])
+  const workflowOptions =
+    kind === 'exercise' ? EXERCISE_WORKFLOW_OPTIONS : INCIDENT_WORKFLOW_OPTIONS
+  const hideComplexity = draft.workflow === 'tabletop-exercise'
 
   const patchDraft = (patch: Partial<WorkspaceNameLocationDraft>) => {
     onDraftChange({ ...draft, ...patch })
@@ -175,14 +179,14 @@ export function WorkspaceNameLocationFields({
               className="w-full justify-between font-normal"
             >
               <span className="truncate text-left">
-                {INCIDENT_WORKFLOW_OPTIONS.find((option) => option.value === draft.workflow)
+                {workflowOptions.find((option) => option.value === draft.workflow)
                   ?.label ?? 'Select workspace format'}
               </span>
               <ChevronDown className="h-4 w-4 text-muted-foreground" />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start">
-            {INCIDENT_WORKFLOW_OPTIONS.map((option) => (
+            {workflowOptions.map((option) => (
               <DropdownMenuItem
                 key={option.value}
                 onSelect={() => handleWorkflowChange(option.value)}
@@ -194,6 +198,7 @@ export function WorkspaceNameLocationFields({
         </DropdownMenu>
       </div>
 
+      {!hideComplexity && (
       <div className="grid gap-2">
         <Label htmlFor="workspace-settings-complexity">Incident Complexity</Label>
         <DropdownMenu>
@@ -225,6 +230,7 @@ export function WorkspaceNameLocationFields({
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
+      )}
 
       <div className="grid gap-2">
         <Label htmlFor="workspace-settings-template">Select Template</Label>

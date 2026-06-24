@@ -44,6 +44,7 @@ export type WorkspaceMetadataRecord = {
   aors?: string[]
   address?: string
   location?: [number, number]
+  exerciseMsel?: import('@/features/exercise-msel/types').ExerciseMselState
 }
 
 export type AccessibleWorkspace = {

@@ -5,6 +5,7 @@ import {
   userBelongsToOrganization,
   userIsOrgAdminForOrganization,
 } from './org-shared.js'
+import { normalizeWorkspaceMetadata } from './exercise-msel-metadata.js'
 
 const supabaseUrl =
   process.env.VITE_SUPABASE_URL ??
@@ -21,6 +22,7 @@ type CreateWorkspaceBody = {
   workspaceFormat?: string
   incidentComplexity?: string
   organizationId?: string
+  metadata?: Record<string, unknown> | null
 }
 
 function deriveSequentialWorkflow(
@@ -78,6 +80,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const workspaceFormat = body.workspaceFormat?.trim() || null
     const incidentComplexity = body.incidentComplexity?.trim() || null
     const organizationId = body.organizationId?.trim()
+    const metadata = normalizeWorkspaceMetadata(body.metadata ?? undefined)
 
     if (kind !== 'incident' && kind !== 'exercise') {
       return res.status(400).json({ error: 'kind must be incident or exercise.' })
@@ -154,9 +157,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         has_sequential_workflow: sequentialWorkflow.has_sequential_workflow,
         sequential_workflow_type: sequentialWorkflow.sequential_workflow_type,
         organization_id: resolvedOrganizationId,
+        metadata,
       })
       .select(
-        'id, kind, legacy_id, name, region, summary, workspace_format, incident_complexity, has_sequential_workflow, sequential_workflow_type'
+        'id, kind, legacy_id, name, region, summary, metadata, workspace_format, incident_complexity, has_sequential_workflow, sequential_workflow_type'
       )
       .single()
 
@@ -241,6 +245,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         name: workspace.name,
         region: workspace.region,
         summary: workspace.summary,
+        metadata: workspace.metadata ?? {},
         workspaceFormat: workspace.workspace_format,
         incidentComplexity: workspace.incident_complexity,
         hasSequentialWorkflow: workspace.has_sequential_workflow,

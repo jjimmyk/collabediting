@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { createClient } from '@supabase/supabase-js'
+import { normalizeWorkspaceMetadata } from './exercise-msel-metadata.js'
 
 const supabaseUrl =
   process.env.VITE_SUPABASE_URL ??
@@ -141,7 +142,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     if (body.metadata !== undefined) {
-      updatePayload.metadata = body.metadata ?? {}
+      updatePayload.metadata = normalizeWorkspaceMetadata(body.metadata ?? undefined)
     }
 
     const { data: workspace, error: updateError } = await admin

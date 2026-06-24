@@ -1,4 +1,5 @@
 export const USCG_ICS_WORKFLOW = 'uscg-ics' as const
+export const TABLETOP_EXERCISE_WORKFLOW = 'tabletop-exercise' as const
 
 export const DEFAULT_INCIDENT_COMPLEXITY = 'tier-1' as const
 export const USCG_INITIAL_RESPONSE_COMPLEXITY = 'initial-response' as const
@@ -45,6 +46,16 @@ export function normalizeIncidentComplexityForWorkflow(
 export const SEQUENTIAL_WORKFLOW_PLANNING_P = USCG_PLANNING_P_COMPLEXITY
 
 export type SequentialWorkflowType = typeof SEQUENTIAL_WORKFLOW_PLANNING_P
+
+export function isTabletopExerciseWorkspace(options: {
+  workspaceFormat?: string | null
+  kind?: 'incident' | 'exercise'
+}) {
+  return (
+    options.kind !== 'incident' &&
+    options.workspaceFormat === TABLETOP_EXERCISE_WORKFLOW
+  )
+}
 
 export function isPlanningPWorkspace(options: {
   workspaceFormat?: string | null

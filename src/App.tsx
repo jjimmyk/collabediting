@@ -810,9 +810,21 @@ import {
   getWorkspaceSequentialWorkflowMetadata,
   normalizeIncidentComplexityForWorkflow,
   STANDARD_INCIDENT_COMPLEXITY_OPTIONS,
+  TABLETOP_EXERCISE_WORKFLOW,
   workspaceHasPlanningPStepper,
   isUscgInitialResponseWorkspace,
 } from '@/lib/workspace-format'
+import { EXERCISE_WORKFLOW_OPTIONS } from '@/features/workspace-settings/constants'
+import { FunctionalMselInjectsEditor } from '@/features/exercise-msel/FunctionalMselInjectsEditor'
+import { MselTabPanel } from '@/features/exercise-msel/MselTabPanel'
+import {
+  buildExerciseMselFromParts,
+  writeLocalExerciseMsel,
+} from '@/features/exercise-msel/msel-utils'
+import { useExerciseMselPersistence } from '@/features/exercise-msel/useExerciseMselPersistence'
+import { useMselInjectMapLayer } from '@/features/exercise-msel/useMselInjectMapLayer'
+import type { MselInject } from '@/features/exercise-msel/types'
+import type { WorkspaceMetadataRecord } from '@/lib/workspace-types'
 import { ICS_POSITIONS, WORKSPACE_ROSTER_POSITIONS } from '@/lib/ics-positions'
 
 type OperationalStatus = 'Operational' | 'Partially Operational' | 'Not Operational'
@@ -6759,6 +6771,11 @@ function App() {
     { value: 'washington-ics', label: 'Washington ICS' },
     { value: 'phmsa-ics', label: 'Pipeline and Hazardous Materials Safety Administration ICS' },
   ] as const
+  const exerciseWorkflowOptions = EXERCISE_WORKFLOW_OPTIONS
+  const activationWorkflowOptions = isCreateExerciseOpen
+    ? exerciseWorkflowOptions
+    : incidentWorkflowOptions
+  const isTabletopExerciseFormat = incidentWorkflow === TABLETOP_EXERCISE_WORKFLOW
   const effectiveIncidentComplexityOptions = useMemo(
     () => getIncidentComplexityOptionsForWorkflow(incidentWorkflow),
     [incidentWorkflow]
@@ -7007,6 +7024,21 @@ function App() {
           return
         }
 
+        const exerciseMsel = buildExerciseMselFromParts({
+          objectives: exerciseObjectives,
+          injects: exerciseMselInjects,
+          workspaceFormat: incidentWorkflow,
+        })
+        const createMetadata: WorkspaceMetadataRecord = {
+          category: incidentCategory.trim() || 'Special Event',
+          templateId: incidentTemplate || undefined,
+          locationMethod: incidentGeometrySummary ? 'draw-point' : 'enter-coordinates',
+          geometrySummary: incidentGeometrySummary || undefined,
+          aors: incidentAors.length > 0 ? [...incidentAors] : undefined,
+          location,
+          exerciseMsel,
+        }
+
         const result = await createWorkspace({
           accessToken,
           kind: 'exercise',
@@ -7014,8 +7046,9 @@ function App() {
           region,
           summary,
           workspaceFormat: incidentWorkflow,
-          incidentComplexity,
+          incidentComplexity: isTabletopExerciseFormat ? null : incidentComplexity,
           organizationId: activeOrganizationId ?? undefined,
+          metadata: createMetadata,
         })
 
         if (!result.ok) {
@@ -7058,6 +7091,14 @@ function App() {
     }
 
     setExerciseList((previous) => [newExercise, ...previous])
+    writeLocalExerciseMsel(
+      `exercise-${newExercise.id}`,
+      buildExerciseMselFromParts({
+        objectives: exerciseObjectives,
+        injects: exerciseMselInjects,
+        workspaceFormat: incidentWorkflow,
+      })
+    )
     const exerciseRosterKey = `exercise-${newExercise.id}`
     setLocalRosterPlansByKey((previous) => ({
       ...previous,
@@ -12037,6 +12078,80 @@ function App() {
       : activeExerciseWorkspace !== null
         ? `exercise-${activeExerciseWorkspace.id}`
         : null
+  const [workspaceMselExpandedInjectId, setWorkspaceMselExpandedInjectId] = useState<number | null>(
+    null
+  )
+  const [activeMselPlacementInjectId, setActiveMselPlacementInjectId] = useState<number | null>(
+    null
+  )
+  const activeExerciseAccessibleMetadata = useMemo(() => {
+    if (!isSupabaseEnabled || !activeWorkspaceSupabaseId) {
+      return null
+    }
+    return (
+      accessibleWorkspaces.find((workspace) => workspace.workspaceId === activeWorkspaceSupabaseId)
+        ?.metadata ?? null
+    )
+  }, [accessibleWorkspaces, activeWorkspaceSupabaseId, isSupabaseEnabled])
+  const {
+    mselState: workspaceMselState,
+    setMselState: setWorkspaceMselState,
+    isTabletopWorkspace: isActiveTabletopExerciseWorkspace,
+  } = useExerciseMselPersistence({
+    enabled: isInExerciseWorkspace,
+    workspaceId: activeWorkspaceSupabaseId,
+    workspaceKey: activeWorkspaceRosterKey,
+    workspaceName: activeExerciseWorkspace?.name ?? 'Exercise',
+    workspaceRegion: activeExerciseWorkspace?.region ?? null,
+    workspaceSummary: activeExerciseWorkspace?.summary ?? null,
+    workspaceFormat: activeExerciseWorkspace?.workspaceFormat,
+    incidentComplexity: activeExerciseWorkspace?.incidentComplexity,
+    metadata: activeExerciseAccessibleMetadata,
+    isSupabaseEnabled,
+    getAccessToken,
+  })
+  const showMselMapLayer =
+    isInExerciseWorkspace &&
+    isActiveTabletopExerciseWorkspace &&
+    workspaceMselState.mode === 'tabletop' &&
+    activeTab === 'msel' &&
+    isMapVisible
+  useEffect(() => {
+    if (activeTab !== 'msel' || workspaceMselState.mode !== 'tabletop') {
+      setActiveMselPlacementInjectId(null)
+    }
+  }, [activeTab, workspaceMselState.mode])
+  const focusMselInjectOnMap = useCallback((inject: MselInject) => {
+    const view = mapViewRef.current
+    if (!view || !inject.mapLocation) {
+      return
+    }
+    const [longitude, latitude] = inject.mapLocation
+    void view.goTo({ center: [longitude, latitude], zoom: 12 })
+  }, [])
+  const handlePlaceMselInjectOnMap = useCallback(
+    (injectId: number, location: [number, number]) => {
+      setWorkspaceMselState((previous) => ({
+        ...previous,
+        injects: previous.injects.map((inject) =>
+          inject.id === injectId ? { ...inject, mapLocation: location } : inject
+        ),
+      }))
+      setActiveMselPlacementInjectId(null)
+    },
+    [setWorkspaceMselState]
+  )
+  useMselInjectMapLayer({
+    enabled: showMselMapLayer,
+    mapViewRef,
+    injects: workspaceMselState.injects,
+    objectives: workspaceMselState.objectives,
+    activePlacementInjectId: activeMselPlacementInjectId,
+    onPlaceInject: handlePlaceMselInjectOnMap,
+    onSelectInjectFromMap: (injectId) => {
+      setWorkspaceMselExpandedInjectId(injectId)
+    },
+  })
   const activeLocalRosterPlan =
     activeWorkspaceRosterKey !== null
       ? localRosterPlansByKey[activeWorkspaceRosterKey]
@@ -17754,197 +17869,13 @@ function App() {
     </>
   )
   const renderExerciseMselInjectsEditor = () => (
-    <div className="grid gap-3">
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div>
-          <p className="text-sm font-medium">Master Scenario Events List</p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            MSEL injects delivered to exercise participants. Each inject links to one exercise
-            objective; an objective may have multiple injects.
-          </p>
-        </div>
-        <Button
-          type="button"
-          size="sm"
-          onClick={() => {
-            const nextId =
-              exerciseMselInjects.length > 0
-                ? Math.max(...exerciseMselInjects.map((row) => row.id)) + 1
-                : 1
-            setExerciseMselInjects((previous) => [
-              ...previous,
-              {
-                id: nextId,
-                objectiveId: exerciseObjectives[0]?.id ?? null,
-                scheduledTime: '',
-                category: 'Operations',
-                inject: '',
-                expectedAction: '',
-              },
-            ])
-            setExpandedExerciseMselInjectId(nextId)
-          }}
-        >
-          <Plus className="mr-1 h-4 w-4" /> Add Inject
-        </Button>
-      </div>
-      {exerciseMselInjects.length === 0 && (
-        <div className="rounded-md border border-dashed bg-muted/20 p-4 text-sm text-muted-foreground">
-          No MSEL injects defined.
-        </div>
-      )}
-      {exerciseMselInjects.map((row) => {
-        const isInjectOpen = expandedExerciseMselInjectId === row.id
-        return (
-          <Item key={row.id} variant="outline" className="flex-col items-stretch">
-            <Collapsible
-              open={isInjectOpen}
-              onOpenChange={(open) => setExpandedExerciseMselInjectId(open ? row.id : null)}
-            >
-              <div className="flex items-center gap-2 px-3 py-2.5">
-                <CollapsibleTrigger asChild>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    aria-label={`Toggle MSEL inject ${row.id}`}
-                  >
-                    <ChevronDown
-                      className={cn('h-4 w-4 transition-transform', isInjectOpen && 'rotate-180')}
-                    />
-                  </Button>
-                </CollapsibleTrigger>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium">
-                    {row.inject.trim() || `Inject ${row.id}`}
-                  </p>
-                  <p className="truncate text-xs text-muted-foreground">
-                    {row.scheduledTime || 'No time set'} · {row.category} ·{' '}
-                    {getExerciseObjectiveLabel(row.objectiveId)}
-                  </p>
-                </div>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  aria-label={`Delete MSEL inject ${row.id}`}
-                  onClick={() => {
-                    setExerciseMselInjects((previous) =>
-                      previous.filter((entry) => entry.id !== row.id)
-                    )
-                    setExpandedExerciseMselInjectId((previous) =>
-                      previous === row.id ? null : previous
-                    )
-                  }}
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              </div>
-              <CollapsibleContent>
-                <div className="grid gap-3 border-t px-3 py-3 md:grid-cols-2">
-                  <div className="grid gap-2 md:col-span-2">
-                    <Label htmlFor={`exercise-msel-objective-${row.id}`}>Exercise Objective</Label>
-                    <Select
-                      value={row.objectiveId != null ? String(row.objectiveId) : ''}
-                      onValueChange={(value) => {
-                        const objectiveId = value ? Number.parseInt(value, 10) : null
-                        setExerciseMselInjects((previous) =>
-                          previous.map((entry) =>
-                            entry.id === row.id ? { ...entry, objectiveId } : entry
-                          )
-                        )
-                      }}
-                    >
-                      <SelectTrigger id={`exercise-msel-objective-${row.id}`}>
-                        <SelectValue placeholder="Select an exercise objective" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {exerciseObjectives.length === 0 ? (
-                          <SelectItem value="__none" disabled>
-                            Add exercise objectives first
-                          </SelectItem>
-                        ) : (
-                          exerciseObjectives.map((objective) => (
-                            <SelectItem key={objective.id} value={String(objective.id)}>
-                              {getExerciseObjectiveLabel(objective.id)}
-                            </SelectItem>
-                          ))
-                        )}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor={`exercise-msel-time-${row.id}`}>Scheduled Time</Label>
-                    <Input
-                      id={`exercise-msel-time-${row.id}`}
-                      type="datetime-local"
-                      value={row.scheduledTime}
-                      onChange={(event) => {
-                        const value = event.target.value
-                        setExerciseMselInjects((previous) =>
-                          previous.map((entry) =>
-                            entry.id === row.id ? { ...entry, scheduledTime: value } : entry
-                          )
-                        )
-                      }}
-                    />
-                  </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor={`exercise-msel-category-${row.id}`}>Category</Label>
-                    <Input
-                      id={`exercise-msel-category-${row.id}`}
-                      value={row.category}
-                      onChange={(event) => {
-                        const value = event.target.value
-                        setExerciseMselInjects((previous) =>
-                          previous.map((entry) =>
-                            entry.id === row.id ? { ...entry, category: value } : entry
-                          )
-                        )
-                      }}
-                    />
-                  </div>
-                  <div className="grid gap-2 md:col-span-2">
-                    <Label htmlFor={`exercise-msel-inject-${row.id}`}>Inject</Label>
-                    <Textarea
-                      id={`exercise-msel-inject-${row.id}`}
-                      value={row.inject}
-                      onChange={(event) => {
-                        const value = event.target.value
-                        setExerciseMselInjects((previous) =>
-                          previous.map((entry) =>
-                            entry.id === row.id ? { ...entry, inject: value } : entry
-                          )
-                        )
-                      }}
-                      className="min-h-20"
-                      placeholder="Describe the scenario inject delivered to participants."
-                    />
-                  </div>
-                  <div className="grid gap-2 md:col-span-2">
-                    <Label htmlFor={`exercise-msel-expected-${row.id}`}>Expected Action</Label>
-                    <Textarea
-                      id={`exercise-msel-expected-${row.id}`}
-                      value={row.expectedAction}
-                      onChange={(event) => {
-                        const value = event.target.value
-                        setExerciseMselInjects((previous) =>
-                          previous.map((entry) =>
-                            entry.id === row.id ? { ...entry, expectedAction: value } : entry
-                          )
-                        )
-                      }}
-                      className="min-h-20"
-                      placeholder="Describe the expected participant or controller response."
-                    />
-                  </div>
-                </div>
-              </CollapsibleContent>
-            </Collapsible>
-          </Item>
-        )
-      })}
-    </div>
+    <FunctionalMselInjectsEditor
+      objectives={exerciseObjectives}
+      injects={exerciseMselInjects}
+      expandedInjectId={expandedExerciseMselInjectId}
+      onExpandedInjectIdChange={setExpandedExerciseMselInjectId}
+      onInjectsChange={(updater) => setExerciseMselInjects(updater)}
+    />
   )
   const cardFilteredEventList = sortEventsBySeverity(
     eventList.filter((item) => {
@@ -25074,7 +25005,7 @@ function App() {
                       className="w-full justify-between font-normal"
                     >
                       <span className="truncate text-left">
-                        {incidentWorkflowOptions.find(
+                        {activationWorkflowOptions.find(
                           (option) => option.value === incidentWorkflow
                         )?.label ?? 'Select workspace format'}
                       </span>
@@ -25082,7 +25013,7 @@ function App() {
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="start">
-                    {incidentWorkflowOptions.map((option) => (
+                    {activationWorkflowOptions.map((option) => (
                       <DropdownMenuItem
                         key={option.value}
                         className="pr-2"
@@ -25106,6 +25037,7 @@ function App() {
                   </DropdownMenuContent>
                 </DropdownMenu>
               </div>
+              {!(isCreateExerciseOpen && isTabletopExerciseFormat) && (
               <div className="grid gap-2">
                 <Label htmlFor="incident-complexity">Select Incident Complexity</Label>
                 <DropdownMenu>
@@ -25144,6 +25076,7 @@ function App() {
                   </DropdownMenuContent>
                 </DropdownMenu>
               </div>
+              )}
               <div className="grid gap-2">
                 <Label htmlFor="incident-template">Select Template</Label>
                 <RadioGroup
@@ -33083,15 +33016,27 @@ function App() {
                 )}
 
                 {activeTab === 'msel' && isInExerciseWorkspace && (
-                  <div className="space-y-3">
-                    <div className="rounded-md border px-3 py-2">
-                      <p className="text-sm font-medium">MSEL</p>
-                      <p className="text-xs text-muted-foreground">
-                        Incident workspace for {activeIncidentWorkspace?.name}
-                      </p>
-                    </div>
-                    {renderExerciseMselInjectsEditor()}
-                  </div>
+                  <MselTabPanel
+                    workspaceName={activeExerciseWorkspace?.name ?? 'Exercise'}
+                    isTabletopWorkspace={isActiveTabletopExerciseWorkspace}
+                    mode={workspaceMselState.mode}
+                    onModeChange={(mode) =>
+                      setWorkspaceMselState((previous) => ({ ...previous, mode }))
+                    }
+                    objectives={workspaceMselState.objectives}
+                    injects={workspaceMselState.injects}
+                    expandedInjectId={workspaceMselExpandedInjectId}
+                    onExpandedInjectIdChange={setWorkspaceMselExpandedInjectId}
+                    onInjectsChange={(updater) =>
+                      setWorkspaceMselState((previous) => ({
+                        ...previous,
+                        injects: updater(previous.injects),
+                      }))
+                    }
+                    activePlacementInjectId={activeMselPlacementInjectId}
+                    onStartPlacement={setActiveMselPlacementInjectId}
+                    onFocusOnMap={focusMselInjectOnMap}
+                  />
                 )}
 
                 {activeTab === 'sitreps' && (

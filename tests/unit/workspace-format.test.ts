@@ -3,8 +3,10 @@ import {
   USCG_ICS_WORKFLOW,
   USCG_INITIAL_RESPONSE_COMPLEXITY,
   USCG_PLANNING_P_COMPLEXITY,
+  TABLETOP_EXERCISE_WORKFLOW,
   getWorkspaceSequentialWorkflowMetadata,
   isPlanningPWorkspace,
+  isTabletopExerciseWorkspace,
   isUscgInitialResponseWorkspace,
   workspaceHasPlanningPStepper,
   workspaceSupportsOperationalPeriods,
@@ -60,5 +62,27 @@ describe('workspace-format', () => {
         sequentialWorkflowType: 'planning-p',
       })
     ).toBe(true)
+  })
+
+  it('identifies tabletop exercise workspaces', () => {
+    expect(
+      isTabletopExerciseWorkspace({
+        workspaceFormat: TABLETOP_EXERCISE_WORKFLOW,
+        kind: 'exercise',
+      })
+    ).toBe(true)
+    expect(
+      isTabletopExerciseWorkspace({
+        workspaceFormat: TABLETOP_EXERCISE_WORKFLOW,
+        kind: 'incident',
+      })
+    ).toBe(false)
+    expect(
+      getWorkspaceSequentialWorkflowMetadata({
+        workspaceFormat: TABLETOP_EXERCISE_WORKFLOW,
+        incidentComplexity: null,
+        kind: 'exercise',
+      }).hasSequentialWorkflow
+    ).toBe(false)
   })
 })

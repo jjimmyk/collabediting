@@ -15,6 +15,11 @@ export const INCIDENT_WORKFLOW_OPTIONS = [
   { value: 'phmsa-ics', label: 'Pipeline and Hazardous Materials Safety Administration ICS' },
 ] as const
 
+export const EXERCISE_WORKFLOW_OPTIONS = [
+  ...INCIDENT_WORKFLOW_OPTIONS,
+  { value: 'tabletop-exercise', label: 'Tabletop Exercise' },
+] as const
+
 export const INCIDENT_TEMPLATE_OPTIONS = [
   {
     id: 'utility-restoration',
