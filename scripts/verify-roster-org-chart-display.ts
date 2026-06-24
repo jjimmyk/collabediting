@@ -698,9 +698,10 @@ const addPositionDialogSource = readFileSync(
 )
 assert(
   addPositionDialogSource.includes('custom-position-type') &&
+    addPositionDialogSource.includes('SearchableSelect') &&
     addPositionDialogSource.includes('WORKSPACE_POSITION_TYPES') &&
     addPositionDialogSource.includes('Single resources are people or assets'),
-  'add position dialog should include type selection without single resource'
+  'add position dialog should include searchable type selection without single resource'
 )
 
 console.log('verify-roster-org-chart-display: all checks passed')

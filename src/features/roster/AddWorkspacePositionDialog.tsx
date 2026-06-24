@@ -10,6 +10,7 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { SearchableSelect } from '@/components/ui/searchable-select'
 import {
   Select,
   SelectContent,
@@ -65,6 +66,18 @@ export function AddWorkspacePositionDialog({
   const [error, setError] = useState<string | null>(null)
 
   const reportsToOptions = useMemo(() => buildReportsToOptions(catalog), [catalog])
+  const reportsToSelectOptions = useMemo(
+    () => reportsToOptions.map((position) => ({ value: position, label: position })),
+    [reportsToOptions]
+  )
+  const typeSelectOptions = useMemo(
+    () =>
+      WORKSPACE_POSITION_TYPES.map((type) => ({
+        value: type,
+        label: WORKSPACE_POSITION_TYPE_LABELS[type],
+      })),
+    []
+  )
 
   const resetDraft = () => {
     setNameDraft('')
@@ -142,45 +155,33 @@ export function AddWorkspacePositionDialog({
           </div>
           <div className="grid gap-2">
             <Label htmlFor="custom-position-reports-to">Reports to</Label>
-            <Select
+            <SearchableSelect
+              id="custom-position-reports-to"
               value={reportsToDraft}
-              onValueChange={(value) => {
-                setReportsToDraft(value)
+              onValueChange={(nextValue) => {
+                setReportsToDraft(nextValue)
                 setError(null)
               }}
-            >
-              <SelectTrigger id="custom-position-reports-to">
-                <SelectValue placeholder="Select a position" />
-              </SelectTrigger>
-              <SelectContent>
-                {reportsToOptions.map((position) => (
-                  <SelectItem key={position} value={position}>
-                    {position}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              options={reportsToSelectOptions}
+              placeholder="Select a position"
+              searchPlaceholder="Search positions…"
+              emptyMessage="No matching positions."
+            />
           </div>
           <div className="grid gap-2">
             <Label htmlFor="custom-position-type">Type</Label>
-            <Select
+            <SearchableSelect
+              id="custom-position-type"
               value={typeDraft}
-              onValueChange={(value) => {
-                setTypeDraft(value as WorkspacePositionType)
+              onValueChange={(nextValue) => {
+                setTypeDraft(nextValue as WorkspacePositionType)
                 setError(null)
               }}
-            >
-              <SelectTrigger id="custom-position-type">
-                <SelectValue placeholder="Select type" />
-              </SelectTrigger>
-              <SelectContent>
-                {WORKSPACE_POSITION_TYPES.map((type) => (
-                  <SelectItem key={type} value={type}>
-                    {WORKSPACE_POSITION_TYPE_LABELS[type]}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              options={typeSelectOptions}
+              placeholder="Select type"
+              searchPlaceholder="Search types…"
+              emptyMessage="No matching types."
+            />
             <p className="text-[11px] text-muted-foreground">
               Single resources are people or assets added separately—not position types.
             </p>
