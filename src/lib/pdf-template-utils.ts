@@ -89,6 +89,21 @@ export function resolveAdaptiveWidgetPadding(rect: PdfWidgetRect, preferred = 4)
   return Math.max(0.75, Math.min(preferred, rect.height * 0.12, rect.width * 0.12))
 }
 
+export function truncateTextToFitWidth(
+  text: string,
+  font: PDFFont,
+  fontSize: number,
+  maxWidth: number
+): string {
+  if (text.length === 0) return text
+  if (font.widthOfTextAtSize(text, fontSize) <= maxWidth) return text
+  let cut = text.length
+  while (cut > 0 && font.widthOfTextAtSize(text.slice(0, cut), fontSize) > maxWidth) {
+    cut -= 1
+  }
+  return cut > 0 ? text.slice(0, cut) : ''
+}
+
 export function resolveFontSizeForWidgetRect(
   rect: PdfWidgetRect,
   font: PDFFont,
@@ -124,7 +139,14 @@ export function drawTextInWidgetRect(
   font: PDFFont,
   rect: PdfWidgetRect,
   text: string,
-  options: { fontSize?: number; lineHeight?: number; padding?: number; maskBackground?: boolean } = {}
+  options: {
+    fontSize?: number
+    lineHeight?: number
+    padding?: number
+    maskBackground?: boolean
+    /** Use a fixed font size and clip text that exceeds the widget bounds. */
+    clipOverflow?: boolean
+  } = {}
 ): void {
   const trimmed = text.trim()
 
@@ -140,6 +162,32 @@ export function drawTextInWidgetRect(
   }
 
   if (trimmed.length === 0) return
+
+  if (options.clipOverflow) {
+    const fontSize = options.fontSize ?? 9
+    const padding = options.padding ?? resolveAdaptiveWidgetPadding(rect)
+    const lineHeight = options.lineHeight ?? Math.max(fontSize + 0.5, fontSize * 1.15)
+    const maxWidth = Math.max(1, rect.width - padding * 2)
+    const lines = wrapPdfLinesForWidth(trimmed, font, fontSize, maxWidth).map((line) =>
+      truncateTextToFitWidth(line, font, fontSize, maxWidth)
+    )
+    let y = rect.y + rect.height - padding - fontSize
+    const minY = rect.y + padding
+    for (const line of lines) {
+      if (y < minY) break
+      if (line.length > 0) {
+        page.drawText(line, {
+          x: rect.x + padding,
+          y,
+          size: fontSize,
+          font,
+          color: rgb(0, 0, 0),
+        })
+      }
+      y -= lineHeight
+    }
+    return
+  }
 
   const layout = resolveFontSizeForWidgetRect(rect, font, trimmed, options)
   const lineHeight = options.lineHeight ?? layout.lineHeight

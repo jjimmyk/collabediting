@@ -1,6 +1,7 @@
 import { PDFDocument, StandardFonts, type PDFFont, type PDFPage } from 'pdf-lib'
 import {
   ICS215_TEMPLATE_FORM_PAGE_INDEX,
+  ICS215_TEMPLATE_SECTION5_FONT_SIZE,
   ICS215_TEMPLATE_URL,
 } from '@/features/ics215/export-template-constants'
 import {
@@ -27,6 +28,11 @@ import {
 } from '@/lib/pdf-template-utils'
 
 const RHN_FIELDS: Ics215TemplateRhnField[] = ['required', 'have', 'need']
+
+const SECTION5_DRAW_OPTIONS = {
+  fontSize: ICS215_TEMPLATE_SECTION5_FONT_SIZE,
+  clipOverflow: true as const,
+}
 
 function clean(value: string | undefined | null): string {
   return (value ?? '').trim()
@@ -69,6 +75,19 @@ function fillFieldOnPage(
   drawTextInWidgetRect(page, font, rect, value, { fontSize, maskBackground: true })
 }
 
+function fillSection5FieldOnPage(
+  page: PDFPage,
+  font: PDFFont,
+  rects: Map<string, PdfWidgetRect>,
+  fieldName: string | undefined,
+  value: string
+): void {
+  if (!fieldName) return
+  const rect = rects.get(fieldName)
+  if (!rect) return
+  drawTextInWidgetRect(page, font, rect, value, { ...SECTION5_DRAW_OPTIONS, maskBackground: true })
+}
+
 function fillFormPagePlan(
   page: PDFPage,
   font: PDFFont,
@@ -106,83 +125,84 @@ function fillFormPagePlan(
 
   plan.assignmentRows.forEach((row, index) => {
     const slot = index + 1
-    fillFieldOnPage(page, font, rects, ics215TemplateAssignmentField('assignee', slot), row.assignee)
-    fillFieldOnPage(
+    fillSection5FieldOnPage(
+      page,
+      font,
+      rects,
+      ics215TemplateAssignmentField('assignee', slot),
+      row.assignee
+    )
+    fillSection5FieldOnPage(
       page,
       font,
       rects,
       ics215TemplateAssignmentField('workAssignment', slot),
       row.workAssignment
     )
-    fillFieldOnPage(
+    fillSection5FieldOnPage(
       page,
       font,
       rects,
       ics215TemplateAssignmentField('overhead', slot),
       row.overheadPositions
     )
-    fillFieldOnPage(
+    fillSection5FieldOnPage(
       page,
       font,
       rects,
       ics215TemplateAssignmentField('specialEquipment', slot),
       row.specialEquipmentSupplies
     )
-    fillFieldOnPage(
+    fillSection5FieldOnPage(
       page,
       font,
       rects,
       ics215TemplateAssignmentField('reportingLocation', slot),
       row.reportingLocation
     )
-    fillFieldOnPage(
+    fillSection5FieldOnPage(
       page,
       font,
       rects,
       ics215TemplateAssignmentField('arrivalTime', slot),
-      row.requestedArrivalTime,
-      7
+      row.requestedArrivalTime
     )
 
     plan.resourceColumns.forEach((column, resourceIndex) => {
       const resourceSlot = resourceIndex + 1
       const values = row.resourceValues[column.id] ?? { required: '', have: '', need: '' }
-      fillFieldOnPage(
+      fillSection5FieldOnPage(
         page,
         font,
         rects,
         ics215TemplateResourceField('required', slot, resourceSlot),
-        clean(values.required),
-        7
+        clean(values.required)
       )
-      fillFieldOnPage(
+      fillSection5FieldOnPage(
         page,
         font,
         rects,
         ics215TemplateResourceField('have', slot, resourceSlot),
-        clean(values.have),
-        7
+        clean(values.have)
       )
-      fillFieldOnPage(
+      fillSection5FieldOnPage(
         page,
         font,
         rects,
         ics215TemplateResourceField('need', slot, resourceSlot),
-        resolveNeedValue(values),
-        7
+        resolveNeedValue(values)
       )
     })
   })
 
   plan.resourceColumns.forEach((column, resourceIndex) => {
     const resourceSlot = resourceIndex + 1
-    fillFieldOnPage(
+    fillSection5FieldOnPage(
       page,
       font,
       rects,
       ics215TemplateKorHeaderField(resourceSlot),
-      column.label,
-      7
+      column.label
     )
   })
 
@@ -193,13 +213,12 @@ function fillFormPagePlan(
       if (!totals) return
       for (const rhn of RHN_FIELDS) {
         const value = rhn === 'need' ? resolveNeedValue(totals) : clean(totals[rhn])
-        fillFieldOnPage(
+        fillSection5FieldOnPage(
           page,
           font,
           rects,
           ics215TemplateTotalsField(rhn, resourceSlot),
-          value,
-          7
+          value
         )
       }
     })

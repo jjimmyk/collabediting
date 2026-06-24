@@ -1,6 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import { PDFDocument, StandardFonts } from 'pdf-lib'
+import { PDFDocument } from 'pdf-lib'
 import { ics215TemplateResourceField } from '../src/features/ics215/export-template-fields'
 import {
   assertIcs215TemplatePaginationInvariants,
@@ -8,9 +8,10 @@ import {
 } from '../src/features/ics215/export-template-pagination'
 import { fillIcs215TemplatePdfFromBytes } from '../src/features/ics215/export-template-pdf'
 import { createEmptyIcs215Form, createEmptyResourceValues } from '../src/features/ics215/utils'
+import { ICS215_TEMPLATE_SECTION5_FONT_SIZE } from '../src/features/ics215/export-template-constants'
 import {
   getPdfTextFieldWidgetRect,
-  resolveFontSizeForWidgetRect,
+  resolveAdaptiveWidgetPadding,
 } from '../src/lib/pdf-template-utils'
 
 function assert(condition: unknown, message: string): asserts condition {
@@ -38,13 +39,16 @@ function extractPdfTextRough(pdfBytes: Uint8Array): string {
 const templateBytes = fs.readFileSync(path.resolve('public/ics-215-cg-template.pdf'))
 const templateDoc = await PDFDocument.load(templateBytes)
 const templateForm = templateDoc.getForm()
-const templateFont = await templateDoc.embedFont(StandardFonts.Helvetica)
 const reqRect = getPdfTextFieldWidgetRect(templateForm, ics215TemplateResourceField('required', 1, 1) ?? '')
 assert(reqRect, 'REQ Row 1 widget rect should exist')
-const reqLayout = resolveFontSizeForWidgetRect(reqRect, templateFont, '11', { fontSize: 7 })
+const reqPadding = resolveAdaptiveWidgetPadding(reqRect)
 assert(
-  reqRect.y + reqRect.height - reqLayout.padding - reqLayout.fontSize >= reqRect.y + reqLayout.padding,
-  'REQ/HAVE/NEED cells should fit at least one line after adaptive layout'
+  reqRect.y +
+    reqRect.height -
+    reqPadding -
+    ICS215_TEMPLATE_SECTION5_FONT_SIZE >=
+    reqRect.y + reqPadding,
+  'REQ/HAVE/NEED cells should fit at least one line at section 5 font size'
 )
 
 const emptyForm = createEmptyIcs215Form('fixture-template-export')
