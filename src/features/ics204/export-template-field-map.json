@@ -1,0 +1,58 @@
+{
+  "formPageIndex": 1,
+  "resourceRowsPerPage": 5,
+  "communicationRowsPerPage": 3,
+  "headerFields": {
+    "incidentName": "1 Incident Name",
+    "operationalPeriodFrom": "Date1_af_date",
+    "operationalPeriodTo": "Date2_af_date",
+    "branch": "Branch",
+    "division": "Divison",
+    "group": "Group",
+    "stagingArea": "Staging Area",
+    "pageNumber": "Text15",
+    "pageTotal": "Text16"
+  },
+  "personnelFields": {
+    "sectionChief": { "name": "NameSection Chief", "contact": "Contact InformationSection Chief" },
+    "branchDirector": { "name": "NameBranch Director", "contact": "Contact InformationBranch Director" },
+    "divisionGroupSupervisor": {
+      "name": "NameDivisionGroup Supervisor",
+      "contact": "Contact InformationDivisionGroup Supervisor"
+    }
+  },
+  "resourceRowFields": {
+    "resourceIdentifier": "Resource IdentifierRow",
+    "leader": "LeaderRow",
+    "personCount": " of PersonsRow",
+    "contactInformation": "Contact InformationRow",
+    "reportingInfoNotes": "Reporting Info  NotesRow",
+    "has204A": "Check Box"
+  },
+  "resourceRow204ACheckboxNumbers": [7, 8, 9, 10, 11],
+  "largeTextFields": {
+    "workAssignments": "6 Work Assignments",
+    "specialInstructions": "7 Special Instructions"
+  },
+  "communicationRowFields": {
+    "nameFunction": "Name  FunctionRow",
+    "contactInformation": "Contact Information Row"
+  },
+  "emergencyFields": {
+    "medical": "Medical",
+    "evacuation": "Evacuation",
+    "other": "Other"
+  },
+  "signatureFields": {
+    "preparedByDateTime": "9 Prepared by DateTime",
+    "preparedByDate": "Date12_af_date",
+    "reviewedPscDateTime": "10 Reviewed by PSC DateTime",
+    "reviewedPscDate": "Date13_af_date",
+    "reviewedOscDateTime": "11 Reviewed by OSCISC DateTime",
+    "reviewedOscDate": "Date14_af_date"
+  },
+  "largeTextRects": {
+    "workAssignments": { "width": 537.8, "height": 117.3, "fontSize": 8, "lineHeight": 10, "padding": 4 },
+    "specialInstructions": { "width": 537.8, "height": 118.4, "fontSize": 8, "lineHeight": 10, "padding": 4 }
+  }
+}

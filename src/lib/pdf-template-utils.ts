@@ -51,6 +51,40 @@ export function wrapPdfLinesForWidth(
   return lines.length > 0 ? lines : ['']
 }
 
+export function maxLinesForWidgetRect(
+  rect: Pick<PdfWidgetRect, 'height'>,
+  options: { fontSize?: number; lineHeight?: number; padding?: number } = {}
+): number {
+  const fontSize = options.fontSize ?? 9
+  const lineHeight = options.lineHeight ?? 11
+  const padding = options.padding ?? 4
+  const usableHeight = Math.max(0, rect.height - padding * 2)
+  return Math.max(1, Math.floor((usableHeight + lineHeight - fontSize) / lineHeight))
+}
+
+export function splitWrappedLinesIntoChunks(lines: string[], maxLinesPerChunk: number): string[][] {
+  if (lines.length === 0) return [[]]
+  const chunks: string[][] = []
+  for (let index = 0; index < lines.length; index += maxLinesPerChunk) {
+    chunks.push(lines.slice(index, index + maxLinesPerChunk))
+  }
+  return chunks
+}
+
+export function splitTextForWidgetRect(
+  text: string,
+  font: PDFFont,
+  rect: PdfWidgetRect,
+  options: { fontSize?: number; lineHeight?: number; padding?: number } = {}
+): string[] {
+  const fontSize = options.fontSize ?? 9
+  const padding = options.padding ?? 4
+  const maxWidth = Math.max(1, rect.width - padding * 2)
+  const lines = wrapPdfLinesForWidth(text.trim(), font, fontSize, maxWidth)
+  const maxLines = maxLinesForWidgetRect(rect, options)
+  return splitWrappedLinesIntoChunks(lines, maxLines).map((chunk) => chunk.join('\n'))
+}
+
 export function drawTextInWidgetRect(
   page: PDFPage,
   font: PDFFont,

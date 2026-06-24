@@ -116,7 +116,7 @@ function buildPersonnelRows(form: Ics204FormState): Ics204PersonnelRow[] {
   ]
 }
 
-function buildResourceExportRow(row: Ics204ResourceAssignedRow): Ics204ResourceExportRow {
+export function buildResourceExportRow(row: Ics204ResourceAssignedRow): Ics204ResourceExportRow {
   const resource = resolveIcs204ResourceSnapshot(row)
   return {
     resourceIdentifier: resource.name,
@@ -164,7 +164,7 @@ export function serializeIcs204WorkAssignments(form: Ics204FormState): string {
     .join('\n\n')
 }
 
-function parseCommunicationRows(text: string): Ics204CommunicationRow[] {
+export function parseCommunicationRows(text: string): Ics204CommunicationRow[] {
   const trimmed = text.trim()
   if (!trimmed) {
     return [{ nameFunction: ' ', contactInformation: ' ' }]

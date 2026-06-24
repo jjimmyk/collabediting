@@ -524,7 +524,7 @@ import { useIcs214WorkspaceForm } from '@/hooks/useIcs214WorkspaceForm'
 import {
   buildIcs204ExportLayout,
   downloadIcs204Docx,
-  downloadIcs204Pdf,
+  downloadIcs204TemplatePdf,
   ics204ExportFilenameBase,
   paginateIcs204Export,
   type Ics204PhysicalPage,
@@ -22231,10 +22231,15 @@ function App() {
   const exportIcs204Pdf = (formId: string) => {
     const payload = resolveIcs204ExportPayload(formId)
     if (!payload) return
+    const formVersions = ics204VersionsById[formId] ?? []
+    const latestVersion = formVersions[formVersions.length - 1]
+    const context = getIcs204ExportContext()
     const stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-')
-    downloadIcs204Pdf(
+    void downloadIcs204TemplatePdf(
       `ICS-204_${ics204ExportFilenameBase(payload.exportForm)}_${stamp}.pdf`,
-      payload.layout
+      payload.exportForm,
+      context,
+      latestVersion?.signatures ?? []
     )
   }
   const mergePersistedIcs204Version = (

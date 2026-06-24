@@ -24,6 +24,11 @@ export {
   serializeIcs204WorkAssignments,
 } from '@/features/ics204/export-layout'
 export { downloadIcs204Docx, downloadIcs204Pdf, paginateIcs204Export } from '@/features/ics204/export-download'
+export {
+  downloadIcs204TemplatePdf,
+  fillIcs204TemplatePdf,
+  paginateIcs204TemplateExport,
+} from '@/features/ics204/export-template-pdf'
 
 /** Flat blocks for IAP bundle export and legacy consumers. */
 export type Ics204DocxBlock =
