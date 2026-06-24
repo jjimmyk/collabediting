@@ -1,3 +1,4 @@
+import { isPositionWithinOrBelowOperationsSectionChief } from '@/features/roster/operations-work-assignment-scope'
 import type { WorkspacePositionCatalog } from '@/features/roster/workspace-positions'
 import {
   formatPositionTypeLabel,
@@ -16,9 +17,10 @@ export type WorkspacePositionSettingsMap = Record<string, WorkspacePositionSetti
 
 export function defaultAllowWorkAssignment(
   positionName: string,
-  catalog: WorkspacePositionCatalog
+  catalog: WorkspacePositionCatalog,
+  options: { reportsTo?: string | null } = {}
 ): boolean {
-  return !catalog.customPositionNames.has(positionName)
+  return isPositionWithinOrBelowOperationsSectionChief(positionName, catalog, options)
 }
 
 export function resolveAllowWorkAssignment(

@@ -1,4 +1,5 @@
 import type { PositionRosterEntry } from '../src/features/roster/workspace-position-roster'
+import { emptyWorkspacePositionCatalog } from '../src/features/roster/workspace-positions'
 import { buildWorkAssignmentTargetOptions } from '../src/lib/work-assignment-target-options'
 import {
   buildWorkAssignmentTarget,
@@ -44,6 +45,8 @@ const roster: WorkspaceRosterMember[] = [
   },
 ]
 
+const catalog = emptyWorkspacePositionCatalog()
+
 const positionEntries: PositionRosterEntry[] = [
   {
     position: 'Division Alpha',
@@ -65,7 +68,7 @@ const positionEntries: PositionRosterEntry[] = [
     positionType: null,
     customTypeLabel: null,
     positionTypeLabel: null,
-    isCustom: false,
+    isCustom: true,
     opAdvanceLabel: null,
     isPlanned: false,
   },
@@ -85,7 +88,7 @@ const positionEntries: PositionRosterEntry[] = [
       allowScheduleUnassign: true,
     },
     editIcs201: true,
-    allowWorkAssignment: true,
+    allowWorkAssignment: false,
     positionType: null,
     customTypeLabel: null,
     positionTypeLabel: null,
@@ -137,16 +140,21 @@ assert(singleTarget.type === 'single_resource', 'single resource target')
 const options = buildWorkAssignmentTargetOptions({
   roster,
   positionEntries,
+  catalog,
   competencyOptions: ['GIS Specialist', 'Team Lead'],
 })
 assert(options.some((option) => option.targetType === 'position'), 'options include positions')
 assert(
-  options.some((option) => option.targetType === 'position_competency'),
-  'options include position roles'
+  !options.some(
+    (option) =>
+      option.targetType === 'position_competency' &&
+      option.label.includes('Planning Section Chief')
+  ),
+  'planning position roles should be excluded when allow work assignment is off'
 )
 assert(
   options.some((option) => option.targetType === 'single_resource'),
-  'options include single resources'
+  'options include single resources under operations'
 )
 assert(options.some((option) => option.targetType === 'member'), 'options include members')
 

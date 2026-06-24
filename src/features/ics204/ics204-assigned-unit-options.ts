@@ -1,4 +1,5 @@
 import type { PositionRosterEntry } from '@/features/roster/workspace-position-roster'
+import type { WorkspacePositionCatalog } from '@/features/roster/workspace-positions'
 import type { WorkspaceRosterMember } from '@/lib/workspace-types'
 import {
   buildWorkAssignmentTargetOptions,
@@ -27,12 +28,14 @@ export function buildIcs204AssignedUnitOptions(
   schedulesByPosition: Record<
     string,
     { assignMemberIds: string[]; unassignMemberIds: string[] }
-  > = {}
+  > = {},
+  catalog?: WorkspacePositionCatalog
 ): Ics204AssignedUnitOption[] {
   return toAssignedUnitOptions(
     buildWorkAssignmentTargetOptions({
       roster,
       positionEntries: entries,
+      catalog,
       competencyOptions,
       schedulesByPosition,
     })
@@ -46,11 +49,13 @@ export function buildIcs204AssignedUnitTargetOptions(
   schedulesByPosition: Record<
     string,
     { assignMemberIds: string[]; unassignMemberIds: string[] }
-  > = {}
+  > = {},
+  catalog?: WorkspacePositionCatalog
 ): WorkAssignmentTargetOption[] {
   return buildWorkAssignmentTargetOptions({
     roster,
     positionEntries: entries,
+    catalog,
     competencyOptions,
     schedulesByPosition,
   })

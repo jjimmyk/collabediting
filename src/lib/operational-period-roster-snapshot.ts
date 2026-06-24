@@ -1,7 +1,9 @@
 import { getAssetByKey } from '@/data/hub-asset-catalog'
 import type { PositionRosterEntry } from '@/features/roster/workspace-position-roster'
+import { emptyWorkspacePositionCatalog } from '@/features/roster/workspace-positions'
 import { getPositionMemberSchedulePolicy } from '@/lib/roster-member-schedule-policy'
 import type { OperationalPeriodRosterSnapshot } from '@/lib/operational-period-roster-types'
+import { defaultAllowWorkAssignment } from '@/lib/workspace-position-settings'
 import type { PositionAssetRosterEntry } from '@/lib/workspace-position-asset-types'
 import type { WorkspaceRosterMember } from '@/lib/workspace-types'
 
@@ -66,7 +68,11 @@ export function buildPositionRosterEntriesFromSnapshot(
           position.lifecycleStatus !== 'planned_create' && position.lifecycleStatus !== 'archived',
       }),
       editIcs201: position.editIcs201,
-      allowWorkAssignment: position.allowWorkAssignment ?? position.source !== 'custom',
+      allowWorkAssignment:
+        position.allowWorkAssignment ??
+        defaultAllowWorkAssignment(position.name, emptyWorkspacePositionCatalog(), {
+          reportsTo: position.reportsTo,
+        }),
       positionType: null,
       customTypeLabel: null,
       positionTypeLabel: null,

@@ -12,6 +12,7 @@ import type {
 import { DEFAULT_NEW_CUSTOM_POSITION_TYPE } from '@/features/roster/workspace-position-type'
 import { inferDefaultPositionType } from '@/features/roster/workspace-position-type'
 import { emptyWorkspacePositionCatalog } from '@/features/roster/workspace-positions'
+import { defaultAllowWorkAssignment } from '@/lib/workspace-position-settings'
 
 const INCIDENT_COMMANDER_POSITION = 'Incident Commander'
 
@@ -74,7 +75,7 @@ export function createBuildTeamRosterDraftFromTemplate(
     positionSettings[position] = {
       positionType: inferDefaultPositionType(position, catalog),
       customTypeLabel: null,
-      allowWorkAssignment: true,
+      allowWorkAssignment: defaultAllowWorkAssignment(position, catalog),
     }
   }
 
@@ -140,7 +141,9 @@ export function addDraftCustomPosition(
       [customPosition.name]: {
         positionType: customPosition.positionType,
         customTypeLabel: customPosition.customTypeLabel,
-        allowWorkAssignment: false,
+        allowWorkAssignment: defaultAllowWorkAssignment(customPosition.name, emptyWorkspacePositionCatalog(), {
+          reportsTo: customPosition.reportsTo,
+        }),
       },
     },
   }

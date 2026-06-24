@@ -1,4 +1,6 @@
+import { isOrgChartParentWithinOperationsSubtree } from '@/features/roster/operations-work-assignment-scope'
 import type { PositionRosterEntry } from '@/features/roster/workspace-position-roster'
+import type { WorkspacePositionCatalog } from '@/features/roster/workspace-positions'
 import {
   buildWorkAssignmentTarget,
   formatWorkAssignmentTargetLabel,
@@ -19,6 +21,7 @@ export type WorkAssignmentTargetOption = {
 export type WorkAssignmentTargetOptionsInput = {
   roster: WorkspaceRosterMember[]
   positionEntries: PositionRosterEntry[]
+  catalog?: WorkspacePositionCatalog
   competencyOptions?: string[]
   schedulesByPosition?: Record<string, { assignMemberIds: string[]; unassignMemberIds: string[] }>
   includeUnassigned?: boolean
@@ -86,6 +89,7 @@ export function buildWorkAssignmentTargetOptions(
   const {
     roster,
     positionEntries,
+    catalog,
     competencyOptions = [],
     schedulesByPosition = {},
     includeUnassigned = false,
@@ -129,6 +133,12 @@ export function buildWorkAssignmentTargetOptions(
   }
 
   for (const member of activeRoster.filter((entry) => entry.assignmentKind === 'single_resource')) {
+    if (
+      catalog &&
+      !isOrgChartParentWithinOperationsSubtree(member.orgChartReportsTo, catalog)
+    ) {
+      continue
+    }
     const target = buildWorkAssignmentTarget({
       type: 'single_resource',
       memberId: member.id,

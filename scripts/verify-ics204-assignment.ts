@@ -63,6 +63,7 @@ const selectableEntry = rosterEntry({
 
 const disabledEntry = rosterEntry({
   position: 'Planning Section Chief',
+  allowWorkAssignment: true,
   members: [rosterMember('m2', 'planning@example.com', ['Planning Section Chief'])],
   scheduledUnassignees: [rosterMember('m2', 'planning@example.com', ['Planning Section Chief'])],
 })
@@ -75,6 +76,7 @@ const retiringPosition = rosterEntry({
 
 const scheduledOnlyEntry = rosterEntry({
   position: 'Finance Section Chief',
+  allowWorkAssignment: true,
   scheduledAssignees: [rosterMember('m4', 'finance@example.com', [])],
 })
 

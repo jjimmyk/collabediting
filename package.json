@@ -19,6 +19,7 @@
     "verify:position-assign-dialog": "npx vite-node scripts/verify-position-assign-dialog.ts",
     "verify:position-identity-editing": "npx vite-node scripts/verify-position-identity-editing.ts",
     "verify:work-assignment-target": "npx vite-node scripts/verify-work-assignment-target.ts",
+    "verify:operations-work-assignment-defaults": "npx vite-node scripts/verify-operations-work-assignment-defaults.ts",
     "verify:create-organization-asset": "npx vite-node scripts/verify-create-organization-asset.ts",
     "verify:add-asset-effective-when": "npx vite-node scripts/verify-add-asset-effective-when.ts",
     "verify:roster-org-chart-display": "npx vite-node scripts/verify-roster-org-chart-display.ts",

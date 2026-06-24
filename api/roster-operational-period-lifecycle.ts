@@ -13,6 +13,8 @@ import {
   validatePendingSingleResourceAssignmentsBeforeOpAdvance,
 } from './roster-pending-assignments-shared.js'
 import { ICS_POSITIONS } from './roster-shared.js'
+import { emptyWorkspacePositionCatalog } from '../src/features/roster/workspace-positions.js'
+import { defaultAllowWorkAssignment } from '../src/lib/workspace-position-settings.js'
 
 type DbCustomPositionRow = {
   id: string
@@ -263,7 +265,8 @@ function buildOperationalPeriodRosterSnapshot(
       opAdvanceLabel,
       reportsTo: null,
       editIcs201: context.editIcs201ByPosition.get(positionName) ?? true,
-      allowWorkAssignment: context.allowWorkAssignmentByPosition.get(positionName) ?? true,
+      allowWorkAssignment: context.allowWorkAssignmentByPosition.get(positionName) ??
+        defaultAllowWorkAssignment(positionName, emptyWorkspacePositionCatalog()),
       members: context.members
         .map((member) => ({
           member,
@@ -298,7 +301,10 @@ function buildOperationalPeriodRosterSnapshot(
       opAdvanceLabel: opAdvanceLabelFromCustomStatus(custom.lifecycle_status),
       reportsTo: custom.reports_to,
       editIcs201: context.editIcs201ByPosition.get(custom.name) ?? false,
-      allowWorkAssignment: context.allowWorkAssignmentByPosition.get(custom.name) ?? false,
+      allowWorkAssignment: context.allowWorkAssignmentByPosition.get(custom.name) ??
+        defaultAllowWorkAssignment(custom.name, emptyWorkspacePositionCatalog(), {
+          reportsTo: custom.reports_to,
+        }),
       members: context.members
         .map((member) => ({
           member,

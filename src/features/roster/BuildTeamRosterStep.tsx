@@ -20,6 +20,7 @@ import {
   buildDraftPositionSettings,
   buildDraftRosterMembers,
 } from '@/features/roster/build-draft-position-catalog'
+import { defaultAllowWorkAssignment } from '@/lib/workspace-position-settings'
 import {
   applyTemplateToBuildTeamDraft,
   hasNonCreatorBuildTeamDraftEdits,
@@ -163,6 +164,9 @@ export function BuildTeamRosterStep({
       positionType: WorkspacePositionType,
       customTypeLabel: string | null
     ) => {
+      const allowWorkAssignment = defaultAllowWorkAssignment(name.trim(), buildDraftPositionCatalog(draft), {
+        reportsTo,
+      })
       onDraftChange({
         ...draft,
         customPositions: [
@@ -180,7 +184,7 @@ export function BuildTeamRosterStep({
           [name.trim()]: {
             positionType,
             customTypeLabel,
-            allowWorkAssignment: false,
+            allowWorkAssignment,
           },
         },
       })
@@ -211,7 +215,9 @@ export function BuildTeamRosterStep({
         positionSettings: {
           ...draft.positionSettings,
           [position]: {
-            allowWorkAssignment: draft.positionSettings[position]?.allowWorkAssignment ?? true,
+            allowWorkAssignment:
+              draft.positionSettings[position]?.allowWorkAssignment ??
+              defaultAllowWorkAssignment(position, buildDraftPositionCatalog(draft)),
             positionType,
             customTypeLabel,
           },

@@ -639,7 +639,7 @@ import {
 } from '@/features/roster/workspace-position-roster'
 import { buildPositionRosterEntriesFromSnapshot } from '@/lib/operational-period-roster-snapshot'
 import type { WorkspacePositionSettingsMap } from '@/lib/workspace-position-settings'
-import { resolveAllowWorkAssignment } from '@/lib/workspace-position-settings'
+import { defaultAllowWorkAssignment, resolveAllowWorkAssignment } from '@/lib/workspace-position-settings'
 import type { WorkspacePositionType } from '@/features/roster/workspace-position-type'
 import {
   buildMemberScheduleSummaryFromRows,
@@ -14237,13 +14237,15 @@ function App() {
         positionRosterEntries,
         activeWorkspaceRoster,
         rosterCompetencyControls.organizationCompetencyOptions,
-        memberSchedulesByPosition
+        memberSchedulesByPosition,
+        workspacePositionCatalog
       ),
     [
       activeWorkspaceRoster,
       memberSchedulesByPosition,
       positionRosterEntries,
       rosterCompetencyControls.organizationCompetencyOptions,
+      workspacePositionCatalog,
     ]
   )
   const workAssignmentTargetOptions = useMemo(
@@ -14252,13 +14254,15 @@ function App() {
         positionRosterEntries,
         activeWorkspaceRoster,
         rosterCompetencyControls.organizationCompetencyOptions,
-        memberSchedulesByPosition
+        memberSchedulesByPosition,
+        workspacePositionCatalog
       ),
     [
       activeWorkspaceRoster,
       memberSchedulesByPosition,
       positionRosterEntries,
       rosterCompetencyControls.organizationCompetencyOptions,
+      workspacePositionCatalog,
     ]
   )
   const ics204AssignedUnitOptionsKey = useMemo(
@@ -16371,6 +16375,9 @@ function App() {
         reportsTo,
         createOnOpAdvance ? 'planned_create' : 'active'
       )
+      const allowWorkAssignment = defaultAllowWorkAssignment(created.name, workspacePositionCatalog, {
+        reportsTo,
+      })
       if (isSupabaseEnabled && activeWorkspaceSupabaseId) {
         const permissions = await fetchWorkspacePositionPermissions(activeWorkspaceSupabaseId)
         setActiveWorkspacePositionPermissions(permissions)
@@ -16380,7 +16387,7 @@ function App() {
           created.name,
           positionType,
           customTypeLabel,
-          false
+          allowWorkAssignment
         )
         if (!typeResult.ok) {
           toast.error(typeResult.message)
@@ -16402,7 +16409,7 @@ function App() {
           [activeWorkspaceRosterKey]: {
             ...(previous[activeWorkspaceRosterKey] ?? {}),
             [created.name]: {
-              allowWorkAssignment: false,
+              allowWorkAssignment,
               positionType,
               customTypeLabel,
             },
