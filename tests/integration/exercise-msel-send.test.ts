@@ -1,7 +1,7 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import updateWorkspaceHandler from '../../api/update-workspace.ts'
 import createWorkspaceHandler from '../../api/create-workspace.ts'
+import sendMselInjectHandler from '../../api/send-msel-inject.ts'
 import { createMockRequest, invokeHandler } from '../helpers/mock-vercel.ts'
 import {
   hasIntegrationTestCredentials,
@@ -14,13 +14,14 @@ import { TABLETOP_EXERCISE_WORKFLOW } from '@/lib/workspace-format'
 
 const describeIntegration = hasIntegrationTestCredentials() ? describe : describe.skip
 
-describeIntegration(`${integrationDescribeLabel()} — exercise MSEL metadata`, () => {
+describeIntegration(`${integrationDescribeLabel()} — send MSEL inject`, () => {
   let admin: SupabaseClient
   let accessToken = ''
+  let senderEmail = ''
   let workspaceId = ''
   let createdWorkspace = false
   const runId = Date.now()
-  const workspaceName = `Integration Tabletop MSEL ${runId}`
+  const workspaceName = `Integration MSEL Send ${runId}`
 
   beforeAll(() => {
     admin = createClient(supabaseUrl(), supabaseServiceRoleKey(), {
@@ -40,6 +41,7 @@ describeIntegration(`${integrationDescribeLabel()} — exercise MSEL metadata`, 
     expect(error).toBeNull()
     expect(data.session?.access_token).toBeTruthy()
     accessToken = data.session!.access_token
+    senderEmail = email.toLowerCase()
   })
 
   it('creates a tabletop exercise workspace with MSEL metadata', async () => {
@@ -76,41 +78,22 @@ describeIntegration(`${integrationDescribeLabel()} — exercise MSEL metadata`, 
     )
 
     expect(statusCode).toBe(200)
-    const payload = body as {
-      workspace?: { workspaceId?: string; metadata?: { exerciseMsel?: typeof exerciseMsel } }
-    }
+    const payload = body as { workspace?: { workspaceId?: string } }
     expect(payload.workspace?.workspaceId).toBeTruthy()
     workspaceId = payload.workspace!.workspaceId!
     createdWorkspace = true
   })
 
-  it('round-trips exercise MSEL metadata on update', async () => {
-    const exerciseMsel = {
-      objectives: [{ id: 1, name: 'Unified command' }],
-      injects: [
-        {
-          id: 1,
-          objectiveId: 1,
-          scheduledTime: '2026-06-22T11:00',
-          category: 'Operations',
-          inject: 'Updated inject text',
-          expectedAction: 'Coordinate with county EOC',
-          mapLocation: [-95.3698, 29.7604],
-        },
-      ],
-    }
-
+  it('sends an MSEL inject to the signed-in roster member', async () => {
     const { statusCode, body } = await invokeHandler(
-      updateWorkspaceHandler,
+      sendMselInjectHandler,
       createMockRequest({
-        method: 'PATCH',
+        method: 'POST',
         body: {
           workspaceId,
-          name: workspaceName,
-          workspaceFormat: TABLETOP_EXERCISE_WORKFLOW,
-          metadata: {
-            exerciseMsel,
-          },
+          injectId: 1,
+          recipientEmails: [senderEmail],
+          severity: 'Medium',
         },
         headers: { authorization: `Bearer ${accessToken}` },
       })
@@ -118,18 +101,39 @@ describeIntegration(`${integrationDescribeLabel()} — exercise MSEL metadata`, 
 
     expect(statusCode).toBe(200)
     const payload = body as {
-      workspace?: { metadata?: { exerciseMsel?: typeof exerciseMsel } }
+      deliveries?: Array<{ injectId: number; recipientEmail: string; title: string }>
     }
-    expect(payload.workspace?.metadata?.exerciseMsel?.injects[0].inject).toBe('Updated inject text')
-    expect(payload.workspace?.metadata?.exerciseMsel?.injects[0].mapLocation).toEqual([
-      -95.3698, 29.7604,
-    ])
+    expect(payload.deliveries?.length).toBe(1)
+    expect(payload.deliveries?.[0]?.injectId).toBe(1)
+    expect(payload.deliveries?.[0]?.recipientEmail).toBe(senderEmail)
+    expect(payload.deliveries?.[0]?.title).toContain('Bridge closure inject')
+  })
+
+  it('allows duplicate sends to the same recipient', async () => {
+    const { statusCode, body } = await invokeHandler(
+      sendMselInjectHandler,
+      createMockRequest({
+        method: 'POST',
+        body: {
+          workspaceId,
+          injectId: 1,
+          recipientEmails: [senderEmail],
+          severity: 'High',
+        },
+        headers: { authorization: `Bearer ${accessToken}` },
+      })
+    )
+
+    expect(statusCode).toBe(200)
+    const payload = body as { deliveries?: unknown[] }
+    expect(payload.deliveries?.length).toBe(1)
   })
 
   afterAll(async () => {
     if (!createdWorkspace || !workspaceId) {
       return
     }
+    await admin.from('exercise_msel_inject_deliveries').delete().eq('workspace_id', workspaceId)
     await admin.from('workspaces').delete().eq('id', workspaceId)
   })
 })

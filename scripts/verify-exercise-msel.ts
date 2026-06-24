@@ -18,7 +18,6 @@ function assert(condition: boolean, message: string) {
 }
 
 const tabletopState = buildExerciseMselFromParts({
-  workspaceFormat: TABLETOP_EXERCISE_WORKFLOW,
   objectives: [{ id: 1, name: 'Command coordination' }],
   injects: [
     {
@@ -33,7 +32,8 @@ const tabletopState = buildExerciseMselFromParts({
   ],
 })
 
-assert(tabletopState.mode === 'tabletop', 'tabletop workspace defaults to tabletop mode')
+assert(!('mode' in tabletopState), 'exercise MSEL state no longer stores mode')
+assert(tabletopState.injects[0].mapLocation != null, 'tabletop inject retains map location')
 
 const normalizedMetadata = normalizeWorkspaceMetadata({
   category: 'Exercise',

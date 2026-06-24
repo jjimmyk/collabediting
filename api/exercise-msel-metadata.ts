@@ -1,5 +1,3 @@
-type MselMode = 'functional' | 'tabletop'
-
 type NormalizedMselInject = {
   id: number
   objectiveId: number | null
@@ -11,7 +9,6 @@ type NormalizedMselInject = {
 }
 
 export type NormalizedExerciseMselState = {
-  mode: MselMode
   objectives: Array<{ id: number; name: string }>
   injects: NormalizedMselInject[]
 }
@@ -35,7 +32,6 @@ export function normalizeExerciseMselMetadata(raw: unknown): NormalizedExerciseM
   }
 
   const record = raw as Record<string, unknown>
-  const mode: MselMode = record.mode === 'tabletop' ? 'tabletop' : 'functional'
 
   const objectives = Array.isArray(record.objectives)
     ? record.objectives
@@ -89,7 +85,11 @@ export function normalizeExerciseMselMetadata(raw: unknown): NormalizedExerciseM
         .filter((entry): entry is NormalizedMselInject => entry !== null)
     : []
 
-  return { mode, objectives, injects }
+  if (objectives.length === 0 && injects.length === 0) {
+    return null
+  }
+
+  return { objectives, injects }
 }
 
 export function normalizeWorkspaceMetadata(

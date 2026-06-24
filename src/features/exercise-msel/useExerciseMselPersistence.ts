@@ -24,21 +24,12 @@ type UseExerciseMselPersistenceOptions = {
 }
 
 export function useExerciseMselPersistence(options: UseExerciseMselPersistenceOptions) {
-  const defaultMode = isTabletopExerciseWorkspace({
-    workspaceFormat: options.workspaceFormat,
-    kind: 'exercise',
-  })
-    ? 'tabletop'
-    : 'functional'
-
   const initialFromMetadata = options.metadata?.exerciseMsel
   const initialFromLocal =
     options.workspaceKey != null ? readLocalExerciseMsel(options.workspaceKey) : null
 
   const [mselState, setMselState] = useState<ExerciseMselState>(() =>
-    normalizeExerciseMselState(initialFromMetadata ?? initialFromLocal, {
-      defaultMode,
-    })
+    normalizeExerciseMselState(initialFromMetadata ?? initialFromLocal)
   )
   const [hydratedKey, setHydratedKey] = useState<string | null>(null)
   const saveTimeoutRef = useRef<number | null>(null)
@@ -53,22 +44,12 @@ export function useExerciseMselPersistence(options: UseExerciseMselPersistenceOp
 
     const fromMetadata = options.metadata?.exerciseMsel
     const fromLocal = readLocalExerciseMsel(options.workspaceKey)
-    setMselState(
-      normalizeExerciseMselState(fromMetadata ?? fromLocal, {
-        defaultMode: isTabletopExerciseWorkspace({
-          workspaceFormat: options.workspaceFormat,
-          kind: 'exercise',
-        })
-          ? 'tabletop'
-          : 'functional',
-      })
-    )
+    setMselState(normalizeExerciseMselState(fromMetadata ?? fromLocal))
     setHydratedKey(options.workspaceKey)
   }, [
     options.enabled,
     options.workspaceKey,
     options.metadata?.exerciseMsel,
-    options.workspaceFormat,
     hydratedKey,
   ])
 

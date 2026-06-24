@@ -1,4 +1,4 @@
-import type { ExerciseMselState, MselInject, MselMode } from './types'
+import type { ExerciseMselState, MselInject } from './types'
 
 function escapeHtml(value: string): string {
   return value
@@ -72,26 +72,19 @@ export function defaultExerciseObjectives(): ExerciseMselState['objectives'] {
   return [{ id: 1, name: '' }]
 }
 
-export function defaultExerciseMselState(options?: {
-  mode?: MselMode
-}): ExerciseMselState {
+export function defaultExerciseMselState(): ExerciseMselState {
   return {
-    mode: options?.mode ?? 'functional',
     objectives: defaultExerciseObjectives(),
     injects: defaultExerciseMselInjects(),
   }
 }
 
-export function normalizeExerciseMselState(
-  raw: unknown,
-  options?: { defaultMode?: MselMode }
-): ExerciseMselState {
+export function normalizeExerciseMselState(raw: unknown): ExerciseMselState {
   if (!raw || typeof raw !== 'object') {
-    return defaultExerciseMselState({ mode: options?.defaultMode })
+    return defaultExerciseMselState()
   }
 
   const record = raw as Record<string, unknown>
-  const mode: MselMode = record.mode === 'tabletop' ? 'tabletop' : 'functional'
 
   const objectives = Array.isArray(record.objectives)
     ? record.objectives
@@ -118,11 +111,10 @@ export function normalizeExerciseMselState(
     : []
 
   if (objectives.length === 0 && injects.length === 0) {
-    return defaultExerciseMselState({ mode: options?.defaultMode ?? mode })
+    return defaultExerciseMselState()
   }
 
   return {
-    mode: options?.defaultMode ?? mode,
     objectives: objectives.length > 0 ? objectives : defaultExerciseObjectives(),
     injects: injects.length > 0 ? injects : defaultExerciseMselInjects(),
   }
@@ -131,20 +123,14 @@ export function normalizeExerciseMselState(
 export function buildExerciseMselFromParts(options: {
   objectives: ExerciseMselState['objectives']
   injects: MselInject[]
-  workspaceFormat?: string | null
 }): ExerciseMselState {
-  const isTabletop = options.workspaceFormat === 'tabletop-exercise'
-  return normalizeExerciseMselState(
-    {
-      mode: isTabletop ? 'tabletop' : 'functional',
-      objectives: options.objectives,
-      injects: options.injects.map((inject) => ({
-        ...inject,
-        mapLocation: inject.mapLocation ?? null,
-      })),
-    },
-    { defaultMode: isTabletop ? 'tabletop' : 'functional' }
-  )
+  return normalizeExerciseMselState({
+    objectives: options.objectives,
+    injects: options.injects.map((inject) => ({
+      ...inject,
+      mapLocation: inject.mapLocation ?? null,
+    })),
+  })
 }
 
 export function getExerciseObjectiveLabel(
@@ -185,6 +171,10 @@ export function mergeMselInjectUpdate(inject: MselInject, patch: Partial<MselInj
 
 export function exerciseMselStorageKey(workspaceKey: string): string {
   return `exercise-msel-${workspaceKey}`
+}
+
+export function exerciseMselDeliveriesStorageKey(workspaceKey: string): string {
+  return `exercise-msel-deliveries-${workspaceKey}`
 }
 
 export function readLocalExerciseMsel(workspaceKey: string): ExerciseMselState | null {

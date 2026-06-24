@@ -817,13 +817,20 @@ import {
 import { EXERCISE_WORKFLOW_OPTIONS } from '@/features/workspace-settings/constants'
 import { FunctionalMselInjectsEditor } from '@/features/exercise-msel/FunctionalMselInjectsEditor'
 import { MselTabPanel } from '@/features/exercise-msel/MselTabPanel'
+import { SendMselInjectDialog } from '@/features/exercise-msel/SendMselInjectDialog'
 import {
   buildExerciseMselFromParts,
   writeLocalExerciseMsel,
 } from '@/features/exercise-msel/msel-utils'
+import {
+  buildMselInjectNotificationFromInject,
+  countDeliveriesByInjectId,
+} from '@/features/exercise-msel/delivery-utils'
 import { useExerciseMselPersistence } from '@/features/exercise-msel/useExerciseMselPersistence'
+import { useMselInjectDeliveries } from '@/features/exercise-msel/useMselInjectDeliveries'
 import { useMselInjectMapLayer } from '@/features/exercise-msel/useMselInjectMapLayer'
-import type { MselInject } from '@/features/exercise-msel/types'
+import type { MselInject, MselInjectDelivery, MselViewTab } from '@/features/exercise-msel/types'
+import { sendMselInjectViaApi } from '@/lib/exercise-msel-delivery-service'
 import type { WorkspaceMetadataRecord } from '@/lib/workspace-types'
 import { ICS_POSITIONS, WORKSPACE_ROSTER_POSITIONS } from '@/lib/ics-positions'
 
@@ -7027,7 +7034,6 @@ function App() {
         const exerciseMsel = buildExerciseMselFromParts({
           objectives: exerciseObjectives,
           injects: exerciseMselInjects,
-          workspaceFormat: incidentWorkflow,
         })
         const createMetadata: WorkspaceMetadataRecord = {
           category: incidentCategory.trim() || 'Special Event',
@@ -7096,7 +7102,6 @@ function App() {
       buildExerciseMselFromParts({
         objectives: exerciseObjectives,
         injects: exerciseMselInjects,
-        workspaceFormat: incidentWorkflow,
       })
     )
     const exerciseRosterKey = `exercise-${newExercise.id}`
@@ -12081,6 +12086,10 @@ function App() {
   const [workspaceMselExpandedInjectId, setWorkspaceMselExpandedInjectId] = useState<number | null>(
     null
   )
+  const [mselViewTab, setMselViewTab] = useState<MselViewTab>('schedule')
+  const [mselReceivedMineOnly, setMselReceivedMineOnly] = useState(false)
+  const [sendMselInjectTarget, setSendMselInjectTarget] = useState<MselInject | null>(null)
+  const [isSendMselInjectOpen, setIsSendMselInjectOpen] = useState(false)
   const [activeMselPlacementInjectId, setActiveMselPlacementInjectId] = useState<number | null>(
     null
   )
@@ -12113,14 +12122,27 @@ function App() {
   const showMselMapLayer =
     isInExerciseWorkspace &&
     isActiveTabletopExerciseWorkspace &&
-    workspaceMselState.mode === 'tabletop' &&
+    mselViewTab === 'schedule' &&
     activeTab === 'msel' &&
     isMapVisible
   useEffect(() => {
-    if (activeTab !== 'msel' || workspaceMselState.mode !== 'tabletop') {
+    if (activeTab !== 'msel' || !isActiveTabletopExerciseWorkspace || mselViewTab !== 'schedule') {
       setActiveMselPlacementInjectId(null)
     }
-  }, [activeTab, workspaceMselState.mode])
+  }, [activeTab, isActiveTabletopExerciseWorkspace, mselViewTab])
+  const {
+    deliveries: mselInjectDeliveries,
+    appendDeliveries: appendMselInjectDeliveries,
+  } = useMselInjectDeliveries({
+    enabled: isInExerciseWorkspace && isActiveTabletopExerciseWorkspace,
+    workspaceId: activeWorkspaceSupabaseId,
+    workspaceKey: activeWorkspaceRosterKey,
+    isSupabaseEnabled,
+  })
+  const mselDeliveryCountByInjectId = useMemo(
+    () => countDeliveriesByInjectId(mselInjectDeliveries),
+    [mselInjectDeliveries]
+  )
   const focusMselInjectOnMap = useCallback((inject: MselInject) => {
     const view = mapViewRef.current
     if (!view || !inject.mapLocation) {
@@ -12129,6 +12151,21 @@ function App() {
     const [longitude, latitude] = inject.mapLocation
     void view.goTo({ center: [longitude, latitude], zoom: 12 })
   }, [])
+  const focusMselDeliveryOnMap = useCallback((delivery: MselInjectDelivery) => {
+    const location = delivery.injectSnapshot.mapLocation
+    if (!location) {
+      return
+    }
+    focusMselInjectOnMap({
+      id: delivery.injectId,
+      objectiveId: delivery.injectSnapshot.objectiveId,
+      scheduledTime: delivery.injectSnapshot.scheduledTime,
+      category: delivery.injectSnapshot.category,
+      inject: delivery.injectSnapshot.inject,
+      expectedAction: delivery.injectSnapshot.expectedAction,
+      mapLocation: location,
+    })
+  }, [focusMselInjectOnMap])
   const handlePlaceMselInjectOnMap = useCallback(
     (injectId: number, location: [number, number]) => {
       setWorkspaceMselState((previous) => ({
@@ -13176,6 +13213,107 @@ function App() {
       isSupabaseEnabled,
       profileEmail,
       upsertHubNotificationInTab,
+    ]
+  )
+  const handleSendMselInject = useCallback(
+    async ({
+      recipientEmails,
+      severity,
+    }: {
+      recipientEmails: string[]
+      severity: 'Critical' | 'High' | 'Medium' | 'Low'
+    }) => {
+      if (!sendMselInjectTarget) {
+        throw new Error('No inject selected to send.')
+      }
+
+      const inject = sendMselInjectTarget
+      const workspaceName = activeExerciseWorkspace?.name ?? 'Exercise'
+      const notification = buildMselInjectNotificationFromInject(
+        inject,
+        workspaceMselState.objectives,
+        workspaceName
+      )
+
+      const normalizedRecipients = recipientEmails.map((email) => email.trim().toLowerCase()).filter(Boolean)
+      if (normalizedRecipients.length === 0) {
+        throw new Error('Select at least one roster recipient.')
+      }
+
+      const rosterEmails = new Set(
+        activeWorkspaceRoster
+          .map((member) => member.email.trim().toLowerCase())
+          .filter(Boolean)
+      )
+      const invalidRecipients = normalizedRecipients.filter((email) => !rosterEmails.has(email))
+      if (invalidRecipients.length > 0) {
+        throw new Error(
+          `Recipients must be on the workspace roster: ${invalidRecipients.join(', ')}`
+        )
+      }
+
+      if (isSupabaseEnabled && activeWorkspaceSupabaseId) {
+        const accessToken = await getAccessToken()
+        if (!accessToken) {
+          throw new Error('Sign in to send MSEL injects.')
+        }
+
+        const deliveries = await sendMselInjectViaApi({
+          accessToken,
+          workspaceId: activeWorkspaceSupabaseId,
+          injectId: inject.id,
+          recipientEmails: normalizedRecipients,
+          severity,
+        })
+        appendMselInjectDeliveries(deliveries)
+      } else if (activeWorkspaceRosterKey) {
+        const createdAt = new Date().toISOString()
+        const senderEmail = profileEmail?.trim().toLowerCase() ?? null
+        const localDeliveries: MselInjectDelivery[] = normalizedRecipients.map((recipientEmail, index) => ({
+          id: `local-${createdAt}-${index}-${recipientEmail}`,
+          workspaceId: activeWorkspaceRosterKey,
+          injectId: inject.id,
+          recipientEmail,
+          title: notification.title,
+          summary: notification.summary,
+          severity,
+          injectSnapshot: notification.snapshot,
+          sentByEmail: senderEmail,
+          hubNotificationId: null,
+          createdAt,
+        }))
+        appendMselInjectDeliveries(localDeliveries)
+        normalizedRecipients.forEach((recipientEmail) => {
+          deliverHubNotificationLocally({
+            recipientEmail,
+            title: notification.title,
+            summary: notification.summary,
+            severity,
+            owner: profileEmail ?? 'You',
+          })
+        })
+      } else {
+        throw new Error('Workspace roster is not available.')
+      }
+
+      toast.success('MSEL inject sent', {
+        description: `Delivered to ${normalizedRecipients.length} recipient${
+          normalizedRecipients.length === 1 ? '' : 's'
+        }.`,
+      })
+    },
+    [
+      activeExerciseWorkspace?.name,
+      activeWorkspaceRoster,
+      activeWorkspaceRosterKey,
+      activeWorkspaceSupabaseId,
+      appendMselInjectDeliveries,
+      deliverHubNotificationLocally,
+      getAccessToken,
+      isSupabaseEnabled,
+      profileEmail,
+      sendMselInjectTarget,
+      workspaceMselState.objectives,
     ]
   )
   const handleHubNotificationFromDb = useCallback(
@@ -33019,10 +33157,8 @@ function App() {
                   <MselTabPanel
                     workspaceName={activeExerciseWorkspace?.name ?? 'Exercise'}
                     isTabletopWorkspace={isActiveTabletopExerciseWorkspace}
-                    mode={workspaceMselState.mode}
-                    onModeChange={(mode) =>
-                      setWorkspaceMselState((previous) => ({ ...previous, mode }))
-                    }
+                    viewTab={mselViewTab}
+                    onViewTabChange={setMselViewTab}
                     objectives={workspaceMselState.objectives}
                     injects={workspaceMselState.injects}
                     expandedInjectId={workspaceMselExpandedInjectId}
@@ -33036,6 +33172,16 @@ function App() {
                     activePlacementInjectId={activeMselPlacementInjectId}
                     onStartPlacement={setActiveMselPlacementInjectId}
                     onFocusOnMap={focusMselInjectOnMap}
+                    onFocusDeliveryOnMap={focusMselDeliveryOnMap}
+                    deliveryCountByInjectId={mselDeliveryCountByInjectId}
+                    onSendInject={(inject) => {
+                      setSendMselInjectTarget(inject)
+                      setIsSendMselInjectOpen(true)
+                    }}
+                    deliveries={mselInjectDeliveries}
+                    profileEmail={profileEmail}
+                    showMineOnly={mselReceivedMineOnly}
+                    onShowMineOnlyChange={setMselReceivedMineOnly}
                   />
                 )}
 
@@ -42210,6 +42356,20 @@ function App() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <SendMselInjectDialog
+        open={isSendMselInjectOpen}
+        onOpenChange={(open) => {
+          setIsSendMselInjectOpen(open)
+          if (!open) {
+            setSendMselInjectTarget(null)
+          }
+        }}
+        inject={sendMselInjectTarget}
+        objectives={workspaceMselState.objectives}
+        rosterMembers={activeWorkspaceRoster}
+        senderLabel={profileEmail ?? undefined}
+        onSend={handleSendMselInject}
+      />
       <CreateHubNotificationDialog
         open={isCreateHubNotificationOpen}
         onOpenChange={setIsCreateHubNotificationOpen}

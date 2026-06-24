@@ -12,19 +12,17 @@ import {
   isMselInjectGraphicHit,
 } from '@/features/exercise-msel/msel-map-utils'
 import { MSEL_INJECT_MAP_KIND } from '@/features/exercise-msel/types'
-import { TABLETOP_EXERCISE_WORKFLOW } from '@/lib/workspace-format'
 
 describe('exercise-msel utils', () => {
   it('normalizes malformed exercise MSEL metadata to defaults', () => {
-    const normalized = normalizeExerciseMselState(null, { defaultMode: 'tabletop' })
-    expect(normalized.mode).toBe('tabletop')
+    const normalized = normalizeExerciseMselState(null)
     expect(normalized.objectives.length).toBeGreaterThan(0)
     expect(normalized.injects.length).toBeGreaterThan(0)
+    expect('mode' in normalized).toBe(false)
   })
 
-  it('builds tabletop exercise MSEL state from wizard parts', () => {
+  it('builds exercise MSEL state from wizard parts', () => {
     const state = buildExerciseMselFromParts({
-      workspaceFormat: TABLETOP_EXERCISE_WORKFLOW,
       objectives: [{ id: 2, name: 'Unified command' }],
       injects: [
         {
@@ -39,8 +37,8 @@ describe('exercise-msel utils', () => {
       ],
     })
 
-    expect(state.mode).toBe('tabletop')
     expect(state.injects[0].mapLocation).toEqual([-97.74, 30.27])
+    expect('mode' in state).toBe(false)
   })
 
   it('escapes HTML in popup content', () => {
