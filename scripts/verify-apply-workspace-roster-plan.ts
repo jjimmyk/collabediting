@@ -108,9 +108,11 @@ assert(
   'roster plan shared module should validate drafts, ensure creator, and batch archive upserts'
 )
 assert(
-  rosterPlanSharedSource.includes("from '../src/lib/ics-positions.js'") &&
-    !rosterPlanSharedSource.includes("from '@/lib/ics-positions'"),
-  'roster plan shared module should use relative imports for Vercel API runtime'
+  rosterPlanSharedSource.includes("from './roster-operations-work-assignment.js'") &&
+    rosterPlanSharedSource.includes("from './roster-template-types.js'") &&
+    !rosterPlanSharedSource.includes("from '../src/") &&
+    !rosterPlanSharedSource.includes("from '@/"),
+  'roster plan shared module should use api-local imports (never ../src/ or @/)'
 )
 
 const applyPlanSource = readFileSync(

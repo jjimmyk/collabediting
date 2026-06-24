@@ -17,6 +17,13 @@ dist-ssr
 .env.vercel.*
 .vercel
 
+# Tests
+coverage
+playwright-report
+test-results
+e2e/.auth
+blob-report
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
