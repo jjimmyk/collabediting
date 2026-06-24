@@ -46,6 +46,9 @@ type Ics215FormSectionsProps = {
   roster?: WorkspaceRosterMember[]
   competencyOptions?: string[]
   workspaceAssets?: ResourceListItemData[]
+  workspaceId?: string | null
+  isSupabaseEnabled?: boolean
+  getAccessToken?: () => Promise<string | null>
   autoFillHaveFromAssets?: boolean
   onAutoFillHaveFromAssetsChange?: (enabled: boolean) => void
   onHaveFillComplete?: (filledCount: number) => void
@@ -89,6 +92,9 @@ export function Ics215FormSections({
   onPatchDraft,
   workAssignmentsSyncTooltip,
   workspaceAssets = [],
+  workspaceId = null,
+  isSupabaseEnabled = false,
+  getAccessToken,
   autoFillHaveFromAssets = false,
   onAutoFillHaveFromAssetsChange,
   onHaveFillComplete,
@@ -216,6 +222,9 @@ export function Ics215FormSections({
             roster={roster}
             competencyOptions={competencyOptions}
             workspaceAssets={workspaceAssets}
+            workspaceId={workspaceId}
+            isSupabaseEnabled={isSupabaseEnabled}
+            getAccessToken={getAccessToken}
             autoFillHaveFromAssets={autoFillHaveFromAssets}
             layoutMode={normalizeIcs215WorkAssignmentsLayoutMode(form.workAssignmentsLayoutMode)}
             editing={isSectionEditing(editingSections, 'work-assignments')}

@@ -1,9 +1,14 @@
 import type { Ics201VersionSignature } from '@/features/ics201/types'
 
+export type Ics215HaveSource = 'manual' | 'linked-assets'
+
 export type Ics215ResourceValue = {
   required: string
   have: string
   need: string
+  /** Asset keys confirmed via Have sparkle modal for this cell */
+  linkedAssetKeys?: string[]
+  haveSource?: Ics215HaveSource
 }
 
 export type Ics215ResourceColumn = {

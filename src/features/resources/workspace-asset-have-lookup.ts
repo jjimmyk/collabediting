@@ -1,6 +1,10 @@
 import type { Ics215ResourceValue } from '@/features/ics215/types'
+import { isHaveLinkedToAssets } from '@/features/ics215/ics215-have-asset-link'
 import type { Ics204ResourceRequirementRow } from '@/features/ics204/types'
 import type { ResourceListItemData } from '@/features/resources/types'
+import {
+  scoreAssetRelevance,
+} from '@/features/resources/workspace-asset-relevance'
 
 export type AssetHaveMatchField = 'name' | 'type' | 'unitName' | 'unitType'
 
@@ -45,6 +49,10 @@ export function assetMatchesResourceNameQuery(
 ): boolean {
   const normalizedQuery = normalizeResourceNameQuery(query)
   if (normalizedQuery.length === 0) return false
+
+  const relevanceScore = scoreAssetRelevance(asset, query).score
+  if (relevanceScore >= 12) return true
+
   return matchFields.some((field) =>
     normalizeResourceNameQuery(readAssetMatchField(asset, field)).includes(normalizedQuery)
   )
@@ -106,12 +114,12 @@ export function buildHaveFillTooltip(
 ): string {
   const label = resourceName.trim() || 'resource'
   if (!hasWorkspaceAssets) {
-    return 'Assign assets to this workspace to auto-fill Have.'
+    return 'Assign assets to this workspace to link Have values.'
   }
   if (matchCount === 0) {
-    return `No assigned workspace assets match “${label}”.`
+    return `No likely matches for “${label}”. Use Have cell sparkle to link manually.`
   }
-  return `Set Have to ${matchCount} based on workspace assets matching “${label}”.`
+  return `${matchCount} likely match${matchCount === 1 ? '' : 'es'} for “${label}”. Click to preview; use Have cell sparkle to link.`
 }
 
 function parseNumericField(value: string): number | null {
@@ -154,7 +162,8 @@ export type FillHaveOptions = {
   lookupOptions?: AssetHaveLookupOptions
 }
 
-export function shouldFillHaveValue(currentHave: string, options: FillHaveOptions): boolean {
+export function shouldFillHaveValue(currentHave: string, options: FillHaveOptions, value?: Ics215ResourceValue): boolean {
+  if (value && isHaveLinkedToAssets(value)) return false
   if (options.overwrite) return true
   if (options.onlyIfHaveEmpty ?? true) {
     return currentHave.trim().length === 0
@@ -169,7 +178,7 @@ export function fillHaveForResourceValue(
   options: FillHaveOptions = {}
 ): { value: Ics215ResourceValue; filled: boolean; lookup: AssetHaveLookupResult } {
   const lookup = lookupHaveFromWorkspaceAssets(assets, resourceName, options.lookupOptions)
-  if (!shouldFillHaveValue(value.have, options)) {
+  if (!shouldFillHaveValue(value.have, options, value)) {
     return { value, filled: false, lookup }
   }
   const nextValue = options.recalculateNeed ?? true

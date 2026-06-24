@@ -34983,6 +34983,9 @@ function App() {
                     onPatchSectionDraft={patchIcs215SectionDraft}
                     workAssignmentsSyncTooltip={ics215WorkAssignmentsSyncTooltip}
                     workspaceAssets={workspaceAssignedAssets}
+                    workspaceId={activeWorkspaceSupabaseId}
+                    isSupabaseEnabled={isSupabaseEnabled}
+                    getAccessToken={getAccessToken}
                     autoFillHaveFromAssets={autoFillHaveFromWorkspaceAssets}
                     onAutoFillHaveFromAssetsChange={setAutoFillHaveFromWorkspaceAssets}
                     onHaveFillComplete={handleHaveFillComplete}

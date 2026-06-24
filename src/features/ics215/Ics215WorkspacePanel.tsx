@@ -76,6 +76,9 @@ type Ics215WorkspacePanelProps = {
   ) => void
   workAssignmentsSyncTooltip?: Ics215Ics204WorkSyncTooltipState
   workspaceAssets?: ResourceListItemData[]
+  workspaceId?: string | null
+  isSupabaseEnabled?: boolean
+  getAccessToken?: () => Promise<string | null>
   autoFillHaveFromAssets?: boolean
   onAutoFillHaveFromAssetsChange?: (enabled: boolean) => void
   onHaveFillComplete?: (filledCount: number) => void
@@ -115,6 +118,9 @@ export function Ics215WorkspacePanel({
   onPatchSectionDraft,
   workAssignmentsSyncTooltip,
   workspaceAssets = [],
+  workspaceId = null,
+  isSupabaseEnabled = false,
+  getAccessToken,
   autoFillHaveFromAssets = false,
   onAutoFillHaveFromAssetsChange,
   onHaveFillComplete,
@@ -500,6 +506,9 @@ export function Ics215WorkspacePanel({
             onPatchDraft={onPatchSectionDraft}
             workAssignmentsSyncTooltip={workAssignmentsSyncTooltip}
             workspaceAssets={workspaceAssets}
+            workspaceId={workspaceId}
+            isSupabaseEnabled={isSupabaseEnabled}
+            getAccessToken={getAccessToken}
             autoFillHaveFromAssets={autoFillHaveFromAssets}
             onAutoFillHaveFromAssetsChange={onAutoFillHaveFromAssetsChange}
             onHaveFillComplete={onHaveFillComplete}

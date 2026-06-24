@@ -3,7 +3,11 @@ import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Ics202ReadOnlyField } from '@/features/ics202/Ics202SectionToolbar'
 import { WorkAssignmentTargetPicker } from '@/features/work-assignments/WorkAssignmentTargetPicker'
+import { Ics215HaveAssetLinkDialog } from '@/features/ics215/Ics215HaveAssetLinkDialog'
+import { Ics215HaveCell } from '@/features/ics215/Ics215HaveCell'
+import { isHaveLinkedToAssets } from '@/features/ics215/ics215-have-asset-link'
 import { ResourceHaveFillButton } from '@/features/resources/ResourceHaveFillButton'
+import { useIcs215HaveAssetLink } from '@/features/ics215/useIcs215HaveAssetLink'
 import type { Ics215ResourceValue } from '@/features/ics215/types'
 import {
   EMPTY_RESOURCE_VALUE,
@@ -39,13 +43,31 @@ function LegacyResourceValueCell({
   value,
   field,
   editing,
+  columnLabel,
   onChange,
+  onManualHaveChange,
+  onOpenHaveLinkDialog,
 }: {
   value: Ics215ResourceValue
-  field: keyof Ics215ResourceValue
+  field: 'required' | 'have' | 'need'
   editing: boolean
+  columnLabel: string
   onChange: (nextValue: string) => void
+  onManualHaveChange?: (have: string) => void
+  onOpenHaveLinkDialog?: () => void
 }) {
+  if (field === 'have') {
+    return (
+      <Ics215HaveCell
+        value={value}
+        editing={editing}
+        columnLabel={columnLabel}
+        onManualChange={onManualHaveChange ?? onChange}
+        onOpenLinkDialog={onOpenHaveLinkDialog ?? (() => undefined)}
+      />
+    )
+  }
+
   const display = value[field].trim()
   if (!editing) {
     return (
@@ -101,6 +123,9 @@ export function Ics215WorkAssignmentsLegacyTable({
   roster = [],
   competencyOptions = [],
   workspaceAssets = [],
+  workspaceId = null,
+  isSupabaseEnabled = false,
+  getAccessToken,
   autoFillHaveFromAssets = false,
   lockedAssignee,
   editing,
@@ -112,6 +137,7 @@ export function Ics215WorkAssignmentsLegacyTable({
     columnTotals,
     patchRow,
     patchResourceField,
+    patchResourceValue,
     fillColumnHave,
     deleteAssignment,
     deleteResourceColumn,
@@ -135,6 +161,23 @@ export function Ics215WorkAssignmentsLegacyTable({
     onHaveFillComplete,
   })
 
+  const haveLink = useIcs215HaveAssetLink({
+    workAssignments,
+    resourceColumns,
+    workspaceAssets,
+    workspaceId,
+    isSupabaseEnabled,
+    getAccessToken,
+    patchResourceValue,
+  })
+
+  const buildWorkAssignmentContext = (assignee: string, workAssignment: string) => {
+    const assigneeLabel =
+      workAssignmentTargetOptions.find((option) => option.value === assignee)?.label ?? assignee
+    const assignmentText = workAssignment.trim()
+    return [assigneeLabel, assignmentText].filter(Boolean).join(' · ')
+  }
+
   const rhnColumnCount = 1
   const totalColSpan =
     leadingColumnCount +
@@ -144,6 +187,7 @@ export function Ics215WorkAssignmentsLegacyTable({
     (editing ? 1 : 0)
 
   return (
+    <>
     <div className="min-w-0 w-full max-w-full space-y-2">
       <div className="min-w-0 w-full max-w-full overflow-hidden rounded-md border">
         <div
@@ -214,7 +258,7 @@ export function Ics215WorkAssignmentsLegacyTable({
                             <ResourceHaveFillButton
                               resourceName={column.label}
                               workspaceAssets={workspaceAssets}
-                              onFill={() => fillColumnHave(column.id, column.label, true)}
+                              onFill={() => haveLink.previewColumnMatches(column.label)}
                             />
                             {resourceColumns.length > 1 ? (
                               <Button
@@ -255,6 +299,10 @@ export function Ics215WorkAssignmentsLegacyTable({
                     workAssignmentTargetOptions,
                     row.assignee,
                     roster
+                  )
+                  const workAssignmentContext = buildWorkAssignmentContext(
+                    row.assignee,
+                    row.workAssignment
                   )
 
                   return RHN_ROWS.map((rhnRow, rhnIndex) => (
@@ -328,8 +376,21 @@ export function Ics215WorkAssignmentsLegacyTable({
                               value={value}
                               field={rhnRow.field}
                               editing={editing}
+                              columnLabel={column.label}
                               onChange={(nextValue) =>
                                 patchResourceField(row.id, column.id, rhnRow.field, nextValue)
+                              }
+                              onManualHaveChange={(have) =>
+                                haveLink.patchManualHave(row.id, column.id, have)
+                              }
+                              onOpenHaveLinkDialog={() =>
+                                void haveLink.openHaveLinkDialog({
+                                  rowId: row.id,
+                                  columnId: column.id,
+                                  columnLabel: column.label,
+                                  mode: isHaveLinkedToAssets(value) ? 'review' : 'create',
+                                  workAssignmentContext,
+                                })
                               }
                             />
                           </td>
@@ -419,5 +480,24 @@ export function Ics215WorkAssignmentsLegacyTable({
         Scroll horizontally to view additional columns.
       </p>
     </div>
+
+    <Ics215HaveAssetLinkDialog
+      open={haveLink.dialogOpen}
+      onOpenChange={(open) => {
+        if (!open) haveLink.closeHaveLinkDialog()
+      }}
+      columnLabel={haveLink.dialogState?.columnLabel ?? ''}
+      workAssignmentContext={haveLink.dialogState?.workAssignmentContext}
+      workspaceAssets={workspaceAssets}
+      initialSelectedKeys={haveLink.dialogInitialSelectedKeys}
+      suggestedKeys={haveLink.suggestedKeys}
+      staleLinkedKeys={haveLink.staleLinkedKeys}
+      linkedElsewhereCounts={haveLink.linkedElsewhereCounts}
+      mode={haveLink.dialogState?.mode ?? 'create'}
+      isLoading={haveLink.isRanking}
+      rankingEngine={haveLink.rankingEngine}
+      onConfirm={haveLink.confirmHaveLink}
+    />
+    </>
   )
 }

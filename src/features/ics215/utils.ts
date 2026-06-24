@@ -1,5 +1,6 @@
 import { ics201AuthorColorFromId } from '@/features/ics201/utils'
 import { fillHaveForResourceValue } from '@/features/resources/workspace-asset-have-lookup'
+import { normalizeIcs215ResourceValue } from '@/features/ics215/ics215-have-asset-link'
 import type { ResourceListItemData } from '@/features/resources/types'
 import {
   normalizeWorkAssignmentTargetValue,
@@ -43,7 +44,7 @@ function slugifyColumnLabel(label: string): string {
 }
 
 function emptyResourceValue(): Ics215ResourceValue {
-  return { required: '', have: '', need: '' }
+  return normalizeIcs215ResourceValue(null)
 }
 
 export function createEmptyResourceValues(
@@ -67,7 +68,7 @@ export function cloneIcs215WorkAssignmentRows(
       ...Object.fromEntries(
         Object.entries(row.resourceValues ?? {}).map(([columnId, value]) => [
           columnId,
-          { ...emptyResourceValue(), ...value },
+          normalizeIcs215ResourceValue(value),
         ])
       ),
     },
@@ -141,11 +142,11 @@ function migrateLegacyWorkAssignmentRow(
     const label = String(resource.categoryKindType ?? '').trim()
     if (label.length === 0) continue
     const column = findOrCreateColumnForLabel(columns, label)
-    resourceValues[column.id] = {
-      required: String(resource.required ?? ''),
-      have: String(resource.have ?? ''),
-      need: String(resource.need ?? ''),
-    }
+    resourceValues[column.id] = normalizeIcs215ResourceValue({
+      required: resource.required,
+      have: resource.have,
+      need: resource.need,
+    })
   }
 
   const assignee =
@@ -186,11 +187,7 @@ function normalizeWorkAssignmentRow(
   const resourceValues = createEmptyResourceValues(columns)
   for (const column of columns) {
     const value = row.resourceValues?.[column.id]
-    resourceValues[column.id] = {
-      required: String(value?.required ?? ''),
-      have: String(value?.have ?? ''),
-      need: String(value?.need ?? ''),
-    }
+    resourceValues[column.id] = normalizeIcs215ResourceValue(value)
   }
 
   return {

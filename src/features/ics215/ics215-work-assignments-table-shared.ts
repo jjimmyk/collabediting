@@ -31,6 +31,9 @@ export type Ics215WorkAssignmentsTableBaseProps = {
   resourceColumns: Ics215ResourceColumn[]
   workAssignments: Ics215WorkAssignmentRow[]
   workspaceAssets?: ResourceListItemData[]
+  workspaceId?: string | null
+  isSupabaseEnabled?: boolean
+  getAccessToken?: () => Promise<string | null>
   autoFillHaveFromAssets?: boolean
   lockedAssignee?: string
   roster?: WorkspaceRosterMember[]
