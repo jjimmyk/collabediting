@@ -26,13 +26,20 @@ import {
 } from '@/features/ics207/export-org-chart-ics207'
 import type { ExportOrgChartIcs207Input } from '@/features/ics207/export-org-chart-ics207'
 import { Ics207PreviewOrgChartPanel } from '@/features/ics207/Ics207PreviewOrgChartPanel'
-import { useOrgChartPaintReady } from '@/features/ics207/use-org-chart-paint-ready'
+import { useIcs207ExportPaintReady } from '@/features/ics207/use-ics207-export-paint-ready'
 import {
   ICS202_PREVIEW_STACK_CLASS,
   ics202PreviewSegmentRowClass,
 } from '@/features/ics202/export-box-stack'
 import { ICS207_PDF_CHART_ASPECT_RATIO } from '@/features/ics207/export-template-constants'
-import { captureIcs207Box4ForPdf } from '@/features/roster/org-chart-export-capture'
+import {
+  captureIcs207Box4ForPdf,
+  resolveIcs207CaptureRoot,
+} from '@/features/roster/org-chart-export-capture'
+import {
+  buildOrgChartExportPaintInput,
+  paintExportConnectors,
+} from '@/features/roster/org-chart-export-connector-paint'
 import type { OrgChartExportScope } from '@/features/roster/org-chart-export-scope'
 
 type OrgChartIcs207ExportDialogProps = {
@@ -186,8 +193,9 @@ export function OrgChartIcs207ExportDialog({
   }, [scopedExportInput])
 
   const paintReadyKey = `${scope}-${open ? 'open' : 'closed'}`
-  const chartPaintReady = useOrgChartPaintReady(
+  const chartPaintReady = useIcs207ExportPaintReady(
     open ? box4Container : null,
+    scopedExportInput,
     paintReadyKey
   )
 
@@ -318,7 +326,26 @@ export function OrgChartIcs207ExportDialog({
               }
               setExportError(null)
               setIsExporting(true)
-              void captureIcs207Box4ForPdf({ box4Container: container })
+              const paintInput = buildOrgChartExportPaintInput(scopedExportInput)
+              const chart = resolveIcs207CaptureRoot(container)
+              if (!chart) {
+                setExportError('Org chart preview is not ready. Try again.')
+                setIsExporting(false)
+                return
+              }
+              const paintResult = paintExportConnectors(chart, paintInput)
+              if (!paintResult.ok) {
+                setExportError(
+                  paintResult.reason ??
+                    'Org chart connector lines are not ready. Try exporting again.'
+                )
+                setIsExporting(false)
+                return
+              }
+              void captureIcs207Box4ForPdf({
+                box4Container: container,
+                paintInput,
+              })
                 .then((pngBytes) =>
                   downloadIcs207FromCapture({
                     context,

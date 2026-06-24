@@ -1295,6 +1295,7 @@ export function WorkspaceOrgChartRoster({
                   showCommandStaff={showCommandStaff}
                   visibleCommandStaff={visibleCommandStaff}
                   zoom={zoom}
+                  useExportConnectors={exportMode}
                 />
               ) : (
                 <IncidentCommanderSubtree
@@ -1315,6 +1316,7 @@ export function WorkspaceOrgChartRoster({
                 showCommandStaff={false}
                 visibleCommandStaff={[]}
                 zoom={zoom}
+                useExportConnectors={exportMode}
               />
             ) : (
               <div

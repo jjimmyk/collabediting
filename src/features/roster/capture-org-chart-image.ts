@@ -167,5 +167,7 @@ export async function captureOrgChartImageWithFallbacks(
 }
 
 export function countOrgChartConnectorLines(root: HTMLElement): number {
-  return root.querySelectorAll('[data-org-chart-connectors] line').length
+  return root.querySelectorAll(
+    '[data-org-chart-connectors] line, [data-ics207-export-connectors] line'
+  ).length
 }

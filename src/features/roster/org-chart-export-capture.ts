@@ -3,6 +3,11 @@ import {
   countOrgChartConnectorLines,
   type CaptureOrgChartImageOptions,
 } from '@/features/roster/capture-org-chart-image'
+import {
+  countOrgChartConnectorLinesAny,
+  type OrgChartExportPaintInput,
+  waitAndPaintExportConnectors,
+} from '@/features/roster/org-chart-export-connector-paint'
 
 export const ICS207_CAPTURE_ROOT_ATTR = 'data-ics207-capture-root'
 export const ORG_CHART_PAINT_COMPLETE_ATTR = 'data-org-chart-paint-complete'
@@ -11,9 +16,7 @@ export const ROSTER_ORG_CHART_LIVE_ROOT_ATTR = 'data-roster-org-chart-live-root'
 const MIN_CAPTURE_WIDTH_PX = 1
 const MIN_CAPTURE_HEIGHT_PX = 1
 const MIN_PNG_BYTES = 1_024
-const PAINT_WAIT_MS = 2_000
 const CAPTURE_TIMEOUT_MS = 8_000
-const CONNECTOR_RETRY_MS = 1_500
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => {
@@ -74,51 +77,46 @@ function hasMinimumDimensions(root: HTMLElement): boolean {
   )
 }
 
-function isPaintComplete(root: HTMLElement): boolean {
-  return root.hasAttribute(ORG_CHART_PAINT_COMPLETE_ATTR)
-}
-
 function isWideOrgChart(root: HTMLElement): boolean {
   return root.hasAttribute('data-org-chart-wide-root')
 }
 
-async function ensureWideConnectorsPainted(root: HTMLElement): Promise<void> {
-  if (!isWideOrgChart(root)) return
-
-  const started = Date.now()
-  while (Date.now() - started < CONNECTOR_RETRY_MS) {
-    if (countOrgChartConnectorLines(root) > 0) {
-      await nextFrames(2)
-      return
-    }
-    await sleep(50)
-  }
-
-  if (countOrgChartCards(root) > 1 && countOrgChartConnectorLines(root) === 0) {
-    console.warn('Org chart connector lines were not detected; proceeding with capture.')
-    return
+async function ensureExportConnectorsPainted(
+  container: HTMLElement,
+  paintInput: OrgChartExportPaintInput
+): Promise<void> {
+  const result = await waitAndPaintExportConnectors(container, paintInput)
+  if (!result.ok) {
+    throw new Error(
+      result.reason ?? 'Org chart connector lines are not ready. Try exporting again.'
+    )
   }
 }
 
 export async function waitForOrgChartPainted(
   container: HTMLElement,
-  options: { timeoutMs?: number } = {}
+  options: {
+    timeoutMs?: number
+    paintInput?: OrgChartExportPaintInput
+  } = {}
 ): Promise<HTMLElement> {
-  const timeoutMs = options.timeoutMs ?? PAINT_WAIT_MS
+  if (options.paintInput) {
+    await ensureExportConnectorsPainted(container, options.paintInput)
+    const root = resolveIcs207CaptureRoot(container)
+    if (!root) {
+      throw new Error('Org chart preview is not ready to export.')
+    }
+    return root
+  }
+
+  const timeoutMs = options.timeoutMs ?? 2_000
   const started = Date.now()
 
   while (Date.now() - started < timeoutMs) {
     const root = resolveIcs207CaptureRoot(container)
-    if (root) {
-      if (isPaintComplete(root)) {
+    if (root && countOrgChartCards(root) > 0 && hasMinimumDimensions(root)) {
+      if (!isWideOrgChart(root) || countOrgChartConnectorLines(root) > 0 || countOrgChartCards(root) <= 1) {
         await nextFrames(2)
-        await ensureWideConnectorsPainted(root)
-        return root
-      }
-
-      if (countOrgChartCards(root) > 0 && hasMinimumDimensions(root)) {
-        await nextFrames(2)
-        await ensureWideConnectorsPainted(root)
         return root
       }
     }
@@ -126,10 +124,7 @@ export async function waitForOrgChartPainted(
   }
 
   const root = resolveIcs207CaptureRoot(container)
-  if (root) {
-    await ensureWideConnectorsPainted(root)
-    return root
-  }
+  if (root) return root
 
   throw new Error('Org chart preview is not ready to export.')
 }
@@ -151,8 +146,6 @@ export async function captureOrgChartElement(
   target: HTMLElement,
   options: Omit<CaptureOrgChartImageOptions, 'root'> = {}
 ): Promise<Uint8Array> {
-  await ensureWideConnectorsPainted(target)
-
   const pngBytes = await withTimeout(
     captureOrgChartImageWithFallbacks({
       root: target,
@@ -167,20 +160,28 @@ export async function captureOrgChartElement(
 }
 
 export async function captureOrgChartFromContainer(
-  container: HTMLElement
+  container: HTMLElement,
+  options: { paintInput?: OrgChartExportPaintInput } = {}
 ): Promise<Uint8Array> {
-  const target = await waitForOrgChartPainted(container)
+  const target = await waitForOrgChartPainted(container, options)
   return captureOrgChartElement(target)
 }
 
 export async function captureIcs207Box4ForPdf(input: {
   box4Container: HTMLElement
+  paintInput: OrgChartExportPaintInput
 }): Promise<Uint8Array> {
-  await waitForOrgChartPainted(input.box4Container)
+  await ensureExportConnectorsPainted(input.box4Container, input.paintInput)
 
   const target = resolveIcs207CaptureRoot(input.box4Container)
   if (!target) {
     throw new Error('Org chart capture root not found in ICS-207 preview.')
+  }
+
+  const lineCount = countOrgChartConnectorLinesAny(target)
+  const cardCount = countOrgChartCards(target)
+  if (cardCount > 1 && lineCount === 0) {
+    throw new Error('Org chart connector lines are not ready. Try exporting again.')
   }
 
   return captureOrgChartElement(target)
@@ -195,5 +196,7 @@ export function pngBytesToDataUrl(pngBytes: Uint8Array): string {
   return `data:image/png;base64,${btoa(binary)}`
 }
 
-/** @deprecated Prefer resolving the user's current roster zoom at export time. */
+/** @deprecated Prefer ICS-207 export paint input for preview/export connectors. */
 export const waitForOrgChartCaptureReady = waitForOrgChartPainted
+
+export { countOrgChartConnectorLinesAny }

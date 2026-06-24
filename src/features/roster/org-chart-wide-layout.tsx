@@ -63,6 +63,7 @@ type OrgChartWideLayoutProps = {
   showCommandStaff: boolean
   visibleCommandStaff: string[]
   zoom?: number
+  useExportConnectors?: boolean
 }
 
 export function OrgChartWideLayout({
@@ -72,6 +73,7 @@ export function OrgChartWideLayout({
   showCommandStaff,
   visibleCommandStaff,
   zoom = 1,
+  useExportConnectors = false,
 }: OrgChartWideLayoutProps) {
   const icVisible =
     renderProps.displayFilters.showIncidentCommander &&
@@ -143,6 +145,7 @@ export function OrgChartWideLayout({
         sectionChiefs={sectionChiefs}
         icBusLinks={icBusLinks}
         zoom={zoom}
+        useExportConnectors={useExportConnectors}
       />
     </OrgChartConnectorProvider>
   )
@@ -156,6 +159,7 @@ function OrgChartWideLayoutBody({
   sectionChiefs,
   icBusLinks,
   zoom,
+  useExportConnectors,
 }: {
   icVisible: boolean
   orgChartLayout: WorkspaceOrgChartLayout
@@ -167,6 +171,7 @@ function OrgChartWideLayoutBody({
   }[]
   icBusLinks: OrgChartIcBusLink[]
   zoom: number
+  useExportConnectors: boolean
 }) {
   const { chartRef } = useOrgChartConnectors()
 
@@ -184,8 +189,6 @@ function OrgChartWideLayoutBody({
       data-org-chart-zoom={zoom}
       className="relative flex w-full min-w-0 max-w-full flex-col items-center"
     >
-      <OrgChartConnectorOverlay zoom={zoom} />
-
       {icVisible ? (
         <div className="flex w-full flex-col items-center">
           {renderProps.renderLeafNode(
@@ -260,6 +263,8 @@ function OrgChartWideLayoutBody({
       ) : null}
 
       {icBusLinks.length > 0 ? <OrgChartIcBusesRegistrar links={icBusLinks} /> : null}
+
+      {useExportConnectors ? null : <OrgChartConnectorOverlay zoom={zoom} />}
     </div>
   )
 }

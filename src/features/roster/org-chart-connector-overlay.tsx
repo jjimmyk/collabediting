@@ -8,6 +8,10 @@ import {
 } from '@/features/roster/org-chart-connector-draw'
 import { ORG_CHART_SPINE_ANCHOR_RATIO } from '@/features/roster/org-chart-layout-tokens'
 
+function escapeConnectorId(id: string): string {
+  return typeof CSS !== 'undefined' && typeof CSS.escape === 'function' ? CSS.escape(id) : id
+}
+
 function appendSvgLines(
   svg: SVGSVGElement,
   lines: ReturnType<typeof spineConnectLines>
@@ -38,24 +42,33 @@ export function OrgChartConnectorOverlay({ zoom = 1 }: { zoom?: number }) {
     const svg = chart.querySelector<SVGSVGElement>('[data-org-chart-connectors]')
     if (!svg) return
 
+    const resolveCardElement = (id: string): HTMLElement | null => {
+      const fromMap = getCardElement(id)
+      if (fromMap?.isConnected) return fromMap
+      return chart.querySelector<HTMLElement>(`[data-org-chart-id="${escapeConnectorId(id)}"]`)
+    }
+
     const draw = () => {
       const chartZoom = readOrgChartZoom(chart) || zoom
       const width = chart.offsetWidth
       const height = chart.offsetHeight
-      if (width <= 0 || height <= 0) return
+      if (width <= 0 || height <= 0) {
+        chart.removeAttribute(ORG_CHART_PAINT_COMPLETE_ATTR)
+        return
+      }
 
       svg.setAttribute('viewBox', `0 0 ${width} ${height}`)
       svg.setAttribute('width', String(width))
       svg.setAttribute('height', String(height))
-      svg.innerHTML = ''
+      svg.replaceChildren()
 
       const lines: ReturnType<typeof spineConnectLines> = []
 
       for (const link of spineLinksRef.current) {
-        const parentEl = getCardElement(link.parentId)
+        const parentEl = resolveCardElement(link.parentId)
         if (!parentEl) continue
         const childEls = link.childIds
-          .map((id) => getCardElement(id))
+          .map((id) => resolveCardElement(id))
           .filter((el): el is HTMLElement => el !== null)
         if (childEls.length === 0) continue
         lines.push(
@@ -70,9 +83,9 @@ export function OrgChartConnectorOverlay({ zoom = 1 }: { zoom?: number }) {
       }
 
       for (const icBus of icBusLinksRef.current) {
-        const commanderEl = getCardElement(icBus.commanderId)
+        const commanderEl = resolveCardElement(icBus.commanderId)
         const headerEls = icBus.headerIds
-          .map((id) => getCardElement(id))
+          .map((id) => resolveCardElement(id))
           .filter((el): el is HTMLElement => el !== null)
         if (commanderEl && headerEls.length > 0) {
           lines.push(...icBusConnectLines(chart, commanderEl, headerEls, undefined, chartZoom))
@@ -80,7 +93,11 @@ export function OrgChartConnectorOverlay({ zoom = 1 }: { zoom?: number }) {
       }
 
       appendSvgLines(svg, lines)
-      chart.setAttribute(ORG_CHART_PAINT_COMPLETE_ATTR, 'true')
+      if (lines.length > 0) {
+        chart.setAttribute(ORG_CHART_PAINT_COMPLETE_ATTR, 'true')
+      } else {
+        chart.removeAttribute(ORG_CHART_PAINT_COMPLETE_ATTR)
+      }
     }
 
     draw()
