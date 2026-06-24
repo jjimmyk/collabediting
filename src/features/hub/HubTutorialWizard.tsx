@@ -49,7 +49,7 @@ function buildHubTutorialSteps(
       popover: {
         title: 'Welcome to PRATUS Coach',
         description:
-          'Product Tours walk you through The Hub — your home for notifications, business units, events, and operational awareness across United States Coast Guard.',
+          'Product Tours walk you through The Hub — your home for notifications, areas of responsibility, events, and operational awareness across United States Coast Guard.',
         side: 'bottom',
         align: 'start',
       },
@@ -59,7 +59,7 @@ function buildHubTutorialSteps(
       popover: {
         title: 'Hub panel tabs',
         description:
-          'These icons switch the left panel between Notifications, Business Units, Events, and More.',
+          'These icons switch the left panel between Notifications, Areas of Responsibility, Events, and More.',
         side: 'bottom',
         align: 'start',
       },
@@ -88,14 +88,14 @@ function buildHubTutorialSteps(
       },
     },
     {
-      element: HUB_TUTORIAL_SELECTORS.businessUnitsTab,
+      element: HUB_TUTORIAL_SELECTORS.aorsTab,
       onHighlightStarted: () => {
         ensureTabVisible('fema-regions', HUB_TUTORIAL_SELECTORS.hubPanel)
       },
       popover: {
-        title: 'Business Units',
+        title: 'Areas of Responsibility',
         description:
-          'Browse Coast Guard districts and regions. Business units organize incidents, exercises, assets, and reporting scope.',
+          'Browse the Coast Guard AOR hierarchy — districts, sectors, air stations, and sub-units — with assigned assets nested at each level.',
         side: 'bottom',
         align: 'start',
       },
@@ -103,9 +103,9 @@ function buildHubTutorialSteps(
     {
       element: () => requireTutorialElement(HUB_TUTORIAL_SELECTORS.hubPanel),
       popover: {
-        title: 'Business Units panel',
+        title: 'AOR panel',
         description:
-          'Select a business unit to filter hub data and open workspaces tied to that geography.',
+          'Search across all AOR levels and assets. Matching items highlight and parent rows auto-expand for quick navigation.',
         side: 'right',
         align: 'start',
       },

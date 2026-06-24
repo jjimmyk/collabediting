@@ -813,7 +813,7 @@ export function EventsSettingsPage({
           />
         </div>
         <div className="grid gap-1.5">
-          <Label>Business unit</Label>
+          <Label>District</Label>
           <Select
             value={rule.businessUnit || undefined}
             onValueChange={(value) =>
@@ -824,7 +824,7 @@ export function EventsSettingsPage({
             }
           >
             <SelectTrigger className="h-8 w-full text-xs">
-              <SelectValue placeholder="Select business unit" />
+              <SelectValue placeholder="Select district" />
             </SelectTrigger>
             <SelectContent>
               {businessUnitOptions.map((businessUnit) => (
@@ -905,7 +905,7 @@ export function EventsSettingsPage({
           <span className="font-medium">Event name template:</span> {rule.eventNameTemplate}
         </p>
         <p>
-          <span className="font-medium">Business unit:</span>{' '}
+          <span className="font-medium">District:</span>{' '}
           {rule.businessUnit || 'Not set'}
         </p>
         <p>
@@ -947,7 +947,7 @@ export function EventsSettingsPage({
             <input
               value={ruleSearchQuery}
               onChange={(event) => setRuleSearchQuery(event.target.value)}
-              placeholder="Search rules by name, data input, business unit, or logic"
+              placeholder="Search rules by name, data input, district, or logic"
               aria-label="Search automated event rules"
               className="w-full bg-transparent text-xs outline-none placeholder:text-muted-foreground"
             />

@@ -686,8 +686,14 @@ import {
 } from '@/features/roster/workspace-positions'
 import { OperationalPeriodHistoricalRosterShell } from '@/features/operational-periods/OperationalPeriodHistoricalRosterShell'
 import { femaRegionGeometries } from '@/data/fema-regions'
-import { filterCoastGuardAreaAssets } from '@/data/uscg-coast-guard-area-assets'
-import { USCG_COAST_GUARD_AREA_SITREPS } from '@/data/uscg-coast-guard-area-sitreps'
+import { HubAorHierarchyPanel } from '@/features/hub/aor/HubAorHierarchyPanel'
+import { HUB_AOR_DISTRICTS, type FemaAorItem } from '@/features/hub/aor/hub-aor-districts'
+import {
+  hubAorPanelItemIdFromResultId,
+  hubAorScrollTargetFromResultId,
+  searchHubAorFlatHits,
+} from '@/features/hub/aor/hub-aor-search'
+import { buildHubAorAreaViews } from '@/features/hub/aor/hub-aor-tree'
 import {
   DEFAULT_EVENT_CREATION_RULES,
   type EventCreationRule,
@@ -1196,43 +1202,7 @@ type AorItem = {
   location: [number, number]
 }
 
-type FemaAorItem = {
-  id: number
-  name: string
-  lead: string
-  incidents: number
-  priority: 'High' | 'Medium' | 'Low'
-  population: string
-  lastUpdate: string
-  evacuationStatus: 'None' | 'Recommended' | 'Active'
-  notes: string
-  sitrep: string
-  sitrepUpdatedBy: string
-  sitrepSources: string[]
-  location: [number, number]
-}
-
-type UscgCoastGuardArea = {
-  key: 'atlantic' | 'pacific'
-  name: 'Atlantic Area' | 'Pacific Area'
-  districtIds: number[]
-  location: [number, number]
-}
-
-const USCG_COAST_GUARD_AREAS: UscgCoastGuardArea[] = [
-  {
-    key: 'atlantic',
-    name: 'Atlantic Area',
-    districtIds: [1, 2, 3, 4, 5, 6, 7],
-    location: [-76.5, 36.8],
-  },
-  {
-    key: 'pacific',
-    name: 'Pacific Area',
-    districtIds: [8, 9, 10],
-    location: [-140.0, 42.0],
-  },
-]
+type FemaAorGraphicItem = FemaAorItem
 
 type RosterPositionItem = {
   id: number
@@ -2901,7 +2871,7 @@ const SITREP_ONGOING_INCIDENTS: IncidentListItem[] = [
 const getOngoingIncidentsForFemaAor = (aorName: string) =>
   SITREP_ONGOING_INCIDENTS.filter((entry) => entry.region === aorName)
 
-const buildFemaAorGraphicAttributes = (aor: FemaAorItem) => {
+const buildFemaAorGraphicAttributes = (aor: FemaAorGraphicItem) => {
   const regionIncidents = getOngoingIncidentsForFemaAor(aor.name)
   return {
     mapKey: `fema-aor-${aor.id}`,
@@ -2948,7 +2918,7 @@ const RESOURCE_AT_RISK_POPUP_TEMPLATE = {
   content: RESOURCE_AT_RISK_POPUP_DETAILS,
 }
 
-const applyFemaAorPopupState = (graphic: Graphic, aor: FemaAorItem) => {
+const applyFemaAorPopupState = (graphic: Graphic, aor: FemaAorGraphicItem) => {
   graphic.attributes = buildFemaAorGraphicAttributes(aor)
   graphic.popupTemplate = FEMA_AOR_POPUP_TEMPLATE
 }
@@ -4354,7 +4324,7 @@ const WORKSPACE_FORMS_MENU: Array<{ id: string; tab: LeftTab; label: string }> =
 
 const WORKSPACE_MORE_MENU: Array<{ tab: LeftTab; label: string }> = [
   { tab: 'aors', label: 'Objectives & Actions' },
-  { tab: 'fema-regions', label: 'Business Units' },
+  { tab: 'fema-regions', label: 'Areas of Responsibility' },
   { tab: 'events', label: 'Events' },
   { tab: 'analytics', label: 'Analytics' },
   { tab: 'sitreps', label: 'SITREPs' },
@@ -4406,7 +4376,7 @@ type SearchResult = {
     | 'incident'
     | 'exercise'
     | 'event'
-    | 'business-unit'
+    | 'hub-aor'
   title: string
   subtitle: string
   location: [number, number]
@@ -7432,10 +7402,7 @@ function App() {
     setIsPratusAiDrawerOpen(true)
   }
   const [expandedItemId, setExpandedItemId] = useState<string | null>(null)
-  const [expandedAorAreaKey, setExpandedAorAreaKey] = useState<string | null>(null)
-  const [visibleAorAreaSitrepKeys, setVisibleAorAreaSitrepKeys] = useState<Set<string>>(
-    () => new Set()
-  )
+  const [hubAorFocusTargetId, setHubAorFocusTargetId] = useState<string | null>(null)
   const [expandedThreats, setExpandedThreats] = useState<Set<string>>(new Set())
   const [visibleThreatLiveFeeds, setVisibleThreatLiveFeeds] = useState<Set<string>>(new Set())
   const [completedResponseActions, setCompletedResponseActions] = useState<Set<string>>(
@@ -9213,227 +9180,7 @@ function App() {
     () => [...new Set(notifications.map((notification) => notification.category))].sort(),
     [notifications]
   )
-  const [femaAors] = useState<FemaAorItem[]>([
-    {
-      id: 1,
-      name: 'USCG District 1 — Northeast',
-      lead: 'District Commander — Boston, MA',
-      incidents: 0,
-      priority: 'Low',
-      population: '14.8M',
-      lastUpdate: '2026-05-09 08:30 EST',
-      evacuationStatus: 'None',
-      notes: 'CT, ME, MA, NH, RI, VT — steady-state DOT operations.',
-      sitrep:
-        'Steady-state DOT operations across CT, ME, MA, NH, RI, VT. NWS marine forecasts stable; no active surface-transport disruptions reported.',
-      sitrepUpdatedBy: 'District Commander Boston, MA',
-      sitrepSources: [
-        'NWS Marine Forecast (WFO Boston, Caribou, Gray)',
-        'Mass511 / 511CT / 511NH traffic feeds',
-        'USCG First District COTP log',
-        'FAA OIS — BOS/BDL/PWM',
-      ],
-      location: [-71.5, 43.8],
-    },
-    {
-      id: 2,
-      name: 'USCG District 1 — New York',
-      lead: 'District Commander — New York, NY',
-      incidents: 0,
-      priority: 'Low',
-      population: '31.5M',
-      lastUpdate: '2026-05-09 08:32 EST',
-      evacuationStatus: 'None',
-      notes: 'NJ, NY, PR, USVI — monitoring downstream coastal impacts.',
-      sitrep:
-        'Monitoring downstream coastal swell from Atlantic system. Port of NY/NJ traffic normal; PR/USVI EOC reports no DOT impacts at this time.',
-      sitrepUpdatedBy: 'District Commander New York, NY',
-      sitrepSources: [
-        'NHC Atlantic basin swell guidance',
-        'PANYNJ TRANSCOM port traffic feed',
-        'USCG Sector NY COTP log',
-        'PR/USVI EOC WebEOC reports',
-        '511NY traffic API',
-      ],
-      location: [-74.5, 41.8],
-    },
-    {
-      id: 3,
-      name: 'USCG District 5 — Mid-Atlantic',
-      lead: 'District Commander — Philadelphia, PA',
-      incidents: 0,
-      priority: 'Medium',
-      population: '32.1M',
-      lastUpdate: '2026-05-09 08:34 EST',
-      evacuationStatus: 'None',
-      notes: 'DE, DC, MD, PA, VA, WV — staging ESF-1 backfill assets for Region 4.',
-      sitrep:
-        'ESF-1 backfill assets staged at Richmond and Petersburg in support of Region 4. I-95 corridor flowing southbound; contraflow plans on standby pending FDOT request.',
-      sitrepUpdatedBy: 'District Commander Philadelphia, PA',
-      sitrepSources: [
-        'FHWA ESF-1 staging tracker',
-        'VDOT 511 / Maryland CHART probe data',
-        'USCG District 5 — Mid-Atlantic operations center',
-        'I-95 Corridor Coalition contraflow plan',
-        'PennDOT 511 / DelDOT DelTrac',
-      ],
-      location: [-78.0, 39.2],
-    },
-    {
-      id: 4,
-      name: 'USCG District 7 — Southeast',
-      lead: 'District Commander — Atlanta, GA',
-      incidents: 8,
-      priority: 'High',
-      population: '67.2M',
-      lastUpdate: '2026-05-09 09:46 EST',
-      evacuationStatus: 'Active',
-      notes:
-        'AL, FL, GA, KY, MS, NC, SC, TN — major hurricane response, multi-state contraflow active.',
-      sitrep:
-        'Multi-state contraflow active on I-75/I-95; FDOT TMC managing Wildwood gridlock. 8 active DOT incidents; FEMA airlift staging at MCO holding through current ground stop.',
-      sitrepUpdatedBy: 'District Commander Atlanta, GA',
-      sitrepSources: [
-        'FDOT SunGuide TMC live traffic feed',
-        'FAA NAS Status / OIS — MCO ground stop',
-        'NHC advisories on Hurricane Edgar',
-        'FL/GA/SC/AL State EOC ESF-1 reports',
-        'FEMA WebEOC / IRRIS logistics tracker',
-        'INRIX/HERE corridor probe data',
-      ],
-      location: [-84.5, 32.5],
-    },
-    {
-      id: 5,
-      name: 'USCG District 9 — Great Lakes',
-      lead: 'District Commander — Chicago, IL',
-      incidents: 0,
-      priority: 'Low',
-      population: '52.6M',
-      lastUpdate: '2026-05-09 08:28 EST',
-      evacuationStatus: 'None',
-      notes: 'IL, IN, MI, MN, OH, WI — steady-state DOT operations.',
-      sitrep:
-        'Steady-state DOT operations across IL, IN, MI, MN, OH, WI. Lake-effect bands forecast for upper MI; salt brine staged but no closures in effect.',
-      sitrepUpdatedBy: 'District Commander Chicago, IL',
-      sitrepSources: [
-        'NWS WFO Marquette / Gaylord / Milwaukee',
-        'MDOT / MnDOT / WisDOT 511 winter ops',
-        'NOAA GLERL ice cover analysis',
-        'IDOT Gateway / OHGO traffic feeds',
-      ],
-      location: [-87.5, 43.5],
-    },
-    {
-      id: 6,
-      name: 'USCG District 8 — Gulf',
-      lead: 'District Commander — Denton, TX',
-      incidents: 3,
-      priority: 'High',
-      population: '41.0M',
-      lastUpdate: '2026-05-09 10:30 CST',
-      evacuationStatus: 'Recommended',
-      notes:
-        'AR, LA, NM, OK, TX — United States Coast Guard Garyville refinery fire, MPLX pipeline release, and Hurricane Edgar Gulf Coast asset protection active.',
-      sitrep:
-        'United States Coast Guard Garyville refinery fire in crude/vacuum unit; MPLX crude pipeline release at Sabine River crossing with USCG spill coordination; Hurricane Edgar driving controlled shutdowns at Texas City and Louisiana assets. PHMSA and LDEQ on-scene.',
-      sitrepUpdatedBy: 'District Commander Denton, TX',
-      sitrepSources: [
-        'United States Coast Guard Garyville unified command status board',
-        'MPLX pipeline control center incident log',
-        'PHMSA NRC hazmat incident log',
-        'NWS WFO Houston/Galveston — Hurricane Edgar advisory',
-        'Louisiana DEQ spill and air monitoring feed',
-        'USCG Sector Houston-Galveston marine safety broadcast',
-      ],
-      location: [-97.5, 32.5],
-    },
-    {
-      id: 7,
-      name: 'USCG District 8 — Inland',
-      lead: 'District Commander — Kansas City, MO',
-      incidents: 0,
-      priority: 'Low',
-      population: '14.3M',
-      lastUpdate: '2026-05-09 08:25 EST',
-      evacuationStatus: 'None',
-      notes: 'IA, KS, MO, NE — steady-state DOT operations.',
-      sitrep:
-        'Steady-state DOT operations across IA, KS, MO, NE. NWS severe weather outlook marginal; FRA monitoring elevated grain-train activity but no incidents reported.',
-      sitrepUpdatedBy: 'District Commander Kansas City, MO',
-      sitrepSources: [
-        'NWS SPC Day-1 Convective Outlook',
-        'FRA Office of Safety incident database',
-        'Iowa DOT 511 / KCSCOUT traffic feeds',
-        'KDOT KanDrive / NDOR 511',
-      ],
-      location: [-94.5, 40.5],
-    },
-    {
-      id: 8,
-      name: 'USCG District 11 — Southwest',
-      lead: 'District Commander — Denver, CO',
-      incidents: 0,
-      priority: 'Low',
-      population: '12.5M',
-      lastUpdate: '2026-05-09 08:20 EST',
-      evacuationStatus: 'None',
-      notes: 'CO, MT, ND, SD, UT, WY — steady-state DOT operations.',
-      sitrep:
-        'Steady-state DOT operations across CO, MT, ND, SD, UT, WY. CDOT chain laws stood down; mountain pass forecasts clear through next 48 hours.',
-      sitrepUpdatedBy: 'District Commander Denver, CO',
-      sitrepSources: [
-        'CDOT / WYDOT / MDT 511 mountain-pass APIs',
-        'NWS WFO Boulder / Salt Lake / Riverton',
-        'AASHTO Snow & Ice Pooled Fund reports',
-        'UDOT CommuterLink probe data',
-      ],
-      location: [-107.0, 44.5],
-    },
-    {
-      id: 9,
-      name: 'USCG District 11 — Pacific',
-      lead: 'District Commander — Oakland, CA',
-      incidents: 0,
-      priority: 'Medium',
-      population: '50.5M',
-      lastUpdate: '2026-05-09 08:18 EST',
-      evacuationStatus: 'None',
-      notes: 'AZ, CA, HI, NV, Pacific Territories — wildfire watch, otherwise steady-state.',
-      sitrep:
-        'CAL FIRE Red Flag Warning posted for inland CA; Caltrans staging detour resources along SR-1. Pacific territories nominal; HI DOT reports normal ops.',
-      sitrepUpdatedBy: 'District Commander Oakland, CA',
-      sitrepSources: [
-        'CAL FIRE Incident Information feed',
-        'NWS WFO Hanford / LA / San Diego Red Flag warnings',
-        'Caltrans QuickMap traffic API',
-        'HDOT GoAkamai feed',
-        'ADOT az511 / NDOT NVRoads',
-      ],
-      location: [-118.5, 37.0],
-    },
-    {
-      id: 10,
-      name: 'USCG District 13 — Pacific Northwest',
-      lead: 'District Commander — Bothell, WA',
-      incidents: 0,
-      priority: 'Low',
-      population: '14.4M',
-      lastUpdate: '2026-05-09 09:46 PST',
-      evacuationStatus: 'None',
-      notes: 'AK, ID, OR, WA — steady-state operations; United States Coast Guard Martinez refinery in routine monitoring posture.',
-      sitrep:
-        'Steady-state operations across AK, ID, OR, WA. United States Coast Guard Martinez refinery conducting planned maintenance with no active ERP activations. NWS marine forecasts stable; no DOT transport disruptions reported.',
-      sitrepUpdatedBy: 'District Commander Bothell, WA',
-      sitrepSources: [
-        'NWS WFO Seattle / Portland marine forecast',
-        'WSDOT traffic cameras — I-5 corridor',
-        'United States Coast Guard Martinez refinery operations status',
-        'USCG Sector Puget Sound marine safety broadcast',
-      ],
-      location: [-122.12, 38.02],
-    },
-  ])
+  const femaAors = HUB_AOR_DISTRICTS
   const DEFAULT_SEERIST_ENDPOINT =
     'https://app.seerist.com/hyperionapi/v1/wod?start=2026-05-20T00:00:00.000Z&end=2026-05-20T23:59:59.999Z&aoiId=us-004&sources=news'
   const [seeristEndpoint, setSeeristEndpoint] = useState<string>(DEFAULT_SEERIST_ENDPOINT)
@@ -10000,7 +9747,7 @@ function App() {
     if (!femaRegionsLayerRef.current) {
       const femaLayer = new GraphicsLayer({
         id: 'fema-regions-layer',
-        title: 'Business Units',
+        title: 'Areas of Responsibility',
         listMode: 'hide',
       })
       femaRegionGraphicsRef.current = new globalThis.Map<number, Graphic>()
@@ -11031,7 +10778,7 @@ function App() {
     if (tab === 'notifications') return 'Notifications'
     if (tab === 'resources') return 'Assets'
     if (tab === 'aors') return 'Objectives & Actions'
-    if (tab === 'fema-regions') return 'Business Units'
+    if (tab === 'fema-regions') return 'Areas of Responsibility'
     if (tab === 'incident-list') return 'Incidents'
     if (tab === 'roster') return 'Roster'
     if (tab === 'exercises') return 'Exercises'
@@ -11606,28 +11353,11 @@ function App() {
       .toLowerCase()
       .includes(normalizedQuery)
   })
-  const searchFilteredBusinessUnits = femaAors.filter((item) => {
-    if (!normalizedQuery) {
-      return true
-    }
-
-    return [
-      item.name,
-      item.lead,
-      item.priority,
-      String(item.incidents),
-      item.population,
-      item.lastUpdate,
-      item.evacuationStatus,
-      item.notes,
-      item.sitrep,
-      item.sitrepUpdatedBy,
-      ...item.sitrepSources,
-    ]
-      .join(' ')
-      .toLowerCase()
-      .includes(normalizedQuery)
-  })
+  const hubAorAreaViews = useMemo(() => buildHubAorAreaViews(hubAssets), [hubAssets])
+  const searchFilteredHubAors = useMemo(
+    () => (normalizedQuery ? searchHubAorFlatHits(hubAorAreaViews, normalizedQuery) : []),
+    [hubAorAreaViews, normalizedQuery]
+  )
   const normalizedAppliedFilterQuery = appliedFilterQuery?.trim().toLowerCase() ?? ''
   const activePanelSearchQuery = normalizedQuery || normalizedAppliedFilterQuery
   const normalizedResourcesSearchQuery = resourcesSearchQuery.trim().toLowerCase()
@@ -11832,45 +11562,6 @@ function App() {
   }
   const getDerivedActionStatus = (item: AorItem) =>
     item.itemType === 'Action' ? (item.assignee ? 'Assigned' : 'Unassigned') : ''
-  const cardFilteredFemaAors = femaAors.filter((item) => {
-    if (!activePanelSearchQuery) {
-      return true
-    }
-
-    return [
-      item.name,
-      item.lead,
-      item.priority,
-      String(item.incidents),
-      item.population,
-      item.lastUpdate,
-      item.evacuationStatus,
-      item.notes,
-      item.sitrep,
-      item.sitrepUpdatedBy,
-      ...item.sitrepSources,
-    ]
-      .join(' ')
-      .toLowerCase()
-      .includes(activePanelSearchQuery)
-  })
-  const cardFilteredFemaAorAreas = USCG_COAST_GUARD_AREAS.map((area) => {
-    const areaMatchesSearch =
-      !!activePanelSearchQuery &&
-      area.name.toLowerCase().includes(activePanelSearchQuery)
-    const districts = areaMatchesSearch
-      ? femaAors.filter((aor) => area.districtIds.includes(aor.id))
-      : cardFilteredFemaAors.filter((aor) => area.districtIds.includes(aor.id))
-    const assets = areaMatchesSearch
-      ? filterCoastGuardAreaAssets(area.key, hubAssets, '')
-      : filterCoastGuardAreaAssets(area.key, hubAssets, activePanelSearchQuery)
-
-    return {
-      ...area,
-      districts,
-      assets,
-    }
-  }).filter((area) => area.districts.length > 0 || area.assets.length > 0)
   const allIncidentsForWorkspace = useMemo(() => {
     const byId = new Map<number, IncidentListItem>()
     for (const incident of incidentList) {
@@ -17567,7 +17258,7 @@ function App() {
           <span className="font-medium">Severity:</span> {event.severity}
         </p>
         <p>
-          <span className="font-medium">Business Unit:</span> {event.businessUnit}
+          <span className="font-medium">District:</span> {event.businessUnit}
         </p>
       </div>
       <p className="mt-2">
@@ -18795,13 +18486,13 @@ function App() {
           location: item.location,
           scale: 80000,
         })),
-        ...searchFilteredBusinessUnits.map((item) => ({
-          id: `business-unit-${item.id}`,
-          kind: 'business-unit' as const,
-          title: item.name,
-          subtitle: `${item.priority} • ${item.lead}`,
+        ...searchFilteredHubAors.map((item) => ({
+          id: item.id,
+          kind: 'hub-aor' as const,
+          title: item.title,
+          subtitle: item.subtitle,
           location: item.location,
-          scale: 10000000,
+          scale: item.kind === 'hub-aor-district' ? 10_000_000 : 300_000,
         })),
       ]
     : []
@@ -18841,74 +18532,25 @@ function App() {
       setActiveTab('events')
     }
 
-    if (result.kind === 'business-unit') {
+    if (result.kind === 'hub-aor') {
       setActiveTab('fema-regions')
+      setHubAorFocusTargetId(hubAorScrollTargetFromResultId(result.id))
+      setSelectedPanelItemId(hubAorPanelItemIdFromResultId(result.id))
+      if (result.id.startsWith('hub-aor-asset-')) {
+        setExpandedItemId(result.id)
+      }
     }
 
     setSearchQuery(result.title)
     setAppliedFilterQuery(result.title)
     setAppliedFilterLabel(result.title)
-    setExpandedItemId(result.id)
+    if (result.kind !== 'hub-aor') {
+      setExpandedItemId(result.id)
+    }
   }
 
   const toggleExpandedItem = (key: string) => {
     setExpandedItemId((previous) => (previous === key ? null : key))
-  }
-
-  const toggleExpandedAorArea = (areaKey: string, areaItemKey: 'atlantic' | 'pacific') => {
-    setExpandedAorAreaKey((previous) => {
-      if (previous === areaKey) {
-        setExpandedItemId((itemPrevious) =>
-          itemPrevious?.startsWith(`aor-area-${areaItemKey}-`) ? null : itemPrevious
-        )
-        setVisibleAorAreaSitrepKeys((sitrepPrevious) => {
-          if (!sitrepPrevious.has(areaKey)) {
-            return sitrepPrevious
-          }
-          const next = new Set(sitrepPrevious)
-          next.delete(areaKey)
-          return next
-        })
-        return null
-      }
-      return areaKey
-    })
-  }
-
-  const handleExpandedAorAreaOpenChange = (
-    open: boolean,
-    areaKey: string,
-    areaItemKey: 'atlantic' | 'pacific'
-  ) => {
-    if (open) {
-      setExpandedAorAreaKey(areaKey)
-      return
-    }
-
-    setExpandedAorAreaKey((previous) => (previous === areaKey ? null : previous))
-    setExpandedItemId((itemPrevious) =>
-      itemPrevious?.startsWith(`aor-area-${areaItemKey}-`) ? null : itemPrevious
-    )
-    setVisibleAorAreaSitrepKeys((previous) => {
-      if (!previous.has(areaKey)) {
-        return previous
-      }
-      const next = new Set(previous)
-      next.delete(areaKey)
-      return next
-    })
-  }
-
-  const toggleAorAreaSitrep = (areaKey: string) => {
-    setVisibleAorAreaSitrepKeys((previous) => {
-      const next = new Set(previous)
-      if (next.has(areaKey)) {
-        next.delete(areaKey)
-      } else {
-        next.add(areaKey)
-      }
-      return next
-    })
   }
 
   const toggleExpandedThreat = (key: string) => {
@@ -26239,7 +25881,7 @@ function App() {
                               result.kind === 'incident' ||
                               result.kind === 'exercise' ||
                               result.kind === 'event' ||
-                              result.kind === 'business-unit'
+                              result.kind === 'hub-aor'
                             ) && (
                               <div className="flex items-center gap-1">
                                 <Button
@@ -26434,15 +26076,15 @@ function App() {
                           variant={isGlassMode ? 'outline' : activeTab === 'fema-regions' ? 'default' : 'outline'}
                           className={selectedGlassTabClasses(activeTab === 'fema-regions')}
                           onClick={() => setActiveTab('fema-regions')}
-                          aria-label="Open Business Units tab"
-                          data-hub-tutorial="business-units-tab"
+                          aria-label="Open Areas of Responsibility tab"
+                          data-hub-tutorial="aors-tab"
                           data-pratus-context-id="tab:fema-regions"
-                          data-pratus-context-label="Business Units"
+                          data-pratus-context-label="Areas of Responsibility"
                         >
                           <MapPin className="h-4 w-4" />
                         </Button>
                       </TooltipTrigger>
-                      <TooltipContent side="bottom" sideOffset={6}>Business Units</TooltipContent>
+                      <TooltipContent side="bottom" sideOffset={6}>Areas of Responsibility</TooltipContent>
                     </Tooltip>
                     )}
                     {(isInIncidentWorkspace || isInExerciseWorkspace) && (
@@ -26736,7 +26378,7 @@ function App() {
                   {activeTab === 'resources' &&
                     (resourcesPanelView === 'resource-requests' ? 'Asset Requests' : 'Assets')}
                   {activeTab === 'aors' && 'Objectives & Actions'}
-                  {activeTab === 'fema-regions' && 'Business Units'}
+                  {activeTab === 'fema-regions' && 'Areas of Responsibility'}
                   {activeTab === 'incident-list' && 'Incidents'}
                   {activeTab === 'roster' && 'Roster'}
                   {activeTab === 'exercises' && 'Exercises'}
@@ -27334,8 +26976,8 @@ function App() {
                         <Button type="button" size="sm" variant="outline">
                           <span className="max-w-[12rem] truncate">
                             {eventBusinessUnitFilters.length > 0
-                              ? `Business Units: ${eventBusinessUnitFilters.length} selected`
-                              : 'Business Units: All'}
+                              ? `Districts: ${eventBusinessUnitFilters.length} selected`
+                              : 'Districts: All'}
                           </span>
                           <ChevronDown className="ml-1 h-4 w-4" />
                         </Button>
@@ -29818,307 +29460,24 @@ function App() {
                 )}
 
                 {activeTab === 'fema-regions' && (
-                  cardFilteredFemaAorAreas.length === 0 ? (
-                    <Item variant="outline" className={glassItemBorderClasses}>
-                      <ItemContent>
-                        <ItemTitle>No matching business units</ItemTitle>
-                        <ItemDescription>Try a broader search term.</ItemDescription>
-                      </ItemContent>
-                    </Item>
-                  ) : (
-                    <>
-                    {cardFilteredFemaAorAreas.map((area) => {
-                      const areaKey = `aor-area-${area.key}`
-                      const isAreaOpen = expandedAorAreaKey === areaKey
-                      return (
-                        <Item
-                          key={area.key}
-                          variant="outline"
-                          className={cn(
-                            'flex-col items-stretch p-0',
-                            glassItemBorderClasses,
-                            selectedPanelItemId === areaKey && 'ring-2 ring-primary/60 bg-primary/5'
-                          )}
-                        >
-                          <Collapsible
-                            open={isAreaOpen}
-                            onOpenChange={(open) =>
-                              handleExpandedAorAreaOpenChange(open, areaKey, area.key)
-                            }
-                          >
-                            <div
-                              className="flex cursor-pointer items-center gap-2 px-3 py-2.5"
-                              onClick={() => toggleExpandedAorArea(areaKey, area.key)}
-                            >
-                              <ItemContent>
-                                <ItemTitle>{area.name}</ItemTitle>
-                                <ItemDescription>
-                                  {[
-                                    area.districts.length > 0
-                                      ? `${area.districts.length} ${
-                                          area.districts.length === 1 ? 'district' : 'districts'
-                                        }`
-                                      : null,
-                                    area.assets.length > 0
-                                      ? `${area.assets.length} ${
-                                          area.assets.length === 1 ? 'asset' : 'assets'
-                                        }`
-                                      : null,
-                                  ]
-                                    .filter(Boolean)
-                                    .join(' · ')}
-                                </ItemDescription>
-                              </ItemContent>
-                              <ItemActions>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  aria-label={`Zoom map to ${area.name}`}
-                                  onClick={(event) => {
-                                    event.stopPropagation()
-                                    setSelectedPanelItemId(areaKey)
-                                    void focusMapItem(
-                                      `fema-aor-area-${area.key}`,
-                                      area.location,
-                                      20_000_000
-                                    )
-                                  }}
-                                >
-                                  <MapIcon className="h-4 w-4" />
-                                </Button>
-                                <CollapsibleTrigger asChild>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    aria-label={`Toggle ${area.name} districts`}
-                                    onClick={(event) => event.stopPropagation()}
-                                  >
-                                    <ChevronDown
-                                      className={cn(
-                                        'h-4 w-4 transition-transform',
-                                        isAreaOpen && 'rotate-180'
-                                      )}
-                                    />
-                                  </Button>
-                                </CollapsibleTrigger>
-                              </ItemActions>
-                            </div>
-                            <CollapsibleContent>
-                              <div className="space-y-4 border-t px-2 py-2">
-                                <div className="space-y-2">
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    className="h-8 w-1/2 text-xs"
-                                    onClick={(event) => {
-                                      event.stopPropagation()
-                                      toggleAorAreaSitrep(areaKey)
-                                    }}
-                                  >
-                                    {visibleAorAreaSitrepKeys.has(areaKey)
-                                      ? 'Hide SITREP'
-                                      : 'Show SITREP'}
-                                  </Button>
-                                  {visibleAorAreaSitrepKeys.has(areaKey) && (
-                                    <div
-                                      className={cn(
-                                        'space-y-2 rounded-md border px-3 py-2.5 text-sm',
-                                        glassItemBorderClasses
-                                      )}
-                                    >
-                                      {(() => {
-                                        const areaSitrep = USCG_COAST_GUARD_AREA_SITREPS[area.key]
-                                        return (
-                                          <>
-                                            <p>
-                                              <span className="font-medium">Reporting Period:</span>{' '}
-                                              {areaSitrep.reportingPeriod}
-                                            </p>
-                                            <p>
-                                              <span className="font-medium">Last Update:</span>{' '}
-                                              {areaSitrep.lastUpdate}
-                                            </p>
-                                            <p className="mt-2">
-                                              <span className="font-medium">Latest SITREP:</span>{' '}
-                                              {areaSitrep.sitrep}{' '}
-                                              <span className="italic text-muted-foreground">
-                                                (last updated by {areaSitrep.sitrepUpdatedBy})
-                                              </span>
-                                            </p>
-                                            <div className="mt-2">
-                                              <span className="font-medium">Data Sources:</span>
-                                              <ul className="mt-1 ml-5 list-disc text-xs text-muted-foreground">
-                                                {areaSitrep.sitrepSources.map((source) => (
-                                                  <li key={source}>{source}</li>
-                                                ))}
-                                              </ul>
-                                            </div>
-                                          </>
-                                        )
-                                      })()}
-                                    </div>
-                                  )}
-                                </div>
-                                {area.assets.length > 0 && (
-                                  <div className="space-y-2">
-                                    <p className="px-1 text-xs font-medium text-muted-foreground">
-                                      Assets
-                                    </p>
-                                    <div className="flex flex-col gap-2 px-0.5">
-                                      <AssetListHeaderRow />
-                                      {area.assets.map((asset) => {
-                                        const key = `aor-area-${area.key}-asset-${asset.assetKey}`
-                                        const isOpen = expandedItemId === key
-                                        return (
-                                          <ResourceListItemCard
-                                            key={asset.assetKey}
-                                            resource={asset}
-                                            glassItemBorderClasses={glassItemBorderClasses}
-                                            selected={selectedPanelItemId === key}
-                                            open={isOpen}
-                                            editable
-                                            workspaceOptions={assetWorkspaceOptions}
-                                            assignmentDisabled={isAssetAssignmentsLoading}
-                                            onAssignmentChange={(workspaceId) =>
-                                              handleAssetAssignmentChange(asset.assetKey, workspaceId)
-                                            }
-                                            onOpenChange={(open) =>
-                                              setExpandedItemId(open ? key : null)
-                                            }
-                                            onHeaderClick={() => toggleExpandedItem(key)}
-                                            onFocusMap={() => {
-                                              setSelectedPanelItemId(key)
-                                              void focusMapItem(
-                                                getAssetMapKey(asset.assetKey),
-                                                asset.mapLocation,
-                                                30000
-                                              )
-                                            }}
-                                          />
-                                        )
-                                      })}
-                                    </div>
-                                  </div>
-                                )}
-                                {area.districts.length > 0 && (
-                                  <div className="space-y-2">
-                                    <p className="px-1 text-xs font-medium text-muted-foreground">
-                                      Districts
-                                    </p>
-                                    {area.districts.map((aor) => {
-                                      const key = `aor-${aor.id}`
-                                      const isOpen = expandedItemId === key
-                                      return (
-                                        <Item
-                                          key={aor.id}
-                                          variant="outline"
-                                          className={cn(
-                                            'flex-col items-stretch p-0',
-                                            glassItemBorderClasses,
-                                            selectedPanelItemId === key &&
-                                              'ring-2 ring-primary/60 bg-primary/5'
-                                          )}
-                                        >
-                                          <Collapsible
-                                            open={isOpen}
-                                            onOpenChange={(open) =>
-                                              setExpandedItemId(open ? key : null)
-                                            }
-                                          >
-                                            <div
-                                              className="flex cursor-pointer items-center gap-2 px-3 py-2.5"
-                                              onClick={() => toggleExpandedItem(key)}
-                                            >
-                                              <ItemContent>
-                                                <ItemTitle className="text-sm">{aor.name}</ItemTitle>
-                                              </ItemContent>
-                                              <ItemActions>
-                                                <Button
-                                                  variant="ghost"
-                                                  size="icon"
-                                                  aria-label="Zoom map to area of responsibility"
-                                                  onClick={(event) => {
-                                                    event.stopPropagation()
-                                                    setSelectedPanelItemId(key)
-                                                    void focusMapItem(
-                                                      `fema-aor-${aor.id}`,
-                                                      aor.location,
-                                                      10_000_000
-                                                    )
-                                                  }}
-                                                >
-                                                  <MapIcon className="h-4 w-4" />
-                                                </Button>
-                                                <CollapsibleTrigger asChild>
-                                                  <Button
-                                                    variant="ghost"
-                                                    size="icon"
-                                                    aria-label="Toggle AOR details"
-                                                    onClick={(event) => event.stopPropagation()}
-                                                  >
-                                                    <ChevronDown
-                                                      className={cn(
-                                                        'h-4 w-4 transition-transform',
-                                                        isOpen && 'rotate-180'
-                                                      )}
-                                                    />
-                                                  </Button>
-                                                </CollapsibleTrigger>
-                                              </ItemActions>
-                                            </div>
-                                            <CollapsibleContent>
-                                              <div className="border-t px-3 py-2 text-sm">
-                                                <div className="grid grid-cols-2 gap-2">
-                                                  <p>
-                                                    <span className="font-medium">Lead:</span>{' '}
-                                                    {aor.lead}
-                                                  </p>
-                                                  <p>
-                                                    <span className="font-medium">Incidents:</span>{' '}
-                                                    {aor.incidents}
-                                                  </p>
-                                                </div>
-                                                <p className="mt-2">
-                                                  <span className="font-medium">Last Update:</span>{' '}
-                                                  {aor.lastUpdate}
-                                                </p>
-                                                <p className="mt-1">
-                                                  <span className="font-medium">
-                                                    Population / Evac:
-                                                  </span>{' '}
-                                                  {aor.population} / {aor.evacuationStatus}
-                                                </p>
-                                                <p className="mt-2">
-                                                  <span className="font-medium">Latest SITREP:</span>{' '}
-                                                  {aor.sitrep}{' '}
-                                                  <span className="italic text-muted-foreground">
-                                                    (last updated by {aor.sitrepUpdatedBy})
-                                                  </span>
-                                                </p>
-                                                <div className="mt-2">
-                                                  <span className="font-medium">Data Sources:</span>
-                                                  <ul className="mt-1 ml-5 list-disc text-xs text-muted-foreground">
-                                                    {aor.sitrepSources.map((source) => (
-                                                      <li key={source}>{source}</li>
-                                                    ))}
-                                                  </ul>
-                                                </div>
-                                              </div>
-                                            </CollapsibleContent>
-                                          </Collapsible>
-                                        </Item>
-                                      )
-                                    })}
-                                  </div>
-                                )}
-                              </div>
-                            </CollapsibleContent>
-                          </Collapsible>
-                        </Item>
-                      )
-                    })}
-                    </>
-                  )
+                  <HubAorHierarchyPanel
+                    assets={hubAssets}
+                    externalSearchQuery={activePanelSearchQuery}
+                    focusTargetId={hubAorFocusTargetId}
+                    glassItemBorderClasses={glassItemBorderClasses}
+                    selectedPanelItemId={selectedPanelItemId}
+                    onSelectPanelItem={setSelectedPanelItemId}
+                    expandedAssetKey={expandedItemId}
+                    onExpandedAssetKeyChange={setExpandedItemId}
+                    assetWorkspaceOptions={assetWorkspaceOptions}
+                    isAssetAssignmentsLoading={isAssetAssignmentsLoading}
+                    onAssetAssignmentChange={(assetKey, workspaceId) => {
+                      void handleAssetAssignmentChange(assetKey, workspaceId)
+                    }}
+                    onFocusMap={(mapKey, location, scale) => {
+                      void focusMapItem(mapKey, location, scale)
+                    }}
+                  />
                 )}
 
                 {activeTab === 'roster' && (isInIncidentWorkspace || isInExerciseWorkspace) && (
@@ -34136,7 +33495,7 @@ function App() {
                               <SelectContent className="text-xs">
                                 <SelectGroup>
                                   <SelectLabel className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                                    Business Units
+                                    Districts
                                   </SelectLabel>
                                   {SITREP_SCOPE_OPTIONS.filter(
                                     (option) => option.kind === 'aor'
