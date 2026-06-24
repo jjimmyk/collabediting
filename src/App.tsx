@@ -27646,6 +27646,7 @@ function App() {
                     assets={workspaceAssignedAssets}
                     unassignedAssets={unassignedHubAssets}
                     workspaceOptions={assetWorkspaceOptions}
+                    activeWorkspaceSupabaseId={activeWorkspaceSupabaseId}
                     isLoading={isAssetAssignmentsLoading}
                     assignmentDisabled={isAssetAssignmentsLoading}
                     orgChartDisabled={isSavingAssetOrgChartPlacement}
@@ -27653,6 +27654,7 @@ function App() {
                     workspaceLabel={activeWorkspaceRosterLabel}
                     glassItemBorderClasses={glassItemBorderClasses}
                     ics204LabelsByDocumentId={ics204LabelsByDocumentId}
+                    updatingAssetCheckInKey={updatingAssetCheckInKey}
                     onFocusMap={(asset) => {
                       const mapKey = getAssetMapKey(asset.assetKey)
                       setSelectedPanelItemId(mapKey)
@@ -27661,6 +27663,10 @@ function App() {
                     onAssignmentChange={handleAssetAssignmentChange}
                     onOrgChartPlacementChange={(assetKey, reportsTo) => {
                       void handleAssetOrgChartPlacementChange(assetKey, reportsTo)
+                    }}
+                    onUpdateOrganizationAsset={handleUpdateOrganizationAsset}
+                    onAssetCheckInStatusChange={(assetKey, status) => {
+                      void handleAssetCheckInStatusChange(assetKey, status)
                     }}
                     onAssignAsset={
                       activeWorkspaceSupabaseId
