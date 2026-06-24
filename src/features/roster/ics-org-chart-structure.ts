@@ -281,6 +281,49 @@ export const ICS_ORG_CHART_POSITIONS: readonly string[] = [
   ...collectOrgChartPositions(ICS_ORG_CHART_BRANCHES),
 ]
 
+let standardPositionParentMapCache: Map<string, string> | null = null
+
+function buildStandardPositionParentMap(): Map<string, string> {
+  const map = new Map<string, string>()
+
+  function walk(nodes: OrgChartNode[], parent: string | null) {
+    for (const node of nodes) {
+      if (node.kind === 'position') {
+        if (parent) {
+          map.set(node.position, parent)
+        }
+        if (node.children?.length) {
+          walk(node.children, node.position)
+        }
+      } else if (node.kind === 'group' || node.kind === 'stack' || node.kind === 'fork') {
+        walk(node.children, parent)
+      }
+    }
+  }
+
+  walk(ICS_ORG_CHART_COMMAND_STAFF_BRANCH.children, ICS_ORG_CHART_ROOT_POSITION)
+  for (const branch of ICS_ORG_CHART_SECTION_BRANCHES) {
+    walk(branch.children, ICS_ORG_CHART_ROOT_POSITION)
+  }
+
+  return map
+}
+
+function getStandardPositionParentMap(): Map<string, string> {
+  if (!standardPositionParentMapCache) {
+    standardPositionParentMapCache = buildStandardPositionParentMap()
+  }
+  return standardPositionParentMapCache
+}
+
+export function resolveStandardPositionReportsTo(positionName: string): string | null {
+  const normalized = positionName.trim().replace(/\s+/g, ' ')
+  if (normalized === ICS_ORG_CHART_ROOT_POSITION) {
+    return null
+  }
+  return getStandardPositionParentMap().get(normalized) ?? null
+}
+
 export function orgChartColorClasses(color: OrgChartColor | undefined): string {
   switch (color) {
     case 'red':

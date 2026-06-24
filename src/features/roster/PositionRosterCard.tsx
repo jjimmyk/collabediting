@@ -30,7 +30,7 @@ import {
 } from '@/features/roster/PositionRosterPropertySections'
 import type { ResourceListItemData } from '@/features/resources/types'
 import type { PositionRosterAssetHandlers } from '@/features/roster/PositionRosterAssetSections'
-import type { WorkspacePositionMeta } from '@/features/roster/workspace-positions'
+import type { WorkspacePositionMeta, WorkspacePositionCatalog } from '@/features/roster/workspace-positions'
 import {
   ORG_CHART_CARD_LAYER_CLASS,
   ORG_CHART_POSITION_CARD_MAX_WIDTH,
@@ -101,6 +101,14 @@ type PositionRosterCardProps = {
   removalBlockedReason?: string | null
   isRemovingFromRoster?: boolean
   onRemoveFromRoster?: () => void
+  positionCatalog?: WorkspacePositionCatalog
+  isUpdatingPositionIdentity?: boolean
+  onSaveCustomPosition?: (input: {
+    positionId: string
+    currentName: string
+    name?: string
+    reportsTo?: string
+  }) => void | Promise<void>
 } & Partial<PositionRosterAssetHandlers>
 
 export function PositionRosterCard({
@@ -162,6 +170,9 @@ export function PositionRosterCard({
   removalBlockedReason = null,
   isRemovingFromRoster = false,
   onRemoveFromRoster,
+  positionCatalog,
+  isUpdatingPositionIdentity = false,
+  onSaveCustomPosition,
 }: PositionRosterCardProps) {
   const [orgModalOpen, setOrgModalOpen] = useState(false)
   const leaderEmail = entry.members[0]?.email ?? null
@@ -214,6 +225,9 @@ export function PositionRosterCard({
     onRemoveScheduledAssignAsset,
     onRemoveScheduledUnassignAsset,
     onUpdateAssetPointOfContact,
+    positionCatalog,
+    isUpdatingPositionIdentity,
+    onSaveCustomPosition,
   }
 
   if (isOrg) {

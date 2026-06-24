@@ -55,7 +55,7 @@ import {
 } from '@/features/roster/roster-org-chart-sections'
 import type { WorkspacePositionType } from '@/features/roster/workspace-position-type'
 import { SingleResourceOrgChartCard } from '@/features/roster/SingleResourceOrgChartCard'
-import type { WorkspaceOrgChartLayout, WorkspacePositionMeta } from '@/features/roster/workspace-positions'
+import type { WorkspaceOrgChartLayout, WorkspacePositionMeta, WorkspacePositionCatalog } from '@/features/roster/workspace-positions'
 
 import {
   rosterOrgCommandStaffCrossbarClassName,
@@ -144,6 +144,22 @@ type WorkspaceOrgChartRosterProps = {
     positionType: WorkspacePositionType | null,
     customTypeLabel: string | null
   ) => void
+  positionCatalog?: WorkspacePositionCatalog
+  isUpdatingPositionIdentity?: string | null
+  onSaveCustomPosition?: (input: {
+    positionId: string
+    currentName: string
+    name?: string
+    reportsTo?: string
+  }) => void | Promise<void>
+  isSavingAssetOrgChartPlacement?: boolean
+  onAssetOrgChartPlacementChange?: (assetKey: string, reportsTo: string | null) => void
+  isUpdatingSingleResourcePlacement?: string | null
+  onSingleResourceOrgChartPlacementChange?: (
+    memberId: string,
+    reportsTo: string,
+    scheduled: boolean
+  ) => void
   exportMode?: boolean
 } & Partial<PositionRosterAssetHandlers>
 
@@ -207,6 +223,14 @@ type OrgChartRenderProps = {
     positionType: WorkspacePositionType | null,
     customTypeLabel: string | null
   ) => void
+  positionCatalog?: WorkspacePositionCatalog
+  isUpdatingPositionIdentity?: string | null
+  onSaveCustomPosition?: (input: {
+    positionId: string
+    currentName: string
+    name?: string
+    reportsTo?: string
+  }) => void | Promise<void>
   exportMode?: boolean
   onOpenOrgChartAssetDetail: (assetKey: string) => void
   onOpenSingleResourceDetail: (memberId: string) => void
@@ -536,6 +560,9 @@ function PositionNode({
   canRemovePositionFromRoster,
   positionRemovalBlockedReason,
   onPositionTypeChange,
+  positionCatalog,
+  isUpdatingPositionIdentity,
+  onSaveCustomPosition,
   onOpenOrgChartAssetDetail,
   onOpenSingleResourceDetail,
   competencyOptions,
@@ -616,6 +643,9 @@ function PositionNode({
     canRemovePositionFromRoster,
     positionRemovalBlockedReason,
     onPositionTypeChange,
+    positionCatalog,
+    isUpdatingPositionIdentity,
+    onSaveCustomPosition,
     onOpenOrgChartAssetDetail,
     onOpenSingleResourceDetail,
     competencyOptions,
@@ -713,6 +743,9 @@ function PositionNode({
                 ? () => onRemovePositionFromRoster(position)
                 : undefined
             }
+            positionCatalog={positionCatalog}
+            isUpdatingPositionIdentity={isUpdatingPositionIdentity === position}
+            onSaveCustomPosition={onSaveCustomPosition}
           />
         </OrgChartCardAnchor>
       ) : (
@@ -783,6 +816,9 @@ function PositionNode({
               ? () => onRemovePositionFromRoster(position)
               : undefined
           }
+          positionCatalog={positionCatalog}
+          isUpdatingPositionIdentity={isUpdatingPositionIdentity === position}
+          onSaveCustomPosition={onSaveCustomPosition}
         />
       )}
       {!suppressChildren ? (
@@ -1132,6 +1168,13 @@ export function WorkspaceOrgChartRoster({
   canRemovePositionFromRoster,
   positionRemovalBlockedReason,
   onPositionTypeChange,
+  positionCatalog,
+  isUpdatingPositionIdentity = null,
+  onSaveCustomPosition,
+  isSavingAssetOrgChartPlacement = false,
+  onAssetOrgChartPlacementChange,
+  isUpdatingSingleResourcePlacement = null,
+  onSingleResourceOrgChartPlacementChange,
   exportMode = false,
 }: WorkspaceOrgChartRosterProps) {
   const [selectedAssetKey, setSelectedAssetKey] = useState<string | null>(null)
@@ -1235,6 +1278,9 @@ export function WorkspaceOrgChartRoster({
     canRemovePositionFromRoster,
     positionRemovalBlockedReason,
     onPositionTypeChange,
+    positionCatalog,
+    isUpdatingPositionIdentity,
+    onSaveCustomPosition,
     exportMode,
     onOpenOrgChartAssetDetail: exportMode ? () => undefined : setSelectedAssetKey,
     onOpenSingleResourceDetail: exportMode ? () => undefined : setSelectedSingleResourceMemberId,
@@ -1407,6 +1453,20 @@ export function WorkspaceOrgChartRoster({
                     })
                 : undefined
             }
+            orgChartReportsTo={
+              selectedAsset.pendingOrgChartReportsTo ?? selectedAsset.orgChartReportsTo
+            }
+            positionCatalog={positionCatalog}
+            isSavingOrgChartPlacement={isSavingAssetOrgChartPlacement}
+            onOrgChartPlacementChange={
+              canManageRoster && onAssetOrgChartPlacementChange
+                ? (reportsTo) => {
+                    if (reportsTo) {
+                      onAssetOrgChartPlacementChange(selectedAsset.assetKey, reportsTo)
+                    }
+                  }
+                : undefined
+            }
           />
         ) : null}
       </OrgChartNodeDetailDialog>
@@ -1424,6 +1484,18 @@ export function WorkspaceOrgChartRoster({
             member={selectedSingleResourceMember}
             scheduled={Boolean(selectedSingleResourceMember.pendingOrgChartReportsTo)}
             canManage={canManageRoster}
+            catalog={positionCatalog}
+            isUpdatingPlacement={isUpdatingSingleResourcePlacement === selectedSingleResourceMember.id}
+            onOrgChartPlacementChange={
+              canManageRoster && onSingleResourceOrgChartPlacementChange && positionCatalog
+                ? (reportsTo) =>
+                    onSingleResourceOrgChartPlacementChange(
+                      selectedSingleResourceMember.id,
+                      reportsTo,
+                      Boolean(selectedSingleResourceMember.pendingOrgChartReportsTo)
+                    )
+                : undefined
+            }
             showCheckInStatus={showCheckInStatus}
             canEditCheckInStatus={canEditCheckInStatus}
             updatingCheckInMemberId={updatingCheckInMemberId}

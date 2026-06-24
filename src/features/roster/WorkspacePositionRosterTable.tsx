@@ -108,6 +108,13 @@ type WorkspacePositionRosterTableProps = {
   pocMembers?: WorkspaceRosterMember[]
   assetsByKey?: Record<string, ResourceListItemData>
   onFocusAsset?: (asset: ResourceListItemData) => void
+  isUpdatingPositionIdentity?: string | null
+  onSaveCustomPosition?: (input: {
+    positionId: string
+    currentName: string
+    name?: string
+    reportsTo?: string
+  }) => void | Promise<void>
 } & Partial<PositionRosterAssetHandlers>
 
 function AssignedMembersList({
@@ -257,6 +264,8 @@ export function WorkspacePositionRosterTable({
   onRemoveScheduledAssignAsset,
   onRemoveScheduledUnassignAsset,
   onUpdateAssetPointOfContact,
+  isUpdatingPositionIdentity = null,
+  onSaveCustomPosition,
 }: WorkspacePositionRosterTableProps) {
   const tableColumnCount =
     3 +
@@ -645,6 +654,11 @@ export function WorkspacePositionRosterTable({
                   onRemoveScheduledUnassignAsset={onRemoveScheduledUnassignAsset}
                   onUpdateAssetPointOfContact={onUpdateAssetPointOfContact}
                   hidePositionTitle
+                  positionCatalog={positionCatalog}
+                  isUpdatingPositionIdentity={
+                    isUpdatingPositionIdentity === managedEntry.position
+                  }
+                  onSaveCustomPosition={onSaveCustomPosition}
                   canRemoveFromRoster={canRemovePositionFromRoster?.(managedEntry) ?? false}
                   removalBlockedReason={positionRemovalBlockedReason?.(managedEntry) ?? null}
                   isRemovingFromRoster={isDeletingCustomPosition === managedEntry.position}

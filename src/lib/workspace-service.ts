@@ -779,6 +779,40 @@ export async function updateRosterMemberCheckInStatus(params: {
   }
 }
 
+export async function updateSingleResourceOrgChartPlacement(params: {
+  accessToken: string
+  workspaceId: string
+  memberId: string
+  orgChartReportsTo: string
+  scheduled?: boolean
+}): Promise<{ ok: true } | { ok: false; message: string }> {
+  if (!isSupabaseConfigured) {
+    return { ok: false, message: 'Supabase is not configured.' }
+  }
+
+  const response = await fetch('/api/update-single-resource-org-chart-placement', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${params.accessToken}`,
+    },
+    body: JSON.stringify({
+      workspaceId: params.workspaceId,
+      memberId: params.memberId,
+      orgChartReportsTo: params.orgChartReportsTo,
+      scheduled: params.scheduled === true,
+    }),
+  })
+
+  const payload = (await response.json().catch(() => ({}))) as { error?: string }
+
+  if (!response.ok) {
+    return { ok: false, message: payload.error ?? 'Could not update org chart placement.' }
+  }
+
+  return { ok: true }
+}
+
 export async function updateWorkspaceAssetCheckInStatusRemote(params: {
   accessToken: string
   workspaceId: string

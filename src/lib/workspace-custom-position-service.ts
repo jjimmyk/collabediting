@@ -4,6 +4,7 @@ import {
   validateCustomPositionName,
   validateReportsToPosition,
   buildWorkspacePositionCatalog,
+  wouldCreatePositionCycle,
 } from '@/features/roster/workspace-positions'
 import { getSupabaseClient, isSupabaseConfigured } from '@/lib/supabase'
 
@@ -137,6 +138,130 @@ export async function createWorkspaceCustomPosition(params: {
   }
 
   return mapRow(data as DbWorkspaceCustomPositionRow)
+}
+
+function applyLocalCustomPositionRename(
+  workspaceId: string,
+  existing: WorkspaceCustomPosition[],
+  oldName: string,
+  newName: string
+): WorkspaceCustomPosition[] {
+  return existing.map((row) => {
+    if (row.name === oldName) {
+      return { ...row, name: newName }
+    }
+    if (row.reportsTo === oldName) {
+      return { ...row, reportsTo: newName }
+    }
+    return row
+  })
+}
+
+export async function updateWorkspaceCustomPosition(params: {
+  workspaceId: string
+  positionId: string
+  name?: string
+  reportsTo?: string
+  accessToken?: string | null
+  existingCustomPositions?: WorkspaceCustomPosition[]
+}): Promise<{ position: WorkspaceCustomPosition; renamedFrom: string | null }> {
+  const existing = params.existingCustomPositions ?? (await fetchWorkspaceCustomPositions(params.workspaceId))
+  const target = existing.find((row) => row.id === params.positionId)
+  if (!target) {
+    throw new Error('Custom position not found.')
+  }
+
+  const catalog = buildWorkspacePositionCatalog(existing)
+  const nextName =
+    params.name !== undefined ? normalizePositionName(params.name) : target.name
+  const nextReportsTo =
+    params.reportsTo !== undefined ? normalizePositionName(params.reportsTo) : target.reportsTo
+
+  if (nextName === target.name && nextReportsTo === target.reportsTo) {
+    return { position: target, renamedFrom: null }
+  }
+
+  if (params.name !== undefined && nextName !== target.name) {
+    const nameError = validateCustomPositionName(nextName, catalog, params.positionId)
+    if (nameError) {
+      throw new Error(nameError)
+    }
+  }
+
+  const reportsToError = validateReportsToPosition(nextReportsTo, catalog, nextName)
+  if (reportsToError) {
+    throw new Error(reportsToError)
+  }
+
+  const draftPositions = existing.map((row) =>
+    row.id === params.positionId ? { ...row, name: nextName, reportsTo: nextReportsTo } : row
+  )
+  if (wouldCreatePositionCycle(draftPositions, nextName, nextReportsTo)) {
+    throw new Error('That reports-to choice would create a circular hierarchy.')
+  }
+
+  if (!isSupabaseConfigured) {
+    let nextRows = existing.map((row) =>
+      row.id === params.positionId ? { ...row, name: nextName, reportsTo: nextReportsTo } : row
+    )
+    if (nextName !== target.name) {
+      nextRows = applyLocalCustomPositionRename(params.workspaceId, nextRows, target.name, nextName)
+    }
+    const all = readLocalCustomPositions()
+    all[params.workspaceId] = nextRows
+    writeLocalCustomPositions(all)
+    const updated = nextRows.find((row) => row.id === params.positionId)
+    if (!updated) {
+      throw new Error('Could not update custom position.')
+    }
+    return { position: updated, renamedFrom: nextName !== target.name ? target.name : null }
+  }
+
+  if (!params.accessToken) {
+    throw new Error('Sign in again to update positions.')
+  }
+
+  const response = await fetch('/api/update-custom-position', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${params.accessToken}`,
+    },
+    body: JSON.stringify({
+      workspaceId: params.workspaceId,
+      positionId: params.positionId,
+      ...(params.name !== undefined ? { name: nextName } : {}),
+      ...(params.reportsTo !== undefined ? { reportsTo: nextReportsTo } : {}),
+    }),
+  })
+
+  const payload = (await response.json().catch(() => ({}))) as {
+    error?: string
+    position?: WorkspaceCustomPosition & { reportsTo?: string }
+    renamedFrom?: string | null
+  }
+
+  if (!response.ok) {
+    throw new Error(payload.error ?? 'Could not update custom position.')
+  }
+
+  const row = payload.position
+  if (!row) {
+    throw new Error('Could not update custom position.')
+  }
+
+  return {
+    position: {
+      id: row.id,
+      name: row.name,
+      reportsTo: row.reportsTo ?? nextReportsTo,
+      sortOrder: row.sortOrder,
+      lifecycleStatus: row.lifecycleStatus,
+      archivedAt: row.archivedAt,
+      activatedAt: row.activatedAt,
+    },
+    renamedFrom: payload.renamedFrom ?? (nextName !== target.name ? target.name : null),
+  }
 }
 
 export async function deleteWorkspaceCustomPosition(params: {

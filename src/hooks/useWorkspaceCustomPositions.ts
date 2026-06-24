@@ -10,6 +10,7 @@ import {
   createWorkspaceCustomPosition,
   deleteWorkspaceCustomPosition,
   fetchWorkspaceCustomPositions,
+  updateWorkspaceCustomPosition,
   updateWorkspaceCustomPositionLifecycleStatus,
 } from '@/lib/workspace-custom-position-service'
 
@@ -19,6 +20,7 @@ type UseWorkspaceCustomPositionsOptions = {
   localWorkspaceKey?: string | null
   userId: string | null
   standardLifecycle?: StandardPositionLifecycleRow[]
+  getAccessToken?: () => Promise<string | null>
 }
 
 export function useWorkspaceCustomPositions({
@@ -27,6 +29,7 @@ export function useWorkspaceCustomPositions({
   localWorkspaceKey,
   userId,
   standardLifecycle = [],
+  getAccessToken,
 }: UseWorkspaceCustomPositionsOptions) {
   const [customPositions, setCustomPositions] = useState<WorkspaceCustomPosition[]>([])
   const [isLoading, setIsLoading] = useState(false)
@@ -143,6 +146,40 @@ export function useWorkspaceCustomPositions({
     [customPositions, storageKey]
   )
 
+  const updateCustomPosition = useCallback(
+    async (
+      positionId: string,
+      input: { name?: string; reportsTo?: string }
+    ): Promise<{ position: WorkspaceCustomPosition; renamedFrom: string | null }> => {
+      if (!storageKey) {
+        throw new Error('Workspace is not available.')
+      }
+      const accessToken = getAccessToken ? await getAccessToken() : null
+      const result = await updateWorkspaceCustomPosition({
+        workspaceId: storageKey,
+        positionId,
+        name: input.name,
+        reportsTo: input.reportsTo,
+        accessToken,
+        existingCustomPositions: customPositions,
+      })
+      setCustomPositions((previous) => {
+        let next = previous.map((row) => (row.id === result.position.id ? result.position : row))
+        if (result.renamedFrom) {
+          next = next.map((row) =>
+            row.reportsTo === result.renamedFrom ? { ...row, reportsTo: result.position.name } : row
+          )
+        }
+        return next.sort((a, b) => {
+          if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder
+          return a.name.localeCompare(b.name)
+        })
+      })
+      return result
+    },
+    [customPositions, getAccessToken, storageKey]
+  )
+
   return {
     customPositions,
     catalog,
@@ -151,6 +188,7 @@ export function useWorkspaceCustomPositions({
     addCustomPosition,
     setCustomPositionLifecycleStatus,
     removeCustomPosition,
+    updateCustomPosition,
     reload: async () => {
       if (!storageKey) return
       const rows = await fetchWorkspaceCustomPositions(storageKey)

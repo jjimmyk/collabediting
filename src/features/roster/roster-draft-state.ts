@@ -146,6 +146,62 @@ export function addDraftCustomPosition(
   }
 }
 
+export function updateDraftCustomPosition(
+  draft: BuildTeamRosterDraft,
+  positionId: string,
+  input: { name?: string; reportsTo?: string }
+): BuildTeamRosterDraft {
+  const target = draft.customPositions.find((position) => position.id === positionId)
+  if (!target) {
+    return draft
+  }
+
+  const nextName = input.name?.trim() ?? target.name
+  const nextReportsTo = input.reportsTo ?? target.reportsTo
+  const oldName = target.name
+
+  let customPositions = draft.customPositions.map((position) =>
+    position.id === positionId
+      ? { ...position, name: nextName, reportsTo: nextReportsTo }
+      : position
+  )
+
+  if (oldName !== nextName) {
+    customPositions = customPositions.map((position) =>
+      position.reportsTo === oldName ? { ...position, reportsTo: nextName } : position
+    )
+  }
+
+  const positionSettings = { ...draft.positionSettings }
+  if (oldName !== nextName && positionSettings[oldName]) {
+    positionSettings[nextName] = positionSettings[oldName]
+    delete positionSettings[oldName]
+  }
+
+  const draftMembers = draft.draftMembers.map((member) => {
+    let nextMember = member
+    if (member.orgChartReportsTo === oldName) {
+      nextMember = { ...nextMember, orgChartReportsTo: nextName }
+    }
+    if (oldName !== nextName && member.icsPositions.includes(oldName)) {
+      nextMember = {
+        ...nextMember,
+        icsPositions: member.icsPositions.map((position) =>
+          position === oldName ? nextName : position
+        ),
+      }
+    }
+    return nextMember
+  })
+
+  return {
+    ...draft,
+    customPositions,
+    positionSettings,
+    draftMembers,
+  }
+}
+
 export function addDraftMember(
   draft: BuildTeamRosterDraft,
   member: Omit<BuildTeamDraftMember, 'id'>

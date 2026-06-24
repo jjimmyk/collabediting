@@ -5,7 +5,10 @@ import type {
   PositionOpAdvanceLabel,
   StandardPositionLifecycleRow,
 } from '@/lib/operational-period-roster-types'
-import type { OrgChartNode } from '@/features/roster/ics-org-chart-structure'
+import {
+  resolveStandardPositionReportsTo,
+  type OrgChartNode,
+} from '@/features/roster/ics-org-chart-structure'
 
 export type WorkspaceCustomPosition = {
   id: string
@@ -313,6 +316,21 @@ export function canAssignMembersToPosition(
 
 export function buildReportsToOptions(catalog: WorkspacePositionCatalog): string[] {
   return [...catalog.orgChartPositionNames].sort((a, b) => a.localeCompare(b))
+}
+
+export function resolvePositionReportsTo(
+  positionName: string,
+  catalog: WorkspacePositionCatalog
+): string | null {
+  const normalized = normalizePositionName(positionName)
+  const meta = catalog.positionMetaByName[normalized]
+  if (!meta) {
+    return null
+  }
+  if (meta.source === 'custom') {
+    return meta.reportsTo ?? null
+  }
+  return resolveStandardPositionReportsTo(normalized)
 }
 
 export function canSetOpAdvanceLabelForPosition(

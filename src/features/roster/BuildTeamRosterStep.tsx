@@ -23,6 +23,7 @@ import {
 import {
   applyTemplateToBuildTeamDraft,
   hasNonCreatorBuildTeamDraftEdits,
+  updateDraftCustomPosition,
 } from '@/features/roster/roster-draft-state'
 import { ROSTER_TEMPLATE_CATALOG } from '@/features/roster/roster-template-catalog'
 import type { BuildTeamRosterDraft } from '@/features/roster/roster-template-types'
@@ -187,6 +188,18 @@ export function BuildTeamRosterStep({
     [draft, onDraftChange]
   )
 
+  const handleSaveCustomPosition = useCallback(
+    async (input: {
+      positionId: string
+      currentName: string
+      name?: string
+      reportsTo?: string
+    }) => {
+      onDraftChange(updateDraftCustomPosition(draft, input.positionId, input))
+    },
+    [draft, onDraftChange]
+  )
+
   const handlePositionTypeChange = useCallback(
     (
       position: string,
@@ -344,6 +357,8 @@ export function BuildTeamRosterStep({
             }}
             onUnassignMember={() => undefined}
             onPositionTypeChange={handlePositionTypeChange}
+            positionCatalog={catalog}
+            onSaveCustomPosition={handleSaveCustomPosition}
             competencyOptions={draftCompetencyOptions}
             canEditCompetencyFunction
             onSingleResourceCompetencyFunctionChange={handleSingleResourceCompetencyFunctionChange}
@@ -364,6 +379,8 @@ export function BuildTeamRosterStep({
             positionMetaByName={catalog.positionMetaByName}
             onToggleEditIcs201={() => undefined}
             onPositionTypeChange={handlePositionTypeChange}
+            isUpdatingPositionIdentity={null}
+            onSaveCustomPosition={handleSaveCustomPosition}
             onAssignExistingMember={() => undefined}
             onScheduleAssignMember={() => undefined}
             onScheduleUnassignMember={() => undefined}

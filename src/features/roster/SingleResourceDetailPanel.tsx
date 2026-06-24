@@ -1,14 +1,20 @@
+import { useEffect, useState } from 'react'
 import { Trash2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { CompetencyFunctionSelect } from '@/features/roster/CompetencyFunctionSelect'
+import { OrgChartReportsToField } from '@/features/roster/OrgChartReportsToField'
+import type { WorkspacePositionCatalog } from '@/features/roster/workspace-positions'
 import type { WorkspaceMemberCheckInStatus, WorkspaceRosterMember } from '@/lib/workspace-types'
 
 type SingleResourceDetailPanelProps = {
   member: WorkspaceRosterMember
   scheduled?: boolean
   canManage?: boolean
+  catalog?: WorkspacePositionCatalog
+  isUpdatingPlacement?: boolean
+  onOrgChartPlacementChange?: (reportsTo: string) => void | Promise<void>
   showCheckInStatus?: boolean
   canEditCheckInStatus?: boolean
   updatingCheckInMemberId?: string | null
@@ -30,6 +36,9 @@ export function SingleResourceDetailPanel({
   member,
   scheduled = false,
   canManage = false,
+  catalog,
+  isUpdatingPlacement = false,
+  onOrgChartPlacementChange,
   showCheckInStatus = false,
   canEditCheckInStatus = false,
   updatingCheckInMemberId = null,
@@ -41,6 +50,12 @@ export function SingleResourceDetailPanel({
   onRemoveFromOrgChart,
 }: SingleResourceDetailPanelProps) {
   const reportsTo = member.orgChartReportsTo ?? member.pendingOrgChartReportsTo
+  const [reportsToDraft, setReportsToDraft] = useState(reportsTo ?? '')
+  const canEditReportsTo = canManage && Boolean(catalog) && Boolean(onOrgChartPlacementChange)
+
+  useEffect(() => {
+    setReportsToDraft(reportsTo ?? '')
+  }, [reportsTo])
 
   return (
     <div className="space-y-4">
@@ -50,7 +65,19 @@ export function SingleResourceDetailPanel({
           <Badge variant="outline">Single resource</Badge>
           {scheduled ? <Badge variant="secondary">Next OP</Badge> : null}
         </div>
-        {reportsTo ? (
+        {catalog ? (
+          <OrgChartReportsToField
+            id={`single-resource-reports-to-${member.id}`}
+            value={canEditReportsTo ? reportsToDraft : (reportsTo ?? null)}
+            catalog={catalog}
+            editable={canEditReportsTo}
+            disabled={isUpdatingPlacement}
+            onValueChange={(nextValue) => {
+              setReportsToDraft(nextValue)
+              void onOrgChartPlacementChange?.(nextValue)
+            }}
+          />
+        ) : reportsTo ? (
           <p className="text-sm text-muted-foreground">Reports to {reportsTo}</p>
         ) : null}
         <p className="text-xs text-muted-foreground">

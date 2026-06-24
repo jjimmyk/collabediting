@@ -16,7 +16,8 @@ import type { PositionRosterAssetHandlers } from '@/features/roster/PositionRost
 import { PositionRosterUnifiedAssignmentSections } from '@/features/roster/PositionRosterAssignmentSections'
 import type { PositionRosterUnifiedAssignmentSectionsProps } from '@/features/roster/PositionRosterAssignmentSections'
 import type { ResourceListItemData } from '@/features/resources/types'
-import type { WorkspacePositionMeta } from '@/features/roster/workspace-positions'
+import type { WorkspacePositionMeta, WorkspacePositionCatalog } from '@/features/roster/workspace-positions'
+import { PositionIdentitySection } from '@/features/roster/PositionIdentitySection'
 
 type PositionRosterDetailPanelProps = {
   entry: PositionRosterEntry
@@ -72,6 +73,14 @@ type PositionRosterDetailPanelProps = {
   isRemovingFromRoster?: boolean
   onRemoveFromRoster?: () => void
   hidePositionTitle?: boolean
+  positionCatalog?: WorkspacePositionCatalog
+  isUpdatingPositionIdentity?: boolean
+  onSaveCustomPosition?: (input: {
+    positionId: string
+    currentName: string
+    name?: string
+    reportsTo?: string
+  }) => void | Promise<void>
 } & Partial<PositionRosterAssetHandlers>
 
 export function PositionRosterDetailPanel({
@@ -131,6 +140,9 @@ export function PositionRosterDetailPanel({
   isRemovingFromRoster = false,
   onRemoveFromRoster,
   hidePositionTitle = false,
+  positionCatalog,
+  isUpdatingPositionIdentity = false,
+  onSaveCustomPosition,
 }: PositionRosterDetailPanelProps) {
   const assetsHandlersReady = Boolean(
     onAssignAsset &&
@@ -147,7 +159,9 @@ export function PositionRosterDetailPanel({
       <div className="space-y-1.5">
         {hidePositionTitle ? null : (
           <>
-            <p className="text-sm font-medium">{entry.position}</p>
+            {entry.isCustom && canManageRoster && positionMeta?.customPositionId ? null : (
+              <p className="text-sm font-medium">{entry.position}</p>
+            )}
             <PositionLifecycleBadges entry={entry} />
             <p className="text-xs text-muted-foreground">
               {canManageRoster
@@ -156,6 +170,17 @@ export function PositionRosterDetailPanel({
             </p>
           </>
         )}
+        {positionCatalog ? (
+          <PositionIdentitySection
+            entry={entry}
+            catalog={positionCatalog}
+            positionMeta={positionMeta}
+            canManageRoster={canManageRoster}
+            isSaving={isUpdatingPositionIdentity}
+            hideTitle={hidePositionTitle}
+            onSaveCustomPosition={onSaveCustomPosition}
+          />
+        ) : null}
         {entry.isPlanned ? (
           <p className="text-[11px] text-muted-foreground">
             This position activates on the next operational period. Schedule users and assets for

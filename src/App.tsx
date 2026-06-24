@@ -212,6 +212,7 @@ import {
   setWorkspacePositionEditIcs201,
   setWorkspacePositionType,
   updateRosterMemberCheckInStatus,
+  updateSingleResourceOrgChartPlacement,
   updateWorkspaceAssetCheckInStatusRemote,
   updateRosterMemberPositions,
   updateWorkspace,
@@ -9121,6 +9122,10 @@ function App() {
   const [isCreatingOrganizationAsset, setIsCreatingOrganizationAsset] = useState(false)
   const [isSavingAssetOrgChartPlacement, setIsSavingAssetOrgChartPlacement] = useState(false)
   const [isSavingCustomPosition, setIsSavingCustomPosition] = useState(false)
+  const [updatingCustomPositionName, setUpdatingCustomPositionName] = useState<string | null>(null)
+  const [isUpdatingSingleResourcePlacement, setIsUpdatingSingleResourcePlacement] = useState<
+    string | null
+  >(null)
   const [deletingCustomPosition, setDeletingCustomPosition] = useState<string | null>(null)
   const [updatingOpAdvanceLabelPosition, setUpdatingOpAdvanceLabelPosition] = useState<
     string | null
@@ -12376,6 +12381,7 @@ function App() {
     addCustomPosition,
     setCustomPositionLifecycleStatus,
     removeCustomPosition,
+    updateCustomPosition,
     reload: reloadCustomPositions,
   } = useWorkspaceCustomPositions({
     enabled: isInIncidentWorkspace || isInExerciseWorkspace,
@@ -12383,6 +12389,7 @@ function App() {
     localWorkspaceKey: activeWorkspaceRosterKey,
     userId: user?.id ?? null,
     standardLifecycle: effectiveStandardLifecycle,
+    getAccessToken,
   })
   const activeWorkspaceRoster = isSupabaseEnabled
     ? supabaseWorkspaceRoster
@@ -16693,6 +16700,128 @@ function App() {
       toast.success(`Added position "${created.name}".`)
     } finally {
       setIsSavingCustomPosition(false)
+    }
+  }
+  const applyLocalPositionRename = (oldName: string, newName: string) => {
+    if (activeWorkspaceRosterKey === null) return
+
+    setLocalPositionPermissionsByKey((previous) => {
+      const current = previous[activeWorkspaceRosterKey] ?? {}
+      if (!current[oldName]) return previous
+      const next = { ...current, [newName]: current[oldName] }
+      delete next[oldName]
+      return { ...previous, [activeWorkspaceRosterKey]: next }
+    })
+
+    setLocalPositionSettingsByKey((previous) => {
+      const current = previous[activeWorkspaceRosterKey] ?? {}
+      if (!current[oldName]) return previous
+      const next = { ...current, [newName]: current[oldName] }
+      delete next[oldName]
+      return { ...previous, [activeWorkspaceRosterKey]: next }
+    })
+
+    setLocalWorkspaceRostersByKey((previous) => ({
+      ...previous,
+      [activeWorkspaceRosterKey]: (previous[activeWorkspaceRosterKey] ?? []).map((member) => ({
+        ...member,
+        orgChartReportsTo:
+          member.orgChartReportsTo === oldName ? newName : member.orgChartReportsTo,
+        pendingOrgChartReportsTo:
+          member.pendingOrgChartReportsTo === oldName
+            ? newName
+            : member.pendingOrgChartReportsTo,
+        icsPositions: member.icsPositions.map((position) =>
+          position === oldName ? newName : position
+        ),
+      })),
+    }))
+  }
+  const handleSaveCustomPosition = async (input: {
+    positionId: string
+    currentName: string
+    name?: string
+    reportsTo?: string
+  }) => {
+    setUpdatingCustomPositionName(input.currentName)
+    try {
+      const result = await updateCustomPosition(input.positionId, {
+        name: input.name,
+        reportsTo: input.reportsTo,
+      })
+
+      if (result.renamedFrom && activeWorkspaceRosterKey !== null && !isSupabaseEnabled) {
+        applyLocalPositionRename(result.renamedFrom, result.position.name)
+      }
+
+      if (isSupabaseEnabled && activeWorkspaceSupabaseId) {
+        const [permissions, settings, roster] = await Promise.all([
+          fetchWorkspacePositionPermissions(activeWorkspaceSupabaseId),
+          fetchWorkspacePositionSettings(activeWorkspaceSupabaseId),
+          fetchWorkspaceRoster(activeWorkspaceSupabaseId),
+        ])
+        setActiveWorkspacePositionPermissions(permissions)
+        setActiveWorkspacePositionSettings(settings)
+        setSupabaseWorkspaceRoster(roster)
+        await refreshAssignments()
+      }
+
+      toast.success('Position updated.')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not update position.')
+      throw error
+    } finally {
+      setUpdatingCustomPositionName(null)
+    }
+  }
+  const handleSingleResourceOrgChartPlacementChange = async (
+    memberId: string,
+    orgChartReportsTo: string,
+    scheduled: boolean
+  ) => {
+    setIsUpdatingSingleResourcePlacement(memberId)
+    try {
+      if (isSupabaseEnabled && activeWorkspaceSupabaseId) {
+        const accessToken = await getAccessToken()
+        if (!accessToken) {
+          throw new Error('Sign in again to update org chart placement.')
+        }
+        const result = await updateSingleResourceOrgChartPlacement({
+          accessToken,
+          workspaceId: activeWorkspaceSupabaseId,
+          memberId,
+          orgChartReportsTo,
+          scheduled,
+        })
+        if (!result.ok) {
+          throw new Error(result.message)
+        }
+        const roster = await fetchWorkspaceRoster(activeWorkspaceSupabaseId)
+        setSupabaseWorkspaceRoster(roster)
+      } else if (activeWorkspaceRosterKey !== null) {
+        setLocalWorkspaceRostersByKey((previous) => ({
+          ...previous,
+          [activeWorkspaceRosterKey]: (previous[activeWorkspaceRosterKey] ?? []).map((member) => {
+            if (member.id !== memberId) return member
+            if (scheduled) {
+              return { ...member, pendingOrgChartReportsTo: orgChartReportsTo }
+            }
+            return {
+              ...member,
+              orgChartReportsTo,
+              pendingOrgChartReportsTo: null,
+            }
+          }),
+        }))
+      }
+      toast.success('Org chart placement updated.')
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : 'Could not update org chart placement.'
+      )
+      throw error
+    } finally {
+      setIsUpdatingSingleResourcePlacement(null)
     }
   }
   const handleOpAdvanceLabelChange = async (
@@ -30136,6 +30265,23 @@ function App() {
                       onPositionTypeChange={(position, positionType, customTypeLabel) => {
                         void handleUpdatePositionType(position, positionType, customTypeLabel)
                       }}
+                      positionCatalog={workspacePositionCatalog}
+                      isUpdatingPositionIdentity={updatingCustomPositionName}
+                      onSaveCustomPosition={(input) => {
+                        void handleSaveCustomPosition(input)
+                      }}
+                      isSavingAssetOrgChartPlacement={isSavingAssetOrgChartPlacement}
+                      onAssetOrgChartPlacementChange={(assetKey, reportsTo) => {
+                        void handleAssetOrgChartPlacementChange(assetKey, reportsTo)
+                      }}
+                      isUpdatingSingleResourcePlacement={isUpdatingSingleResourcePlacement}
+                      onSingleResourceOrgChartPlacementChange={(memberId, reportsTo, scheduled) => {
+                        void handleSingleResourceOrgChartPlacementChange(
+                          memberId,
+                          reportsTo,
+                          scheduled
+                        )
+                      }}
                     />
                         </div>
                       ) : (
@@ -30196,6 +30342,10 @@ function App() {
                       positionRemovalBlockedReason={positionRemovalBlockedReason}
                       onPositionTypeChange={(position, positionType, customTypeLabel) => {
                         void handleUpdatePositionType(position, positionType, customTypeLabel)
+                      }}
+                      isUpdatingPositionIdentity={updatingCustomPositionName}
+                      onSaveCustomPosition={(input) => {
+                        void handleSaveCustomPosition(input)
                       }}
                       onDeleteCustomPosition={(position) => {
                         void handleDeleteCustomPosition(position)

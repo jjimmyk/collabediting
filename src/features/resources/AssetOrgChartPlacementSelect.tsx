@@ -1,11 +1,5 @@
 import { Label } from '@/components/ui/label'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
+import { SearchableSelect } from '@/components/ui/searchable-select'
 import {
   buildAssetOrgChartReportsToOptions,
   orgChartSelectValue,
@@ -26,29 +20,26 @@ export function AssetOrgChartPlacementSelect({
   disabled = false,
   onChange,
 }: AssetOrgChartPlacementSelectProps) {
-  const options = buildAssetOrgChartReportsToOptions(catalog)
+  const options = buildAssetOrgChartReportsToOptions(catalog).map((option) => ({
+    value: option.value,
+    label: option.label,
+  }))
 
   return (
     <div className="space-y-1">
       <Label className="text-[11px] text-muted-foreground">Org chart placement</Label>
-      <Select
+      <SearchableSelect
         value={orgChartSelectValue(value)}
-        disabled={disabled}
         onValueChange={(nextValue) => {
           onChange(orgChartValueToReportsTo(nextValue))
         }}
-      >
-        <SelectTrigger className="h-8 text-xs">
-          <SelectValue placeholder="Not on org chart" />
-        </SelectTrigger>
-        <SelectContent>
-          {options.map((option) => (
-            <SelectItem key={option.value} value={option.value}>
-              {option.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+        options={options}
+        placeholder="Not on org chart"
+        searchPlaceholder="Search positions…"
+        emptyMessage="No positions found."
+        disabled={disabled}
+        triggerClassName="h-8 text-xs"
+      />
     </div>
   )
 }

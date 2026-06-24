@@ -8,6 +8,8 @@ import {
   PositionAssetRow,
 } from '@/features/roster/PositionRosterAssetSections'
 import { CompetencyFunctionSelect } from '@/features/roster/CompetencyFunctionSelect'
+import { AssetOrgChartPlacementSelect } from '@/features/resources/AssetOrgChartPlacementSelect'
+import type { WorkspacePositionCatalog } from '@/features/roster/workspace-positions'
 import type { PositionAssetRosterEntry } from '@/lib/workspace-position-asset-types'
 import type { WorkspaceRosterMember } from '@/lib/workspace-types'
 
@@ -33,6 +35,10 @@ type RosterAssetResourceListItemProps = {
   open?: boolean
   onOpenChange?: (open: boolean) => void
   variant?: 'default' | 'orgChart'
+  orgChartReportsTo?: string | null
+  positionCatalog?: WorkspacePositionCatalog
+  isSavingOrgChartPlacement?: boolean
+  onOrgChartPlacementChange?: (reportsTo: string | null) => void
 }
 
 export function RosterAssetResourceListItem({
@@ -57,6 +63,10 @@ export function RosterAssetResourceListItem({
   open,
   onOpenChange,
   variant = 'default',
+  orgChartReportsTo = null,
+  positionCatalog,
+  isSavingOrgChartPlacement = false,
+  onOrgChartPlacementChange,
 }: RosterAssetResourceListItemProps) {
   if (!resource) {
     if (!onUpdateAssetPointOfContact) {
@@ -133,6 +143,16 @@ export function RosterAssetResourceListItem({
       }
       footerAddon={
         <>
+          {variant === 'orgChart' && positionCatalog && onOrgChartPlacementChange ? (
+            <div className="border-t px-3 py-2" onClick={(event) => event.stopPropagation()}>
+              <AssetOrgChartPlacementSelect
+                value={orgChartReportsTo}
+                catalog={positionCatalog}
+                disabled={!canManage || isBusy || isSavingOrgChartPlacement}
+                onChange={onOrgChartPlacementChange}
+              />
+            </div>
+          ) : null}
           {showPoc && onUpdateAssetPointOfContact ? (
             <div className="border-t px-3 py-2" onClick={(event) => event.stopPropagation()}>
               <AssetPointOfContactSelect
