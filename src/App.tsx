@@ -33,7 +33,6 @@ import {
 import Zoom from '@arcgis/core/widgets/Zoom'
 import {
   AlertTriangle,
-  Archive,
   Box,
   Check,
   ChevronDown,
@@ -207,7 +206,6 @@ import {
   searchOrgMembersForWorkspace,
   removeWorkspaceRosterMember as removeWorkspaceRosterMemberFromDb,
   resolveWorkspaceId,
-  setWorkspaceArchived,
   setWorkspacePositionAllowWorkAssignment,
   setWorkspacePositionEditIcs201,
   setWorkspacePositionType,
@@ -16801,43 +16799,6 @@ function App() {
       ),
     [allExercisesForWorkspace, exerciseWorkspaceNavQuery, isSupabaseEnabled, canAccessWorkspace]
   )
-  const handleSetIncidentArchived = async (
-    incident: IncidentListItem,
-    archived: boolean
-  ) => {
-    const workspaceId =
-      incident.workspaceId ??
-      findAccessibleWorkspaceUuid(accessibleWorkspaces, 'incident', incident.id)
-
-    if (isSupabaseEnabled && workspaceId) {
-      const result = await setWorkspaceArchived(workspaceId, archived)
-      if (!result.ok) {
-        toast.error(result.message)
-        return
-      }
-      await refreshAccess()
-    } else {
-      setIncidentArchiveOverrides((previous) => ({
-        ...previous,
-        [incident.id]: archived ? new Date().toISOString() : null,
-      }))
-      setIncidentList((previous) =>
-        previous.map((item) =>
-          item.id === incident.id
-            ? { ...item, archivedAt: archived ? new Date().toISOString() : null }
-            : item
-        )
-      )
-    }
-
-    if (archived && activeIncidentWorkspaceId === incident.id) {
-      setActiveIncidentWorkspaceId(null)
-      setActiveWorkspaceSupabaseId(null)
-      setActiveTab('incident-list')
-    }
-
-    toast.success(archived ? `${incident.name} archived.` : `${incident.name} restored.`)
-  }
   const enterIncidentWorkspace = (incident: IncidentListItem) => {
     if (isSupabaseEnabled && !canAccessWorkspace('incident', incident.id)) {
       toast.error('You are not on the roster for this incident workspace.')
@@ -40110,55 +40071,29 @@ function App() {
                   </label>
                   <div className="mt-1 max-h-40 space-y-0.5 overflow-y-auto">
                     {filteredIncidentWorkspaceOptions.map((incident) => (
-                      <div
+                      <button
                         key={incident.id}
+                        type="button"
+                        onClick={() => selectIncidentWorkspace(incident)}
                         className={cn(
-                          'flex items-start gap-0.5 rounded-md',
-                          activeIncidentWorkspaceId === incident.id && 'bg-accent text-accent-foreground'
+                          'flex w-full flex-col items-start rounded-md px-2 py-1.5 text-left transition-colors hover:bg-accent/60',
+                          activeIncidentWorkspaceId === incident.id &&
+                            'bg-accent text-accent-foreground'
                         )}
                       >
-                        <button
-                          type="button"
-                          onClick={() => selectIncidentWorkspace(incident)}
+                        <span className="line-clamp-2 text-xs font-medium">{incident.name}</span>
+                        <span
                           className={cn(
-                            'flex min-w-0 flex-1 flex-col items-start px-2 py-1.5 text-left transition-colors hover:bg-accent/60',
-                            activeIncidentWorkspaceId === incident.id &&
-                              'text-accent-foreground'
+                            'text-[11px]',
+                            activeIncidentWorkspaceId === incident.id
+                              ? 'text-accent-foreground/80'
+                              : 'text-muted-foreground'
                           )}
                         >
-                          <span className="line-clamp-2 text-xs font-medium">{incident.name}</span>
-                          <span
-                            className={cn(
-                              'text-[11px]',
-                              activeIncidentWorkspaceId === incident.id
-                                ? 'text-accent-foreground/80'
-                                : 'text-muted-foreground'
-                            )}
-                          >
-                            {incident.type} · {incident.severity}
-                            {isIncidentArchived(incident) ? ' · Archived' : ''}
-                          </span>
-                        </button>
-                        <Button
-                          type="button"
-                          size="icon"
-                          variant="ghost"
-                          className="mt-0.5 h-7 w-7 shrink-0"
-                          aria-label={
-                            isIncidentArchived(incident)
-                              ? `Restore ${incident.name}`
-                              : `Archive ${incident.name}`
-                          }
-                          onClick={() =>
-                            void handleSetIncidentArchived(
-                              incident,
-                              !isIncidentArchived(incident)
-                            )
-                          }
-                        >
-                          <Archive className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
+                          {incident.type} · {incident.severity}
+                          {isIncidentArchived(incident) ? ' · Archived' : ''}
+                        </span>
+                      </button>
                     ))}
                     {filteredIncidentWorkspaceOptions.length === 0 && (
                       <p className="px-2 py-1.5 text-xs text-muted-foreground">No matching incidents</p>
