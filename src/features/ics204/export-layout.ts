@@ -72,13 +72,28 @@ function formatOperationalPeriod(context: Ics204ExportContext): string {
   ].join('\n')
 }
 
+function formatIcs204LabeledLocationValue(label: string, value: string): string {
+  const trimmed = value.trim()
+  if (!trimmed) return ''
+  return `${label}: ${trimmed}`
+}
+
+export function buildIcs204AssignedLocationFields(form: Ics204FormState): {
+  branch: string
+  division: string
+  group: string
+  stagingArea: string
+} {
+  return {
+    branch: formatIcs204LabeledLocationValue('Branch', form.branch),
+    division: formatIcs204LabeledLocationValue('Division', form.division),
+    group: formatIcs204LabeledLocationValue('Group', form.group),
+    stagingArea: formatIcs204LabeledLocationValue('Staging Area', form.stagingArea),
+  }
+}
+
 function formatAssignedLocation(form: Ics204FormState): string {
-  return [
-    form.branch.trim() ? form.branch.trim() : '',
-    form.division.trim() ? form.division.trim() : '',
-    form.group.trim() ? form.group.trim() : '',
-    form.stagingArea.trim() ? form.stagingArea.trim() : '',
-  ]
+  return Object.values(buildIcs204AssignedLocationFields(form))
     .filter((line) => line.length > 0)
     .join('\n')
 }
@@ -128,8 +143,8 @@ export function buildResourceExportRow(row: Ics204ResourceAssignedRow): Ics204Re
   }
 }
 
-function serializeWorkAssignment(row: Ics204WorkAssignmentRow, index: number): string {
-  const lines: string[] = [`Assignment ${index + 1}`]
+function serializeWorkAssignment(row: Ics204WorkAssignmentRow): string {
+  const lines: string[] = []
   if (row.priority.trim()) lines.push(`Priority: ${row.priority.trim()}`)
   if (row.assignment.trim()) lines.push(row.assignment.trim())
   if (row.reportingLocation.trim()) {
@@ -137,14 +152,6 @@ function serializeWorkAssignment(row: Ics204WorkAssignmentRow, index: number): s
   }
   if (row.requestedArrivalTime.trim()) {
     lines.push(`Requested Arrival: ${row.requestedArrivalTime.trim()}`)
-  }
-  if (row.resourceRequirements.length > 0) {
-    lines.push('Resource Requirements:')
-    row.resourceRequirements.forEach((requirement) => {
-      lines.push(
-        `- ${requirement.resource || 'Resource'} — Required: ${requirement.required || '—'} · Have: ${requirement.have || '—'} · Need: ${requirement.need || '—'}`
-      )
-    })
   }
   if (row.overheadPositions.trim()) {
     lines.push(`Overhead Positions: ${row.overheadPositions.trim()}`)
@@ -159,9 +166,7 @@ export function serializeIcs204WorkAssignments(form: Ics204FormState): string {
   if (form.workAssignments.length === 0) {
     return ''
   }
-  return form.workAssignments
-    .map((row, index) => serializeWorkAssignment(row, index))
-    .join('\n\n')
+  return form.workAssignments.map((row) => serializeWorkAssignment(row)).join('\n\n')
 }
 
 export function parseCommunicationRows(text: string): Ics204CommunicationRow[] {

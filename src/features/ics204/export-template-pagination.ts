@@ -10,6 +10,7 @@ import type {
   Ics204SignatureFooter,
 } from '@/features/ics204/export-layout'
 import {
+  buildIcs204AssignedLocationFields,
   buildIcs204SignatureFooter,
   buildResourceExportRow,
   parseCommunicationRows,
@@ -149,14 +150,15 @@ export function buildIcs204TemplateHeaderValues(
   form: Ics204FormState,
   context: Ics204ExportContext
 ): Ics204TemplatePagePlan['header'] {
+  const assignedLocation = buildIcs204AssignedLocationFields(form)
   return {
     incidentName: context.incidentName?.trim() ?? '',
     operationalPeriodFrom: context.operationalPeriodFrom?.trim() ?? '',
     operationalPeriodTo: context.operationalPeriodTo?.trim() ?? '',
-    branch: form.branch.trim(),
-    division: form.division.trim(),
-    group: form.group.trim(),
-    stagingArea: form.stagingArea.trim(),
+    branch: assignedLocation.branch,
+    division: assignedLocation.division,
+    group: assignedLocation.group,
+    stagingArea: assignedLocation.stagingArea,
   }
 }
 

@@ -18,6 +18,7 @@ export type { Ics204ExportContext, Ics204ExportLayoutBlock } from '@/features/ic
 export type { Ics204PhysicalPage } from '@/features/ics204/export-pagination'
 export {
   buildIcs204ExportLayout,
+  buildIcs204AssignedLocationFields,
   buildIcs204SignatureFooter,
   ics204ExportFilenameBase,
   ICS204_FORM_TITLE_LINES,

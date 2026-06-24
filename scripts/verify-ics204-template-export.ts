@@ -1,6 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { PDFDocument } from 'pdf-lib'
+import { buildIcs204AssignedLocationFields, serializeIcs204WorkAssignments } from '../src/features/ics204/export-layout'
 import {
   assertIcs204TemplatePaginationInvariants,
   paginateIcs204TemplateExport,
@@ -88,6 +89,69 @@ const emergency = parseIcs204EmergencyCommunications(
 assert(emergency.medical === 'Clinic A', 'Emergency parser should read medical field')
 assert(emergency.evacuation === 'Route 7', 'Emergency parser should read evacuation field')
 assert(emergency.other === 'Command net', 'Emergency parser should read other field')
+
+const locationForm = createEmptyIcs204Form('fixture-location')
+locationForm.branch = 'Branch Alpha'
+locationForm.division = 'Division Bravo'
+locationForm.group = 'Group Charlie'
+locationForm.stagingArea = 'Staging Delta'
+const locationFields = buildIcs204AssignedLocationFields(locationForm)
+assert(locationFields.branch === 'Branch: Branch Alpha', 'Branch field should include label prefix')
+assert(locationFields.division === 'Division: Division Bravo', 'Division field should include label prefix')
+assert(
+  serializeIcs204WorkAssignments({
+    ...locationForm,
+    workAssignments: [
+      {
+        id: 1,
+        assignment: 'Conduct shoreline assessment.',
+        priority: '1',
+        resourceRequirements: [{ id: 1, resource: 'Boats', required: '2', have: '1', need: '1' }],
+        overheadPositions: '',
+        specialEquipmentSupplies: '',
+        reportingLocation: '',
+        requestedArrivalTime: '',
+      },
+    ],
+  }).includes('Conduct shoreline assessment'),
+  'Work assignments should include assignment text'
+)
+assert(
+  !serializeIcs204WorkAssignments({
+    ...locationForm,
+    workAssignments: [
+      {
+        id: 1,
+        assignment: 'Conduct shoreline assessment.',
+        priority: '1',
+        resourceRequirements: [{ id: 1, resource: 'Boats', required: '2', have: '1', need: '1' }],
+        overheadPositions: '',
+        specialEquipmentSupplies: '',
+        reportingLocation: '',
+        requestedArrivalTime: '',
+      },
+    ],
+  }).includes('Resource Requirements'),
+  'Work assignments should omit resource needs'
+)
+assert(
+  !serializeIcs204WorkAssignments({
+    ...locationForm,
+    workAssignments: [
+      {
+        id: 1,
+        assignment: 'Conduct shoreline assessment.',
+        priority: '1',
+        resourceRequirements: [],
+        overheadPositions: '',
+        specialEquipmentSupplies: '',
+        reportingLocation: '',
+        requestedArrivalTime: '',
+      },
+    ],
+  }).includes('Assignment 1'),
+  'Work assignments should omit assignment numbering'
+)
 
 const filledPdf = await fillIcs204TemplatePdfFromBytes(templateBytes, resourceForm)
 const filledDoc = await PDFDocument.load(filledPdf)
