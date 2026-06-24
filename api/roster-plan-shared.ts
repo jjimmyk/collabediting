@@ -1,8 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { WORKSPACE_ROSTER_POSITIONS } from '../src/lib/ics-positions.js'
-import { emptyWorkspacePositionCatalog } from '../src/features/roster/workspace-positions.js'
-import { defaultAllowWorkAssignment } from '../src/lib/workspace-position-settings.js'
-import type { BuildTeamDraftMember, BuildTeamRosterDraft } from '../src/features/roster/roster-template-types.js'
+import { defaultAllowWorkAssignmentForApi } from './roster-operations-work-assignment.js'
+import type { BuildTeamDraftMember, BuildTeamRosterDraft } from './roster-template-types.js'
 import {
   addIcsWorkspaceMemberWithEffectiveWhen,
   addSingleResourceWorkspaceMemberWithEffectiveWhen,
@@ -163,8 +161,6 @@ async function upsertPositionSettingsFromDraft(
   workspaceId: string,
   draft: BuildTeamRosterDraft
 ): Promise<void> {
-  const catalog = emptyWorkspacePositionCatalog()
-
   for (const positionName of draft.visibleStandardPositions) {
     const settings = draft.positionSettings[positionName]
     const { error } = await admin.from('workspace_position_settings').upsert(
@@ -172,7 +168,7 @@ async function upsertPositionSettingsFromDraft(
         workspace_id: workspaceId,
         position_name: positionName,
         allow_work_assignment:
-          settings?.allowWorkAssignment ?? defaultAllowWorkAssignment(positionName, catalog),
+          settings?.allowWorkAssignment ?? defaultAllowWorkAssignmentForApi(positionName),
         position_type: settings?.positionType ?? null,
         custom_type_label:
           settings?.positionType === 'custom_type' ? settings.customTypeLabel : null,
@@ -194,7 +190,7 @@ async function upsertPositionSettingsFromDraft(
         position_name: custom.name,
         allow_work_assignment:
           settings?.allowWorkAssignment ??
-          defaultAllowWorkAssignment(custom.name, catalog, { reportsTo: custom.reportsTo }),
+          defaultAllowWorkAssignmentForApi(custom.name, { reportsTo: custom.reportsTo }),
         position_type: settings?.positionType ?? custom.positionType,
         custom_type_label:
           (settings?.positionType ?? custom.positionType) === 'custom_type'

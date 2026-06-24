@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { createClient } from '@supabase/supabase-js'
-import type { BuildTeamRosterDraft } from '../src/features/roster/roster-template-types.js'
+import type { BuildTeamRosterDraft } from './roster-template-types.js'
 import {
   applyRosterPlanToWorkspace,
   ensureCreatorAsIncidentCommander,

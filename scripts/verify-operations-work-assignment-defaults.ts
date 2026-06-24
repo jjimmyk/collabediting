@@ -1,3 +1,4 @@
+import { defaultAllowWorkAssignmentForApi } from '../api/roster-operations-work-assignment'
 import { emptyWorkspacePositionCatalog } from '../src/features/roster/workspace-positions'
 import {
   isOrgChartParentWithinOperationsSubtree,
@@ -63,6 +64,25 @@ assert(
 assert(
   !isOrgChartParentWithinOperationsSubtree('Planning Section Chief', catalog),
   'single resource under Planning should not be eligible'
+)
+
+assert(
+  defaultAllowWorkAssignmentForApi('Operations Section Chief'),
+  'API default allow work assignment for Operations Section Chief'
+)
+assert(
+  defaultAllowWorkAssignmentForApi('Staging Area Manager'),
+  'API default allow work assignment for Staging Area Manager'
+)
+assert(
+  !defaultAllowWorkAssignmentForApi('Planning Section Chief'),
+  'API Planning Section Chief should default to no work assignment'
+)
+assert(
+  defaultAllowWorkAssignmentForApi('Division Alpha', {
+    reportsTo: OPERATIONS_SECTION_CHIEF_POSITION,
+  }),
+  'API custom position under Operations Section Chief should be eligible'
 )
 
 console.log('verify-operations-work-assignment-defaults: all checks passed')
