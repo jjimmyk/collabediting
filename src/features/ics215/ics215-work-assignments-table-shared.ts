@@ -4,6 +4,7 @@ import type {
   Ics215ResourceColumn,
   Ics215ResourceValue,
   Ics215WorkAssignmentRow,
+  Ics215WorkAssignmentsDraft,
 } from '@/features/ics215/types'
 import {
   computeIcs215ColumnTotals,
@@ -45,6 +46,29 @@ export type Ics215WorkAssignmentsTableBaseProps = {
     workAssignments: Ics215WorkAssignmentRow[]
   }) => void
   onHaveFillComplete?: (filledCount: number) => void
+  onPersistWorkAssignments?: (draft: Ics215WorkAssignmentsDraft) => void
+}
+
+export function patchResourceValueInDraft(
+  draft: Ics215WorkAssignmentsDraft,
+  rowId: number,
+  columnId: string,
+  value: Ics215ResourceValue
+): Ics215WorkAssignmentsDraft {
+  return {
+    ...draft,
+    workAssignments: draft.workAssignments.map((row) =>
+      row.id === rowId
+        ? {
+            ...row,
+            resourceValues: {
+              ...row.resourceValues,
+              [columnId]: value,
+            },
+          }
+        : row
+    ),
+  }
 }
 
 export function useIcs215WorkAssignmentsTable({

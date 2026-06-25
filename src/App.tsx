@@ -361,6 +361,7 @@ import type {
   Ics215FormState,
   Ics215SectionId,
   Ics215Version,
+  Ics215WorkAssignmentsDraft,
   Ics215WorkAssignmentsLayoutMode,
 } from '@/features/ics215/types'
 import {
@@ -23203,6 +23204,54 @@ function App() {
       [section]: value,
     }))
   }
+  const persistIcs215WorkAssignmentsFromDraft = (
+    draft: Ics215WorkAssignmentsDraft,
+    options: { closeEdit?: boolean } = {}
+  ) => {
+    if (!canEditIcs201Form || !ics215Form) return
+    const nextForm = applyIcs215SectionDraft(ics215Form, 'work-assignments', draft)
+    setIcs215Form(cloneIcs215FormState(nextForm))
+
+    const updated204Forms = syncIcs215WorkAssignmentsToLinkedIcs204Forms(nextForm, ics204Forms)
+    if (updated204Forms.length > 0) {
+      const updatedById = new Map(
+        updated204Forms.map((form) => [form.id, cloneIcs204FormState(form)])
+      )
+      setIcs204Forms((previous) =>
+        previous.map((entry) => updatedById.get(entry.id) ?? entry)
+      )
+      for (const updated of updated204Forms) {
+        const cloned = cloneIcs204FormState(updated)
+        const formVersions = ics204VersionsById[updated.id] ?? []
+        const latest204Version = formVersions[formVersions.length - 1]
+        if (latest204Version && latest204Version.signatures.length === 0) {
+          handleIcs204SaveDraft(updated.id, cloned, latest204Version)
+        }
+      }
+      if (options.closeEdit) {
+        toast.success(
+          `Synced work assignments to ${updated204Forms.length} ICS-204 list${updated204Forms.length === 1 ? '' : 's'}.`
+        )
+      }
+    }
+
+    const latestVersion = ics215Versions[ics215Versions.length - 1]
+    if (latestVersion && latestVersion.signatures.length === 0) {
+      handleIcs215SaveDraft(nextForm, latestVersion)
+    }
+
+    setIcs215SectionDrafts((previous) => ({
+      ...previous,
+      'work-assignments': draft,
+    }))
+
+    if (options.closeEdit) {
+      cancelIcs215SectionEdit('work-assignments')
+    }
+  }
+  const persistIcs215WorkAssignmentsDraft = (draft: Ics215WorkAssignmentsDraft) => {
+    persistIcs215WorkAssignmentsFromDraft(draft, { closeEdit: false })
+  }
   const saveIcs215Section = (section: Ics215SectionId) => {
     if (!canEditIcs201Form) {
       toast.error('Your ICS position does not include permission to edit ICS-215 forms.')
@@ -23210,31 +23259,16 @@ function App() {
     }
     const draft = ics215SectionDrafts[section]
     if (draft === undefined || !ics215Form) return
-    const nextForm = applyIcs215SectionDraft(ics215Form, section, draft)
-    setIcs215Form(cloneIcs215FormState(nextForm))
 
     if (section === 'work-assignments') {
-      const updated204Forms = syncIcs215WorkAssignmentsToLinkedIcs204Forms(nextForm, ics204Forms)
-      if (updated204Forms.length > 0) {
-        const updatedById = new Map(
-          updated204Forms.map((form) => [form.id, cloneIcs204FormState(form)])
-        )
-        setIcs204Forms((previous) =>
-          previous.map((entry) => updatedById.get(entry.id) ?? entry)
-        )
-        for (const updated of updated204Forms) {
-          const cloned = cloneIcs204FormState(updated)
-          const formVersions = ics204VersionsById[updated.id] ?? []
-          const latest204Version = formVersions[formVersions.length - 1]
-          if (latest204Version && latest204Version.signatures.length === 0) {
-            handleIcs204SaveDraft(updated.id, cloned, latest204Version)
-          }
-        }
-        toast.success(
-          `Synced work assignments to ${updated204Forms.length} ICS-204 list${updated204Forms.length === 1 ? '' : 's'}.`
-        )
-      }
+      persistIcs215WorkAssignmentsFromDraft(draft as Ics215WorkAssignmentsDraft, {
+        closeEdit: true,
+      })
+      return
     }
+
+    const nextForm = applyIcs215SectionDraft(ics215Form, section, draft)
+    setIcs215Form(cloneIcs215FormState(nextForm))
 
     const latestVersion = ics215Versions[ics215Versions.length - 1]
     if (latestVersion && latestVersion.signatures.length === 0) {
@@ -34981,6 +35015,7 @@ function App() {
                     onSaveSection={saveIcs215Section}
                     onGenerateSection={openIcs215SectionGeneration}
                     onPatchSectionDraft={patchIcs215SectionDraft}
+                    onPersistWorkAssignmentsDraft={persistIcs215WorkAssignmentsDraft}
                     workAssignmentsSyncTooltip={ics215WorkAssignmentsSyncTooltip}
                     workspaceAssets={workspaceAssignedAssets}
                     workspaceId={activeWorkspaceSupabaseId}

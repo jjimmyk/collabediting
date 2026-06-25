@@ -3,7 +3,6 @@ import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Ics202ReadOnlyField } from '@/features/ics202/Ics202SectionToolbar'
 import { WorkAssignmentTargetPicker } from '@/features/work-assignments/WorkAssignmentTargetPicker'
-import { ResourceHaveFillButton } from '@/features/resources/ResourceHaveFillButton'
 import { Ics215HaveAssetLinkDialog } from '@/features/ics215/Ics215HaveAssetLinkDialog'
 import { Ics215HaveCell, HaveLinkSparkleButton } from '@/features/ics215/Ics215HaveCell'
 import type { Ics215ResourceValue } from '@/features/ics215/types'
@@ -125,6 +124,7 @@ export function Ics215WorkAssignmentsSpreadsheetTable({
   onRequestEdit,
   onChange,
   onHaveFillComplete,
+  onPersistWorkAssignments,
 }: Ics215WorkAssignmentsSpreadsheetTableProps) {
   const {
     hideAssigneeColumn,
@@ -160,7 +160,8 @@ export function Ics215WorkAssignmentsSpreadsheetTable({
     workspaceId,
     isSupabaseEnabled,
     getAccessToken,
-    patchResourceValue,
+    onApplyWorkAssignmentsDraft: onChange,
+    onPersistWorkAssignments,
   })
 
   const openHaveLinkWithEdit = (
@@ -222,11 +223,6 @@ export function Ics215WorkAssignmentsSpreadsheetTable({
                               }}
                               className="h-7 min-w-[5.5rem] flex-1 rounded border bg-transparent px-1 text-[11px] font-semibold normal-case outline-none"
                             />
-                            <ResourceHaveFillButton
-                              resourceName={column.label}
-                              workspaceAssets={workspaceAssets}
-                              onFill={() => haveLink.previewColumnMatches(column.label)}
-                            />
                             {resourceColumns.length > 1 ? (
                               <Button
                                 type="button"
@@ -241,16 +237,7 @@ export function Ics215WorkAssignmentsSpreadsheetTable({
                             ) : null}
                           </div>
                         ) : (
-                          <div className="flex items-center gap-1 normal-case">
-                            <span className="block">{column.label}</span>
-                            {canLinkAssets ? (
-                              <ResourceHaveFillButton
-                                resourceName={column.label}
-                                workspaceAssets={workspaceAssets}
-                                onFill={() => haveLink.previewColumnMatches(column.label)}
-                              />
-                            ) : null}
-                          </div>
+                          <span className="block normal-case">{column.label}</span>
                         )}
                         <div className="grid grid-cols-3 gap-1 text-[9px] font-normal normal-case">
                           <span>Req</span>

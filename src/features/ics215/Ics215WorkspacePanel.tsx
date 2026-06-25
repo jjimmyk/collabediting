@@ -45,6 +45,7 @@ import type {
   Ics215FormState,
   Ics215SectionId,
   Ics215Version,
+  Ics215WorkAssignmentsDraft,
   Ics215WorkAssignmentsLayoutMode,
 } from '@/features/ics215/types'
 import { cloneIcs215FormState, getIcs215FormForExport } from '@/features/ics215/utils'
@@ -74,6 +75,7 @@ type Ics215WorkspacePanelProps = {
     section: S,
     value: Ics215FormSectionDrafts[S]
   ) => void
+  onPersistWorkAssignmentsDraft?: (draft: Ics215WorkAssignmentsDraft) => void
   workAssignmentsSyncTooltip?: Ics215Ics204WorkSyncTooltipState
   workspaceAssets?: ResourceListItemData[]
   workspaceId?: string | null
@@ -116,6 +118,7 @@ export function Ics215WorkspacePanel({
   onSaveSection,
   onGenerateSection,
   onPatchSectionDraft,
+  onPersistWorkAssignmentsDraft,
   workAssignmentsSyncTooltip,
   workspaceAssets = [],
   workspaceId = null,
@@ -504,6 +507,7 @@ export function Ics215WorkspacePanel({
             onSaveSection={onSaveSection}
             onGenerateSection={onGenerateSection}
             onPatchDraft={onPatchSectionDraft}
+            onPersistWorkAssignmentsDraft={onPersistWorkAssignmentsDraft}
             workAssignmentsSyncTooltip={workAssignmentsSyncTooltip}
             workspaceAssets={workspaceAssets}
             workspaceId={workspaceId}

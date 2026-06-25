@@ -11,6 +11,9 @@ import {
   normalizeIcs215ResourceValue,
   removeHaveAssetLinkKeys,
 } from '@/features/ics215/ics215-have-asset-link'
+import {
+  patchResourceValueInDraft,
+} from '@/features/ics215/ics215-work-assignments-table-shared'
 import type { Ics215ResourceColumn, Ics215WorkAssignmentRow } from '@/features/ics215/types'
 import {
   buildAssetSearchText,
@@ -235,5 +238,32 @@ describe('ics215-have-asset-link', () => {
     expect(partial.linkedAssetKeys).toEqual(['helo-1'])
     expect(partial.have).toBe('1')
     expect(isHaveLinkedToAssets(partial)).toBe(true)
+  })
+
+  it('patchResourceValueInDraft updates one cell in a draft', () => {
+    const draft = {
+      resourceColumns: [{ id: 'col-helo', label: 'Helicopter' }],
+      workAssignments: [
+        {
+          id: 1,
+          assignee: 'unit-a',
+          workAssignment: 'Alpha',
+          resourceValues: { 'col-helo': { required: '1', have: '', need: '' } },
+          overheadPositions: '',
+          specialEquipmentSupplies: '',
+          reportingLocation: '',
+          requestedArrivalTime: '',
+          status: '',
+        },
+      ],
+    }
+    const linked = applyHaveAssetLink(
+      { required: '1', have: '', need: '' },
+      ['helo-1'],
+      [helicopter]
+    )
+    const next = patchResourceValueInDraft(draft, 1, 'col-helo', linked)
+    expect(next.workAssignments[0]?.resourceValues['col-helo']?.have).toBe('1')
+    expect(next.workAssignments[0]?.resourceValues['col-helo']?.linkedAssetKeys).toEqual(['helo-1'])
   })
 })

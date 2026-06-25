@@ -1,4 +1,5 @@
-import { type ReactNode } from 'react'
+import { type ReactNode, useEffect, useState } from 'react'
+import { Maximize2, Minimize2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Ics202FieldLabel,
@@ -63,6 +64,7 @@ type Ics215FormSectionsProps = {
     section: S,
     value: Ics215FormSectionDrafts[S]
   ) => void
+  onPersistWorkAssignmentsDraft?: (draft: Ics215WorkAssignmentsDraft) => void
   workAssignmentsSyncTooltip?: Ics215Ics204WorkSyncTooltipState
 }
 
@@ -90,6 +92,7 @@ export function Ics215FormSections({
   onSaveSection,
   onGenerateSection,
   onPatchDraft,
+  onPersistWorkAssignmentsDraft,
   workAssignmentsSyncTooltip,
   workspaceAssets = [],
   workspaceId = null,
@@ -100,6 +103,24 @@ export function Ics215FormSections({
   onHaveFillComplete,
   onWorkAssignmentsLayoutModeChange,
 }: Ics215FormSectionsProps) {
+  const [workAssignmentsMaximized, setWorkAssignmentsMaximized] = useState(false)
+
+  useEffect(() => {
+    if (!workAssignmentsMaximized) return
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setWorkAssignmentsMaximized(false)
+      }
+    }
+    document.addEventListener('keydown', onKeyDown)
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.removeEventListener('keydown', onKeyDown)
+      document.body.style.overflow = previousOverflow
+    }
+  }, [workAssignmentsMaximized])
+
   const incidentInfo =
     isSectionEditing(editingSections, 'incident-info') && drafts['incident-info']
       ? drafts['incident-info']
@@ -126,7 +147,8 @@ export function Ics215FormSections({
     content: ReactNode,
     headerActions?: ReactNode,
     itemClassName?: string,
-    headerAccessory?: ReactNode
+    headerAccessory?: ReactNode,
+    fillViewport = false
   ) => {
     const editing = isSectionEditing(editingSections, section)
     return (
@@ -138,7 +160,12 @@ export function Ics215FormSections({
           itemClassName
         )}
       >
-        <div className="min-w-0 w-full max-w-full space-y-2 px-3 py-2.5">
+        <div
+          className={cn(
+            'min-w-0 w-full max-w-full space-y-2 px-3 py-2.5',
+            fillViewport && 'flex min-h-0 flex-1 flex-col'
+          )}
+        >
           <div className="flex items-start justify-between gap-2">
             <div className="flex min-w-0 items-center gap-1.5">
               <Ics202SectionHeader
@@ -210,29 +237,63 @@ export function Ics215FormSections({
 
       {renderSectionShell(
         'work-assignments',
-        <div className="min-w-0 w-full max-w-full space-y-2">
-          <Ics215WorkAssignmentsLayoutToggle
-            value={normalizeIcs215WorkAssignmentsLayoutMode(form.workAssignmentsLayoutMode)}
-            onChange={(mode) => onWorkAssignmentsLayoutModeChange?.(mode)}
-          />
-          <Ics215WorkAssignmentsTable
-            resourceColumns={workAssignmentsDraft.resourceColumns}
-            workAssignments={workAssignmentsDraft.workAssignments}
-            workAssignmentTargetOptions={workAssignmentTargetOptions}
-            roster={roster}
-            competencyOptions={competencyOptions}
-            workspaceAssets={workspaceAssets}
-            workspaceId={workspaceId}
-            isSupabaseEnabled={isSupabaseEnabled}
-            getAccessToken={getAccessToken}
-            autoFillHaveFromAssets={autoFillHaveFromAssets}
-            layoutMode={normalizeIcs215WorkAssignmentsLayoutMode(form.workAssignmentsLayoutMode)}
-            editing={isSectionEditing(editingSections, 'work-assignments')}
-            canLinkAssets={canEdit && !formIsLocked}
-            onRequestEdit={() => onStartSectionEdit('work-assignments')}
-            onChange={(next) => onPatchDraft('work-assignments', next)}
-            onHaveFillComplete={onHaveFillComplete}
-          />
+        <div
+          className={cn(
+            'min-w-0 w-full max-w-full space-y-2',
+            workAssignmentsMaximized && 'flex min-h-0 flex-1 flex-col'
+          )}
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <Ics215WorkAssignmentsLayoutToggle
+              value={normalizeIcs215WorkAssignmentsLayoutMode(form.workAssignmentsLayoutMode)}
+              onChange={(mode) => onWorkAssignmentsLayoutModeChange?.(mode)}
+            />
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-7 gap-1 text-xs"
+              aria-label={
+                workAssignmentsMaximized
+                  ? 'Restore Work Assignments section size'
+                  : 'Maximize Work Assignments section'
+              }
+              onClick={() => setWorkAssignmentsMaximized((previous) => !previous)}
+            >
+              {workAssignmentsMaximized ? (
+                <>
+                  <Minimize2 className="h-3.5 w-3.5" />
+                  Restore
+                </>
+              ) : (
+                <>
+                  <Maximize2 className="h-3.5 w-3.5" />
+                  Maximize
+                </>
+              )}
+            </Button>
+          </div>
+          <div className={cn(workAssignmentsMaximized && 'min-h-0 flex-1 overflow-hidden')}>
+            <Ics215WorkAssignmentsTable
+              resourceColumns={workAssignmentsDraft.resourceColumns}
+              workAssignments={workAssignmentsDraft.workAssignments}
+              workAssignmentTargetOptions={workAssignmentTargetOptions}
+              roster={roster}
+              competencyOptions={competencyOptions}
+              workspaceAssets={workspaceAssets}
+              workspaceId={workspaceId}
+              isSupabaseEnabled={isSupabaseEnabled}
+              getAccessToken={getAccessToken}
+              autoFillHaveFromAssets={autoFillHaveFromAssets}
+              layoutMode={normalizeIcs215WorkAssignmentsLayoutMode(form.workAssignmentsLayoutMode)}
+              editing={isSectionEditing(editingSections, 'work-assignments')}
+              canLinkAssets={canEdit && !formIsLocked}
+              onRequestEdit={() => onStartSectionEdit('work-assignments')}
+              onChange={(next) => onPatchDraft('work-assignments', next)}
+              onPersistWorkAssignments={onPersistWorkAssignmentsDraft}
+              onHaveFillComplete={onHaveFillComplete}
+            />
+          </div>
         </div>,
         isSectionEditing(editingSections, 'work-assignments') ? (
           <div className="flex flex-wrap items-center justify-end gap-2">
@@ -295,13 +356,16 @@ export function Ics215FormSections({
             </Button>
           </div>
         ) : null,
-        undefined,
+        workAssignmentsMaximized
+          ? 'fixed inset-0 z-40 flex max-h-none flex-col overflow-hidden bg-background p-0 shadow-xl'
+          : undefined,
         workAssignmentsSyncTooltip ? (
           <Ics215Ics204WorkAssignmentsSyncTooltip
             context="ics215"
             state={workAssignmentsSyncTooltip}
           />
-        ) : null
+        ) : null,
+        workAssignmentsMaximized
       )}
 
       {renderSectionShell(

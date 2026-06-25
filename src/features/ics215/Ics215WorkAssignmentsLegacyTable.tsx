@@ -6,7 +6,6 @@ import { WorkAssignmentTargetPicker } from '@/features/work-assignments/WorkAssi
 import { Ics215HaveAssetLinkDialog } from '@/features/ics215/Ics215HaveAssetLinkDialog'
 import { Ics215HaveCell } from '@/features/ics215/Ics215HaveCell'
 import { isHaveLinkedToAssets } from '@/features/ics215/ics215-have-asset-link'
-import { ResourceHaveFillButton } from '@/features/resources/ResourceHaveFillButton'
 import { useIcs215HaveAssetLink } from '@/features/ics215/useIcs215HaveAssetLink'
 import type { Ics215ResourceValue } from '@/features/ics215/types'
 import {
@@ -136,6 +135,7 @@ export function Ics215WorkAssignmentsLegacyTable({
   onRequestEdit,
   onChange,
   onHaveFillComplete,
+  onPersistWorkAssignments,
 }: Ics215WorkAssignmentsLegacyTableProps) {
   const {
     hideAssigneeColumn,
@@ -174,7 +174,8 @@ export function Ics215WorkAssignmentsLegacyTable({
     workspaceId,
     isSupabaseEnabled,
     getAccessToken,
-    patchResourceValue,
+    onApplyWorkAssignmentsDraft: onChange,
+    onPersistWorkAssignments,
   })
 
   const openHaveLinkWithEdit = (
@@ -272,11 +273,6 @@ export function Ics215WorkAssignmentsLegacyTable({
                               }}
                               className="h-7 min-w-0 flex-1 rounded border bg-transparent px-1 text-[10px] font-semibold outline-none"
                             />
-                            <ResourceHaveFillButton
-                              resourceName={column.label}
-                              workspaceAssets={workspaceAssets}
-                              onFill={() => haveLink.previewColumnMatches(column.label)}
-                            />
                             {resourceColumns.length > 1 ? (
                               <Button
                                 type="button"
@@ -292,16 +288,7 @@ export function Ics215WorkAssignmentsLegacyTable({
                           </div>
                         </div>
                       ) : (
-                        <div className="flex items-center justify-center gap-0.5 normal-case">
-                          <span className="block">{column.label}</span>
-                          {canLinkAssets ? (
-                            <ResourceHaveFillButton
-                              resourceName={column.label}
-                              workspaceAssets={workspaceAssets}
-                              onFill={() => haveLink.previewColumnMatches(column.label)}
-                            />
-                          ) : null}
-                        </div>
+                        <span className="block normal-case">{column.label}</span>
                       )}
                     </th>
                   ))}
