@@ -3,11 +3,13 @@ import {
   applyHaveAssetLink,
   applyManualHaveValue,
   buildHaveAssetLinkIndex,
+  clearHaveAssetLink,
   formatHaveAssetLinkLocation,
   getConflictingHaveAssetKeys,
   isAssetLinkedElsewhere,
   isHaveLinkedToAssets,
   normalizeIcs215ResourceValue,
+  removeHaveAssetLinkKeys,
 } from '@/features/ics215/ics215-have-asset-link'
 import type { Ics215ResourceColumn, Ics215WorkAssignmentRow } from '@/features/ics215/types'
 import {
@@ -186,5 +188,52 @@ describe('ics215-have-asset-link', () => {
     expect(
       getConflictingHaveAssetKeys(['helo-1'], { rowId: 1, columnId: 'col-helo' }, index)
     ).toEqual([])
+  })
+
+  it('clears linked Have state when no assets remain', () => {
+    const linked = applyHaveAssetLink(
+      { required: '2', have: '', need: '' },
+      ['helo-1'],
+      [helicopter]
+    )
+    expect(isHaveLinkedToAssets(linked)).toBe(true)
+
+    const cleared = clearHaveAssetLink(linked)
+    expect(isHaveLinkedToAssets(cleared)).toBe(false)
+    expect(cleared.haveSource).toBe('manual')
+    expect(cleared.linkedAssetKeys).toBeUndefined()
+    expect(cleared.have).toBe('')
+    expect(cleared.need).toBe('2')
+  })
+
+  it('applyHaveAssetLink with empty keys clears links', () => {
+    const linked = applyHaveAssetLink(
+      { required: '1', have: '', need: '' },
+      ['helo-1'],
+      [helicopter]
+    )
+    const cleared = applyHaveAssetLink(linked, [], [helicopter])
+    expect(isHaveLinkedToAssets(cleared)).toBe(false)
+    expect(cleared.have).toBe('')
+  })
+
+  it('removeHaveAssetLinkKeys drops one of two linked assets', () => {
+    const boat: ResourceListItemData = {
+      ...helicopter,
+      assetKey: 'boat-1',
+      name: 'Small Boat',
+      type: 'Boat',
+    }
+    const linked = applyHaveAssetLink(
+      { required: '2', have: '', need: '' },
+      ['helo-1', 'boat-1'],
+      [helicopter, boat]
+    )
+    expect(linked.have).toBe('2')
+
+    const partial = removeHaveAssetLinkKeys(linked, ['boat-1'], [helicopter, boat])
+    expect(partial.linkedAssetKeys).toEqual(['helo-1'])
+    expect(partial.have).toBe('1')
+    expect(isHaveLinkedToAssets(partial)).toBe(true)
   })
 })

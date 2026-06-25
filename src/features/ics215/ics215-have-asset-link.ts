@@ -49,6 +49,9 @@ export function applyHaveAssetLink(
   options: { recalculateNeed?: boolean } = {}
 ): Ics215ResourceValue {
   const uniqueKeys = [...new Set(selectedKeys)]
+  if (uniqueKeys.length === 0) {
+    return clearHaveAssetLink(value, options)
+  }
   const have = formatHaveCountFromAssetKeys(uniqueKeys, workspaceAssets)
   const linked: Ics215ResourceValue = {
     ...value,
@@ -57,6 +60,37 @@ export function applyHaveAssetLink(
     have,
   }
   return options.recalculateNeed === false ? linked : applyHaveWithOptionalNeedRecalc(linked, have)
+}
+
+export function clearHaveAssetLink(
+  value: Ics215ResourceValue,
+  options: { recalculateNeed?: boolean } = {}
+): Ics215ResourceValue {
+  const cleared: Ics215ResourceValue = {
+    ...value,
+    have: '',
+    linkedAssetKeys: undefined,
+    haveSource: 'manual',
+  }
+  if (options.recalculateNeed === false) {
+    return cleared
+  }
+  const recalculated = applyHaveWithOptionalNeedRecalc({ ...cleared, have: '0' }, '0')
+  return { ...recalculated, have: '' }
+}
+
+export function removeHaveAssetLinkKeys(
+  value: Ics215ResourceValue,
+  keysToRemove: string[],
+  workspaceAssets: ResourceListItemData[],
+  options: { recalculateNeed?: boolean } = {}
+): Ics215ResourceValue {
+  const removeSet = new Set(keysToRemove)
+  const remaining = (value.linkedAssetKeys ?? []).filter((key) => !removeSet.has(key))
+  if (remaining.length === 0) {
+    return clearHaveAssetLink(value, options)
+  }
+  return applyHaveAssetLink(value, remaining, workspaceAssets, options)
 }
 
 export function normalizeIcs215ResourceValue(raw: unknown): Ics215ResourceValue {

@@ -4,10 +4,13 @@ import {
   applyHaveAssetLink,
   applyManualHaveValue,
   buildHaveAssetLinkIndex,
+  clearHaveAssetLink,
   collectLinkedAssetKeysInForm,
   getConflictingHaveAssetKeys,
   isHaveLinkedToAssets,
   partitionHaveLinkAssets,
+  removeHaveAssetLinkKeys,
+  type Ics215HaveAssetLinkLocation,
 } from '@/features/ics215/ics215-have-asset-link'
 import type { ResourceListItemData } from '@/features/resources/types'
 import { rankWorkspaceAssetsForResourceQuery } from '@/features/resources/workspace-asset-relevance'
@@ -58,7 +61,7 @@ export function useIcs215HaveAssetLink({
   )
 
   const linkedAssetLocations = useMemo(() => {
-    if (!dialogState) return new Map()
+    if (!dialogState) return new Map<string, Ics215HaveAssetLinkLocation>()
     return buildHaveAssetLinkIndex(
       workAssignments,
       resourceColumns,
@@ -122,6 +125,17 @@ export function useIcs215HaveAssetLink({
     (selectedKeys: string[]) => {
       if (!dialogState) return
 
+      const current =
+        workAssignments.find((row) => row.id === dialogState.rowId)?.resourceValues[
+          dialogState.columnId
+        ] ?? EMPTY_RESOURCE_VALUE
+
+      if (selectedKeys.length === 0) {
+        patchResourceValue(dialogState.rowId, dialogState.columnId, clearHaveAssetLink(current))
+        closeHaveLinkDialog()
+        return
+      }
+
       const fullIndex = buildHaveAssetLinkIndex(
         workAssignments,
         resourceColumns,
@@ -130,15 +144,10 @@ export function useIcs215HaveAssetLink({
       const conflicts = getConflictingHaveAssetKeys(selectedKeys, dialogState, fullIndex)
       if (conflicts.length > 0) {
         toast.error('One or more assets are already linked elsewhere', {
-          description: 'Each asset can only be assigned to one Have cell.',
+          description: 'Unlink them from the other Have cell first, then try again.',
         })
         return
       }
-
-      const current =
-        workAssignments.find((row) => row.id === dialogState.rowId)?.resourceValues[
-          dialogState.columnId
-        ] ?? EMPTY_RESOURCE_VALUE
 
       patchResourceValue(
         dialogState.rowId,
@@ -156,6 +165,22 @@ export function useIcs215HaveAssetLink({
       workspaceAssets,
       closeHaveLinkDialog,
     ]
+  )
+
+  const unlinkAssetFromOtherCell = useCallback(
+    (location: Ics215HaveAssetLinkLocation, assetKey: string) => {
+      const row = workAssignments.find((entry) => entry.id === location.rowId)
+      const current = row?.resourceValues[location.columnId] ?? EMPTY_RESOURCE_VALUE
+      patchResourceValue(
+        location.rowId,
+        location.columnId,
+        removeHaveAssetLinkKeys(current, [assetKey], workspaceAssets)
+      )
+      toast.success('Asset unlinked', {
+        description: `Removed from ${location.columnLabel} Have.`,
+      })
+    },
+    [workAssignments, patchResourceValue, workspaceAssets]
   )
 
   const patchManualHave = useCallback(
@@ -220,6 +245,7 @@ export function useIcs215HaveAssetLink({
     openHaveLinkDialog,
     closeHaveLinkDialog,
     confirmHaveLink,
+    unlinkAssetFromOtherCell,
     patchManualHave,
     previewColumnMatches,
   }

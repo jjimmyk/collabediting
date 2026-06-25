@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ChevronDown } from 'lucide-react'
+import { ChevronDown, Unlink } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -23,8 +23,10 @@ type Ics215HaveAssetPickCardProps = {
   entry: ScoredWorkspaceAsset
   checked: boolean
   disabled?: boolean
+  linkedToThisCell?: boolean
   linkedElsewhere?: Ics215HaveAssetLinkLocation
   onToggle: () => void
+  onUnlinkFromElsewhere?: () => void
 }
 
 function DetailField({ label, value }: { label: string; value: string | number }) {
@@ -43,11 +45,14 @@ export function Ics215HaveAssetPickCard({
   entry,
   checked,
   disabled = false,
+  linkedToThisCell = false,
   linkedElsewhere,
   onToggle,
+  onUnlinkFromElsewhere,
 }: Ics215HaveAssetPickCardProps) {
   const [open, setOpen] = useState(false)
   const asset = entry.asset
+  const blockedByOtherCell = Boolean(linkedElsewhere) && !linkedToThisCell
 
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
@@ -55,13 +60,14 @@ export function Ics215HaveAssetPickCard({
         className={cn(
           'rounded-md border',
           checked && 'border-primary/40 bg-primary/5',
-          disabled && 'opacity-70'
+          blockedByOtherCell && 'opacity-80',
+          disabled && !blockedByOtherCell && 'opacity-70'
         )}
       >
         <div className="flex items-start gap-2 px-3 py-2">
           <Checkbox
             checked={checked}
-            disabled={disabled}
+            disabled={disabled || blockedByOtherCell}
             onCheckedChange={onToggle}
             className="mt-1"
             aria-label={`Select ${asset.name}`}
@@ -74,6 +80,11 @@ export function Ics215HaveAssetPickCard({
               <Badge variant="outline" className="text-[10px]">
                 {asset.type}
               </Badge>
+              {linkedToThisCell ? (
+                <Badge variant="secondary" className="text-[10px]">
+                  Linked here
+                </Badge>
+              ) : null}
             </div>
             <p className="text-xs text-muted-foreground">
               {asset.unitName || asset.unitType || asset.owner || 'Assigned asset'}
@@ -87,18 +98,50 @@ export function Ics215HaveAssetPickCard({
               </p>
             ) : null}
           </div>
-          <CollapsibleTrigger asChild>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7 shrink-0"
-              aria-label={`Toggle details for ${asset.name}`}
-              onClick={(event) => event.stopPropagation()}
-            >
-              <ChevronDown className={cn('h-4 w-4 transition-transform', open && 'rotate-180')} />
-            </Button>
-          </CollapsibleTrigger>
+          <div className="flex shrink-0 flex-col items-end gap-1">
+            {linkedToThisCell && checked ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 gap-1 px-2 text-xs text-muted-foreground"
+                onClick={(event) => {
+                  event.stopPropagation()
+                  onToggle()
+                }}
+              >
+                <Unlink className="h-3 w-3" />
+                Unlink
+              </Button>
+            ) : null}
+            {blockedByOtherCell && onUnlinkFromElsewhere ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-7 gap-1 px-2 text-xs"
+                onClick={(event) => {
+                  event.stopPropagation()
+                  onUnlinkFromElsewhere()
+                }}
+              >
+                <Unlink className="h-3 w-3" />
+                Unlink there
+              </Button>
+            ) : null}
+            <CollapsibleTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7"
+                aria-label={`Toggle details for ${asset.name}`}
+                onClick={(event) => event.stopPropagation()}
+              >
+                <ChevronDown className={cn('h-4 w-4 transition-transform', open && 'rotate-180')} />
+              </Button>
+            </CollapsibleTrigger>
+          </div>
         </div>
         <CollapsibleContent>
           <div className="grid grid-cols-2 gap-x-4 gap-y-2 border-t px-3 py-3 sm:grid-cols-3">

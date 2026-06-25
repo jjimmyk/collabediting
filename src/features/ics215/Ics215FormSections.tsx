@@ -126,27 +126,19 @@ export function Ics215FormSections({
     content: ReactNode,
     headerActions?: ReactNode,
     itemClassName?: string,
-    headerAccessory?: ReactNode,
-    options?: { stickyEditActions?: boolean }
+    headerAccessory?: ReactNode
   ) => {
     const editing = isSectionEditing(editingSections, section)
-    const stickyEditActions = options?.stickyEditActions ?? false
     return (
       <Item
         variant="outline"
         className={cn(
           'min-w-0 max-w-full flex-nowrap flex-col items-stretch overflow-hidden p-0',
           glassItemBorderClasses,
-          itemClassName,
-          stickyEditActions && 'min-h-0'
+          itemClassName
         )}
       >
-        <div
-          className={cn(
-            'min-w-0 w-full max-w-full px-3 py-2.5',
-            stickyEditActions ? 'flex min-h-0 flex-1 flex-col gap-2' : 'space-y-2'
-          )}
-        >
+        <div className="min-w-0 w-full max-w-full space-y-2 px-3 py-2.5">
           <div className="flex items-start justify-between gap-2">
             <div className="flex min-w-0 items-center gap-1.5">
               <Ics202SectionHeader
@@ -161,15 +153,10 @@ export function Ics215FormSections({
             </div>
             {headerActions}
           </div>
-          <div className={stickyEditActions ? 'min-h-0 flex-1' : undefined}>{content}</div>
+          {content}
           <Ics202SectionEditActions
             isEditing={editing}
             isSaving={isSaving}
-            className={
-              stickyEditActions
-                ? 'sticky bottom-0 z-10 shrink-0 border-t bg-card/95 pt-2 backdrop-blur-sm'
-                : undefined
-            }
             onGenerate={() => onGenerateSection(section)}
             onCancel={() => onCancelSectionEdit(section)}
             onSave={() => onSaveSection(section)}
@@ -314,8 +301,7 @@ export function Ics215FormSections({
             context="ics215"
             state={workAssignmentsSyncTooltip}
           />
-        ) : null,
-        { stickyEditActions: true }
+        ) : null
       )}
 
       {renderSectionShell(

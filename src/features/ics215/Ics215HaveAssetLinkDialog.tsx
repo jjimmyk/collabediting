@@ -34,6 +34,7 @@ export type Ics215HaveAssetLinkDialogProps = {
   isLoading?: boolean
   rankingEngine?: 'lexical' | 'openai'
   onConfirm: (selectedKeys: string[]) => void
+  onUnlinkFromOtherCell?: (location: Ics215HaveAssetLinkLocation, assetKey: string) => void
 }
 
 export function Ics215HaveAssetLinkDialog({
@@ -50,8 +51,10 @@ export function Ics215HaveAssetLinkDialog({
   isLoading = false,
   rankingEngine,
   onConfirm,
+  onUnlinkFromOtherCell,
 }: Ics215HaveAssetLinkDialogProps) {
   const [filterQuery, setFilterQuery] = useState('')
+  const linkedToThisCellKeys = useMemo(() => new Set(initialSelectedKeys), [initialSelectedKeys])
 
   const ranked = useMemo(
     () => rankWorkspaceAssetsForResourceQuery(workspaceAssets, columnLabel),
@@ -100,8 +103,24 @@ export function Ics215HaveAssetLinkDialog({
     })
   }
 
-  const suggestedEntries = filterEntries(ranked.suggested)
-  const otherEntries = filterEntries(ranked.other)
+  const allRankedEntries = useMemo(
+    () => [...ranked.suggested, ...ranked.other],
+    [ranked.suggested, ranked.other]
+  )
+
+  const linkedToThisCellEntries = useMemo(() => {
+    const byKey = new Map(allRankedEntries.map((entry) => [entry.asset.assetKey, entry]))
+    return initialSelectedKeys
+      .map((key) => byKey.get(key))
+      .filter((entry): entry is ScoredWorkspaceAsset => entry !== undefined)
+  }, [allRankedEntries, initialSelectedKeys])
+
+  const suggestedEntries = filterEntries(
+    ranked.suggested.filter((entry) => !linkedToThisCellKeys.has(entry.asset.assetKey))
+  )
+  const otherEntries = filterEntries(
+    ranked.other.filter((entry) => !linkedToThisCellKeys.has(entry.asset.assetKey))
+  )
 
   const staleEntries = staleLinkedKeys.map((key) => ({
     assetKey: key,
@@ -111,29 +130,41 @@ export function Ics215HaveAssetLinkDialog({
   const handleToggle = (assetKey: string) => {
     if (linkedAssetLocations.has(assetKey) && !selectedKeys.has(assetKey)) {
       toast.error('Asset already linked to another Have cell', {
-        description: 'Unlink it from that cell first, or open that Have cell to move the asset.',
+        description: 'Use Unlink there on that asset, or open that Have cell.',
       })
       return
     }
     toggleKey(assetKey)
   }
 
-  const renderPickList = (entries: ScoredWorkspaceAsset[]) =>
-    entries.map((entry) => {
-      const assetKey = entry.asset.assetKey
-      const linkedElsewhere = linkedAssetLocations.get(assetKey)
-      const isBlocked = Boolean(linkedElsewhere) && !selectedKeys.has(assetKey)
-      return (
-        <Ics215HaveAssetPickCard
-          key={assetKey}
-          entry={entry}
-          checked={selectedKeys.has(assetKey)}
-          disabled={isBlocked}
-          linkedElsewhere={linkedElsewhere}
-          onToggle={() => handleToggle(assetKey)}
-        />
-      )
-    })
+  const renderPickCard = (entry: ScoredWorkspaceAsset) => {
+    const assetKey = entry.asset.assetKey
+    const linkedElsewhere = linkedAssetLocations.get(assetKey)
+    const linkedToThisCell = linkedToThisCellKeys.has(assetKey)
+    return (
+      <Ics215HaveAssetPickCard
+        key={assetKey}
+        entry={entry}
+        checked={selectedKeys.has(assetKey)}
+        linkedToThisCell={linkedToThisCell}
+        linkedElsewhere={linkedElsewhere}
+        onToggle={() => handleToggle(assetKey)}
+        onUnlinkFromElsewhere={
+          linkedElsewhere && onUnlinkFromOtherCell
+            ? () => onUnlinkFromOtherCell(linkedElsewhere, assetKey)
+            : undefined
+        }
+      />
+    )
+  }
+
+  const hadInitialLinks = initialSelectedKeys.length > 0
+  const clearingAllLinks = hadInitialLinks && selectedKeys.size === 0
+  const confirmLabel = clearingAllLinks
+    ? 'Clear Have link'
+    : selectedKeys.size === 0
+      ? 'Confirm'
+      : 'Confirm Have link'
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -145,17 +176,30 @@ export function Ics215HaveAssetLinkDialog({
               ? `Work assignment: ${workAssignmentContext}`
               : 'Select workspace assets to reference in this Have cell.'}
             {rankingEngine ? ` Ranked via ${rankingEngine}.` : ''}
-            {' Each asset can only be linked to one Have cell.'}
+            {' Uncheck or unlink to remove assets from this cell. Each asset can only be linked to one Have cell.'}
           </DialogDescription>
         </DialogHeader>
 
-        <div className="shrink-0 px-6 py-3">
+        <div className="shrink-0 space-y-2 px-6 py-3">
           <Input
             value={filterQuery}
             onChange={(event) => setFilterQuery(event.target.value)}
             placeholder="Filter assets…"
             aria-label="Filter assets"
           />
+          {hadInitialLinks ? (
+            <div className="flex justify-end">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 text-xs"
+                onClick={() => setKeys([])}
+              >
+                Clear all links from this cell
+              </Button>
+            </div>
+          ) : null}
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-4">
@@ -167,6 +211,17 @@ export function Ics215HaveAssetLinkDialog({
             </div>
           ) : (
             <div className="space-y-4">
+              {linkedToThisCellEntries.length > 0 ? (
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Linked to this Have cell
+                  </p>
+                  <div className="space-y-2">
+                    {linkedToThisCellEntries.map((entry) => renderPickCard(entry))}
+                  </div>
+                </div>
+              ) : null}
+
               {staleEntries.length > 0 ? (
                 <div className="space-y-2">
                   <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -188,7 +243,7 @@ export function Ics215HaveAssetLinkDialog({
                   <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                     Suggested matches
                   </p>
-                  <div className="space-y-2">{renderPickList(suggestedEntries)}</div>
+                  <div className="space-y-2">{suggestedEntries.map((entry) => renderPickCard(entry))}</div>
                 </div>
               ) : null}
 
@@ -197,7 +252,7 @@ export function Ics215HaveAssetLinkDialog({
                   <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                     Other assigned assets
                   </p>
-                  <div className="space-y-2">{renderPickList(otherEntries)}</div>
+                  <div className="space-y-2">{otherEntries.map((entry) => renderPickCard(entry))}</div>
                 </div>
               ) : null}
             </div>
@@ -206,7 +261,9 @@ export function Ics215HaveAssetLinkDialog({
 
         <DialogFooter className="shrink-0 flex-col gap-2 border-t bg-background px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-xs text-muted-foreground">
-            Selected: {selectedKeys.size} asset{selectedKeys.size === 1 ? '' : 's'}
+            {clearingAllLinks
+              ? 'Have will be cleared and asset links removed.'
+              : `Selected: ${selectedKeys.size} asset${selectedKeys.size === 1 ? '' : 's'}`}
           </p>
           <div className="flex gap-2">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
@@ -215,9 +272,10 @@ export function Ics215HaveAssetLinkDialog({
             <Button
               type="button"
               data-testid="ics215-have-link-confirm"
+              variant={clearingAllLinks ? 'destructive' : 'default'}
               onClick={() => onConfirm([...selectedKeys])}
             >
-              Confirm Have link
+              {confirmLabel}
             </Button>
           </div>
         </DialogFooter>
