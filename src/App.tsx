@@ -741,6 +741,25 @@ import {
   ics201VersionAuthorLabel,
   resolveActiveIcs201Section,
 } from '@/features/ics201/utils'
+import {
+  createEmptySitrepDraft,
+  createInitialSitrepForm,
+  SITREP_AI_COMPATIBLE_SECTIONS,
+  SITREP_SECTION_PRIMARY,
+} from '@/features/sitrep/constants'
+import type { SitrepFormState, SitrepSection, SitrepVersion } from '@/features/sitrep/types'
+import {
+  buildDefaultSitrepForAor,
+  buildDefaultSitrepForWorkspace,
+  cloneSitrepFormState,
+  createLocalSitrepVersion,
+  createSeedSitrepVersions,
+  getSitrepSectionsForScope,
+  resolveDefaultSitrepActiveSection,
+  resolveSitrepScopeRef,
+} from '@/features/sitrep/utils'
+import { useSitrepSync } from '@/hooks/useSitrepSync'
+import { fetchSitrepLiveSummaryForAor } from '@/lib/sitrep-service'
 import { useIcs201ObjectivesSectionEditor } from '@/hooks/useIcs201ObjectivesSectionEditor'
 import { useIcs201Presence } from '@/hooks/useIcs201Presence'
 import { useIcs201Sync } from '@/hooks/useIcs201Sync'
@@ -2896,7 +2915,10 @@ const SITREP_ONGOING_INCIDENTS: IncidentListItem[] = [
 const getOngoingIncidentsForFemaAor = (aorName: string) =>
   SITREP_ONGOING_INCIDENTS.filter((entry) => entry.region === aorName)
 
-const buildFemaAorGraphicAttributes = (aor: FemaAorGraphicItem) => {
+const buildFemaAorGraphicAttributes = (
+  aor: FemaAorGraphicItem,
+  liveSummary?: { executiveSummary: string; sitrepUpdatedBy: string }
+) => {
   const regionIncidents = getOngoingIncidentsForFemaAor(aor.name)
   return {
     mapKey: `fema-aor-${aor.id}`,
@@ -2909,8 +2931,8 @@ const buildFemaAorGraphicAttributes = (aor: FemaAorGraphicItem) => {
     evacuationStatus: aor.evacuationStatus,
     priority: aor.priority,
     lastUpdate: aor.lastUpdate,
-    sitrep: aor.sitrep,
-    sitrepUpdatedBy: aor.sitrepUpdatedBy,
+    sitrep: liveSummary?.executiveSummary ?? aor.sitrep,
+    sitrepUpdatedBy: liveSummary?.sitrepUpdatedBy ?? aor.sitrepUpdatedBy,
     ongoingIncidentsSummary:
       regionIncidents.length > 0
         ? regionIncidents
@@ -2943,8 +2965,12 @@ const RESOURCE_AT_RISK_POPUP_TEMPLATE = {
   content: RESOURCE_AT_RISK_POPUP_DETAILS,
 }
 
-const applyFemaAorPopupState = (graphic: Graphic, aor: FemaAorGraphicItem) => {
-  graphic.attributes = buildFemaAorGraphicAttributes(aor)
+const applyFemaAorPopupState = (
+  graphic: Graphic,
+  aor: FemaAorGraphicItem,
+  liveSummary?: { executiveSummary: string; sitrepUpdatedBy: string }
+) => {
+  graphic.attributes = buildFemaAorGraphicAttributes(aor, liveSummary)
   graphic.popupTemplate = FEMA_AOR_POPUP_TEMPLATE
 }
 
@@ -3261,92 +3287,6 @@ const getOngoingIncidentSitrepSectionValue = (
       return content.imageryNotes
     default:
       return null
-  }
-}
-
-type WorkspaceSitrepSource = {
-  id: number
-  name: string
-  region: string
-  summary: string
-  lead: string
-  type: string
-  resourcesCommitted: string
-  severity: string
-  status: string
-  startedAt?: string
-}
-
-function buildDefaultSitrepForWorkspace(
-  workspace: WorkspaceSitrepSource,
-  kind: 'incident' | 'exercise',
-  baseForm: SitrepFormState
-): SitrepFormState {
-  const workspaceKindLabel = kind === 'exercise' ? 'Exercise' : 'Incident'
-  const ongoing =
-    kind === 'incident' ? ONGOING_INCIDENT_SITREP_CONTENT[workspace.id] : undefined
-  const stamp = new Date().toISOString().slice(0, 16).replace('T', ' ') + ' UTC'
-
-  if (ongoing) {
-    return {
-      ...baseForm,
-      reportNumber: `SITREP-${workspace.id}-${new Date().getFullYear()}`,
-      preparedDateTime: stamp,
-      reportingPeriodStart: workspace.startedAt ?? stamp,
-      reportingPeriodEnd: stamp,
-      incidentName: workspace.name,
-      incidentLocation: workspace.region,
-      preparedBy: workspace.lead,
-      agency: workspace.region,
-      executiveSummary: ongoing.executiveSummary,
-      readinessAssessment: ongoing.readinessAssessment,
-      riskToMission: ongoing.riskToMission,
-      outstandingRfiRfr: ongoing.outstandingRfiRfr,
-      previousCriticalIncidentComms: ongoing.previousCriticalIncidentComms,
-      generalComments: ongoing.generalComments,
-      imageryNotes: ongoing.imageryNotes,
-      currentSituationSummary: workspace.summary,
-    }
-  }
-
-  return {
-    ...baseForm,
-    reportNumber: `SITREP-${kind === 'exercise' ? 'EX' : 'IN'}-${workspace.id}-${new Date().getFullYear()}`,
-    preparedDateTime: stamp,
-    reportingPeriodStart: workspace.startedAt ?? stamp,
-    reportingPeriodEnd: stamp,
-    incidentName: workspace.name,
-    incidentLocation: workspace.region,
-    preparedBy: workspace.lead,
-    agency: workspace.region,
-    executiveSummary:
-      workspace.summary ||
-      `${workspaceKindLabel} ${workspace.name} is ${workspace.status} with ${workspace.severity} severity in ${workspace.region}.`,
-    readinessAssessment:
-      kind === 'exercise'
-        ? `Exercise planning posture for ${workspace.name}: ${workspace.resourcesCommitted}. Objectives and MSEL injects aligned to the current exercise timeline.`
-        : `Operational readiness for ${workspace.name}: ${workspace.resourcesCommitted}. Status ${workspace.status}; severity ${workspace.severity}.`,
-    riskToMission:
-      kind === 'exercise'
-        ? `Primary exercise risks include scenario inject timing, evaluator coverage gaps, and controller-to-player communications. Mitigations: MSEL synchronization, dedicated evaluators, and redundant comms checks.`
-        : `Primary operational risks for ${workspace.name} include sustained resource demand, weather impacts, and coordination across ${workspace.region}. Mitigations tracked through the incident action plan.`,
-    outstandingRfiRfr:
-      kind === 'exercise'
-        ? `RFI-EX-${workspace.id}: Confirm exercise evaluation criteria for ${workspace.name}.\nRFR-EX-${workspace.id}: Additional simulation cell support for the next exercise period.`
-        : `RFI-IN-${workspace.id}: Updated situational assessment for ${workspace.name}.\nRFR-IN-${workspace.id}: Additional resources for ${workspace.region}.`,
-    previousCriticalIncidentComms:
-      kind === 'exercise'
-        ? `${workspaceKindLabel} workspace activated for ${workspace.name}. Initial coordination with exercise controllers and participating agencies complete.`
-        : `${workspaceKindLabel} workspace activated for ${workspace.name}. Unified command coordination established for ${workspace.region}.`,
-    generalComments:
-      kind === 'exercise'
-        ? `${workspace.type} exercise in ${workspace.status} status. ${workspace.resourcesCommitted}. Next exercise period briefing scheduled.`
-        : `${workspace.type} in ${workspace.status} status. ${workspace.resourcesCommitted}. Next operational period briefing scheduled.`,
-    imageryNotes:
-      kind === 'exercise'
-        ? `Exercise map overlays and controller logs for ${workspace.name} archived to the workspace file manager.`
-        : `Situation map and field imagery for ${workspace.name} archived to the incident workspace file manager.`,
-    currentSituationSummary: workspace.summary,
   }
 }
 
@@ -4412,44 +4352,6 @@ type AssigneeOption = {
   position: string
   availability: 'Available'
 }
-type SitrepActivityRow = {
-  id: number
-  time: string
-  description: string
-  status: 'Planned' | 'In Progress' | 'Completed'
-}
-type SitrepResourceRow = {
-  id: number
-  resource: string
-  quantity: string
-  status: string
-  location: string
-}
-type SitrepFormState = {
-  reportNumber: string
-  preparedDateTime: string
-  reportingPeriodStart: string
-  reportingPeriodEnd: string
-  incidentName: string
-  incidentLocation: string
-  preparedBy: string
-  agency: string
-  sectorLno: string
-  executiveSummary: string
-  readinessAssessment: string
-  riskToMission: string
-  outstandingRfiRfr: string
-  previousCriticalIncidentComms: string
-  generalComments: string
-  imageryNotes: string
-  currentSituationSummary: string
-  currentActivities: SitrepActivityRow[]
-  resourcesDeployed: SitrepResourceRow[]
-  keyIssues: string[]
-  nextSteps: string[]
-  distribution: string
-}
-
 let crc32Table: Uint32Array | null = null
 function computeCrc32(bytes: Uint8Array): number {
   if (!crc32Table) {
@@ -7643,163 +7545,9 @@ function App() {
     color: '#ef4444',
   } as const
   const liveIcs201FormRef = useRef<Ics201FormState | null>(null)
-  const INITIAL_SITREP_FORM: SitrepFormState = {
-    reportNumber: 'SITREP-2026-014',
-    preparedDateTime: '2026-04-25 18:00 UTC',
-    reportingPeriodStart: '2026-04-25 06:00 UTC',
-    reportingPeriodEnd: '2026-04-25 18:00 UTC',
-    incidentName: 'Incident Alpha',
-    incidentLocation: 'North Levee Sector / Districts 4 & 7',
-    preparedBy: 'Planning Section Chief',
-    agency: 'State Emergency Operations Center',
-    sectorLno: 'Sector North-1 • LNO: M. Wells (State EOC) • Backup LNO: R. Patel (County EOC)',
-    executiveSummary:
-      'Operations remain in life-safety phase. Two evacuation orders active; shelter occupancy at 64%. No new injuries reported in this period; one rescue completed successfully.',
-    readinessAssessment:
-      'Personnel: 92% on-shift. Equipment: 85% mission-capable; 2 pumps deadlined awaiting parts. Logistics: 36-hour fuel and water supply on hand. Communications: primary and alternate nets stable. Overall readiness: AMBER (degraded equipment, sustainable for next op period).',
-    riskToMission:
-      'Highest: potential levee breach at North Sector within 2 hours could force shelter relocation. Medium: deteriorating road network restricting medical transport routes. Low: weather-driven shelter surge expected to plateau by 22:00.',
-    outstandingRfiRfr:
-      'RFI-014 (open): updated rainfall forecast for next 12 hours from NWS. RFI-016 (open): power restoration ETA for Districts 4 & 7. RFR-009 (open): two additional water tenders. RFR-011 (pending approval): mutual aid medical strike team.',
-    previousCriticalIncidentComms:
-      '15:12 — Notified IC of swift water rescue at River Bend Corridor (resolved). 16:40 — Coordinated evacuation messaging with PIO for Districts 4 & 7. 17:05 — Briefed County EOC on shelter capacity trend. 17:42 — Casualty transport coordinated with Hospital Liaison.',
-    generalComments:
-      'Inter-agency cooperation strong this period. Recommend standing up mutual aid coordination cell next op period. Consider pre-positioning sandbag teams at North Levee Sector ahead of forecast rainfall.',
-    imageryNotes:
-      'Aerial drone footage of North Levee Sector captured at 17:30 (3 frames). Ground photos of River Bend Corridor staging at 16:15 (2 frames). All imagery archived to Incident Archive folder /alpha-2026-001/sitrep-014/.',
-    currentSituationSummary:
-      'Severe weather impacts continue across multiple districts. Road closures and utility disruptions are driving shelter demand and dynamic resource allocation.',
-    currentActivities: [
-      {
-        id: 1,
-        time: '14:30',
-        description: 'Swift water rescue completed at River Bend Corridor.',
-        status: 'Completed',
-      },
-      {
-        id: 2,
-        time: '15:45',
-        description: 'Levee monitoring teams deployed to North Sector.',
-        status: 'In Progress',
-      },
-      {
-        id: 3,
-        time: '17:00',
-        description: 'Shelter staffing surge for Central Aid Station.',
-        status: 'Planned',
-      },
-    ],
-    resourcesDeployed: [
-      {
-        id: 1,
-        resource: 'USAR Team Alpha',
-        quantity: '2',
-        status: 'Assigned',
-        location: 'North Levee Sector',
-      },
-      {
-        id: 2,
-        resource: 'Medical Strike Team',
-        quantity: '1',
-        status: 'Available',
-        location: 'South Aid Station',
-      },
-    ],
-    keyIssues: [
-      'Rising water at North Levee Sector with breach risk in next 2 hours.',
-      'Shelter capacity nearing threshold at Central Aid Station.',
-    ],
-    nextSteps: [
-      'Coordinate utility assessment sweep across affected sectors.',
-      'Pre-position barricade teams at South Connector choke points.',
-      'Issue updated public messaging at next operational period.',
-    ],
-    distribution:
-      'Incident Commander; Section Chiefs; State EOC; County EOC; Public Information Officer.',
-  }
-  const [sitrepForm, setSitrepForm] = useState<SitrepFormState>(INITIAL_SITREP_FORM)
-  type SitrepVersion = {
-    id: string
-    createdAt: number
-    creatorCreatedAt: number
-    creatorName: string
-    creatorColor: string
-    creatorRole: string
-    authorName: string
-    authorColor: string
-    authorRole: string
-    snapshot: SitrepFormState
-    signatures: Ics201VersionSignature[]
-    submittedForReviewTo?: Array<{ name: string; role: string }>
-    submittedForReviewAt?: number
-    aiGeneratedSections?: SitrepSection[]
-  }
-  const [sitrepVersions, setSitrepVersions] = useState<SitrepVersion[]>(() => {
-    const now = Date.now()
-    const authors: Array<{ name: string; color: string; role: string }> = [
-      { name: 'You', color: '#16a34a', role: 'Technical Specialist' },
-      { name: 'Maya Chen', color: '#ef4444', role: 'Operations Section Chief' },
-      { name: 'Diego Alvarez', color: '#3b82f6', role: 'Logistics Section Chief' },
-      { name: 'A. Rivera', color: '#16a34a', role: 'Liaison Officer' },
-    ]
-    const signers: Array<{ name: string; role: string }> = [
-      { name: 'R. Morgan', role: 'Incident Commander' },
-      { name: 'A. Rivera', role: 'Planning Section Chief' },
-      { name: 'T. Hale', role: 'Operations Section Chief' },
-    ]
-    const signedIndices = new Set([0, 2, 4, 6])
-    let signedCursor = 0
-    const totalSeedVersions = 8
-    let latestUnsignedIndex = -1
-    for (let i = totalSeedVersions - 1; i >= 0; i -= 1) {
-      if (!signedIndices.has(i)) {
-        latestUnsignedIndex = i
-        break
-      }
-    }
-    return Array.from({ length: totalSeedVersions }, (_, index) => {
-      const minutesAgo = (totalSeedVersions - index) * 3
-      const createdAt = now - minutesAgo * 60_000
-      const author = authors[index % authors.length]
-      const isSigned = signedIndices.has(index)
-      const signatures: Ics201VersionSignature[] = []
-      if (isSigned) {
-        const signer = signers[signedCursor % signers.length]
-        signedCursor += 1
-        signatures.push({
-          name: signer.name,
-          role: signer.role,
-          signedAt: createdAt + 30_000,
-        })
-      }
-      const creator = authors[(index + 2) % authors.length]
-      const isSubmittedSeed = !isSigned && index === latestUnsignedIndex
-      const submittedForReviewTo = isSubmittedSeed
-        ? [
-            { name: 'D. Alvarez', role: 'Situation Unit Leader' },
-            { name: 'M. Tanaka', role: 'Situation Unit Leader' },
-            { name: 'A. Rivera', role: 'Planning Section Chief' },
-            { name: 'Maya Chen', role: 'Planning Section Chief' },
-          ]
-        : undefined
-      const submittedForReviewAt = isSubmittedSeed ? createdAt + 60_000 : undefined
-      return {
-        id: `seed-sitrep-v${index + 1}`,
-        createdAt,
-        creatorCreatedAt: createdAt - 8 * 60 * 1000,
-        creatorName: creator.name,
-        creatorColor: creator.color,
-        creatorRole: creator.role,
-        authorName: author.name,
-        authorColor: author.color,
-        authorRole: author.role,
-        snapshot: INITIAL_SITREP_FORM,
-        signatures,
-        submittedForReviewTo,
-        submittedForReviewAt,
-      }
-    })
-  })
+  const INITIAL_SITREP_FORM = useMemo(() => createInitialSitrepForm(), [])
+  const [sitrepForm, setSitrepForm] = useState<SitrepFormState>(() => createInitialSitrepForm())
+  const [sitrepVersions, setSitrepVersions] = useState<SitrepVersion[]>([])
   const [isSitrepVersionDialogOpen, setIsSitrepVersionDialogOpen] = useState(false)
   const [isSitrepSignedVersionsDialogOpen, setIsSitrepSignedVersionsDialogOpen] = useState(false)
   const [isCreatingSignedSitrepVersion, setIsCreatingSignedSitrepVersion] = useState(false)
@@ -7882,17 +7630,21 @@ function App() {
       })),
     ]
     const submittedAt = Date.now()
-    setSitrepVersions((previous) =>
-      previous.map((entry) =>
-        entry.id === picker.draftId
-          ? {
-              ...entry,
-              submittedForReviewTo: selectedRecipients,
-              submittedForReviewAt: submittedAt,
-            }
-          : entry
-      )
-    )
+    const activeDraft = sitrepVersions.find((entry) => entry.id === picker.draftId)
+    if (activeDraft) {
+      pushSitrepVersionRef.current(activeDraft.snapshot, {
+        submittedForReviewTo: selectedRecipients,
+        submittedForReviewAt: submittedAt,
+        authorNameOverride: activeDraft.authorName,
+        authorColorOverride: activeDraft.authorColor,
+        authorRole: activeDraft.authorRole,
+        creatorName: activeDraft.creatorName,
+        creatorColor: activeDraft.creatorColor,
+        creatorRole: activeDraft.creatorRole,
+        creatorCreatedAt: activeDraft.creatorCreatedAt,
+        aiGeneratedSections: activeDraft.aiGeneratedSections,
+      })
+    }
     setRequestedApprovalSitrepDraftIds((previous) => {
       const next = new Set(previous)
       next.add(picker.draftId)
@@ -7916,40 +7668,44 @@ function App() {
     workspace?: IncidentListItem
   }
   const [selectedSitrepScopeId, setSelectedSitrepScopeId] = useState<string>('aor-fema-1')
-  const [sitrepFormsByScopeId, setSitrepFormsByScopeId] = useState<
-    Record<string, SitrepFormState>
-  >({})
+  const pushSitrepVersionRef = useRef<
+    (
+      snapshot: SitrepFormState,
+      options?: {
+        signatures?: Ics201VersionSignature[]
+        sectionId?: SitrepSection
+        authorNameOverride?: string
+        authorColorOverride?: string
+        authorRole?: string
+        creatorName?: string
+        creatorColor?: string
+        creatorRole?: string
+        creatorCreatedAt?: number
+        submittedForReviewTo?: Array<{ name: string; role: string }>
+        submittedForReviewAt?: number
+        aiGeneratedSections?: SitrepSection[]
+      }
+    ) => SitrepVersion
+  >((snapshot, options) =>
+    createLocalSitrepVersion(snapshot, 'You', '#16a34a', {
+      sectionId: options?.sectionId,
+      signatures: options?.signatures,
+      authorRole: options?.authorRole,
+      creatorName: options?.creatorName,
+      creatorColor: options?.creatorColor,
+      creatorRole: options?.creatorRole,
+      creatorCreatedAt: options?.creatorCreatedAt,
+      submittedForReviewTo: options?.submittedForReviewTo,
+      submittedForReviewAt: options?.submittedForReviewAt,
+      aiGeneratedSections: options?.aiGeneratedSections,
+    })
+  )
+  const sitrepAuthorColorRef = useRef('#16a34a')
   const createNewSitrepDraft = () => {
-    const now = Date.now()
-    const newId = `${now}-sitrep-draft-${Math.random().toString(36).slice(2, 8)}`
-    const seedSnapshot: SitrepFormState = {
-      ...INITIAL_SITREP_FORM,
-      sectorLno: '',
-      executiveSummary: '',
-      readinessAssessment: '',
-      riskToMission: '',
-      outstandingRfiRfr: '',
-      previousCriticalIncidentComms: '',
-      generalComments: '',
-      imageryNotes: '',
-    }
-    const newDraft: SitrepVersion = {
-      id: newId,
-      createdAt: now,
-      creatorCreatedAt: now,
-      creatorName: 'You',
-      creatorColor: '#16a34a',
-      creatorRole: 'Technical Specialist',
-      authorName: 'You',
-      authorColor: '#16a34a',
-      authorRole: 'Technical Specialist',
-      snapshot: seedSnapshot,
-      signatures: [],
-    }
+    const seedSnapshot = createEmptySitrepDraft(INITIAL_SITREP_FORM)
     if (liveSitrepFormRef.current === null) {
       liveSitrepFormRef.current = sitrepForm
     }
-    setSitrepVersions((previous) => [...previous, newDraft].slice(-100))
     setSitrepForm(seedSnapshot)
     setSitrepSectionEdits({
       'executive-summary': null,
@@ -7963,35 +7719,14 @@ function App() {
     })
     setViewingSitrepVersion(null)
     setSitrepViewMode('current')
-    setActiveSitrepDraftId(newId)
+    const version = pushSitrepVersionRef.current(seedSnapshot, {
+      authorRole: 'Technical Specialist',
+      creatorName: 'You',
+      creatorColor: sitrepAuthorColorRef.current,
+      creatorRole: 'Technical Specialist',
+    })
+    setActiveSitrepDraftId(version.id)
   }
-  type SitrepSection =
-    | 'executive-summary'
-    | 'ongoing-incidents'
-    | 'readiness-assessment'
-    | 'risk-to-mission'
-    | 'outstanding-rfi-rfr'
-    | 'previous-critical-incident-comms'
-    | 'general-comments'
-    | 'imagery'
-  const SITREP_SECTIONS: { id: SitrepSection; label: string }[] = [
-    { id: 'executive-summary', label: 'Executive Summary' },
-    { id: 'ongoing-incidents', label: 'Ongoing Incidents' },
-    { id: 'readiness-assessment', label: 'Readiness Assessment' },
-    { id: 'risk-to-mission', label: 'Risk to Mission' },
-    { id: 'outstanding-rfi-rfr', label: 'Outstanding RFI/RFR' },
-    { id: 'previous-critical-incident-comms', label: 'Previous Critical Incident Communications' },
-    { id: 'general-comments', label: 'General Comments' },
-    { id: 'imagery', label: 'Imagery' },
-  ]
-  const SITREP_AI_COMPATIBLE_SECTIONS: SitrepSection[] = [
-    'executive-summary',
-    'readiness-assessment',
-    'risk-to-mission',
-    'outstanding-rfi-rfr',
-    'previous-critical-incident-comms',
-    'general-comments',
-  ]
   const [sitrepActiveSection, setSitrepActiveSection] = useState<SitrepSection>('executive-summary')
   type SitrepSectionType = 'manual' | 'ai'
   type SitrepOutputFormat = 'paragraph' | 'table' | 'list'
@@ -8339,26 +8074,15 @@ function App() {
       window.setTimeout(() => {
         const content = generateContentForSitrepSection(section, draft)
         const primaryField = SITREP_SECTION_PRIMARY[section].field
-        updateSitrepField(primaryField, content)
+        const nextSnapshot = {
+          ...sitrepForm,
+          [primaryField]: content,
+        }
+        setSitrepForm(nextSnapshot)
+        pushSitrepVersionRef.current(nextSnapshot, { sectionId: section })
         setSitrepSectionGenerating((current) => (current === section ? null : current))
       }, 5000)
     }
-  }
-  const SITREP_SECTION_PRIMARY: Record<
-    SitrepSection,
-    { field: keyof SitrepFormState; label: string }
-  > = {
-    'executive-summary': { field: 'executiveSummary', label: 'Executive Summary' },
-    'ongoing-incidents': { field: 'generalComments', label: 'Ongoing Incidents' },
-    'readiness-assessment': { field: 'readinessAssessment', label: 'Readiness Assessment' },
-    'risk-to-mission': { field: 'riskToMission', label: 'Risk to Mission' },
-    'outstanding-rfi-rfr': { field: 'outstandingRfiRfr', label: 'Outstanding RFI/RFR' },
-    'previous-critical-incident-comms': {
-      field: 'previousCriticalIncidentComms',
-      label: 'Previous Critical Incident Communications',
-    },
-    'general-comments': { field: 'generalComments', label: 'General Comments' },
-    'imagery': { field: 'imageryNotes', label: 'Imagery' },
   }
   const [sitrepSectionEdits, setSitrepSectionEdits] = useState<
     Record<SitrepSection, string | null>
@@ -8391,26 +8115,17 @@ function App() {
     const yourDraft = sitrepSectionEdits[section]
     if (yourDraft === null) return
     const { field: primaryField } = SITREP_SECTION_PRIMARY[section]
-    updateSitrepField(primaryField, yourDraft)
+    const nextSnapshot = {
+      ...sitrepForm,
+      [primaryField]: yourDraft,
+    }
+    setSitrepForm(nextSnapshot)
+    const version = pushSitrepVersionRef.current(nextSnapshot, {
+      sectionId: section,
+      authorRole: 'Technical Specialist',
+    })
     if (activeSitrepDraftId !== null) {
-      const editedAt = Date.now()
-      setSitrepVersions((previous) =>
-        previous.map((entry) =>
-          entry.id === activeSitrepDraftId
-            ? {
-                ...entry,
-                createdAt: editedAt,
-                authorName: 'You',
-                authorRole: '',
-                authorColor: '#16a34a',
-                snapshot: {
-                  ...entry.snapshot,
-                  [primaryField]: yourDraft,
-                },
-              }
-            : entry
-        )
-      )
+      setActiveSitrepDraftId(version.id)
     }
     cancelSitrepSectionEdit(section)
   }
@@ -11327,7 +11042,22 @@ function App() {
       return
     }
 
-    applyFemaAorPopupState(polygonGraphic, aor)
+    let liveSummary: { executiveSummary: string; sitrepUpdatedBy: string } | undefined
+    if (isSupabaseEnabled && activeOrganizationId) {
+      try {
+        const summary = await fetchSitrepLiveSummaryForAor(
+          activeOrganizationId,
+          String(aorId)
+        )
+        if (summary) {
+          liveSummary = summary
+        }
+      } catch {
+        liveSummary = undefined
+      }
+    }
+
+    applyFemaAorPopupState(polygonGraphic, aor, liveSummary)
 
     try {
       const geometry = polygonGraphic.geometry
@@ -12041,60 +11771,163 @@ function App() {
     return 'AOR'
   }
   const applySitrepScope = useCallback(
-    (scopeId: string, options?: { persistCurrent?: boolean }) => {
-      if (options?.persistCurrent !== false && selectedSitrepScopeId) {
-        setSitrepFormsByScopeId((previous) => ({
-          ...previous,
-          [selectedSitrepScopeId]: sitrepForm,
-        }))
-      }
-
+    (scopeId: string) => {
       setSelectedSitrepScopeId(scopeId)
 
       const scope = SITREP_SCOPE_OPTIONS.find((option) => option.id === scopeId)
-      if (!scope) {
-        return
+      if (scope) {
+        const nextSection = resolveDefaultSitrepActiveSection(scope.kind, sitrepActiveSection)
+        if (nextSection !== sitrepActiveSection) {
+          setSitrepActiveSection(nextSection)
+        }
       }
 
-      setSitrepFormsByScopeId((previous) => {
-        const cachedForm = previous[scopeId]
-        if (cachedForm) {
-          liveSitrepFormRef.current = null
-          setSitrepForm(cachedForm)
-          return previous
-        }
-
-        let nextForm: SitrepFormState
-        if (scope.kind === 'incident' && scope.workspace) {
-          nextForm = buildDefaultSitrepForWorkspace(
-            scope.workspace,
-            'incident',
-            INITIAL_SITREP_FORM
-          )
-        } else if (scope.kind === 'exercise' && scope.workspace) {
-          nextForm = buildDefaultSitrepForWorkspace(
-            scope.workspace,
-            'exercise',
-            INITIAL_SITREP_FORM
-          )
-        } else {
-          nextForm = {
-            ...INITIAL_SITREP_FORM,
-            incidentName: scope.label,
-            incidentLocation: scope.label,
-            executiveSummary: scope.label.includes('Region 1')
-              ? buildRegion1DotExecutiveSummary(scope.label)
-              : `${scope.label} situational summary for the current reporting period.`,
-          }
-        }
-
-        liveSitrepFormRef.current = null
-        setSitrepForm(nextForm)
-        return { ...previous, [scopeId]: nextForm }
+      setActiveSitrepDraftId(null)
+      setViewingSitrepVersion(null)
+      setViewingSitrepVersionOrigin(null)
+      liveSitrepFormRef.current = null
+      setSitrepSectionEdits({
+        'executive-summary': null,
+        'ongoing-incidents': null,
+        'readiness-assessment': null,
+        'risk-to-mission': null,
+        'outstanding-rfi-rfr': null,
+        'previous-critical-incident-comms': null,
+        'general-comments': null,
+        'imagery': null,
       })
     },
-    [INITIAL_SITREP_FORM, selectedSitrepScopeId, sitrepForm, SITREP_SCOPE_OPTIONS]
+    [SITREP_SCOPE_OPTIONS, sitrepActiveSection]
   )
+  const selectedSitrepScope = useMemo(
+    () => SITREP_SCOPE_OPTIONS.find((option) => option.id === selectedSitrepScopeId) ?? null,
+    [SITREP_SCOPE_OPTIONS, selectedSitrepScopeId]
+  )
+  const sitrepScopeRef = useMemo(
+    () =>
+      resolveSitrepScopeRef(selectedSitrepScopeId, {
+        accessibleWorkspaces,
+        organizationId: activeOrganizationId,
+        scopeOptions: SITREP_SCOPE_OPTIONS,
+      }),
+    [accessibleWorkspaces, activeOrganizationId, selectedSitrepScopeId, SITREP_SCOPE_OPTIONS]
+  )
+  const sitrepInitialFormForScope = useMemo(() => {
+    const scope = selectedSitrepScope
+    if (!scope) {
+      return INITIAL_SITREP_FORM
+    }
+    if (scope.kind === 'incident' && scope.workspace) {
+      return buildDefaultSitrepForWorkspace(
+        scope.workspace,
+        'incident',
+        INITIAL_SITREP_FORM,
+        ONGOING_INCIDENT_SITREP_CONTENT[scope.workspace.id]
+      )
+    }
+    if (scope.kind === 'exercise' && scope.workspace) {
+      return buildDefaultSitrepForWorkspace(scope.workspace, 'exercise', INITIAL_SITREP_FORM)
+    }
+    return buildDefaultSitrepForAor(scope.label, INITIAL_SITREP_FORM, buildRegion1DotExecutiveSummary)
+  }, [INITIAL_SITREP_FORM, selectedSitrepScope])
+  const sitrepSectionsForScope = useMemo(
+    () => getSitrepSectionsForScope(selectedSitrepScope?.kind),
+    [selectedSitrepScope?.kind]
+  )
+  const handleSitrepLoaded = useCallback(
+    (payload: { documentId: string | null; form: SitrepFormState; versions: SitrepVersion[] }) => {
+      setSitrepForm(cloneSitrepFormState(payload.form))
+      if (!isSupabaseEnabled && payload.versions.length === 0) {
+        setSitrepVersions(createSeedSitrepVersions(payload.form))
+        return
+      }
+      setSitrepVersions(payload.versions)
+    },
+    [isSupabaseEnabled]
+  )
+  const handleSitrepRemoteFormUpdated = useCallback((form: SitrepFormState) => {
+    setSitrepForm(cloneSitrepFormState(form))
+  }, [])
+  const handleSitrepRemoteVersionInserted = useCallback((version: SitrepVersion) => {
+    setSitrepVersions((previous) => {
+      if (previous.some((entry) => entry.id === version.id)) {
+        return previous
+      }
+      return [...previous, version].slice(-100)
+    })
+  }, [])
+  const {
+    loading: isSitrepLoading,
+    syncError: sitrepSyncError,
+    isSaving: isSitrepSaving,
+    authorName: sitrepAuthorName,
+    authorColor: sitrepAuthorColor,
+    appendVersion: appendSitrepVersion,
+  } = useSitrepSync({
+    enabled: isSupabaseEnabled && sitrepScopeRef !== null,
+    scopeRef: sitrepScopeRef,
+    userId: user?.id ?? null,
+    profileEmail,
+    initialForm: sitrepInitialFormForScope,
+    sectionEdits: sitrepSectionEdits,
+    onLoaded: handleSitrepLoaded,
+    onRemoteFormUpdated: handleSitrepRemoteFormUpdated,
+    onRemoteVersionInserted: handleSitrepRemoteVersionInserted,
+  })
+  const pushSitrepVersion = useCallback(
+    (
+      snapshot: SitrepFormState,
+      options?: {
+        signatures?: Ics201VersionSignature[]
+        sectionId?: SitrepSection
+        authorNameOverride?: string
+        authorColorOverride?: string
+        authorRole?: string
+        creatorName?: string
+        creatorColor?: string
+        creatorRole?: string
+        creatorCreatedAt?: number
+        submittedForReviewTo?: Array<{ name: string; role: string }>
+        submittedForReviewAt?: number
+        aiGeneratedSections?: SitrepSection[]
+      }
+    ): SitrepVersion => {
+      const nextAuthorName = options?.authorNameOverride ?? sitrepAuthorName
+      const nextAuthorColor = options?.authorColorOverride ?? sitrepAuthorColor
+      const optimisticVersion = createLocalSitrepVersion(snapshot, nextAuthorName, nextAuthorColor, {
+        signatures: options?.signatures,
+        sectionId: options?.sectionId,
+        authorRole: options?.authorRole,
+        creatorName: options?.creatorName,
+        creatorColor: options?.creatorColor,
+        creatorRole: options?.creatorRole,
+        creatorCreatedAt: options?.creatorCreatedAt,
+        submittedForReviewTo: options?.submittedForReviewTo,
+        submittedForReviewAt: options?.submittedForReviewAt,
+        aiGeneratedSections: options?.aiGeneratedSections,
+        authorId: user?.id ?? null,
+      })
+      setSitrepVersions((previous) => [...previous, optimisticVersion].slice(-100))
+      void appendSitrepVersion(snapshot, options).then((persisted) => {
+        if (!persisted) return
+        setSitrepVersions((previous) =>
+          previous.map((entry) => (entry.id === optimisticVersion.id ? persisted : entry)).slice(-100)
+        )
+        if (activeSitrepDraftId === optimisticVersion.id) {
+          setActiveSitrepDraftId(persisted.id)
+        }
+      })
+      return optimisticVersion
+    },
+    [activeSitrepDraftId, appendSitrepVersion, sitrepAuthorColor, sitrepAuthorName, user?.id]
+  )
+  pushSitrepVersionRef.current = pushSitrepVersion
+  sitrepAuthorColorRef.current = sitrepAuthorColor
+  useEffect(() => {
+    if (sitrepSyncError) {
+      toast.error(sitrepSyncError)
+    }
+  }, [sitrepSyncError])
   const isInExerciseWorkspace = activeExerciseWorkspace !== null
   const isInIncidentWorkspace = activeIncidentWorkspace !== null
   const isInWorkspaceContext = isInIncidentWorkspace || isInExerciseWorkspace
@@ -17175,7 +17008,7 @@ function App() {
       })
     )
     liveIcs201FormRef.current = null
-    applySitrepScope(`incident-${incident.id}`, { persistCurrent: false })
+    applySitrepScope(`incident-${incident.id}`)
   }
   const enterExerciseWorkspace = (exercise: ExerciseListItem) => {
     if (isSupabaseEnabled && !canAccessWorkspace('exercise', exercise.id)) {
@@ -17205,7 +17038,7 @@ function App() {
       })
     )
     liveIcs201FormRef.current = null
-    applySitrepScope(`exercise-${exercise.id}`, { persistCurrent: false })
+    applySitrepScope(`exercise-${exercise.id}`)
   }
   const syncWorkspaceSettingsDraft = () => {
     const kind = isInExerciseWorkspace ? 'exercise' : 'incident'
@@ -19324,8 +19157,6 @@ function App() {
     setPratusAiSelectedFiles([])
     setSitrepGeneratingFromScope(scopeLabel)
     window.setTimeout(() => {
-      const now = Date.now()
-      const newId = `${now}-sitrep-ai-draft-${Math.random().toString(36).slice(2, 8)}`
       const generatedSnapshot: SitrepFormState = {
         ...INITIAL_SITREP_FORM,
         incidentName: scopeLabel,
@@ -19353,38 +19184,32 @@ function App() {
           'Latest overhead imagery reviewed; no significant change in footprint. Updated annotations attached for distribution.',
         preparedBy: `PRATUS AI (autogenerated for ${scopeLabel})`,
       }
-      const newDraft: SitrepVersion = {
-        id: newId,
-        createdAt: now,
-        creatorCreatedAt: now,
-        creatorName: 'PRATUS AI',
-        creatorColor: '#7c3aed',
-        creatorRole: 'AI Assistant',
-        authorName: 'PRATUS AI',
-        authorColor: '#7c3aed',
-        authorRole: 'AI Assistant',
-        snapshot: generatedSnapshot,
-        signatures: [],
-        aiGeneratedSections: [...SITREP_AI_COMPATIBLE_SECTIONS],
-      }
       if (liveSitrepFormRef.current === null) {
         liveSitrepFormRef.current = sitrepForm
       }
-      setSitrepVersions((previous) => [...previous, newDraft].slice(-100))
       setSitrepForm(generatedSnapshot)
-        setSitrepSectionEdits({
-          'executive-summary': null,
-          'ongoing-incidents': null,
-          'readiness-assessment': null,
-          'risk-to-mission': null,
-          'outstanding-rfi-rfr': null,
-          'previous-critical-incident-comms': null,
-          'general-comments': null,
-          'imagery': null,
-        })
-        setViewingSitrepVersion(null)
-        setSitrepViewMode('current')
-        setActiveSitrepDraftId(newId)
+      setSitrepSectionEdits({
+        'executive-summary': null,
+        'ongoing-incidents': null,
+        'readiness-assessment': null,
+        'risk-to-mission': null,
+        'outstanding-rfi-rfr': null,
+        'previous-critical-incident-comms': null,
+        'general-comments': null,
+        'imagery': null,
+      })
+      setViewingSitrepVersion(null)
+      setSitrepViewMode('current')
+      const version = pushSitrepVersion(generatedSnapshot, {
+        authorNameOverride: 'PRATUS AI',
+        authorColorOverride: '#7c3aed',
+        authorRole: 'AI Assistant',
+        creatorName: 'PRATUS AI',
+        creatorColor: '#7c3aed',
+        creatorRole: 'AI Assistant',
+        aiGeneratedSections: [...SITREP_AI_COMPATIBLE_SECTIONS],
+      })
+      setActiveSitrepDraftId(version.id)
       setSitrepGeneratingFromScope(null)
     }, 2500)
   }
@@ -34208,7 +34033,7 @@ function App() {
                                     )
                                   : null
                               const aiGeneratedSections = tabSitrepDraft?.aiGeneratedSections
-                              return SITREP_SECTIONS.map((section) => {
+                              return sitrepSectionsForScope.map((section) => {
                                 const isActive = sitrepActiveSection === section.id
                                 const showAiSparkle =
                                   aiGeneratedSections?.includes(section.id) ?? false
@@ -39640,7 +39465,7 @@ function App() {
                     </div>
                     <div className="-mx-1 overflow-x-auto px-1">
                       <div className="flex min-w-max items-center gap-1 border-b">
-                        {SITREP_SECTIONS.map((section) => {
+                        {sitrepSectionsForScope.map((section) => {
                           const isActive = sitrepActiveSection === section.id
                           const showAiSparkle =
                             previewDraft.aiGeneratedSections?.includes(section.id) ?? false
@@ -41108,17 +40933,13 @@ function App() {
                   return
                 }
                 const signedAt = Date.now()
-                const newVersion: SitrepVersion = {
-                  id: `${signedAt}-sitrep-signed-${Math.random().toString(36).slice(2, 8)}`,
-                  createdAt: signedAt,
-                  creatorCreatedAt: signedAt,
-                  creatorName: name,
-                  creatorColor: '#16a34a',
-                  creatorRole: 'Technical Specialist',
-                  authorName: name,
-                  authorColor: '#16a34a',
+                pushSitrepVersion(sitrepForm, {
+                  authorNameOverride: name,
+                  authorColorOverride: sitrepAuthorColor,
                   authorRole: 'Technical Specialist',
-                  snapshot: sitrepForm,
+                  creatorName: name,
+                  creatorColor: sitrepAuthorColor,
+                  creatorRole: 'Technical Specialist',
                   signatures: [
                     {
                       name,
@@ -41126,8 +40947,7 @@ function App() {
                       signedAt,
                     },
                   ],
-                }
-                setSitrepVersions((previous) => [...previous, newVersion].slice(-100))
+                })
                 setIsSitrepSignNameDialogOpen(false)
                 setIsCreatingSignedSitrepVersion(false)
                 setSitrepSignNameInput('You')
