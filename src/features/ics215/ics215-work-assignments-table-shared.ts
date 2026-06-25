@@ -233,6 +233,10 @@ export function useIcs215WorkAssignmentsTable({
   }
 }
 
+/** Max height for scrollable ICS-215 work assignment rows (thead/tfoot stay visible). */
+export const ICS215_WORK_ASSIGNMENTS_TABLE_SCROLL_CLASS =
+  'max-h-[min(60vh,32rem)] min-h-[12rem]'
+
 export function formatResourceValueDisplay(value: Ics215ResourceValue | undefined): string {
   if (!value) return '—'
   const parts = [value.required, value.have, value.need].map((part) => part.trim())

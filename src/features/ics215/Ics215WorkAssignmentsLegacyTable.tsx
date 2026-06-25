@@ -12,6 +12,7 @@ import type { Ics215ResourceValue } from '@/features/ics215/types'
 import {
   EMPTY_RESOURCE_VALUE,
   ICS215_OVERFLOW_COLUMNS,
+  ICS215_WORK_ASSIGNMENTS_TABLE_SCROLL_CLASS,
   type Ics215WorkAssignmentsTableBaseProps,
   useIcs215WorkAssignmentsTable,
 } from '@/features/ics215/ics215-work-assignments-table-shared'
@@ -170,6 +171,7 @@ export function Ics215WorkAssignmentsLegacyTable({
     workAssignments,
     resourceColumns,
     workspaceAssets,
+    workAssignmentTargetOptions,
     workspaceId,
     isSupabaseEnabled,
     getAccessToken,
@@ -207,16 +209,19 @@ export function Ics215WorkAssignmentsLegacyTable({
     <div className="min-w-0 w-full max-w-full space-y-2">
       <div className="min-w-0 w-full max-w-full overflow-hidden rounded-md border">
         <div
-          className="w-0 min-w-full overflow-x-auto overscroll-x-contain touch-pan-x [scrollbar-gutter:stable] [-webkit-overflow-scrolling:touch]"
+          className={cn(
+            'w-0 min-w-full overflow-auto overscroll-contain touch-pan-x [scrollbar-gutter:stable] [-webkit-overflow-scrolling:touch]',
+            ICS215_WORK_ASSIGNMENTS_TABLE_SCROLL_CLASS
+          )}
           tabIndex={0}
-          aria-label="Work assignments table — scroll horizontally to view additional columns"
+          aria-label="Work assignments table — scroll to view rows and additional columns"
         >
           <table
             className="w-full border-collapse text-xs"
             style={{ minWidth: `${legacyTableMinWidthPx}px` }}
           >
-            <thead>
-              <tr className="border-b bg-muted/40 text-[10px] uppercase tracking-wide text-muted-foreground">
+            <thead className="sticky top-0 z-10 bg-muted/95 backdrop-blur-sm">
+              <tr className="border-b text-[10px] uppercase tracking-wide text-muted-foreground">
                 {!hideAssigneeColumn ? (
                   <th className={cn(fixedColumnClass, 'px-2 py-2 text-left font-semibold')}>
                     Assignee
@@ -453,12 +458,12 @@ export function Ics215WorkAssignmentsLegacyTable({
               )}
             </tbody>
             {workAssignments.length > 0 ? (
-              <tfoot>
+              <tfoot className="sticky bottom-0 z-10 bg-muted/95 backdrop-blur-sm shadow-[0_-1px_0_0_hsl(var(--border))]">
                 {TOTAL_ROWS.map((totalRow, totalIndex) => (
                   <tr
                     key={totalRow.field}
                     className={cn(
-                      'border-t bg-muted/20',
+                      'border-t',
                       totalIndex < TOTAL_ROWS.length - 1 ? 'border-b border-dashed' : ''
                     )}
                   >
@@ -518,7 +523,7 @@ export function Ics215WorkAssignmentsLegacyTable({
       initialSelectedKeys={haveLink.dialogInitialSelectedKeys}
       suggestedKeys={haveLink.suggestedKeys}
       staleLinkedKeys={haveLink.staleLinkedKeys}
-      linkedElsewhereCounts={haveLink.linkedElsewhereCounts}
+      linkedAssetLocations={haveLink.linkedAssetLocations}
       mode={haveLink.dialogState?.mode ?? 'create'}
       isLoading={haveLink.isRanking}
       rankingEngine={haveLink.rankingEngine}

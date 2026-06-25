@@ -11,6 +11,7 @@ import {
   EMPTY_RESOURCE_VALUE,
   formatResourceValueDisplay,
   ICS215_OVERFLOW_COLUMNS,
+  ICS215_WORK_ASSIGNMENTS_TABLE_SCROLL_CLASS,
   type Ics215WorkAssignmentsTableBaseProps,
   useIcs215WorkAssignmentsTable,
 } from '@/features/ics215/ics215-work-assignments-table-shared'
@@ -156,6 +157,7 @@ export function Ics215WorkAssignmentsSpreadsheetTable({
     workAssignments,
     resourceColumns,
     workspaceAssets,
+    workAssignmentTargetOptions,
     workspaceId,
     isSupabaseEnabled,
     getAccessToken,
@@ -185,16 +187,19 @@ export function Ics215WorkAssignmentsSpreadsheetTable({
       <div className="min-w-0 w-full max-w-full space-y-2">
         <div className="min-w-0 w-full max-w-full overflow-hidden rounded-md border">
           <div
-            className="w-0 min-w-full overflow-x-auto overscroll-x-contain touch-pan-x [scrollbar-gutter:stable] [-webkit-overflow-scrolling:touch]"
+            className={cn(
+              'w-0 min-w-full overflow-auto overscroll-contain touch-pan-x [scrollbar-gutter:stable] [-webkit-overflow-scrolling:touch]',
+              ICS215_WORK_ASSIGNMENTS_TABLE_SCROLL_CLASS
+            )}
             tabIndex={0}
-            aria-label="Work assignments table — scroll horizontally to view additional columns"
+            aria-label="Work assignments table — scroll to view rows and additional columns"
           >
             <table
               className="w-full border-collapse text-xs"
               style={{ minWidth: `${tableMinWidthPx}px` }}
             >
-              <thead>
-                <tr className="border-b bg-muted/40 text-[10px] uppercase tracking-wide text-muted-foreground">
+              <thead className="sticky top-0 z-10 bg-muted/95 backdrop-blur-sm">
+                <tr className="border-b text-[10px] uppercase tracking-wide text-muted-foreground">
                   {!hideAssigneeColumn ? (
                     <th className={cn(fixedColumnClass, 'px-2 py-2 text-left font-semibold')}>
                       Assignee
@@ -413,8 +418,8 @@ export function Ics215WorkAssignmentsSpreadsheetTable({
                 )}
               </tbody>
               {workAssignments.length > 0 ? (
-                <tfoot>
-                  <tr className="border-t bg-muted/20">
+                <tfoot className="sticky bottom-0 z-10 bg-muted/95 backdrop-blur-sm shadow-[0_-1px_0_0_hsl(var(--border))]">
+                  <tr className="border-t">
                     <td colSpan={leadingColumnCount} className="px-2 py-2 text-[11px] font-semibold">
                       Totals
                     </td>
@@ -453,7 +458,7 @@ export function Ics215WorkAssignmentsSpreadsheetTable({
         initialSelectedKeys={haveLink.dialogInitialSelectedKeys}
         suggestedKeys={haveLink.suggestedKeys}
         staleLinkedKeys={haveLink.staleLinkedKeys}
-        linkedElsewhereCounts={haveLink.linkedElsewhereCounts}
+        linkedAssetLocations={haveLink.linkedAssetLocations}
         mode={haveLink.dialogState?.mode ?? 'create'}
         isLoading={haveLink.isRanking}
         rankingEngine={haveLink.rankingEngine}

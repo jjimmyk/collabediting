@@ -45,6 +45,7 @@ type Ics202SectionEditActionsProps = {
   isEditing: boolean
   isSaving?: boolean
   generateLabel?: string
+  className?: string
   onGenerate: () => void
   onCancel: () => void
   onSave: () => void
@@ -54,6 +55,7 @@ export function Ics202SectionEditActions({
   isEditing,
   isSaving = false,
   generateLabel = 'Generate Section Content',
+  className,
   onGenerate,
   onCancel,
   onSave,
@@ -63,7 +65,7 @@ export function Ics202SectionEditActions({
   }
 
   return (
-    <div className="flex items-center justify-end gap-1.5">
+    <div className={cn('flex items-center justify-end gap-1.5', className)}>
       <Button
         type="button"
         size="sm"

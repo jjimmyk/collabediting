@@ -1,4 +1,4 @@
-import type { Ics215HaveSource, Ics215ResourceValue } from '@/features/ics215/types'
+import type { Ics215HaveSource, Ics215ResourceColumn, Ics215ResourceValue, Ics215WorkAssignmentRow } from '@/features/ics215/types'
 import { applyHaveWithOptionalNeedRecalc } from '@/features/resources/workspace-asset-have-lookup'
 import type { ResourceListItemData } from '@/features/resources/types'
 
@@ -118,4 +118,67 @@ export function collectLinkedAssetKeysInForm(
     }
   }
   return counts
+}
+
+export type Ics215HaveAssetLinkLocation = {
+  rowId: number
+  columnId: string
+  columnLabel: string
+  assigneeKey: string
+  assigneeLabel: string
+  workAssignment: string
+}
+
+export function buildHaveAssetLinkIndex(
+  workAssignments: Ics215WorkAssignmentRow[],
+  resourceColumns: Ics215ResourceColumn[],
+  resolveAssigneeLabel: (assigneeKey: string) => string,
+  exclude?: { rowId: number; columnId: string }
+): Map<string, Ics215HaveAssetLinkLocation> {
+  const columnLabelById = new Map(resourceColumns.map((column) => [column.id, column.label]))
+  const index = new Map<string, Ics215HaveAssetLinkLocation>()
+
+  for (const row of workAssignments) {
+    for (const [columnId, value] of Object.entries(row.resourceValues ?? {})) {
+      if (exclude && exclude.rowId === row.id && exclude.columnId === columnId) continue
+      if (!isHaveLinkedToAssets(value)) continue
+      for (const assetKey of value.linkedAssetKeys ?? []) {
+        if (index.has(assetKey)) continue
+        index.set(assetKey, {
+          rowId: row.id,
+          columnId,
+          columnLabel: columnLabelById.get(columnId) ?? columnId,
+          assigneeKey: row.assignee,
+          assigneeLabel: resolveAssigneeLabel(row.assignee),
+          workAssignment: row.workAssignment,
+        })
+      }
+    }
+  }
+
+  return index
+}
+
+export function isAssetLinkedElsewhere(
+  assetKey: string,
+  currentCell: { rowId: number; columnId: string },
+  index: Map<string, Ics215HaveAssetLinkLocation>
+): boolean {
+  const location = index.get(assetKey)
+  if (!location) return false
+  return location.rowId !== currentCell.rowId || location.columnId !== currentCell.columnId
+}
+
+export function getConflictingHaveAssetKeys(
+  selectedKeys: string[],
+  currentCell: { rowId: number; columnId: string },
+  index: Map<string, Ics215HaveAssetLinkLocation>
+): string[] {
+  return selectedKeys.filter((key) => isAssetLinkedElsewhere(key, currentCell, index))
+}
+
+export function formatHaveAssetLinkLocation(location: Ics215HaveAssetLinkLocation): string {
+  const assignment =
+    location.workAssignment.trim().length > 0 ? location.workAssignment.trim() : 'Work assignment'
+  return `${location.assigneeLabel} · ${assignment} · ${location.columnLabel} Have`
 }

@@ -3,13 +3,16 @@ import type { Ics215ResourceColumn, Ics215ResourceValue, Ics215WorkAssignmentRow
 import {
   applyHaveAssetLink,
   applyManualHaveValue,
+  buildHaveAssetLinkIndex,
   collectLinkedAssetKeysInForm,
+  getConflictingHaveAssetKeys,
   isHaveLinkedToAssets,
   partitionHaveLinkAssets,
 } from '@/features/ics215/ics215-have-asset-link'
 import type { ResourceListItemData } from '@/features/resources/types'
 import { rankWorkspaceAssetsForResourceQuery } from '@/features/resources/workspace-asset-relevance'
 import { matchWorkspaceAssetsViaApi } from '@/lib/match-workspace-assets-service'
+import type { WorkAssignmentTargetOption } from '@/lib/work-assignment-target-options'
 import { toast } from 'sonner'
 import { EMPTY_RESOURCE_VALUE } from '@/features/ics215/ics215-work-assignments-table-shared'
 
@@ -25,6 +28,7 @@ type UseIcs215HaveAssetLinkOptions = {
   workAssignments: Ics215WorkAssignmentRow[]
   resourceColumns: Ics215ResourceColumn[]
   workspaceAssets: ResourceListItemData[]
+  workAssignmentTargetOptions?: WorkAssignmentTargetOption[]
   workspaceId?: string | null
   isSupabaseEnabled?: boolean
   getAccessToken?: () => Promise<string | null>
@@ -35,6 +39,7 @@ export function useIcs215HaveAssetLink({
   workAssignments,
   resourceColumns,
   workspaceAssets,
+  workAssignmentTargetOptions = [],
   workspaceId,
   isSupabaseEnabled = false,
   getAccessToken,
@@ -44,6 +49,23 @@ export function useIcs215HaveAssetLink({
   const [isRanking, setIsRanking] = useState(false)
   const [suggestedKeys, setSuggestedKeys] = useState<string[]>([])
   const [rankingEngine, setRankingEngine] = useState<'lexical' | 'openai' | undefined>()
+
+  const resolveAssigneeLabel = useCallback(
+    (assigneeKey: string) =>
+      workAssignmentTargetOptions.find((option) => option.value === assigneeKey)?.label ??
+      assigneeKey,
+    [workAssignmentTargetOptions]
+  )
+
+  const linkedAssetLocations = useMemo(() => {
+    if (!dialogState) return new Map()
+    return buildHaveAssetLinkIndex(
+      workAssignments,
+      resourceColumns,
+      resolveAssigneeLabel,
+      { rowId: dialogState.rowId, columnId: dialogState.columnId }
+    )
+  }, [dialogState, workAssignments, resourceColumns, resolveAssigneeLabel])
 
   const openHaveLinkDialog = useCallback(
     async (params: {
@@ -99,6 +121,20 @@ export function useIcs215HaveAssetLink({
   const confirmHaveLink = useCallback(
     (selectedKeys: string[]) => {
       if (!dialogState) return
+
+      const fullIndex = buildHaveAssetLinkIndex(
+        workAssignments,
+        resourceColumns,
+        resolveAssigneeLabel
+      )
+      const conflicts = getConflictingHaveAssetKeys(selectedKeys, dialogState, fullIndex)
+      if (conflicts.length > 0) {
+        toast.error('One or more assets are already linked elsewhere', {
+          description: 'Each asset can only be assigned to one Have cell.',
+        })
+        return
+      }
+
       const current =
         workAssignments.find((row) => row.id === dialogState.rowId)?.resourceValues[
           dialogState.columnId
@@ -111,7 +147,15 @@ export function useIcs215HaveAssetLink({
       )
       closeHaveLinkDialog()
     },
-    [dialogState, workAssignments, patchResourceValue, workspaceAssets, closeHaveLinkDialog]
+    [
+      dialogState,
+      workAssignments,
+      resourceColumns,
+      resolveAssigneeLabel,
+      patchResourceValue,
+      workspaceAssets,
+      closeHaveLinkDialog,
+    ]
   )
 
   const patchManualHave = useCallback(
@@ -171,6 +215,7 @@ export function useIcs215HaveAssetLink({
     rankingEngine,
     dialogInitialSelectedKeys: linkedKeys,
     staleLinkedKeys: staleKeys,
+    linkedAssetLocations,
     linkedElsewhereCounts,
     openHaveLinkDialog,
     closeHaveLinkDialog,
