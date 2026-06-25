@@ -1,4 +1,5 @@
 import { type ReactNode, useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Maximize2, Minimize2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
@@ -142,6 +143,171 @@ export function Ics215FormSections({
     onPatchDraft('prepared-by', { ...preparedBy, ...patch })
   }
 
+  const workAssignmentsEditing = isSectionEditing(editingSections, 'work-assignments')
+
+  const workAssignmentsHeaderActions = workAssignmentsEditing ? (
+    <div className="flex flex-wrap items-center justify-end gap-2">
+      <label className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+        <input
+          type="checkbox"
+          checked={autoFillHaveFromAssets}
+          onChange={(event) => onAutoFillHaveFromAssetsChange?.(event.target.checked)}
+        />
+        Auto-fill Have from assets
+      </label>
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        className="h-7 shrink-0 text-xs"
+        onClick={() =>
+          onPatchDraft('work-assignments', appendIcs215WorkAssignmentToDraft(workAssignmentsDraft))
+        }
+      >
+        + Add Assignment
+      </Button>
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        className="h-7 shrink-0 text-xs"
+        onClick={() => {
+          const result = fillAllIcs215WorkAssignmentsHaveInDraft(
+            workAssignmentsDraft,
+            workspaceAssets,
+            true
+          )
+          onPatchDraft('work-assignments', result.draft)
+          if (result.filledCount > 0) {
+            onHaveFillComplete?.(result.filledCount)
+          }
+        }}
+      >
+        Fill all Have from assets
+      </Button>
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        className="h-7 shrink-0 text-xs"
+        onClick={() =>
+          onPatchDraft('work-assignments', appendIcs215ResourceColumn(workAssignmentsDraft))
+        }
+      >
+        + Add Resource Requirement
+      </Button>
+    </div>
+  ) : null
+
+  const workAssignmentsToolbar = (
+    <div className="flex shrink-0 flex-wrap items-center justify-between gap-2">
+      <Ics215WorkAssignmentsLayoutToggle
+        value={normalizeIcs215WorkAssignmentsLayoutMode(form.workAssignmentsLayoutMode)}
+        onChange={(mode) => onWorkAssignmentsLayoutModeChange?.(mode)}
+      />
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="h-7 gap-1 text-xs"
+        aria-label={
+          workAssignmentsMaximized
+            ? 'Restore Work Assignments section size'
+            : 'Maximize Work Assignments section'
+        }
+        onClick={() => setWorkAssignmentsMaximized((previous) => !previous)}
+      >
+        {workAssignmentsMaximized ? (
+          <>
+            <Minimize2 className="h-3.5 w-3.5" />
+            Restore
+          </>
+        ) : (
+          <>
+            <Maximize2 className="h-3.5 w-3.5" />
+            Maximize
+          </>
+        )}
+      </Button>
+    </div>
+  )
+
+  const renderWorkAssignmentsTable = (maximized: boolean) => (
+    <Ics215WorkAssignmentsTable
+      resourceColumns={workAssignmentsDraft.resourceColumns}
+      workAssignments={workAssignmentsDraft.workAssignments}
+      workAssignmentTargetOptions={workAssignmentTargetOptions}
+      roster={roster}
+      competencyOptions={competencyOptions}
+      workspaceAssets={workspaceAssets}
+      workspaceId={workspaceId}
+      isSupabaseEnabled={isSupabaseEnabled}
+      getAccessToken={getAccessToken}
+      autoFillHaveFromAssets={autoFillHaveFromAssets}
+      layoutMode={normalizeIcs215WorkAssignmentsLayoutMode(form.workAssignmentsLayoutMode)}
+      tableLayout={maximized ? 'maximized' : 'default'}
+      editing={workAssignmentsEditing}
+      canLinkAssets={canEdit && !formIsLocked}
+      onRequestEdit={() => onStartSectionEdit('work-assignments')}
+      onChange={(next) => onPatchDraft('work-assignments', next)}
+      onPersistWorkAssignments={onPersistWorkAssignmentsDraft}
+      onHaveFillComplete={onHaveFillComplete}
+    />
+  )
+
+  const workAssignmentsMaximizedOverlay =
+    workAssignmentsMaximized && typeof document !== 'undefined'
+      ? createPortal(
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label={ICS215_SECTION_LABELS['work-assignments']}
+            className={cn(
+              'fixed inset-0 z-40 flex h-dvh flex-col overflow-hidden bg-background',
+              glassItemBorderClasses
+            )}
+          >
+            <div className="shrink-0 border-b px-4 py-3">
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex min-w-0 items-center gap-1.5">
+                  <Ics202SectionHeader
+                    sectionId="incident-info"
+                    title={ICS215_SECTION_LABELS['work-assignments']}
+                    isEditing={workAssignmentsEditing}
+                    canEdit={canEdit}
+                    disabled={formIsLocked}
+                    onStartEdit={() => onStartSectionEdit('work-assignments')}
+                  />
+                  {workAssignmentsSyncTooltip ? (
+                    <Ics215Ics204WorkAssignmentsSyncTooltip
+                      context="ics215"
+                      state={workAssignmentsSyncTooltip}
+                    />
+                  ) : null}
+                </div>
+                {workAssignmentsHeaderActions}
+              </div>
+            </div>
+            <div className="shrink-0 px-4 py-2">{workAssignmentsToolbar}</div>
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 pb-2">
+              <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                {renderWorkAssignmentsTable(true)}
+              </div>
+            </div>
+            <div className="shrink-0 border-t px-4 py-3">
+              <Ics202SectionEditActions
+                isEditing={workAssignmentsEditing}
+                isSaving={isSaving}
+                onGenerate={() => onGenerateSection('work-assignments')}
+                onCancel={() => onCancelSectionEdit('work-assignments')}
+                onSave={() => onSaveSection('work-assignments')}
+              />
+            </div>
+          </div>,
+          document.body
+        )
+      : null
+
   const renderSectionShell = (
     section: Ics215SectionId,
     content: ReactNode,
@@ -240,139 +406,25 @@ export function Ics215FormSections({
         </div>
       )}
 
-      {renderSectionShell(
-        'work-assignments',
-        <div
-          className={cn(
-            'min-w-0 w-full max-w-full space-y-2',
-            workAssignmentsMaximized && 'flex min-h-0 flex-1 flex-col'
-          )}
-        >
-          <div className="flex shrink-0 flex-wrap items-center justify-between gap-2">
-            <Ics215WorkAssignmentsLayoutToggle
-              value={normalizeIcs215WorkAssignmentsLayoutMode(form.workAssignmentsLayoutMode)}
-              onChange={(mode) => onWorkAssignmentsLayoutModeChange?.(mode)}
-            />
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="h-7 gap-1 text-xs"
-              aria-label={
-                workAssignmentsMaximized
-                  ? 'Restore Work Assignments section size'
-                  : 'Maximize Work Assignments section'
-              }
-              onClick={() => setWorkAssignmentsMaximized((previous) => !previous)}
-            >
-              {workAssignmentsMaximized ? (
-                <>
-                  <Minimize2 className="h-3.5 w-3.5" />
-                  Restore
-                </>
-              ) : (
-                <>
-                  <Maximize2 className="h-3.5 w-3.5" />
-                  Maximize
-                </>
-              )}
-            </Button>
-          </div>
-          <div className={cn(workAssignmentsMaximized && 'min-h-0 flex-1 overflow-hidden')}>
-            <Ics215WorkAssignmentsTable
-              resourceColumns={workAssignmentsDraft.resourceColumns}
-              workAssignments={workAssignmentsDraft.workAssignments}
-              workAssignmentTargetOptions={workAssignmentTargetOptions}
-              roster={roster}
-              competencyOptions={competencyOptions}
-              workspaceAssets={workspaceAssets}
-              workspaceId={workspaceId}
-              isSupabaseEnabled={isSupabaseEnabled}
-              getAccessToken={getAccessToken}
-              autoFillHaveFromAssets={autoFillHaveFromAssets}
-              layoutMode={normalizeIcs215WorkAssignmentsLayoutMode(form.workAssignmentsLayoutMode)}
-              tableLayout={workAssignmentsMaximized ? 'maximized' : 'default'}
-              editing={isSectionEditing(editingSections, 'work-assignments')}
-              canLinkAssets={canEdit && !formIsLocked}
-              onRequestEdit={() => onStartSectionEdit('work-assignments')}
-              onChange={(next) => onPatchDraft('work-assignments', next)}
-              onPersistWorkAssignments={onPersistWorkAssignmentsDraft}
-              onHaveFillComplete={onHaveFillComplete}
-            />
-          </div>
-        </div>,
-        isSectionEditing(editingSections, 'work-assignments') ? (
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            <label className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
-              <input
-                type="checkbox"
-                checked={autoFillHaveFromAssets}
-                onChange={(event) =>
-                  onAutoFillHaveFromAssetsChange?.(event.target.checked)
-                }
+      {workAssignmentsMaximizedOverlay}
+
+      {!workAssignmentsMaximized
+        ? renderSectionShell(
+            'work-assignments',
+            <div className="min-w-0 w-full max-w-full space-y-2">
+              {workAssignmentsToolbar}
+              {renderWorkAssignmentsTable(false)}
+            </div>,
+            workAssignmentsHeaderActions,
+            undefined,
+            workAssignmentsSyncTooltip ? (
+              <Ics215Ics204WorkAssignmentsSyncTooltip
+                context="ics215"
+                state={workAssignmentsSyncTooltip}
               />
-              Auto-fill Have from assets
-            </label>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              className="h-7 shrink-0 text-xs"
-              onClick={() =>
-                onPatchDraft(
-                  'work-assignments',
-                  appendIcs215WorkAssignmentToDraft(workAssignmentsDraft)
-                )
-              }
-            >
-              + Add Assignment
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              className="h-7 shrink-0 text-xs"
-              onClick={() => {
-                const result = fillAllIcs215WorkAssignmentsHaveInDraft(
-                  workAssignmentsDraft,
-                  workspaceAssets,
-                  true
-                )
-                onPatchDraft('work-assignments', result.draft)
-                if (result.filledCount > 0) {
-                  onHaveFillComplete?.(result.filledCount)
-                }
-              }}
-            >
-              Fill all Have from assets
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              className="h-7 shrink-0 text-xs"
-              onClick={() =>
-                onPatchDraft(
-                  'work-assignments',
-                  appendIcs215ResourceColumn(workAssignmentsDraft)
-                )
-              }
-            >
-              + Add Resource Requirement
-            </Button>
-          </div>
-        ) : null,
-        workAssignmentsMaximized
-          ? 'fixed inset-0 z-40 flex h-dvh max-h-none flex-col overflow-hidden bg-background p-0 shadow-xl'
-          : undefined,
-        workAssignmentsSyncTooltip ? (
-          <Ics215Ics204WorkAssignmentsSyncTooltip
-            context="ics215"
-            state={workAssignmentsSyncTooltip}
-          />
-        ) : null,
-        workAssignmentsMaximized
-      )}
+            ) : null
+          )
+        : null}
 
       {renderSectionShell(
         'prepared-by',

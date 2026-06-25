@@ -283,13 +283,13 @@ export function Ics215WorkAssignmentsLegacyTable({
     <div
       className={cn(
         'min-w-0 w-full max-w-full',
-        isMaximized ? 'flex min-h-0 flex-1 flex-col' : 'space-y-2'
+        isMaximized ? 'flex h-full min-h-0 flex-1 flex-col' : 'space-y-2'
       )}
     >
       <div
         className={cn(
           'min-w-0 w-full max-w-full overflow-hidden rounded-md border',
-          isMaximized && 'flex min-h-0 flex-1 flex-col'
+          isMaximized && 'flex h-full min-h-0 flex-1 flex-col'
         )}
       >
         <div
@@ -299,7 +299,7 @@ export function Ics215WorkAssignmentsLegacyTable({
           }}
           className={cn(
             'w-0 min-w-full overscroll-x-contain touch-pan-x [scrollbar-gutter:stable] [-webkit-overflow-scrolling:touch]',
-            isMaximized ? 'min-h-0 flex-1 overflow-auto' : 'overflow-x-auto'
+            isMaximized ? 'h-0 min-h-0 flex-1 overflow-auto' : 'overflow-x-auto'
           )}
           tabIndex={0}
           aria-label="Work assignments table — scroll horizontally to view additional columns"
