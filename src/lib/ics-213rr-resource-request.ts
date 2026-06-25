@@ -654,3 +654,176 @@ export const DEFAULT_ICS213RR_RESOURCE_REQUESTS: ResourceRequestItem[] = [
     financeApprovalDateTime: '05/09/2026 09:30 CST',
   },
 ]
+
+export type CreateResourceRequestInput = Omit<ResourceRequestItem, 'id'>
+
+export type CreateResourceRequestDefaults = {
+  requestedByName?: string
+  incidentName?: string
+  mapLocation?: [number, number]
+}
+
+export function formatResourceRequestDateTime(date = new Date()): string {
+  const pad = (value: number) => String(value).padStart(2, '0')
+  return `${pad(date.getMonth() + 1)}/${pad(date.getDate())}/${date.getFullYear()} ${pad(date.getHours())}:${pad(date.getMinutes())}`
+}
+
+export function generateResourceRequestNumber(existing: ResourceRequestItem[]): string {
+  const year = new Date().getFullYear()
+  const prefix = `RR-${year}-`
+  let maxSequence = 0
+
+  for (const item of existing) {
+    const match = item.requestNumber.trim().match(/^RR-(\d{4})-(\d+)$/i)
+    if (!match) continue
+    if (Number(match[1]) !== year) continue
+    maxSequence = Math.max(maxSequence, Number.parseInt(match[2], 10))
+  }
+
+  return `${prefix}${String(maxSequence + 1).padStart(4, '0')}`
+}
+
+export function nextResourceRequestId(existing: ResourceRequestItem[]): number {
+  if (existing.length === 0) return 1
+  return Math.max(...existing.map((item) => item.id)) + 1
+}
+
+export function createEmptyResourceRequestInput(
+  defaults: CreateResourceRequestDefaults = {}
+): CreateResourceRequestInput {
+  const now = formatResourceRequestDateTime()
+  const mapLocation = defaults.mapLocation ?? [0, 0]
+
+  return {
+    mapLocation,
+    status: 'Pending',
+    incidentName: defaults.incidentName ?? '',
+    dateTimeInitiated: now,
+    requestNumber: '',
+    orderQuantity: 1,
+    orderKind: '',
+    orderType: '',
+    orderPriority: 'R',
+    orderDetailedDescription: '',
+    orderRequestedReportingLocation: '',
+    orderLocationDateTime: '',
+    orderNumberLsc: '',
+    orderEtaLsc: '',
+    orderCostLsc: '',
+    suggestedSourcesAndSubstitutes: '',
+    requestedByName: defaults.requestedByName ?? '',
+    requestedByPosition: '',
+    requestedByDateTime: now,
+    sectionChiefApprovalName: '',
+    sectionChiefApprovalPosition: '',
+    sectionChiefApprovalSignature: '',
+    sectionChiefApprovalDateTime: '',
+    reslTacticalResources: false,
+    reslResourceAvailable: false,
+    reslResourceNotAvailable: false,
+    reslReviewName: '',
+    reslReviewSignature: '',
+    reslReviewDateTime: '',
+    requisitionPurchaseOrderNumber: '',
+    supplierNamePhoneFaxEmail: '',
+    notes: '',
+    logisticsApprovalName: '',
+    logisticsApprovalPosition: '',
+    logisticsApprovalSignature: '',
+    logisticsApprovalDateTime: '',
+    orderPlacedBySpul: false,
+    orderPlacedByProc: false,
+    orderPlacedByOther: false,
+    orderPlacedByOtherText: '',
+    orderPlacedSignature: '',
+    orderPlacedDateTime: '',
+    financeReplyComments: '',
+    financeApprovalName: '',
+    financeApprovalPosition: '',
+    financeApprovalSignature: '',
+    financeApprovalDateTime: '',
+  }
+}
+
+export function validateCreateResourceRequestInput(
+  input: CreateResourceRequestInput
+): string | null {
+  if (!input.incidentName.trim()) {
+    return 'Incident name is required.'
+  }
+  if (!input.orderKind.trim()) {
+    return 'Order kind is required.'
+  }
+  if (!input.orderType.trim()) {
+    return 'Order type is required.'
+  }
+  if (!input.orderDetailedDescription.trim()) {
+    return 'Detailed description is required.'
+  }
+  if (!input.orderRequestedReportingLocation.trim()) {
+    return 'Reporting location is required.'
+  }
+  if (!input.requestedByName.trim()) {
+    return 'Requested by name is required.'
+  }
+  if (!Number.isFinite(input.orderQuantity) || input.orderQuantity < 1) {
+    return 'Quantity must be at least 1.'
+  }
+  return null
+}
+
+export function buildResourceRequestFromInput(
+  input: CreateResourceRequestInput,
+  params: { id: number; requestNumber: string }
+): ResourceRequestItem {
+  return {
+    id: params.id,
+    mapLocation: input.mapLocation ?? [0, 0],
+    status: input.status ?? 'Pending',
+    incidentName: input.incidentName.trim(),
+    dateTimeInitiated: input.dateTimeInitiated.trim() || formatResourceRequestDateTime(),
+    requestNumber: params.requestNumber,
+    orderQuantity: input.orderQuantity,
+    orderKind: input.orderKind.trim(),
+    orderType: input.orderType.trim(),
+    orderPriority: input.orderPriority,
+    orderDetailedDescription: input.orderDetailedDescription.trim(),
+    orderRequestedReportingLocation: input.orderRequestedReportingLocation.trim(),
+    orderLocationDateTime: input.orderLocationDateTime.trim(),
+    orderNumberLsc: input.orderNumberLsc.trim(),
+    orderEtaLsc: input.orderEtaLsc.trim(),
+    orderCostLsc: input.orderCostLsc.trim(),
+    suggestedSourcesAndSubstitutes: input.suggestedSourcesAndSubstitutes.trim(),
+    requestedByName: input.requestedByName.trim(),
+    requestedByPosition: input.requestedByPosition.trim(),
+    requestedByDateTime: input.requestedByDateTime.trim() || formatResourceRequestDateTime(),
+    sectionChiefApprovalName: input.sectionChiefApprovalName.trim(),
+    sectionChiefApprovalPosition: input.sectionChiefApprovalPosition.trim(),
+    sectionChiefApprovalSignature: input.sectionChiefApprovalSignature.trim(),
+    sectionChiefApprovalDateTime: input.sectionChiefApprovalDateTime.trim(),
+    reslTacticalResources: input.reslTacticalResources,
+    reslResourceAvailable: input.reslResourceAvailable,
+    reslResourceNotAvailable: input.reslResourceNotAvailable,
+    reslReviewName: input.reslReviewName.trim(),
+    reslReviewSignature: input.reslReviewSignature.trim(),
+    reslReviewDateTime: input.reslReviewDateTime.trim(),
+    requisitionPurchaseOrderNumber: input.requisitionPurchaseOrderNumber.trim(),
+    supplierNamePhoneFaxEmail: input.supplierNamePhoneFaxEmail.trim(),
+    notes: input.notes.trim(),
+    logisticsApprovalName: input.logisticsApprovalName.trim(),
+    logisticsApprovalPosition: input.logisticsApprovalPosition.trim(),
+    logisticsApprovalSignature: input.logisticsApprovalSignature.trim(),
+    logisticsApprovalDateTime: input.logisticsApprovalDateTime.trim(),
+    orderPlacedBySpul: input.orderPlacedBySpul,
+    orderPlacedByProc: input.orderPlacedByProc,
+    orderPlacedByOther: input.orderPlacedByOther,
+    orderPlacedByOtherText: input.orderPlacedByOtherText.trim(),
+    orderPlacedSignature: input.orderPlacedSignature.trim(),
+    orderPlacedDateTime: input.orderPlacedDateTime.trim(),
+    financeReplyComments: input.financeReplyComments.trim(),
+    financeApprovalName: input.financeApprovalName.trim(),
+    financeApprovalPosition: input.financeApprovalPosition.trim(),
+    financeApprovalSignature: input.financeApprovalSignature.trim(),
+    financeApprovalDateTime: input.financeApprovalDateTime.trim(),
+  }
+}

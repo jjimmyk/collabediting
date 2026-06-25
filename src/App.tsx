@@ -154,6 +154,7 @@ import {
   getResourceRequestItemFieldValue,
   getResourceRequestSearchValues,
   printResourceRequestPdf,
+  type CreateResourceRequestInput,
   type ResourceRequestItem,
 } from '@/lib/ics-213rr-resource-request'
 import { cn } from '@/lib/utils'
@@ -227,6 +228,10 @@ import {
   type CreateOrganizationAssetInput,
 } from '@/lib/organization-asset-catalog'
 import { createOrganizationAsset, updateOrganizationAsset } from '@/lib/organization-asset-service'
+import {
+  createOrganizationAssetRequest,
+  fetchOrganizationAssetRequests,
+} from '@/lib/organization-asset-request-service'
 import { CreateOrganizationDialog } from '@/features/organization/CreateOrganizationDialog'
 import { OrgMembersSheet } from '@/features/organization/OrgMembersSheet'
 import { OrganizationProfileMenuSection } from '@/features/organization/OrganizationProfileMenuSection'
@@ -573,6 +578,7 @@ import { WorkspaceAssignedAssetsPanel } from '@/features/resources/WorkspaceAssi
 import { AssetsTabToolbar } from '@/features/resources/AssetsTabToolbar'
 import { AddWorkspaceAssetDialog } from '@/features/resources/AddWorkspaceAssetDialog'
 import { CreateOrganizationAssetDialog } from '@/features/resources/CreateOrganizationAssetDialog'
+import { CreateAssetRequestDialog } from '@/features/resources/CreateAssetRequestDialog'
 import { AssetWorkspaceAssignmentSelect } from '@/features/resources/AssetWorkspaceAssignmentSelect'
 import {
   SINGLE_RESOURCE_POSITION_LABEL,
@@ -8844,7 +8850,18 @@ function App() {
       location: [-90.82, 30.02],
     },
   ])
-  const [resourceRequests] = useState<ResourceRequestItem[]>(DEFAULT_ICS213RR_RESOURCE_REQUESTS)
+  const [organizationAssetRequests, setOrganizationAssetRequests] = useState<ResourceRequestItem[]>(
+    []
+  )
+  const [isLoadingOrganizationAssetRequests, setIsLoadingOrganizationAssetRequests] =
+    useState(false)
+  const resourceRequests = useMemo(
+    () =>
+      organizationAssetRequests.length > 0
+        ? organizationAssetRequests
+        : DEFAULT_ICS213RR_RESOURCE_REQUESTS,
+    [organizationAssetRequests]
+  )
   const [resourcesPanelView, setResourcesPanelView] = useState<ResourcesPanelView>('resources')
   const [resourcesDisplayMode, setResourcesDisplayMode] = useState<ResourcesDisplayMode>('list')
   const [resourcesFieldFiltersByView, setResourcesFieldFiltersByView] = useState<
@@ -9043,6 +9060,78 @@ function App() {
     },
     [activeOrganizationId, getAccessToken, refreshOrganizationAssets]
   )
+  const refreshOrganizationAssetRequests = useCallback(async () => {
+    if (!activeOrganizationId) {
+      setOrganizationAssetRequests([])
+      return
+    }
+
+    setIsLoadingOrganizationAssetRequests(true)
+    try {
+      const accessToken = await getAccessToken()
+      const result = await fetchOrganizationAssetRequests({
+        accessToken,
+        organizationId: activeOrganizationId,
+      })
+      if (result.ok) {
+        setOrganizationAssetRequests(result.requests)
+      }
+    } finally {
+      setIsLoadingOrganizationAssetRequests(false)
+    }
+  }, [activeOrganizationId, getAccessToken])
+  useEffect(() => {
+    void refreshOrganizationAssetRequests()
+  }, [refreshOrganizationAssetRequests])
+  const assetRequestIncidentOptions = useMemo(
+    () =>
+      incidentList.map((incident) => ({
+        name: incident.name,
+        location: incident.location,
+      })),
+    [incidentList]
+  )
+  const defaultAssetRequestRequestedByName = useMemo(() => {
+    const metadataName =
+      typeof user?.user_metadata?.full_name === 'string'
+        ? user.user_metadata.full_name.trim()
+        : ''
+    if (metadataName) return metadataName
+    if (profileEmail) return profileEmail.split('@')[0] ?? profileEmail
+    return ''
+  }, [profileEmail, user?.user_metadata?.full_name])
+  const handleCreateAssetRequest = useCallback(
+    async (input: CreateResourceRequestInput) => {
+      if (!activeOrganizationId) {
+        toast.error('Select an organization before creating asset requests.')
+        return false
+      }
+
+      setIsCreatingAssetRequest(true)
+      try {
+        const accessToken = await getAccessToken()
+        const result = await createOrganizationAssetRequest({
+          accessToken,
+          organizationId: activeOrganizationId,
+          input,
+          existingRequests: organizationAssetRequests,
+        })
+        if (!result.ok) {
+          toast.error(result.message)
+          return false
+        }
+
+        setOrganizationAssetRequests((previous) => [...previous, result.request])
+        setResourcesPanelView('resource-requests')
+        setOpenResourceRequestPreviewId(result.request.id)
+        toast.success(`Asset request ${result.request.requestNumber} created.`)
+        return true
+      } finally {
+        setIsCreatingAssetRequest(false)
+      }
+    },
+    [activeOrganizationId, getAccessToken, organizationAssetRequests]
+  )
   const handleUpdateOrganizationAsset = useCallback(
     async (resource: ResourceListItemData) => {
       if (!activeOrganizationId || !isOrganizationManagedAssetKey(resource.assetKey)) {
@@ -9133,8 +9222,10 @@ function App() {
   const [isAddWorkspacePositionOpen, setIsAddWorkspacePositionOpen] = useState(false)
   const [isAddAssetToOrgChartOpen, setIsAddAssetToOrgChartOpen] = useState(false)
   const [isCreateOrganizationAssetOpen, setIsCreateOrganizationAssetOpen] = useState(false)
+  const [isCreateAssetRequestOpen, setIsCreateAssetRequestOpen] = useState(false)
   const [isAddWorkspaceAssetOpen, setIsAddWorkspaceAssetOpen] = useState(false)
   const [isCreatingOrganizationAsset, setIsCreatingOrganizationAsset] = useState(false)
+  const [isCreatingAssetRequest, setIsCreatingAssetRequest] = useState(false)
   const [isSavingAssetOrgChartPlacement, setIsSavingAssetOrgChartPlacement] = useState(false)
   const [isSavingCustomPosition, setIsSavingCustomPosition] = useState(false)
   const [updatingCustomPositionName, setUpdatingCustomPositionName] = useState<string | null>(null)
@@ -11335,11 +11426,13 @@ function App() {
       .includes(normalizedQuery)
   })
   const searchFilteredResourceRequests = resourceRequests.filter((item) => {
-    if (!normalizedQuery) {
+    if (!normalizedResourcesSearchQuery) {
       return true
     }
 
-    return getResourceRequestSearchValues(item).toLowerCase().includes(normalizedQuery)
+    return getResourceRequestSearchValues(item)
+      .toLowerCase()
+      .includes(normalizedResourcesSearchQuery)
   })
   const searchFilteredAors = aors.filter((item) => {
     if (!normalizedQuery) {
@@ -26599,17 +26692,28 @@ function App() {
                 {activeTab === 'resources' && !isInWorkspaceContext && (
                   <div className="flex flex-wrap items-center justify-end gap-2">
                     <AssetsTabToolbar
+                      panelView={resourcesPanelView}
                       canManageAssets={Boolean(profileEmail && activeOrganizationId)}
                       onAddAsset={() => setIsCreateOrganizationAssetOpen(true)}
+                      onCreateAssetRequest={() => setIsCreateAssetRequestOpen(true)}
                     />
-                    {resourcesPanelView === 'resources' && (
+                    {(resourcesPanelView === 'resources' ||
+                      resourcesPanelView === 'resource-requests') && (
                       <div className="flex w-56 items-center gap-2 rounded-md border px-2 py-1.5">
                         <Search className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                         <input
                           value={resourcesSearchQuery}
                           onChange={(event) => setResourcesSearchQuery(event.target.value)}
-                          placeholder="Search assets"
-                          aria-label="Search assets"
+                          placeholder={
+                            resourcesPanelView === 'resource-requests'
+                              ? 'Search asset requests'
+                              : 'Search assets'
+                          }
+                          aria-label={
+                            resourcesPanelView === 'resource-requests'
+                              ? 'Search asset requests'
+                              : 'Search assets'
+                          }
                           className="w-full bg-transparent text-xs outline-none placeholder:text-muted-foreground"
                         />
                       </div>
@@ -26824,8 +26928,10 @@ function App() {
                 {activeTab === 'resources' && isInWorkspaceContext && (
                   <div className="flex flex-wrap items-center justify-end gap-2">
                     <AssetsTabToolbar
+                      panelView="resources"
                       canManageAssets={effectiveCanManageRoster}
                       onAddAsset={() => setIsAddWorkspaceAssetOpen(true)}
+                      onCreateAssetRequest={() => undefined}
                     />
                   </div>
                 )}
@@ -27910,8 +28016,16 @@ function App() {
                   cardFilteredResourceRequests.length === 0 && (
                     <Item variant="outline" className={glassItemBorderClasses}>
                       <ItemContent>
-                        <ItemTitle>No matching asset requests</ItemTitle>
-                        <ItemDescription>Try a broader search term.</ItemDescription>
+                        <ItemTitle>
+                          {normalizedResourcesSearchQuery
+                            ? 'No matching asset requests'
+                            : 'No asset requests yet'}
+                        </ItemTitle>
+                        <ItemDescription>
+                          {normalizedResourcesSearchQuery
+                            ? 'Try a broader search term.'
+                            : 'Create an ICS 213RR asset request to track resource needs for an incident.'}
+                        </ItemDescription>
                       </ItemContent>
                     </Item>
                   )}
@@ -39318,6 +39432,14 @@ function App() {
         onOpenChange={setIsCreateOrganizationAssetOpen}
         isSubmitting={isCreatingOrganizationAsset}
         onSubmit={handleCreateOrganizationAsset}
+      />
+      <CreateAssetRequestDialog
+        open={isCreateAssetRequestOpen}
+        onOpenChange={setIsCreateAssetRequestOpen}
+        isSubmitting={isCreatingAssetRequest || isLoadingOrganizationAssetRequests}
+        defaultRequestedByName={defaultAssetRequestRequestedByName}
+        incidentOptions={assetRequestIncidentOptions}
+        onSubmit={handleCreateAssetRequest}
       />
       <AddWorkspaceAssetDialog
         open={isAddWorkspaceAssetOpen}
