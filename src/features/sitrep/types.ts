@@ -52,6 +52,8 @@ export type SitrepSection =
 
 export type SitrepScopeKind = 'aor' | 'incident' | 'exercise'
 
+export type SitrepViewMode = 'current' | 'historical' | 'drafts' | 'review-queue'
+
 export type SitrepVersionSignature = Ics201VersionSignature
 
 export type SitrepVersion = {

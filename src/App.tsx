@@ -747,7 +747,28 @@ import {
   SITREP_AI_COMPATIBLE_SECTIONS,
   SITREP_SECTION_PRIMARY,
 } from '@/features/sitrep/constants'
-import type { SitrepFormState, SitrepSection, SitrepVersion } from '@/features/sitrep/types'
+import type { SitrepFormState, SitrepSection, SitrepVersion, SitrepViewMode } from '@/features/sitrep/types'
+import {
+  clearSitrepSectionEdits,
+  filterSitrepVersionsForMode,
+  formatSitrepLastEditor,
+  getHumanSitrepAuthorName,
+  getLatestSitrepVersion,
+  getSitrepLastEditorLabel,
+  getSitrepVersionLabel,
+  isSitrepVersionSigned,
+  isSitrepVersionSubmitted,
+  sitrepViewModeEmptyLabel,
+} from '@/features/sitrep/editor-utils'
+import {
+  SitrepHistoricalBanner,
+  SitrepReviewTargetBanner,
+  SitrepScopeHeader,
+  SitrepVersionToolbar,
+  SitrepViewModeTabs,
+} from '@/features/sitrep/SitrepChrome'
+import { SitrepVersionDialogs } from '@/features/sitrep/SitrepVersionDialogs'
+import { useSitrepEditorState } from '@/hooks/useSitrepEditorState'
 import {
   buildDefaultSitrepForAor,
   buildDefaultSitrepForWorkspace,
@@ -3290,40 +3311,8 @@ const getOngoingIncidentSitrepSectionValue = (
   }
 }
 
-const isNonHumanSitrepAuthor = (name: string) => name.trim().toLowerCase() === 'pratus ai'
-
 const getNotificationSourceDisplayName = (owner: string) =>
   owner.split('·')[0]?.trim() || owner
-
-const getHumanSitrepAuthorName = (
-  version: { authorName: string; creatorName: string } | null | undefined
-) => {
-  if (version) {
-    if (!isNonHumanSitrepAuthor(version.authorName)) {
-      return version.authorName
-    }
-    if (!isNonHumanSitrepAuthor(version.creatorName)) {
-      return version.creatorName
-    }
-  }
-  return 'You'
-}
-
-const formatSitrepLastEditor = (
-  version: { authorName: string; authorRole: string } | null | undefined
-) => {
-  if (!version) {
-    return 'You'
-  }
-  if (version.authorName === 'You') {
-    return 'You'
-  }
-  return [version.authorRole, version.authorName].filter(Boolean).join(' ')
-}
-
-const getSitrepLastEditorLabel = (
-  version: { authorName: string } | null | undefined
-) => (version?.authorName === 'You' ? 'Last edited by' : 'Last updated by')
 
 type YesNoField = 'yes' | 'no' | ''
 
@@ -7557,7 +7546,7 @@ function App() {
   const [viewingSitrepVersionOrigin, setViewingSitrepVersionOrigin] = useState<
     SitrepViewMode | null
   >(null)
-  const [activeSitrepDraftId, setActiveSitrepDraftId] = useState<string | null>(null)
+  const [sitrepReviewTargetId, setSitrepReviewTargetId] = useState<string | null>(null)
   const [requestedApprovalSitrepDraftIds, setRequestedApprovalSitrepDraftIds] = useState<
     Set<string>
   >(() => new Set())
@@ -7658,9 +7647,8 @@ function App() {
     })
     setSitrepApprovalRecipientPicker(null)
   }
-  type SitrepViewMode = 'current' | 'historical' | 'drafts' | 'review-queue'
-  const [sitrepViewMode, setSitrepViewMode] = useState<SitrepViewMode>('current')
   type SitrepScopeKind = 'aor' | 'incident' | 'exercise'
+  const [sitrepViewMode, setSitrepViewMode] = useState<SitrepViewMode>('current')
   type SitrepScopeOption = {
     id: string
     kind: SitrepScopeKind
@@ -7718,14 +7706,16 @@ function App() {
       'imagery': null,
     })
     setViewingSitrepVersion(null)
+    setViewingSitrepVersionOrigin(null)
+    setSitrepReviewTargetId(null)
+    setIsCreatingSignedSitrepVersion(false)
     setSitrepViewMode('current')
-    const version = pushSitrepVersionRef.current(seedSnapshot, {
+    pushSitrepVersionRef.current(seedSnapshot, {
       authorRole: 'Technical Specialist',
       creatorName: 'You',
       creatorColor: sitrepAuthorColorRef.current,
       creatorRole: 'Technical Specialist',
     })
-    setActiveSitrepDraftId(version.id)
   }
   const [sitrepActiveSection, setSitrepActiveSection] = useState<SitrepSection>('executive-summary')
   type SitrepSectionType = 'manual' | 'ai'
@@ -8120,13 +8110,10 @@ function App() {
       [primaryField]: yourDraft,
     }
     setSitrepForm(nextSnapshot)
-    const version = pushSitrepVersionRef.current(nextSnapshot, {
+    pushSitrepVersionRef.current(nextSnapshot, {
       sectionId: section,
       authorRole: 'Technical Specialist',
     })
-    if (activeSitrepDraftId !== null) {
-      setActiveSitrepDraftId(version.id)
-    }
     cancelSitrepSectionEdit(section)
   }
   const liveSitrepFormRef = useRef<SitrepFormState | null>(null)
@@ -11782,20 +11769,12 @@ function App() {
         }
       }
 
-      setActiveSitrepDraftId(null)
       setViewingSitrepVersion(null)
       setViewingSitrepVersionOrigin(null)
+      setSitrepReviewTargetId(null)
+      setIsCreatingSignedSitrepVersion(false)
       liveSitrepFormRef.current = null
-      setSitrepSectionEdits({
-        'executive-summary': null,
-        'ongoing-incidents': null,
-        'readiness-assessment': null,
-        'risk-to-mission': null,
-        'outstanding-rfi-rfr': null,
-        'previous-critical-incident-comms': null,
-        'general-comments': null,
-        'imagery': null,
-      })
+      setSitrepSectionEdits(clearSitrepSectionEdits())
     },
     [SITREP_SCOPE_OPTIONS, sitrepActiveSection]
   )
@@ -11913,16 +11892,134 @@ function App() {
         setSitrepVersions((previous) =>
           previous.map((entry) => (entry.id === optimisticVersion.id ? persisted : entry)).slice(-100)
         )
-        if (activeSitrepDraftId === optimisticVersion.id) {
-          setActiveSitrepDraftId(persisted.id)
-        }
       })
       return optimisticVersion
     },
-    [activeSitrepDraftId, appendSitrepVersion, sitrepAuthorColor, sitrepAuthorName, user?.id]
+    [appendSitrepVersion, sitrepAuthorColor, sitrepAuthorName, user?.id]
   )
   pushSitrepVersionRef.current = pushSitrepVersion
   sitrepAuthorColorRef.current = sitrepAuthorColor
+  const sitrepEditor = useSitrepEditorState({
+    versions: sitrepVersions,
+    viewingSitrepVersion,
+    isCreatingSignedSitrepVersion,
+    sitrepReviewTargetId,
+  })
+  const sitrepReviewTarget = useMemo(
+    () =>
+      sitrepReviewTargetId
+        ? sitrepVersions.find((entry) => entry.id === sitrepReviewTargetId) ?? null
+        : null,
+    [sitrepReviewTargetId, sitrepVersions]
+  )
+  const viewLatestSitrep = useCallback(() => {
+    if (liveSitrepFormRef.current) {
+      setSitrepForm(liveSitrepFormRef.current)
+      liveSitrepFormRef.current = null
+    }
+    setViewingSitrepVersion(null)
+    setViewingSitrepVersionOrigin(null)
+    setSitrepReviewTargetId(null)
+    setIsCreatingSignedSitrepVersion(false)
+    setSitrepSectionEdits(clearSitrepSectionEdits())
+    const latest = getLatestSitrepVersion(sitrepVersions)
+    if (latest) {
+      setSitrepForm(cloneSitrepFormState(latest.snapshot))
+    }
+  }, [sitrepVersions])
+  const openSitrepVersionFromList = useCallback(
+    (
+      version: SitrepVersion,
+      fromMode: SitrepViewMode,
+      options?: { preserveLiveForm?: boolean; viewOnly?: boolean }
+    ) => {
+      const latest = getLatestSitrepVersion(sitrepVersions)
+      const isLatest = latest?.id === version.id
+
+      if (options?.preserveLiveForm && liveSitrepFormRef.current === null) {
+        liveSitrepFormRef.current = sitrepForm
+      }
+
+      if (options?.viewOnly || isSitrepVersionSigned(version)) {
+        setSitrepForm(cloneSitrepFormState(version.snapshot))
+        setViewingSitrepVersion(version)
+        setViewingSitrepVersionOrigin(fromMode === 'current' ? 'historical' : fromMode)
+        setSitrepReviewTargetId(null)
+        setSitrepViewMode('current')
+        setSitrepSectionEdits(clearSitrepSectionEdits())
+        return
+      }
+
+      if (fromMode === 'review-queue' && isSitrepVersionSubmitted(version)) {
+        setSitrepForm(cloneSitrepFormState(version.snapshot))
+        setSitrepReviewTargetId(version.id)
+        setViewingSitrepVersion(null)
+        setViewingSitrepVersionOrigin('review-queue')
+        setSitrepViewMode('current')
+        setSitrepSectionEdits(clearSitrepSectionEdits())
+        return
+      }
+
+      if (!isLatest) {
+        pushSitrepVersion(cloneSitrepFormState(version.snapshot), {
+          authorRole: version.authorRole,
+          creatorName: version.creatorName,
+          creatorColor: version.creatorColor,
+          creatorRole: version.creatorRole,
+          aiGeneratedSections: version.aiGeneratedSections,
+        })
+        setSitrepForm(cloneSitrepFormState(version.snapshot))
+        toast.info('Created a new version from the selected draft.')
+        setSitrepViewMode('current')
+        setViewingSitrepVersion(null)
+        setSitrepReviewTargetId(null)
+        setSitrepSectionEdits(clearSitrepSectionEdits())
+        return
+      }
+
+      setSitrepForm(cloneSitrepFormState(version.snapshot))
+      setViewingSitrepVersion(null)
+      setSitrepReviewTargetId(null)
+      setSitrepViewMode('current')
+      setSitrepSectionEdits(clearSitrepSectionEdits())
+    },
+    [pushSitrepVersion, sitrepForm, sitrepVersions]
+  )
+  const handleSitrepCreateSignedOrNewVersion = useCallback(() => {
+    if (sitrepEditor.isLatestSigned) {
+      pushSitrepVersion(sitrepForm)
+      setIsCreatingSignedSitrepVersion(false)
+      return
+    }
+    setIsCreatingSignedSitrepVersion(true)
+    setViewingSitrepVersion(null)
+    setSitrepReviewTargetId(null)
+    setSitrepViewMode('current')
+  }, [pushSitrepVersion, sitrepEditor.isLatestSigned, sitrepForm])
+  const handleSitrepConfirmSign = useCallback(() => {
+    const name = sitrepSignNameInput.trim()
+    if (!name) {
+      return
+    }
+    pushSitrepVersion(sitrepForm, {
+      authorNameOverride: name,
+      authorColorOverride: sitrepAuthorColor,
+      authorRole: 'Technical Specialist',
+      creatorName: name,
+      creatorColor: sitrepAuthorColor,
+      creatorRole: 'Technical Specialist',
+      signatures: [
+        {
+          name,
+          role: 'Technical Specialist',
+          signedAt: Date.now(),
+        },
+      ],
+    })
+    setIsSitrepSignNameDialogOpen(false)
+    setIsCreatingSignedSitrepVersion(false)
+    setSitrepSignNameInput('You')
+  }, [pushSitrepVersion, sitrepAuthorColor, sitrepForm, sitrepSignNameInput])
   useEffect(() => {
     if (sitrepSyncError) {
       toast.error(sitrepSyncError)
@@ -18705,10 +18802,8 @@ function App() {
 
     const executiveSummary =
       ONGOING_INCIDENT_SITREP_CONTENT[incident.id]?.executiveSummary ?? incident.summary
-    const activeDraft = activeSitrepDraftId
-      ? sitrepVersions.find((entry) => entry.id === activeSitrepDraftId)
-      : sitrepVersions[sitrepVersions.length - 1]
-    const updatedByLine = `${incident.lastUpdate} by ${getHumanSitrepAuthorName(activeDraft)}`
+    const latestVersion = getLatestSitrepVersion(sitrepVersions)
+    const updatedByLine = `${incident.lastUpdate} by ${getHumanSitrepAuthorName(latestVersion)}`
 
     polygonGraphic.attributes = {
       ...polygonGraphic.attributes,
@@ -19200,7 +19295,7 @@ function App() {
       })
       setViewingSitrepVersion(null)
       setSitrepViewMode('current')
-      const version = pushSitrepVersion(generatedSnapshot, {
+      pushSitrepVersion(generatedSnapshot, {
         authorNameOverride: 'PRATUS AI',
         authorColorOverride: '#7c3aed',
         authorRole: 'AI Assistant',
@@ -19209,7 +19304,6 @@ function App() {
         creatorRole: 'AI Assistant',
         aiGeneratedSections: [...SITREP_AI_COMPATIBLE_SECTIONS],
       })
-      setActiveSitrepDraftId(version.id)
       setSitrepGeneratingFromScope(null)
     }, 2500)
   }
@@ -33198,533 +33292,133 @@ function App() {
                       </div>
                     )}
                     <div className="sticky top-0 z-10 -mx-2 space-y-3 bg-card px-2 pb-2 pt-1">
-                      {viewingSitrepVersion && (() => {
-                        const liveViewedVersion = sitrepVersions.find(
-                          (entry) => entry.id === viewingSitrepVersion.id
-                        )
-                        const liveSignaturesForBanner =
-                          liveViewedVersion?.signatures ?? viewingSitrepVersion.signatures
-                        const isViewingSubmittedDraft =
-                          liveSignaturesForBanner.length === 0 &&
-                          ((liveViewedVersion?.submittedForReviewTo?.length ?? 0) > 0 ||
-                            (viewingSitrepVersion.submittedForReviewTo?.length ?? 0) > 0)
-                        const isViewingUnsignedDraft = liveSignaturesForBanner.length === 0
-                        const backLabelByMode: Record<SitrepViewMode, string> = {
-                          current: 'View latest',
-                          historical: 'Back to Historical',
-                          drafts: 'Back to Drafts',
-                          'review-queue': 'Back to Review Queue',
+                      {viewingSitrepVersion && (
+                        <SitrepHistoricalBanner
+                          version={viewingSitrepVersion}
+                          originMode={viewingSitrepVersionOrigin}
+                          onBack={() => {
+                            if (viewingSitrepVersionOrigin) {
+                              setSitrepViewMode(viewingSitrepVersionOrigin)
+                            }
+                            viewLatestSitrep()
+                          }}
+                        />
+                      )}
+                      {sitrepReviewTarget && !viewingSitrepVersion && (
+                        <SitrepReviewTargetBanner
+                          version={sitrepReviewTarget}
+                          onExitReview={() => {
+                            viewLatestSitrep()
+                            setSitrepViewMode('review-queue')
+                          }}
+                        />
+                      )}
+                      <SitrepScopeHeader
+                        isInWorkspaceContext={isInWorkspaceContext}
+                        scopeKindLabel={getSitrepScopeKindLabel(selectedSitrepScope?.kind)}
+                        scopeLabel={selectedSitrepScope?.label ?? ''}
+                        scopeKind={selectedSitrepScope?.kind}
+                        selectedScopeId={selectedSitrepScopeId}
+                        scopeOptions={SITREP_SCOPE_OPTIONS}
+                        onScopeChange={applySitrepScope}
+                      />
+                      <SitrepViewModeTabs
+                        viewMode={sitrepViewMode}
+                        onViewModeChange={setSitrepViewMode}
+                        toggleGroupClassName={glassToggleGroupClasses}
+                        showDraftActions={
+                          sitrepViewMode === 'current' || sitrepViewMode === 'drafts'
                         }
-                        const originMode = viewingSitrepVersionOrigin
-                        const backLabel = originMode
-                          ? backLabelByMode[originMode]
-                          : isViewingUnsignedDraft
-                            ? 'Back to Drafts'
-                            : backLabelByMode[sitrepViewMode]
-                        const handleBack = () => {
-                          if (liveSitrepFormRef.current) {
-                            setSitrepForm(liveSitrepFormRef.current)
-                            liveSitrepFormRef.current = null
-                          }
-                          setViewingSitrepVersion(null)
-                          setViewingSitrepVersionOrigin(null)
-                          if (originMode) {
-                            setSitrepViewMode(originMode)
-                          } else if (isViewingUnsignedDraft) {
-                            setSitrepViewMode('drafts')
-                          }
+                        draftActionsDisabled={
+                          viewingSitrepVersion !== null ||
+                          isCreatingSignedSitrepVersion ||
+                          sitrepGeneratingFromScope !== null
                         }
-                        return (
-                        <>
-                        <div className="flex items-center justify-start gap-2">
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            className="h-7 gap-1 text-xs"
-                            onClick={handleBack}
-                          >
-                            <ChevronLeft className="h-3.5 w-3.5" />
-                            {backLabel}
-                          </Button>
-                        </div>
-                        <div className="flex flex-col gap-2 rounded-md border border-amber-400 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-500 dark:bg-amber-500/10 dark:text-amber-200">
-                          <div className="flex flex-wrap items-center gap-2">
-                            {!isViewingSubmittedDraft && <History className="h-3.5 w-3.5" />}
-                            <span>
-                              {isViewingSubmittedDraft ? (
-                                <>
-                                  You are viewing a draft last edited by{' '}
-                                  <span className="font-semibold">
-                                    {viewingSitrepVersion.authorRole}{' '}
-                                    {viewingSitrepVersion.authorName}
-                                  </span>{' '}
-                                  submitted for review. Drafts submitted for review can only be
-                                  edited by their reviewers.
-                                </>
-                              ) : (
-                                <>
-                                  You are viewing a past version from{' '}
-                                  <span className="font-semibold">
-                                    {new Date(viewingSitrepVersion.createdAt).toLocaleTimeString(
-                                      [],
-                                      {
-                                        hour: '2-digit',
-                                        minute: '2-digit',
-                                        second: '2-digit',
-                                      }
-                                    )}
-                                  </span>{' '}
-                                  last edited by{' '}
-                                  <span className="font-semibold">
-                                    {viewingSitrepVersion.authorRole}{' '}
-                                    {viewingSitrepVersion.authorName}
-                                  </span>
-                                  .
-                                </>
-                              )}
-                            </span>
-                            {(() => {
-                              const liveVersion = sitrepVersions.find(
-                                (entry) => entry.id === viewingSitrepVersion.id
-                              )
-                              const allSubmittedRecipients =
-                                liveVersion?.submittedForReviewTo ??
-                                viewingSitrepVersion.submittedForReviewTo
-                              const submittedRecipients = allSubmittedRecipients?.filter(
-                                (recipient) => recipient.role !== 'Incident Commander'
-                              )
-                              const submittedAt =
-                                liveVersion?.submittedForReviewAt ??
-                                viewingSitrepVersion.submittedForReviewAt
-                              if (
-                                !submittedRecipients ||
-                                submittedRecipients.length === 0 ||
-                                !submittedAt
-                              ) {
-                                return null
-                              }
-                              return (
-                                <span className="basis-full text-[11px] text-amber-900 dark:text-amber-200">
-                                  Submitted for Review to{' '}
-                                  <span className="font-semibold">
-                                    {submittedRecipients
-                                      .map(
-                                        (recipient) => `${recipient.role} ${recipient.name}`
-                                      )
-                                      .join(', ')}
-                                  </span>{' '}
-                                  at{' '}
-                                  <span className="font-semibold">
-                                    {new Date(submittedAt).toLocaleTimeString([], {
-                                      hour: '2-digit',
-                                      minute: '2-digit',
-                                      second: '2-digit',
-                                    })}
-                                  </span>
-                                  .
-                                </span>
-                              )
-                            })()}
-                            {(() => {
-                              const liveSignatures =
-                                sitrepVersions.find((entry) => entry.id === viewingSitrepVersion.id)
-                                  ?.signatures ?? viewingSitrepVersion.signatures
-                              if (liveSignatures.length === 0) {
-                                return null
-                              }
-                              return (
-                                <span
-                                  className="flex items-center gap-1 rounded-full border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-800 dark:border-emerald-500/50 dark:bg-emerald-500/10 dark:text-emerald-300"
-                                  title={liveSignatures
-                                    .map(
-                                      (signature) =>
-                                        `${signature.name} (${signature.role}) at ${new Date(
-                                          signature.signedAt
-                                        ).toLocaleTimeString([], {
-                                          hour: '2-digit',
-                                          minute: '2-digit',
-                                        })}`
-                                    )
-                                    .join(', ')}
-                                >
-                                  <Check className="h-3 w-3" />
-                                  Signed by{' '}
-                                  {liveSignatures
-                                    .map((signature) => `${signature.name} (${signature.role})`)
-                                    .join(', ')}
-                                </span>
-                              )
-                            })()}
-                          </div>
-                        </div>
-                        </>
-                        )
-                      })()}
-                      {activeSitrepDraftId !== null &&
-                        !viewingSitrepVersion &&
-                        (() => {
-                          const activeDraft = sitrepVersions.find(
-                            (v) => v.id === activeSitrepDraftId
-                          )
-                          if (!activeDraft) {
-                            return null
-                          }
-                          const indexInAll = sitrepVersions.findIndex(
-                            (v) => v.id === activeSitrepDraftId
-                          )
-                          const versionLabel =
-                            indexInAll === sitrepVersions.length - 1
-                              ? 'latest'
-                              : `v${indexInAll + 1}`
-                          const hasRequestedApproval = requestedApprovalSitrepDraftIds.has(
-                            activeDraft.id
-                          )
-                          const reviewingFromQueue =
-                            viewingSitrepVersionOrigin === 'review-queue'
-                          const selectedScopeForBanner = SITREP_SCOPE_OPTIONS.find(
+                        onGenerateDraft={() => {
+                          const selectedScope = SITREP_SCOPE_OPTIONS.find(
                             (option) => option.id === selectedSitrepScopeId
                           )
-                          const bannerScopeLabel =
-                            selectedScopeForBanner?.label ??
-                            activeDraft.snapshot.incidentName?.trim() ??
-                            ''
-                          const bannerScopeKindLabel = getSitrepScopeKindLabel(
-                            selectedScopeForBanner?.kind
+                          const scopeLabel = selectedScope?.label ?? 'the selected scope'
+                          const scopeKindLabel = getSitrepScopeKindLabel(selectedScope?.kind)
+                          const scopeContextId = selectedScope
+                            ? `sitrep-scope:${selectedScope.id}`
+                            : 'sitrep-scope:none'
+                          const scopeContextLabel = selectedScope?.label ?? 'SITREPs'
+                          setPratusAiIntent('sitrep-generation')
+                          setPratusAiDraftMessage(
+                            `Generate a SITREP draft for ${scopeKindLabel} ${scopeLabel} using the selected sources. ` +
+                              'A draft will be generated for every compatible section of the SITREP — every section except Ongoing Incidents and Imagery.'
                           )
-                          return (
-                            <>
-                              {bannerScopeLabel.length > 0 && (
-                                <div className="flex flex-wrap items-center gap-2 rounded-md border bg-muted/40 px-3 py-2 text-xs">
-                                  <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                                    SITREP for
-                                  </span>
-                                  <Badge
-                                    variant="outline"
-                                    className={cn(
-                                      'gap-1 border-transparent px-1.5 py-0 font-mono text-[10px] uppercase tracking-wide',
-                                      bannerScopeKindLabel === 'AOR'
-                                        ? 'bg-sky-500/15 text-sky-700 dark:text-sky-300'
-                                        : 'bg-amber-500/15 text-amber-700 dark:text-amber-300'
-                                    )}
-                                  >
-                                    {bannerScopeKindLabel === 'AOR' ? (
-                                      <MapPin className="h-3 w-3" />
-                                    ) : (
-                                      <AlertTriangle className="h-3 w-3" />
-                                    )}
-                                    {bannerScopeKindLabel}
-                                  </Badge>
-                                  <span className="font-medium text-foreground">
-                                    {bannerScopeLabel}
-                                  </span>
-                                </div>
-                              )}
-                              <div className="flex items-center justify-between gap-2">
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant="outline"
-                                  className="h-7 gap-1 text-xs"
-                                  onClick={() => {
-                                    if (liveSitrepFormRef.current) {
-                                      setSitrepForm(liveSitrepFormRef.current)
-                                      liveSitrepFormRef.current = null
-                                    }
-                                    setActiveSitrepDraftId(null)
-                                    setSitrepViewMode(
-                                      reviewingFromQueue ? 'review-queue' : 'drafts'
-                                    )
-                                    setViewingSitrepVersionOrigin(null)
-                                    setSitrepSectionEdits({
-                                      'executive-summary': null,
-                                      'ongoing-incidents': null,
-                                      'readiness-assessment': null,
-                                      'risk-to-mission': null,
-                                      'outstanding-rfi-rfr': null,
-                                      'previous-critical-incident-comms': null,
-                                      'general-comments': null,
-                                      'imagery': null,
-                                    })
-                                  }}
-                                >
-                                  <ChevronLeft className="h-3.5 w-3.5" />
-                                  {reviewingFromQueue ? 'Back to Review Queue' : 'Back to Drafts'}
-                                </Button>
-                                {!reviewingFromQueue && (
-                                  <Button
-                                    type="button"
-                                    size="sm"
-                                    variant={hasRequestedApproval ? 'outline' : 'default'}
-                                    disabled={hasRequestedApproval}
-                                    className={cn(
-                                      'h-7 gap-1 text-xs',
-                                      !hasRequestedApproval &&
-                                        'bg-emerald-600 text-white hover:bg-emerald-700'
-                                    )}
-                                    onClick={() => {
-                                      openSitrepApprovalRecipientPicker({
-                                        draftId: activeDraft.id,
-                                        versionLabel,
-                                        authorName: activeDraft.authorName,
-                                      })
-                                    }}
-                                  >
-                                    {hasRequestedApproval ? (
-                                      <>
-                                        <Check className="h-3.5 w-3.5" />
-                                        Approval Requested
-                                      </>
-                                    ) : (
-                                      'Request Approval'
-                                    )}
-                                  </Button>
-                                )}
-                              </div>
-                              <div className="rounded-md border border-sky-400 bg-sky-50 px-3 py-2 text-xs text-sky-900 dark:border-sky-500 dark:bg-sky-500/10 dark:text-sky-200">
-                                <div className="flex flex-wrap items-center gap-2">
-                                  <div className="flex flex-col gap-0.5">
-                                    <span>
-                                      Created by{' '}
-                                      <span className="font-semibold">
-                                        {activeDraft.creatorRole} {activeDraft.creatorName}
-                                      </span>{' '}
-                                      at{' '}
-                                      <span className="font-semibold">
-                                        {new Date(activeDraft.creatorCreatedAt).toLocaleTimeString(
-                                          [],
-                                          {
-                                            hour: '2-digit',
-                                            minute: '2-digit',
-                                            second: '2-digit',
-                                          }
-                                        )}
-                                      </span>
-                                      .
-                                    </span>
-                                    <span>
-                                      {getSitrepLastEditorLabel(activeDraft)}{' '}
-                                      <span className="font-semibold">
-                                        {formatSitrepLastEditor(activeDraft)}
-                                      </span>{' '}
-                                      at{' '}
-                                      <span className="font-semibold">
-                                        {new Date(activeDraft.createdAt).toLocaleTimeString([], {
-                                          hour: '2-digit',
-                                          minute: '2-digit',
-                                          second: '2-digit',
-                                        })}
-                                      </span>
-                                      .
-                                    </span>
-                                  </div>
-                                </div>
-                              </div>
-                            </>
-                          )
-                        })()}
-                      {!viewingSitrepVersion &&
-                        !isCreatingSignedSitrepVersion &&
-                        activeSitrepDraftId === null && (
-                          <div className="flex items-center justify-start gap-2">
-                            <span className="text-base font-semibold text-foreground">
-                              SITREP for
-                            </span>
-                            <Select
-                              value={selectedSitrepScopeId}
-                              onValueChange={(value) => applySitrepScope(value)}
-                            >
-                              <SelectTrigger
-                                size="sm"
-                                aria-label="SITREP scope: AOR, incident, or exercise"
-                                className="h-8 w-[280px] text-xs"
-                              >
-                                <SelectValue placeholder="Select scope" />
-                              </SelectTrigger>
-                              <SelectContent className="text-xs">
-                                <SelectGroup>
-                                  <SelectLabel className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                                    Districts
-                                  </SelectLabel>
-                                  {SITREP_SCOPE_OPTIONS.filter(
-                                    (option) => option.kind === 'aor'
-                                  ).map((option) => (
-                                    <SelectItem
-                                      key={option.id}
-                                      value={option.id}
-                                      className="text-xs"
-                                    >
-                                      {option.label}
-                                    </SelectItem>
-                                  ))}
-                                </SelectGroup>
-                                <SelectGroup>
-                                  <SelectLabel className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                                    Incidents
-                                  </SelectLabel>
-                                  {SITREP_SCOPE_OPTIONS.filter(
-                                    (option) => option.kind === 'incident'
-                                  ).map((option) => (
-                                    <SelectItem
-                                      key={option.id}
-                                      value={option.id}
-                                      className="text-xs"
-                                    >
-                                      {option.label}
-                                    </SelectItem>
-                                  ))}
-                                </SelectGroup>
-                                <SelectGroup>
-                                  <SelectLabel className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                                    Exercises
-                                  </SelectLabel>
-                                  {SITREP_SCOPE_OPTIONS.filter(
-                                    (option) => option.kind === 'exercise'
-                                  ).map((option) => (
-                                    <SelectItem
-                                      key={option.id}
-                                      value={option.id}
-                                      className="text-xs"
-                                    >
-                                      {option.label}
-                                    </SelectItem>
-                                  ))}
-                                </SelectGroup>
-                              </SelectContent>
-                            </Select>
-                          </div>
-                        )}
-                      {!viewingSitrepVersion &&
-                        !isCreatingSignedSitrepVersion &&
-                        activeSitrepDraftId === null && (
-                          <div className="flex items-center justify-between gap-2">
-                            <ToggleGroup
-                              type="single"
-                              value={sitrepViewMode}
-                              onValueChange={(value) => {
-                                if (
-                                  value === 'current' ||
-                                  value === 'historical' ||
-                                  value === 'drafts' ||
-                                  value === 'review-queue'
-                                ) {
-                                  setSitrepViewMode(value)
-                                }
-                              }}
-                              variant="outline"
-                              size="sm"
-                              spacing={0}
-                              aria-label="SITREP view mode"
-                              className={glassToggleGroupClasses}
-                            >
-                              <ToggleGroupItem value="current" aria-label="Current">
-                                Current
-                              </ToggleGroupItem>
-                              <ToggleGroupItem value="historical" aria-label="Historical">
-                                Historical
-                              </ToggleGroupItem>
-                              <ToggleGroupItem value="drafts" aria-label="Drafts">
-                                Drafts
-                              </ToggleGroupItem>
-                              <ToggleGroupItem value="review-queue" aria-label="Review Queue">
-                                Review Queue
-                              </ToggleGroupItem>
-                            </ToggleGroup>
-                            {(sitrepViewMode === 'current' ||
-                              sitrepViewMode === 'drafts') && (
-                              <div className="flex items-center gap-2">
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  className="h-8 gap-1 bg-blue-600 text-xs text-white hover:bg-blue-700"
-                                  disabled={
-                                    viewingSitrepVersion !== null ||
-                                    isCreatingSignedSitrepVersion ||
-                                    sitrepGeneratingFromScope !== null
-                                  }
-                                  onClick={() => {
-                                    const selectedScope = SITREP_SCOPE_OPTIONS.find(
-                                      (option) => option.id === selectedSitrepScopeId
-                                    )
-                                    const scopeLabel = selectedScope?.label ?? 'the selected scope'
-                                    const scopeKindLabel = getSitrepScopeKindLabel(selectedScope?.kind)
-                                    const scopeContextId = selectedScope
-                                      ? `sitrep-scope:${selectedScope.id}`
-                                      : 'sitrep-scope:none'
-                                    const scopeContextLabel = selectedScope?.label ?? 'SITREPs'
-                                    setPratusAiIntent('sitrep-generation')
-                                    setPratusAiDraftMessage(
-                                      `Generate a SITREP draft for ${scopeKindLabel} ${scopeLabel} using the selected sources. ` +
-                                        'A draft will be generated for every compatible section of the SITREP — every section except Ongoing Incidents and Imagery.'
-                                    )
-                                    setPratusAiDataSources((previous) => ({
-                                      ...previous,
-                                      files: true,
-                                      organizationData: true,
-                                      incidentData: true,
-                                    }))
-                                    setPratusAiSelectedFiles([])
-                                    setPratusAiSelectedContexts((previous) => {
-                                      const withoutSitrepScopes = previous.filter(
-                                        (entry) =>
-                                          entry.id !== 'tab:sitreps' &&
-                                          !entry.id.startsWith('sitrep-scope:')
-                                      )
-                                      return [
-                                        ...withoutSitrepScopes,
-                                        { id: scopeContextId, label: scopeContextLabel },
-                                      ]
-                                    })
-                                    setIsPratusAiSelectingContext(false)
-                                    setIsPratusAiDrawerOpen(true)
-                                  }}
-                                >
-                                  <Sparkles className="h-3.5 w-3.5" />
-                                  Generate Draft
-                                </Button>
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  className="h-8 gap-1 bg-emerald-600 text-xs text-white hover:bg-emerald-700"
-                                  onClick={createNewSitrepDraft}
-                                >
-                                  <Plus className="h-3.5 w-3.5" />
-                                  Create Draft SITREP
-                                </Button>
-                              </div>
-                            )}
-                          </div>
-                        )}
+                          setPratusAiDataSources((previous) => ({
+                            ...previous,
+                            files: true,
+                            organizationData: true,
+                            incidentData: true,
+                          }))
+                          setPratusAiSelectedFiles([])
+                          setPratusAiSelectedContexts((previous) => {
+                            const withoutSitrepScopes = previous.filter(
+                              (entry) =>
+                                entry.id !== 'tab:sitreps' &&
+                                !entry.id.startsWith('sitrep-scope:')
+                            )
+                            return [
+                              ...withoutSitrepScopes,
+                              { id: scopeContextId, label: scopeContextLabel },
+                            ]
+                          })
+                          setIsPratusAiSelectingContext(false)
+                          setIsPratusAiDrawerOpen(true)
+                        }}
+                        onCreateDraft={createNewSitrepDraft}
+                      />
+                      {sitrepViewMode === 'current' && !viewingSitrepVersion && (
+                        <SitrepVersionToolbar
+                          latestVersion={sitrepEditor.latestVersion}
+                          isLatestSigned={sitrepEditor.isLatestSigned}
+                          signedVersionsCount={sitrepEditor.signedVersionsCount}
+                          versionsCount={sitrepVersions.length}
+                          isSaving={isSitrepSaving}
+                          isLoading={isSitrepLoading}
+                          viewingHistorical={false}
+                          isCreatingSignedVersion={isCreatingSignedSitrepVersion}
+                          authorDisplay={(version) => version.authorName}
+                          onOpenVersionHistory={() => setIsSitrepVersionDialogOpen(true)}
+                          onOpenSignedVersions={() => setIsSitrepSignedVersionsDialogOpen(true)}
+                          onCreateSignedOrNewVersion={handleSitrepCreateSignedOrNewVersion}
+                          canRequestApproval={
+                            !!sitrepEditor.latestUnsignedVersion &&
+                            !sitrepEditor.isLatestSigned &&
+                            !isSitrepVersionSubmitted(sitrepEditor.latestUnsignedVersion)
+                          }
+                          approvalRequested={
+                            sitrepEditor.latestUnsignedVersion
+                              ? requestedApprovalSitrepDraftIds.has(
+                                  sitrepEditor.latestUnsignedVersion.id
+                                )
+                              : false
+                          }
+                          onRequestApproval={() => {
+                            const draft = sitrepEditor.latestUnsignedVersion
+                            if (!draft) return
+                            openSitrepApprovalRecipientPicker({
+                              draftId: draft.id,
+                              versionLabel: getSitrepVersionLabel(draft.id, sitrepVersions),
+                              authorName: draft.authorName,
+                            })
+                          }}
+                        />
+                      )}
                     </div>
                     {!viewingSitrepVersion && sitrepViewMode !== 'current' && (() => {
-                      const reversed = [...sitrepVersions].reverse()
-                      const filtered =
-                        sitrepViewMode === 'historical'
-                          ? reversed
-                          : sitrepViewMode === 'drafts'
-                            ? reversed.filter((version) => version.signatures.length === 0)
-                            : reversed
-                                .filter(
-                                  (version) =>
-                                    version.signatures.length === 0 &&
-                                    (version.submittedForReviewTo?.filter(
-                                      (recipient) =>
-                                        recipient.role === 'Situation Unit Leader'
-                                    ).length ?? 0) > 0
-                                )
-                                .slice(0, 1)
-                      const emptyByMode: Record<Exclude<SitrepViewMode, 'current'>, string> = {
-                        historical: 'No versions yet.',
-                        drafts: 'No draft versions yet.',
-                        'review-queue': 'No drafts awaiting your review.',
-                      }
                       const mode = sitrepViewMode
+                      const filtered = filterSitrepVersionsForMode(sitrepVersions, mode)
                       return (
                         <div className="space-y-2">
                           <div className="overflow-hidden rounded-md border">
                             {filtered.length === 0 ? (
                               <div className="px-4 py-8 text-center text-xs text-muted-foreground">
-                                {emptyByMode[mode]}
+                                {sitrepViewModeEmptyLabel[mode]}
                               </div>
                             ) : (
                               <ul className="divide-y">
@@ -33869,43 +33563,7 @@ function App() {
                                       variant="outline"
                                       className="h-7 text-xs"
                                       onClick={() => {
-                                        const isEditableDraft =
-                                          version.signatures.length === 0 &&
-                                          (!version.submittedForReviewTo ||
-                                            version.submittedForReviewTo.length === 0)
-                                        if (
-                                          !viewingSitrepVersion &&
-                                          activeSitrepDraftId === null
-                                        ) {
-                                          liveSitrepFormRef.current = sitrepForm
-                                        }
-                                        setSitrepForm(version.snapshot)
-                                        setSitrepSectionEdits({
-                                          'executive-summary': null,
-                                          'ongoing-incidents': null,
-                                          'readiness-assessment': null,
-                                          'risk-to-mission': null,
-                                          'outstanding-rfi-rfr': null,
-                                          'previous-critical-incident-comms': null,
-                                          'general-comments': null,
-                                          'imagery': null,
-                                        })
-                                        const fromReviewQueue =
-                                          sitrepViewMode === 'review-queue'
-                                        if (isEditableDraft) {
-                                          setActiveSitrepDraftId(version.id)
-                                          setViewingSitrepVersion(null)
-                                          setViewingSitrepVersionOrigin(null)
-                                        } else if (fromReviewQueue) {
-                                          setActiveSitrepDraftId(version.id)
-                                          setViewingSitrepVersion(null)
-                                          setViewingSitrepVersionOrigin('review-queue')
-                                        } else {
-                                          setActiveSitrepDraftId(null)
-                                          setViewingSitrepVersion(version)
-                                          setViewingSitrepVersionOrigin(sitrepViewMode)
-                                        }
-                                        setSitrepViewMode('current')
+                                        openSitrepVersionFromList(version, mode)
                                       }}
                                     >
                                       View
@@ -33994,7 +33652,8 @@ function App() {
                       <div className="space-y-3">
                         {sitrepViewMode === 'current' &&
                           viewingSitrepVersion === null &&
-                          activeSitrepDraftId === null &&
+                          !sitrepReviewTargetId &&
+                          !isCreatingSignedSitrepVersion &&
                           (() => {
                             const latestSignedSitrep = [...sitrepVersions]
                               .reverse()
@@ -34026,12 +33685,7 @@ function App() {
                         <div className="-mx-1 overflow-x-auto px-1">
                           <div className="flex min-w-max items-center gap-1 border-b">
                             {(() => {
-                              const tabSitrepDraft =
-                                activeSitrepDraftId !== null
-                                  ? sitrepVersions.find(
-                                      (entry) => entry.id === activeSitrepDraftId
-                                    )
-                                  : null
+                              const tabSitrepDraft = sitrepEditor.workingVersion
                               const aiGeneratedSections = tabSitrepDraft?.aiGeneratedSections
                               return sitrepSectionsForScope.map((section) => {
                                 const isActive = sitrepActiveSection === section.id
@@ -34063,25 +33717,11 @@ function App() {
                           </div>
                         </div>
                         {(() => {
-                          const activeSitrepDraft =
-                            activeSitrepDraftId !== null
-                              ? sitrepVersions.find((entry) => entry.id === activeSitrepDraftId)
-                              : null
-                          const activeDraftSubmitted =
-                            !!activeSitrepDraft &&
-                            ((activeSitrepDraft.submittedForReviewTo?.length ?? 0) > 0 ||
-                              requestedApprovalSitrepDraftIds.has(activeSitrepDraft.id))
-                          const isReviewingFromQueue =
-                            viewingSitrepVersionOrigin === 'review-queue' &&
-                            activeSitrepDraftId !== null
-                          const formLocked =
-                            !!viewingSitrepVersion ||
-                            (activeSitrepDraftId === null && !isCreatingSignedSitrepVersion) ||
-                            (activeDraftSubmitted && !isReviewingFromQueue)
-                          const isEditingActiveDraft =
-                            activeSitrepDraftId !== null &&
-                            (!activeDraftSubmitted || isReviewingFromQueue) &&
-                            !viewingSitrepVersion
+                          const formLocked = sitrepEditor.isFormLocked
+                          const isEditingActiveDraft = sitrepEditor.canEditSections
+                          const isReviewingFromQueue = sitrepReviewTargetId !== null
+                          const reviewTarget = sitrepReviewTarget
+                          const tabSitrepDraft = sitrepEditor.workingVersion
                           const sitrepSectionIsGenerating =
                             sitrepSectionGenerating === sitrepActiveSection
                           const sitrepActivePrimaryField =
@@ -34226,7 +33866,7 @@ function App() {
                               </div>
                             </div>
                           ) : null
-                          const sitrepSectionHeader = isEditingActiveDraft ? (
+                          const sitrepSectionHeader = sitrepEditor.canShowSectionAiControls ? (
                             SITREP_AI_COMPATIBLE_SECTIONS.includes(sitrepActiveSection) ? (
                             <div className="flex items-center justify-start gap-2">
                               <Button
@@ -34757,7 +34397,7 @@ function App() {
                               </div>
                             </Item>
                           )}
-                          {isReviewingFromQueue && activeSitrepDraft && (
+                          {isReviewingFromQueue && reviewTarget && (
                             <div className="flex items-center justify-end gap-2 pt-1">
                               <Button
                                 type="button"
@@ -34765,20 +34405,13 @@ function App() {
                                 variant="outline"
                                 className="h-8 gap-1 border-red-400 text-xs text-red-700 hover:bg-red-50 dark:border-red-500/60 dark:text-red-300 dark:hover:bg-red-500/10"
                                 onClick={() => {
-                                  const draftId = activeSitrepDraft.id
-                                  const authorRole = activeSitrepDraft.authorRole
-                                  const authorName = activeSitrepDraft.authorName
-                                  setSitrepVersions((previous) =>
-                                    previous.map((entry) =>
-                                      entry.id === draftId
-                                        ? {
-                                            ...entry,
-                                            submittedForReviewTo: [],
-                                            submittedForReviewAt: undefined,
-                                          }
-                                        : entry
-                                    )
-                                  )
+                                  const draftId = reviewTarget.id
+                                  const authorRole = reviewTarget.authorRole
+                                  const authorName = reviewTarget.authorName
+                                  pushSitrepVersion(sitrepForm, {
+                                    submittedForReviewTo: [],
+                                    submittedForReviewAt: undefined,
+                                  })
                                   setSitrepDraftSulApprovals((previous) => {
                                     if (!previous[draftId]) return previous
                                     const next = { ...previous }
@@ -34791,23 +34424,8 @@ function App() {
                                     next.delete(draftId)
                                     return next
                                   })
-                                  if (liveSitrepFormRef.current) {
-                                    setSitrepForm(liveSitrepFormRef.current)
-                                    liveSitrepFormRef.current = null
-                                  }
-                                  setActiveSitrepDraftId(null)
-                                  setViewingSitrepVersionOrigin(null)
+                                  viewLatestSitrep()
                                   setSitrepViewMode('review-queue')
-                                  setSitrepSectionEdits({
-                                    'executive-summary': null,
-                                    'ongoing-incidents': null,
-                                    'readiness-assessment': null,
-                                    'risk-to-mission': null,
-                                    'outstanding-rfi-rfr': null,
-                                    'previous-critical-incident-comms': null,
-                                    'general-comments': null,
-                                    'imagery': null,
-                                  })
                                   toast.error(
                                     `Rejected draft last edited by ${authorRole} ${authorName}. Returned to the originator.`
                                   )
@@ -34821,44 +34439,22 @@ function App() {
                                 size="sm"
                                 className="h-8 gap-1 bg-emerald-600 text-xs text-white hover:bg-emerald-700"
                                 onClick={() => {
-                                  const draftId = activeSitrepDraft.id
-                                  const authorRole = activeSitrepDraft.authorRole
-                                  const authorName = activeSitrepDraft.authorName
-                                  setSitrepVersions((previous) =>
-                                    previous.map((entry) =>
-                                      entry.id === draftId
-                                        ? {
-                                            ...entry,
-                                            snapshot: sitrepForm,
-                                            signatures: [
-                                              ...entry.signatures,
-                                              {
-                                                name: 'You',
-                                                role: 'Planning Section Chief',
-                                                signedAt: Date.now(),
-                                              },
-                                            ],
-                                          }
-                                        : entry
-                                    )
-                                  )
-                                  if (liveSitrepFormRef.current) {
-                                    setSitrepForm(liveSitrepFormRef.current)
-                                    liveSitrepFormRef.current = null
-                                  }
-                                  setActiveSitrepDraftId(null)
-                                  setViewingSitrepVersionOrigin(null)
-                                  setSitrepViewMode('review-queue')
-                                  setSitrepSectionEdits({
-                                    'executive-summary': null,
-                                    'ongoing-incidents': null,
-                                    'readiness-assessment': null,
-                                    'risk-to-mission': null,
-                                    'outstanding-rfi-rfr': null,
-                                    'previous-critical-incident-comms': null,
-                                    'general-comments': null,
-                                    'imagery': null,
+                                  const authorRole = reviewTarget.authorRole
+                                  const authorName = reviewTarget.authorName
+                                  pushSitrepVersion(sitrepForm, {
+                                    signatures: [
+                                      ...reviewTarget.signatures,
+                                      {
+                                        name: 'You',
+                                        role: 'Planning Section Chief',
+                                        signedAt: Date.now(),
+                                      },
+                                    ],
+                                    submittedForReviewTo: [],
+                                    submittedForReviewAt: undefined,
                                   })
+                                  viewLatestSitrep()
+                                  setSitrepViewMode('review-queue')
                                   toast.success(
                                     `Approved draft last edited by ${authorRole} ${authorName}.`
                                   )
@@ -34866,6 +34462,22 @@ function App() {
                               >
                                 <Check className="h-3.5 w-3.5" />
                                 Approve
+                              </Button>
+                            </div>
+                          )}
+                          {isCreatingSignedSitrepVersion && !viewingSitrepVersion && (
+                            <div className="flex items-center justify-end rounded-md border border-sky-400 bg-sky-50/60 px-3 py-2 dark:border-sky-500 dark:bg-sky-500/10">
+                              <Button
+                                type="button"
+                                size="sm"
+                                className="h-8 gap-1 bg-emerald-600 text-xs text-white hover:bg-emerald-700"
+                                onClick={() => {
+                                  setSitrepSignNameInput('You')
+                                  setIsSitrepSignNameDialogOpen(true)
+                                }}
+                              >
+                                <Check className="h-3.5 w-3.5" />
+                                Sign this version
                               </Button>
                             </div>
                           )}
@@ -40677,288 +40289,31 @@ function App() {
           )}
         </DialogContent>
       </Dialog>
-      <Dialog open={isSitrepVersionDialogOpen} onOpenChange={setIsSitrepVersionDialogOpen}>
-        <DialogContent className="!w-[60vw] !max-w-[60vw] sm:!max-w-[60vw]">
-          <div className="flex items-center gap-2 px-1 pb-2 text-sm font-semibold">
-            <History className="h-4 w-4" />
-            SITREP version history
-            <span className="ml-auto text-xs font-normal text-muted-foreground">
-              Revisions captured as the team collaborates
-            </span>
-          </div>
-          <div className="max-h-[60vh] overflow-y-auto rounded-md border">
-            {sitrepVersions.length === 0 ? (
-              <div className="px-4 py-8 text-center text-xs text-muted-foreground">
-                No versions yet.
-              </div>
-            ) : (
-              <ul className="divide-y">
-                {[...sitrepVersions].reverse().map((version, index) => {
-                  const created = new Date(version.createdAt)
-                  const preview =
-                    version.snapshot.executiveSummary.slice(0, 80) +
-                    (version.snapshot.executiveSummary.length > 80 ? '…' : '')
-                  return (
-                    <li
-                      key={version.id}
-                      className="flex items-center gap-3 px-3 py-2 text-xs hover:bg-muted/40"
-                    >
-                      <div className="flex w-32 shrink-0 flex-col">
-                        <span className="font-medium">
-                          {index === 0 ? 'Current' : `v${sitrepVersions.length - index}`}
-                        </span>
-                        <span className="text-muted-foreground">
-                          {created.toLocaleTimeString([], {
-                            hour: '2-digit',
-                            minute: '2-digit',
-                            second: '2-digit',
-                          })}
-                        </span>
-                      </div>
-                      <span
-                        className="flex h-5 items-center gap-1 rounded-full px-2 text-[10px] font-semibold text-white"
-                        style={{ backgroundColor: version.authorColor }}
-                      >
-                        {version.authorName}
-                      </span>
-                      <span className="flex-1 truncate text-muted-foreground">
-                        {preview || '(no summary changes)'}
-                      </span>
-                      {version.signatures.length > 0 ? (
-                        <span
-                          className="flex max-w-[18rem] items-center gap-1 truncate rounded-full border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-800 dark:border-emerald-500/50 dark:bg-emerald-500/10 dark:text-emerald-300"
-                          title={version.signatures
-                            .map(
-                              (signature) =>
-                                `${signature.name} (${signature.role}) at ${new Date(
-                                  signature.signedAt
-                                ).toLocaleTimeString([], {
-                                  hour: '2-digit',
-                                  minute: '2-digit',
-                                })}`
-                            )
-                            .join(', ')}
-                        >
-                          <Check className="h-3 w-3" />
-                          <span className="truncate">
-                            Signed by{' '}
-                            {version.signatures
-                              .map((signature) => `${signature.name} (${signature.role})`)
-                              .join(', ')}
-                          </span>
-                        </span>
-                      ) : (
-                        <span className="flex items-center gap-1 rounded-full border border-muted-foreground/30 px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
-                          Unsigned
-                        </span>
-                      )}
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        className="h-7 text-xs"
-                        disabled={index === 0 && !viewingSitrepVersion}
-                        onClick={() => {
-                          if (!viewingSitrepVersion) {
-                            liveSitrepFormRef.current = sitrepForm
-                          }
-                          setSitrepForm(version.snapshot)
-                          setViewingSitrepVersion(version)
-                          setIsSitrepVersionDialogOpen(false)
-                        }}
-                      >
-                        View
-                      </Button>
-                    </li>
-                  )
-                })}
-              </ul>
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
-      <Dialog
-        open={isSitrepSignedVersionsDialogOpen}
-        onOpenChange={setIsSitrepSignedVersionsDialogOpen}
-      >
-        <DialogContent className="!w-[60vw] !max-w-[60vw] sm:!max-w-[60vw]">
-          <div className="flex items-center gap-2 px-1 pb-2 text-sm font-semibold">
-            <Check className="h-4 w-4 text-emerald-600" />
-            SITREP signed versions
-            <span className="ml-auto text-xs font-normal text-muted-foreground">
-              Versions with at least one signature
-            </span>
-          </div>
-          <div className="max-h-[60vh] overflow-y-auto rounded-md border">
-            {(() => {
-              const signedVersions = sitrepVersions.filter(
-                (version) => version.signatures.length > 0
-              )
-              if (signedVersions.length === 0) {
-                return (
-                  <div className="px-4 py-8 text-center text-xs text-muted-foreground">
-                    No signed versions yet.
-                  </div>
-                )
-              }
-              return (
-                <ul className="divide-y">
-                  {[...signedVersions].reverse().map((version) => {
-                    const created = new Date(version.createdAt)
-                    const indexInAll = sitrepVersions.findIndex(
-                      (entry) => entry.id === version.id
-                    )
-                    const versionLabel =
-                      indexInAll === sitrepVersions.length - 1 ? 'Current' : `v${indexInAll + 1}`
-                    const preview =
-                      version.snapshot.executiveSummary.slice(0, 80) +
-                      (version.snapshot.executiveSummary.length > 80 ? '…' : '')
-                    return (
-                      <li
-                        key={version.id}
-                        className="flex items-center gap-3 px-3 py-2 text-xs hover:bg-muted/40"
-                      >
-                        <div className="flex w-32 shrink-0 flex-col">
-                          <span className="font-medium">{versionLabel}</span>
-                          <span className="text-muted-foreground">
-                            {created.toLocaleTimeString([], {
-                              hour: '2-digit',
-                              minute: '2-digit',
-                              second: '2-digit',
-                            })}
-                          </span>
-                        </div>
-                        <span
-                          className="flex h-5 items-center gap-1 rounded-full px-2 text-[10px] font-semibold text-white"
-                          style={{ backgroundColor: version.authorColor }}
-                        >
-                          {version.authorName}
-                        </span>
-                        <span className="flex-1 truncate text-muted-foreground">
-                          {preview || '(no summary changes)'}
-                        </span>
-                        <span
-                          className="flex max-w-[20rem] items-center gap-1 truncate rounded-full border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-800 dark:border-emerald-500/50 dark:bg-emerald-500/10 dark:text-emerald-300"
-                          title={version.signatures
-                            .map(
-                              (signature) =>
-                                `${signature.name} (${signature.role}) at ${new Date(
-                                  signature.signedAt
-                                ).toLocaleTimeString([], {
-                                  hour: '2-digit',
-                                  minute: '2-digit',
-                                })}`
-                            )
-                            .join(', ')}
-                        >
-                          <Check className="h-3 w-3" />
-                          <span className="truncate">
-                            Signed by{' '}
-                            {version.signatures
-                              .map((signature) => `${signature.name} (${signature.role})`)
-                              .join(', ')}
-                          </span>
-                        </span>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          className="h-7 text-xs"
-                          onClick={() => {
-                            if (!viewingSitrepVersion) {
-                              liveSitrepFormRef.current = sitrepForm
-                            }
-                            setSitrepForm(version.snapshot)
-                            setViewingSitrepVersion(version)
-                            setIsSitrepSignedVersionsDialogOpen(false)
-                          }}
-                        >
-                          View
-                        </Button>
-                      </li>
-                    )
-                  })}
-                </ul>
-              )
-            })()}
-          </div>
-        </DialogContent>
-      </Dialog>
-      <Dialog
-        open={isSitrepSignNameDialogOpen}
-        onOpenChange={(open) => {
+      <SitrepVersionDialogs
+        versions={sitrepVersions}
+        form={sitrepForm}
+        viewingSitrepVersion={viewingSitrepVersion}
+        isVersionHistoryOpen={isSitrepVersionDialogOpen}
+        isSignedVersionsOpen={isSitrepSignedVersionsDialogOpen}
+        isSignDialogOpen={isSitrepSignNameDialogOpen}
+        signNameInput={sitrepSignNameInput}
+        onVersionHistoryOpenChange={setIsSitrepVersionDialogOpen}
+        onSignedVersionsOpenChange={setIsSitrepSignedVersionsDialogOpen}
+        onSignDialogOpenChange={(open) => {
           setIsSitrepSignNameDialogOpen(open)
           if (!open) {
             setSitrepSignNameInput('You')
           }
         }}
-      >
-        <DialogContent className="!w-[24rem] !max-w-[24rem] sm:!max-w-[24rem]">
-          <div className="flex items-center gap-2 px-1 pb-1 text-sm font-semibold">
-            <Check className="h-4 w-4 text-emerald-600" />
-            Confirm your signature
-          </div>
-          <p className="px-1 text-xs text-muted-foreground">
-            Type your name to sign this version. Your signature will be attached to a new entry in
-            the SITREP version history.
-          </p>
-          <div className="space-y-1 px-1 pt-2">
-            <label className="text-[11px] font-medium text-muted-foreground">Your name</label>
-            <input
-              autoFocus
-              value={sitrepSignNameInput}
-              onChange={(event) => setSitrepSignNameInput(event.target.value)}
-              placeholder="Full name"
-              className="h-9 w-full rounded-md border bg-transparent px-2 text-sm outline-none focus:ring-2 focus:ring-emerald-500/40"
-            />
-          </div>
-          <div className="flex items-center justify-end gap-2 px-1 pt-3">
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              className="h-8 text-xs"
-              onClick={() => setIsSitrepSignNameDialogOpen(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              disabled={sitrepSignNameInput.trim().length === 0}
-              className="h-8 gap-1 bg-emerald-600 text-xs text-white hover:bg-emerald-700"
-              onClick={() => {
-                const name = sitrepSignNameInput.trim()
-                if (!name) {
-                  return
-                }
-                const signedAt = Date.now()
-                pushSitrepVersion(sitrepForm, {
-                  authorNameOverride: name,
-                  authorColorOverride: sitrepAuthorColor,
-                  authorRole: 'Technical Specialist',
-                  creatorName: name,
-                  creatorColor: sitrepAuthorColor,
-                  creatorRole: 'Technical Specialist',
-                  signatures: [
-                    {
-                      name,
-                      role: 'Technical Specialist',
-                      signedAt,
-                    },
-                  ],
-                })
-                setIsSitrepSignNameDialogOpen(false)
-                setIsCreatingSignedSitrepVersion(false)
-                setSitrepSignNameInput('You')
-              }}
-            >
-              <Check className="h-3.5 w-3.5" />
-              Sign
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+        onSignNameInputChange={setSitrepSignNameInput}
+        onViewVersion={(version, options) => {
+          openSitrepVersionFromList(version, 'historical', {
+            ...options,
+            viewOnly: true,
+          })
+        }}
+        onConfirmSign={handleSitrepConfirmSign}
+      />
       <Dialog
         open={ics204VersionDialog !== null}
         onOpenChange={(open) => {
