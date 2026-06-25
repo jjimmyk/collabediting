@@ -1,5 +1,5 @@
 import type { Ics215HaveSource, Ics215ResourceColumn, Ics215ResourceValue, Ics215WorkAssignmentRow } from '@/features/ics215/types'
-import { applyHaveWithOptionalNeedRecalc } from '@/features/resources/workspace-asset-have-lookup'
+import { applyIcs215NeedRecalc } from '@/features/ics215/ics215-work-assignments-table-shared'
 import type { ResourceListItemData } from '@/features/resources/types'
 
 export function isHaveLinkedToAssets(value: Ics215ResourceValue | undefined): boolean {
@@ -30,16 +30,13 @@ export function applyManualHaveValue(
   have: string,
   options: { recalculateNeed?: boolean } = {}
 ): Ics215ResourceValue {
-  const next = applyHaveWithOptionalNeedRecalc(
-    {
-      ...value,
-      have,
-      linkedAssetKeys: undefined,
-      haveSource: 'manual',
-    },
-    have
-  )
-  return options.recalculateNeed === false ? { ...value, have, linkedAssetKeys: undefined, haveSource: 'manual' } : next
+  const manual: Ics215ResourceValue = {
+    ...value,
+    have,
+    linkedAssetKeys: undefined,
+    haveSource: 'manual',
+  }
+  return options.recalculateNeed === false ? manual : applyIcs215NeedRecalc(manual)
 }
 
 export function applyHaveAssetLink(
@@ -59,7 +56,7 @@ export function applyHaveAssetLink(
     haveSource: 'linked-assets',
     have,
   }
-  return options.recalculateNeed === false ? linked : applyHaveWithOptionalNeedRecalc(linked, have)
+  return options.recalculateNeed === false ? linked : applyIcs215NeedRecalc(linked)
 }
 
 export function clearHaveAssetLink(
@@ -75,8 +72,7 @@ export function clearHaveAssetLink(
   if (options.recalculateNeed === false) {
     return cleared
   }
-  const recalculated = applyHaveWithOptionalNeedRecalc({ ...cleared, have: '0' }, '0')
-  return { ...recalculated, have: '' }
+  return applyIcs215NeedRecalc(cleared)
 }
 
 export function removeHaveAssetLinkKeys(

@@ -28,6 +28,44 @@ export const EMPTY_RESOURCE_VALUE: Ics215ResourceValue = {
   need: '',
 }
 
+function parseNumericField(value: string): number | null {
+  const trimmed = value.trim()
+  if (!trimmed) return null
+  const parsed = Number(trimmed)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+export function computeIcs215Need(required: string, have: string): string {
+  const req = parseNumericField(required)
+  if (req === null) return ''
+  const hav = parseNumericField(have) ?? 0
+  return String(Math.max(0, req - hav))
+}
+
+export function applyIcs215NeedRecalc(value: Ics215ResourceValue): Ics215ResourceValue {
+  return {
+    ...value,
+    need: computeIcs215Need(value.required, value.have),
+  }
+}
+
+export function recalcIcs215WorkAssignmentsDraftNeed(
+  draft: Ics215WorkAssignmentsDraft
+): Ics215WorkAssignmentsDraft {
+  return {
+    ...draft,
+    workAssignments: draft.workAssignments.map((row) => ({
+      ...row,
+      resourceValues: Object.fromEntries(
+        Object.entries(row.resourceValues).map(([columnId, value]) => [
+          columnId,
+          applyIcs215NeedRecalc(value ?? EMPTY_RESOURCE_VALUE),
+        ])
+      ),
+    })),
+  }
+}
+
 export type Ics215WorkAssignmentsTableLayout = 'default' | 'maximized'
 
 export type Ics215WorkAssignmentsTableBaseProps = {
@@ -116,7 +154,7 @@ export function useIcs215WorkAssignmentsTable({
               ...row,
               resourceValues: {
                 ...row.resourceValues,
-                [columnId]: value,
+                [columnId]: applyIcs215NeedRecalc(value),
               },
             }
           : row
@@ -133,7 +171,12 @@ export function useIcs215WorkAssignmentsTable({
     const row = workAssignments.find((entry) => entry.id === rowId)
     if (!row) return
     const current = row.resourceValues[columnId] ?? EMPTY_RESOURCE_VALUE
-    patchResourceValue(rowId, columnId, { ...current, [field]: nextValue })
+    if (field === 'need') return
+    const next =
+      field === 'required' || field === 'have'
+        ? applyIcs215NeedRecalc({ ...current, [field]: nextValue })
+        : { ...current, [field]: nextValue }
+    patchResourceValue(rowId, columnId, next)
   }
 
   const fillColumnHave = (columnId: string, resourceName: string, overwrite: boolean) => {

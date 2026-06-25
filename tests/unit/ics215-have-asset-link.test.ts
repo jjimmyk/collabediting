@@ -13,6 +13,8 @@ import {
 } from '@/features/ics215/ics215-have-asset-link'
 import {
   patchResourceValueInDraft,
+  computeIcs215Need,
+  applyIcs215NeedRecalc,
 } from '@/features/ics215/ics215-work-assignments-table-shared'
 import type { Ics215ResourceColumn, Ics215WorkAssignmentRow } from '@/features/ics215/types'
 import {
@@ -265,5 +267,19 @@ describe('ics215-have-asset-link', () => {
     const next = patchResourceValueInDraft(draft, 1, 'col-helo', linked)
     expect(next.workAssignments[0]?.resourceValues['col-helo']?.have).toBe('1')
     expect(next.workAssignments[0]?.resourceValues['col-helo']?.linkedAssetKeys).toEqual(['helo-1'])
+  })
+})
+
+describe('ics215-need-recalc', () => {
+  it('computes need as required minus have', () => {
+    expect(computeIcs215Need('3', '1')).toBe('2')
+    expect(computeIcs215Need('2', '')).toBe('2')
+    expect(computeIcs215Need('', '1')).toBe('')
+    expect(computeIcs215Need('1', '5')).toBe('0')
+  })
+
+  it('applyIcs215NeedRecalc updates need on resource value', () => {
+    const next = applyIcs215NeedRecalc({ required: '4', have: '1', need: '' })
+    expect(next.need).toBe('3')
   })
 })

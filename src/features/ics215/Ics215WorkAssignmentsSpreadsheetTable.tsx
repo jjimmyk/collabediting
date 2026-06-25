@@ -9,6 +9,7 @@ import { Ics215HaveCell, HaveLinkSparkleButton } from '@/features/ics215/Ics215H
 import type { Ics215ResourceValue } from '@/features/ics215/types'
 import {
   EMPTY_RESOURCE_VALUE,
+  applyIcs215NeedRecalc,
   formatResourceValueDisplay,
   ICS215_OVERFLOW_COLUMNS,
   type Ics215WorkAssignmentsTableBaseProps,
@@ -33,7 +34,7 @@ function ResourceValueCell({
   editing,
   canLinkAssets = false,
   columnLabel,
-  onChange,
+  onRequiredChange,
   onManualHaveChange,
   onOpenHaveLinkDialog,
 }: {
@@ -41,7 +42,7 @@ function ResourceValueCell({
   editing: boolean
   canLinkAssets?: boolean
   columnLabel: string
-  onChange: (next: Ics215ResourceValue) => void
+  onRequiredChange: (next: string) => void
   onManualHaveChange: (have: string) => void
   onOpenHaveLinkDialog: () => void
 }) {
@@ -82,28 +83,27 @@ function ResourceValueCell({
 
   return (
     <div className="grid grid-cols-3 gap-0.5">
-      {(['required', 'have', 'need'] as const).map((field) =>
-        field === 'have' ? (
-          <Ics215HaveCell
-            key={field}
-            value={value}
-            editing={editing}
-            canLinkAssets={canLinkAssets}
-            columnLabel={columnLabel}
-            onManualChange={onManualHaveChange}
-            onOpenLinkDialog={onOpenHaveLinkDialog}
-          />
-        ) : (
-          <input
-            key={field}
-            value={value[field]}
-            onChange={(event) => onChange({ ...value, [field]: event.target.value })}
-            placeholder={field === 'required' ? 'R' : 'N'}
-            title={field === 'required' ? 'Required' : 'Need'}
-            className="h-7 w-full rounded border bg-transparent px-1 text-[11px] outline-none"
-          />
-        )
-      )}
+      <input
+        value={value.required}
+        onChange={(event) => onRequiredChange(event.target.value)}
+        placeholder="R"
+        title="Required"
+        className="h-7 w-full rounded border bg-transparent px-1 text-[11px] outline-none"
+      />
+      <Ics215HaveCell
+        value={value}
+        editing={editing}
+        canLinkAssets={canLinkAssets}
+        columnLabel={columnLabel}
+        onManualChange={onManualHaveChange}
+        onOpenLinkDialog={onOpenHaveLinkDialog}
+      />
+      <span
+        title="Need (Required − Have)"
+        className="flex h-7 items-center rounded border border-transparent bg-muted/20 px-1 text-[11px] text-muted-foreground"
+      >
+        {applyIcs215NeedRecalc(value).need || '—'}
+      </span>
     </div>
   )
 }
@@ -133,6 +133,7 @@ export function Ics215WorkAssignmentsSpreadsheetTable({
     columnTotals,
     patchRow,
     patchResourceValue,
+    patchResourceField,
     fillColumnHave,
     deleteAssignment,
     deleteResourceColumn,
@@ -209,10 +210,10 @@ export function Ics215WorkAssignmentsSpreadsheetTable({
           {resourceColumns.map((column) => (
             <td key={column.id} className={cn(resourceColumnClass, 'px-2 py-2')}>
               <ResourceValueCell
-                value={columnTotals[column.id] ?? EMPTY_RESOURCE_VALUE}
+                value={applyIcs215NeedRecalc(columnTotals[column.id] ?? EMPTY_RESOURCE_VALUE)}
                 editing={false}
                 columnLabel={column.label}
-                onChange={() => undefined}
+                onRequiredChange={() => undefined}
                 onManualHaveChange={() => undefined}
                 onOpenHaveLinkDialog={() => undefined}
               />
@@ -227,8 +228,8 @@ export function Ics215WorkAssignmentsSpreadsheetTable({
     <>
       <div
         className={cn(
-          'min-w-0 w-full max-w-full space-y-2',
-          isMaximized && 'flex min-h-0 flex-1 flex-col'
+          'min-w-0 w-full max-w-full',
+          isMaximized ? 'flex min-h-0 flex-1 flex-col' : 'space-y-2'
         )}
       >
         <div
@@ -399,7 +400,9 @@ export function Ics215WorkAssignmentsSpreadsheetTable({
                               editing={editing}
                               canLinkAssets={canLinkAssets}
                               columnLabel={column.label}
-                              onChange={(value) => patchResourceValue(row.id, column.id, value)}
+                              onRequiredChange={(next) =>
+                                patchResourceField(row.id, column.id, 'required', next)
+                              }
                               onManualHaveChange={(have) =>
                                 haveLink.patchManualHave(row.id, column.id, have)
                               }
@@ -482,9 +485,11 @@ export function Ics215WorkAssignmentsSpreadsheetTable({
             </div>
           ) : null}
         </div>
-        <p className="text-[10px] text-muted-foreground">
-          Scroll horizontally to view additional columns.
-        </p>
+        {!isMaximized ? (
+          <p className="text-[10px] text-muted-foreground">
+            Scroll horizontally to view additional columns.
+          </p>
+        ) : null}
       </div>
 
       <Ics215HaveAssetLinkDialog

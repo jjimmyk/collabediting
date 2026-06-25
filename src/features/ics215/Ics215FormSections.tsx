@@ -166,7 +166,7 @@ export function Ics215FormSections({
             fillViewport && 'flex min-h-0 flex-1 flex-col'
           )}
         >
-          <div className="flex items-start justify-between gap-2">
+          <div className="flex shrink-0 items-start justify-between gap-2">
             <div className="flex min-w-0 items-center gap-1.5">
               <Ics202SectionHeader
                 sectionId="incident-info"
@@ -180,10 +180,15 @@ export function Ics215FormSections({
             </div>
             {headerActions}
           </div>
-          {content}
+          {fillViewport ? (
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">{content}</div>
+          ) : (
+            content
+          )}
           <Ics202SectionEditActions
             isEditing={editing}
             isSaving={isSaving}
+            className={fillViewport ? 'shrink-0' : undefined}
             onGenerate={() => onGenerateSection(section)}
             onCancel={() => onCancelSectionEdit(section)}
             onSave={() => onSaveSection(section)}
@@ -243,7 +248,7 @@ export function Ics215FormSections({
             workAssignmentsMaximized && 'flex min-h-0 flex-1 flex-col'
           )}
         >
-          <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex shrink-0 flex-wrap items-center justify-between gap-2">
             <Ics215WorkAssignmentsLayoutToggle
               value={normalizeIcs215WorkAssignmentsLayoutMode(form.workAssignmentsLayoutMode)}
               onChange={(mode) => onWorkAssignmentsLayoutModeChange?.(mode)}
@@ -358,7 +363,7 @@ export function Ics215FormSections({
           </div>
         ) : null,
         workAssignmentsMaximized
-          ? 'fixed inset-0 z-40 flex max-h-none flex-col overflow-hidden bg-background p-0 shadow-xl'
+          ? 'fixed inset-0 z-40 flex h-dvh max-h-none flex-col overflow-hidden bg-background p-0 shadow-xl'
           : undefined,
         workAssignmentsSyncTooltip ? (
           <Ics215Ics204WorkAssignmentsSyncTooltip

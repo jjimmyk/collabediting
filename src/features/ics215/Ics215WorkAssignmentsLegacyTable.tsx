@@ -11,6 +11,7 @@ import { useIcs215HaveAssetLink } from '@/features/ics215/useIcs215HaveAssetLink
 import type { Ics215ResourceValue } from '@/features/ics215/types'
 import {
   EMPTY_RESOURCE_VALUE,
+  applyIcs215NeedRecalc,
   ICS215_OVERFLOW_COLUMNS,
   type Ics215WorkAssignmentsTableBaseProps,
   useIcs215WorkAssignmentsTable,
@@ -68,6 +69,15 @@ function LegacyResourceValueCell({
         onManualChange={onManualHaveChange ?? onChange}
         onOpenLinkDialog={onOpenHaveLinkDialog ?? (() => undefined)}
       />
+    )
+  }
+
+  if (field === 'need') {
+    const need = applyIcs215NeedRecalc(value).need
+    return (
+      <span className="block px-1 py-1 text-[11px] leading-tight text-muted-foreground">
+        {need.trim().length > 0 ? need : '—'}
+      </span>
     )
   }
 
@@ -272,8 +282,8 @@ export function Ics215WorkAssignmentsLegacyTable({
     <>
     <div
       className={cn(
-        'min-w-0 w-full max-w-full space-y-2',
-        isMaximized && 'flex min-h-0 flex-1 flex-col'
+        'min-w-0 w-full max-w-full',
+        isMaximized ? 'flex min-h-0 flex-1 flex-col' : 'space-y-2'
       )}
     >
       <div
@@ -545,9 +555,11 @@ export function Ics215WorkAssignmentsLegacyTable({
           </div>
         ) : null}
       </div>
-      <p className="text-[10px] text-muted-foreground">
-        Scroll horizontally to view additional columns.
-      </p>
+      {!isMaximized ? (
+        <p className="text-[10px] text-muted-foreground">
+          Scroll horizontally to view additional columns.
+        </p>
+      ) : null}
     </div>
 
     <Ics215HaveAssetLinkDialog

@@ -165,7 +165,7 @@ export function Ics215HaveAssetLinkDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex max-h-[min(85vh,48rem)] !w-[64rem] !max-w-[min(64rem,calc(100%-2rem))] flex-col gap-0 overflow-hidden p-0 sm:!max-w-[min(64rem,calc(100%-2rem))]">
+      <DialogContent className="flex h-[min(85vh,48rem)] max-h-[min(85vh,48rem)] !w-[64rem] !max-w-[min(64rem,calc(100%-2rem))] flex-col gap-0 overflow-hidden p-0 sm:!max-w-[min(64rem,calc(100%-2rem))]">
         <DialogHeader className="shrink-0 space-y-2 border-b px-6 py-4">
           <DialogTitle>Link assets to Have — {columnLabel.trim() || 'Resource'}</DialogTitle>
           <DialogDescription>
@@ -247,7 +247,7 @@ export function Ics215HaveAssetLinkDialog({
               {otherEntries.length > 0 ? (
                 <div className="space-y-2">
                   <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                    Other assigned assets
+                    Other Assets Assigned to This Incident
                   </p>
                   <div className="space-y-2">{otherEntries.map((entry) => renderPickCard(entry))}</div>
                 </div>

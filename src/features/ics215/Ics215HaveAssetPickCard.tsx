@@ -128,7 +128,7 @@ export function Ics215HaveAssetPickCard({
             </CollapsibleTrigger>
           </div>
         </div>
-        <CollapsibleContent forceMount className="overflow-hidden data-[state=closed]:hidden">
+        <CollapsibleContent className="overflow-hidden">
           <div className="max-h-56 overflow-y-auto border-t px-3 py-3">
             <Ics215HaveAssetDetailFields asset={asset} />
           </div>

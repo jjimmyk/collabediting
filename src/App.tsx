@@ -374,6 +374,7 @@ import {
   getIcs215FormForExport,
   ics215AuthorColor,
 } from '@/features/ics215/utils'
+import { recalcIcs215WorkAssignmentsDraftNeed } from '@/features/ics215/ics215-work-assignments-table-shared'
 import { useIcs215WorkspaceForm } from '@/hooks/useIcs215WorkspaceForm'
 import { ICS215A_SECTION_PROMPTS } from '@/features/ics215a/constants'
 import { Ics215aWorkspacePanel } from '@/features/ics215a/Ics215aWorkspacePanel'
@@ -23174,9 +23175,14 @@ function App() {
   }
   const startIcs215SectionEdit = (section: Ics215SectionId) => {
     if (!canEditIcs201Form || !ics215Form) return
+    const extracted = extractIcs215SectionDraft(ics215Form, section)
+    const draft =
+      section === 'work-assignments'
+        ? recalcIcs215WorkAssignmentsDraftNeed(extracted as Ics215WorkAssignmentsDraft)
+        : extracted
     setIcs215SectionDrafts((previous) => ({
       ...previous,
-      [section]: extractIcs215SectionDraft(ics215Form, section),
+      [section]: draft,
     }))
     setIcs215EditingSections((previous) => ({
       ...previous,
