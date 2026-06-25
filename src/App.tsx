@@ -11366,6 +11366,7 @@ function App() {
   }
 
   const normalizedQuery = searchQuery.trim().toLowerCase()
+  const normalizedResourcesSearchQuery = resourcesSearchQuery.trim().toLowerCase()
   const userVisibleNotifications = notifications.filter((item) =>
     isNotificationVisibleToUser(item, profileEmail)
   )
@@ -11499,7 +11500,6 @@ function App() {
   )
   const normalizedAppliedFilterQuery = appliedFilterQuery?.trim().toLowerCase() ?? ''
   const activePanelSearchQuery = normalizedQuery || normalizedAppliedFilterQuery
-  const normalizedResourcesSearchQuery = resourcesSearchQuery.trim().toLowerCase()
   const cardFilteredNotifications = userVisibleNotifications.filter((item) => {
     if (!activePanelSearchQuery) {
       return true
