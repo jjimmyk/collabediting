@@ -1,3 +1,4 @@
+import { useRef } from 'react'
 import { Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
@@ -136,6 +137,7 @@ export function Ics215WorkAssignmentsLegacyTable({
   onChange,
   onHaveFillComplete,
   onPersistWorkAssignments,
+  tableLayout = 'default',
 }: Ics215WorkAssignmentsLegacyTableProps) {
   const {
     hideAssigneeColumn,
@@ -204,12 +206,91 @@ export function Ics215WorkAssignmentsLegacyTable({
     ICS215_OVERFLOW_COLUMNS.length +
     (editing ? 1 : 0)
 
+  const isMaximized = tableLayout === 'maximized'
+  const bodyScrollRef = useRef<HTMLDivElement>(null)
+  const totalsScrollRef = useRef<HTMLDivElement>(null)
+
+  const syncHorizontalScroll = (source: 'body' | 'totals') => {
+    const bodyEl = bodyScrollRef.current
+    const totalsEl = totalsScrollRef.current
+    if (!bodyEl || !totalsEl) return
+    if (source === 'body') {
+      totalsEl.scrollLeft = bodyEl.scrollLeft
+    } else {
+      bodyEl.scrollLeft = totalsEl.scrollLeft
+    }
+  }
+
+  const legacyTotalsFoot =
+    workAssignments.length > 0 ? (
+      <tfoot>
+        {TOTAL_ROWS.map((totalRow, totalIndex) => (
+          <tr
+            key={totalRow.field}
+            className={cn(
+              'border-t bg-muted/20',
+              totalIndex < TOTAL_ROWS.length - 1 ? 'border-b border-dashed' : ''
+            )}
+          >
+            {totalIndex === 0 ? (
+              <td
+                colSpan={leadingColumnCount}
+                rowSpan={TOTAL_ROWS.length}
+                className="px-2 py-2 text-[10px] font-semibold leading-tight"
+              >
+                Totals
+              </td>
+            ) : null}
+            <td
+              className={cn(
+                rhnStubColumnClass,
+                'border-r bg-muted/10 px-1 py-1 text-center text-[8px] font-semibold leading-tight text-muted-foreground'
+              )}
+            >
+              {totalRow.label}
+            </td>
+            {resourceColumns.map((column) => {
+              const totals = columnTotals[column.id] ?? EMPTY_RESOURCE_VALUE
+              return (
+                <td
+                  key={column.id}
+                  className={cn(legacyResourceColumnClass, 'border-x px-1 py-1')}
+                >
+                  <span className="block px-1 py-1 text-[11px] leading-tight">
+                    {totals[totalRow.field].trim().length > 0 ? totals[totalRow.field] : '—'}
+                  </span>
+                </td>
+              )
+            })}
+            <td colSpan={ICS215_OVERFLOW_COLUMNS.length + (editing ? 1 : 0)} />
+          </tr>
+        ))}
+      </tfoot>
+    ) : null
+
   return (
     <>
-    <div className="min-w-0 w-full max-w-full space-y-2">
-      <div className="min-w-0 w-full max-w-full overflow-hidden rounded-md border">
+    <div
+      className={cn(
+        'min-w-0 w-full max-w-full space-y-2',
+        isMaximized && 'flex min-h-0 flex-1 flex-col'
+      )}
+    >
+      <div
+        className={cn(
+          'min-w-0 w-full max-w-full overflow-hidden rounded-md border',
+          isMaximized && 'flex min-h-0 flex-1 flex-col'
+        )}
+      >
         <div
-          className="w-0 min-w-full overflow-x-auto overscroll-x-contain touch-pan-x [scrollbar-gutter:stable] [-webkit-overflow-scrolling:touch]"
+          ref={bodyScrollRef}
+          onScroll={() => {
+            if (isMaximized) syncHorizontalScroll('body')
+          }}
+          className={cn(
+            'w-0 min-w-full overscroll-x-contain touch-pan-x [scrollbar-gutter:stable] [-webkit-overflow-scrolling:touch]',
+            isMaximized ? 'min-h-0 flex-1 overflow-auto' : 'overflow-x-auto'
+          )}
           tabIndex={0}
           aria-label="Work assignments table — scroll horizontally to view additional columns"
         >
@@ -218,7 +299,12 @@ export function Ics215WorkAssignmentsLegacyTable({
             style={{ minWidth: `${legacyTableMinWidthPx}px` }}
           >
             <thead>
-              <tr className="border-b bg-muted/40 text-[10px] uppercase tracking-wide text-muted-foreground">
+              <tr
+                className={cn(
+                  'border-b bg-muted/40 text-[10px] uppercase tracking-wide text-muted-foreground',
+                  isMaximized && 'sticky top-0 z-10'
+                )}
+              >
                 {!hideAssigneeColumn ? (
                   <th className={cn(fixedColumnClass, 'px-2 py-2 text-left font-semibold')}>
                     Assignee
@@ -440,55 +526,24 @@ export function Ics215WorkAssignmentsLegacyTable({
                 })
               )}
             </tbody>
-            {workAssignments.length > 0 ? (
-              <tfoot>
-                {TOTAL_ROWS.map((totalRow, totalIndex) => (
-                  <tr
-                    key={totalRow.field}
-                    className={cn(
-                      'border-t bg-muted/20',
-                      totalIndex < TOTAL_ROWS.length - 1 ? 'border-b border-dashed' : ''
-                    )}
-                  >
-                    {totalIndex === 0 ? (
-                      <td
-                        colSpan={leadingColumnCount}
-                        rowSpan={TOTAL_ROWS.length}
-                        className="px-2 py-2 text-[10px] font-semibold leading-tight"
-                      >
-                        Totals
-                      </td>
-                    ) : null}
-                    <td
-                      className={cn(
-                        rhnStubColumnClass,
-                        'border-r bg-muted/10 px-1 py-1 text-center text-[8px] font-semibold leading-tight text-muted-foreground'
-                      )}
-                    >
-                      {totalRow.label}
-                    </td>
-                    {resourceColumns.map((column) => {
-                      const totals = columnTotals[column.id] ?? EMPTY_RESOURCE_VALUE
-                      return (
-                        <td
-                          key={column.id}
-                          className={cn(legacyResourceColumnClass, 'border-x px-1 py-1')}
-                        >
-                          <span className="block px-1 py-1 text-[11px] leading-tight">
-                            {totals[totalRow.field].trim().length > 0
-                              ? totals[totalRow.field]
-                              : '—'}
-                          </span>
-                        </td>
-                      )
-                    })}
-                    <td colSpan={ICS215_OVERFLOW_COLUMNS.length + (editing ? 1 : 0)} />
-                  </tr>
-                ))}
-              </tfoot>
-            ) : null}
+            {!isMaximized ? legacyTotalsFoot : null}
           </table>
         </div>
+        {isMaximized && legacyTotalsFoot ? (
+          <div
+            ref={totalsScrollRef}
+            onScroll={() => syncHorizontalScroll('totals')}
+            className="shrink-0 overflow-x-auto border-t bg-muted/20 [scrollbar-gutter:stable]"
+            aria-label="Work assignments totals"
+          >
+            <table
+              className="w-full border-collapse text-xs"
+              style={{ minWidth: `${legacyTableMinWidthPx}px` }}
+            >
+              {legacyTotalsFoot}
+            </table>
+          </div>
+        ) : null}
       </div>
       <p className="text-[10px] text-muted-foreground">
         Scroll horizontally to view additional columns.

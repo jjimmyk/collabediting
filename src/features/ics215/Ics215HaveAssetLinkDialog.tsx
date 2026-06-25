@@ -9,7 +9,6 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
-import { Ics215HaveAssetDetailPanel } from '@/features/ics215/Ics215HaveAssetDetailPanel'
 import { Ics215HaveAssetPickCard } from '@/features/ics215/Ics215HaveAssetPickCard'
 import type { Ics215HaveAssetLinkLocation } from '@/features/ics215/ics215-have-asset-link'
 import type { ResourceListItemData } from '@/features/resources/types'
@@ -55,7 +54,6 @@ export function Ics215HaveAssetLinkDialog({
   onUnlinkFromOtherCell,
 }: Ics215HaveAssetLinkDialogProps) {
   const [filterQuery, setFilterQuery] = useState('')
-  const [detailAssetKey, setDetailAssetKey] = useState<string | null>(null)
   const linkedToThisCellKeys = useMemo(() => new Set(initialSelectedKeys), [initialSelectedKeys])
 
   const ranked = useMemo(
@@ -80,7 +78,6 @@ export function Ics215HaveAssetLinkDialog({
   useEffect(() => {
     if (!open) {
       setFilterQuery('')
-      setDetailAssetKey(null)
       return
     }
     setKeys(startingSelection)
@@ -106,21 +103,14 @@ export function Ics215HaveAssetLinkDialog({
     })
   }
 
-  const allRankedEntries = useMemo(
-    () => [...ranked.suggested, ...ranked.other],
-    [ranked.suggested, ranked.other]
-  )
-
-  const entryByKey = useMemo(
-    () => new Map(allRankedEntries.map((entry) => [entry.asset.assetKey, entry])),
-    [allRankedEntries]
-  )
-
   const linkedToThisCellEntries = useMemo(() => {
+    const byKey = new Map(
+      [...ranked.suggested, ...ranked.other].map((entry) => [entry.asset.assetKey, entry])
+    )
     return initialSelectedKeys
-      .map((key) => entryByKey.get(key))
+      .map((key) => byKey.get(key))
       .filter((entry): entry is ScoredWorkspaceAsset => entry !== undefined)
-  }, [entryByKey, initialSelectedKeys])
+  }, [ranked.suggested, ranked.other, initialSelectedKeys])
 
   const suggestedEntries = filterEntries(
     ranked.suggested.filter((entry) => !linkedToThisCellKeys.has(entry.asset.assetKey))
@@ -133,8 +123,6 @@ export function Ics215HaveAssetLinkDialog({
     assetKey: key,
     label: key,
   }))
-
-  const detailEntry = detailAssetKey ? entryByKey.get(detailAssetKey) : undefined
 
   const handleToggle = (assetKey: string) => {
     if (linkedAssetLocations.has(assetKey) && !selectedKeys.has(assetKey)) {
@@ -155,11 +143,9 @@ export function Ics215HaveAssetLinkDialog({
         key={assetKey}
         entry={entry}
         checked={selectedKeys.has(assetKey)}
-        selected={detailAssetKey === assetKey}
         linkedToThisCell={linkedToThisCell}
         linkedElsewhere={linkedElsewhere}
         onToggle={() => handleToggle(assetKey)}
-        onSelectDetail={() => setDetailAssetKey(assetKey)}
         onUnlinkFromElsewhere={
           linkedElsewhere && onUnlinkFromOtherCell
             ? () => onUnlinkFromOtherCell(linkedElsewhere, assetKey)
@@ -213,80 +199,64 @@ export function Ics215HaveAssetLinkDialog({
           ) : null}
         </div>
 
-        <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 overflow-hidden px-6 pb-4 md:grid-cols-[minmax(0,1fr)_min(24rem,38%)]">
-          <div className="min-h-0 overflow-y-auto">
-            {isLoading ? (
-              <p className="text-sm text-muted-foreground">Finding likely matches…</p>
-            ) : workspaceAssets.length === 0 ? (
-              <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
-                No assets are assigned to this workspace.
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {linkedToThisCellEntries.length > 0 ? (
+        <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-4">
+          {isLoading ? (
+            <p className="text-sm text-muted-foreground">Finding likely matches…</p>
+          ) : workspaceAssets.length === 0 ? (
+            <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
+              No assets are assigned to this workspace.
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {linkedToThisCellEntries.length > 0 ? (
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Linked to this Have cell
+                  </p>
                   <div className="space-y-2">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                      Linked to this Have cell
-                    </p>
-                    <div className="space-y-2">
-                      {linkedToThisCellEntries.map((entry) => renderPickCard(entry))}
+                    {linkedToThisCellEntries.map((entry) => renderPickCard(entry))}
+                  </div>
+                </div>
+              ) : null}
+
+              {staleEntries.length > 0 ? (
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Previously linked (no longer assigned)
+                  </p>
+                  {staleEntries.map((entry) => (
+                    <div
+                      key={entry.assetKey}
+                      className="rounded-md border border-dashed px-3 py-2 text-xs text-muted-foreground"
+                    >
+                      {entry.label}
                     </div>
-                  </div>
-                ) : null}
+                  ))}
+                </div>
+              ) : null}
 
-                {staleEntries.length > 0 ? (
-                  <div className="space-y-2">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                      Previously linked (no longer assigned)
-                    </p>
-                    {staleEntries.map((entry) => (
-                      <div
-                        key={entry.assetKey}
-                        className="rounded-md border border-dashed px-3 py-2 text-xs text-muted-foreground"
-                      >
-                        {entry.label}
-                      </div>
-                    ))}
-                  </div>
-                ) : null}
+              {suggestedEntries.length > 0 ? (
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Suggested matches
+                  </p>
+                  <div className="space-y-2">{suggestedEntries.map((entry) => renderPickCard(entry))}</div>
+                </div>
+              ) : null}
 
-                {suggestedEntries.length > 0 ? (
-                  <div className="space-y-2">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                      Suggested matches
-                    </p>
-                    <div className="space-y-2">{suggestedEntries.map((entry) => renderPickCard(entry))}</div>
-                  </div>
-                ) : null}
-
-                {otherEntries.length > 0 ? (
-                  <div className="space-y-2">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                      Other assigned assets
-                    </p>
-                    <div className="space-y-2">{otherEntries.map((entry) => renderPickCard(entry))}</div>
-                  </div>
-                ) : null}
-              </div>
-            )}
-          </div>
-
-        <div className="hidden min-h-0 md:block">
-          <Ics215HaveAssetDetailPanel
-            asset={detailEntry?.asset ?? null}
-            matchReason={detailEntry?.matchReason}
-          />
+              {otherEntries.length > 0 ? (
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Other assigned assets
+                  </p>
+                  <div className="space-y-2">{otherEntries.map((entry) => renderPickCard(entry))}</div>
+                </div>
+              ) : null}
+            </div>
+          )}
         </div>
-      </div>
 
-      <div className="h-48 shrink-0 border-t px-6 py-3 md:hidden">
-        <Ics215HaveAssetDetailPanel
-          asset={detailEntry?.asset ?? null}
-          matchReason={detailEntry?.matchReason}
-        />
-      </div>
-
-        <DialogFooter className="shrink-0 flex-col gap-2 border-t bg-background px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
+        <DialogFooter className="shrink-0 flex-col gap-2 border-t bg-background px-6 pt-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:flex-row sm:items-center sm:justify-between">
           <p className="text-xs text-muted-foreground">
             {clearingAllLinks
               ? 'Have will be cleared and asset links removed.'

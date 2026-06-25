@@ -286,6 +286,7 @@ export function Ics215FormSections({
               getAccessToken={getAccessToken}
               autoFillHaveFromAssets={autoFillHaveFromAssets}
               layoutMode={normalizeIcs215WorkAssignmentsLayoutMode(form.workAssignmentsLayoutMode)}
+              tableLayout={workAssignmentsMaximized ? 'maximized' : 'default'}
               editing={isSectionEditing(editingSections, 'work-assignments')}
               canLinkAssets={canEdit && !formIsLocked}
               onRequestEdit={() => onStartSectionEdit('work-assignments')}

@@ -28,6 +28,8 @@ export const EMPTY_RESOURCE_VALUE: Ics215ResourceValue = {
   need: '',
 }
 
+export type Ics215WorkAssignmentsTableLayout = 'default' | 'maximized'
+
 export type Ics215WorkAssignmentsTableBaseProps = {
   resourceColumns: Ics215ResourceColumn[]
   workAssignments: Ics215WorkAssignmentRow[]
@@ -40,6 +42,7 @@ export type Ics215WorkAssignmentsTableBaseProps = {
   roster?: WorkspaceRosterMember[]
   editing: boolean
   canLinkAssets?: boolean
+  tableLayout?: Ics215WorkAssignmentsTableLayout
   onRequestEdit?: () => void
   onChange: (next: {
     resourceColumns: Ics215ResourceColumn[]
