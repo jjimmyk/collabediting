@@ -10,7 +10,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import {
   formatSitrepLastEditor,
   getHumanSitrepAuthorName,
@@ -128,83 +127,27 @@ export function SitrepScopeHeader({
   )
 }
 
-type SitrepViewModeTabsProps = {
-  viewMode: SitrepViewMode
-  onViewModeChange: (mode: SitrepViewMode) => void
-  toggleGroupClassName?: string
-  showDraftActions: boolean
-  draftActionsDisabled: boolean
+type SitrepGenerateDraftActionProps = {
+  disabled: boolean
   onGenerateDraft: () => void
-  onCreateDraft: () => void
 }
 
-export function SitrepViewModeTabs({
-  viewMode,
-  onViewModeChange,
-  toggleGroupClassName,
-  showDraftActions,
-  draftActionsDisabled,
+export function SitrepGenerateDraftAction({
+  disabled,
   onGenerateDraft,
-  onCreateDraft,
-}: SitrepViewModeTabsProps) {
+}: SitrepGenerateDraftActionProps) {
   return (
-    <div className="flex items-center justify-between gap-2">
-      <ToggleGroup
-        type="single"
-        value={viewMode}
-        onValueChange={(value) => {
-          if (
-            value === 'current' ||
-            value === 'historical' ||
-            value === 'drafts' ||
-            value === 'review-queue'
-          ) {
-            onViewModeChange(value)
-          }
-        }}
-        variant="outline"
+    <div className="flex items-center justify-end">
+      <Button
+        type="button"
         size="sm"
-        spacing={0}
-        aria-label="SITREP view mode"
-        className={toggleGroupClassName}
+        className="h-8 gap-1 bg-blue-600 text-xs text-white hover:bg-blue-700"
+        disabled={disabled}
+        onClick={onGenerateDraft}
       >
-        <ToggleGroupItem value="current" aria-label="Current">
-          Current
-        </ToggleGroupItem>
-        <ToggleGroupItem value="historical" aria-label="Historical">
-          Historical
-        </ToggleGroupItem>
-        <ToggleGroupItem value="drafts" aria-label="Drafts">
-          Drafts
-        </ToggleGroupItem>
-        <ToggleGroupItem value="review-queue" aria-label="Review Queue">
-          Review Queue
-        </ToggleGroupItem>
-      </ToggleGroup>
-      {showDraftActions && (
-        <div className="flex items-center gap-2">
-          <Button
-            type="button"
-            size="sm"
-            className="h-8 gap-1 bg-blue-600 text-xs text-white hover:bg-blue-700"
-            disabled={draftActionsDisabled}
-            onClick={onGenerateDraft}
-          >
-            <Sparkles className="h-3.5 w-3.5" />
-            Generate Draft
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            className="h-8 gap-1 bg-emerald-600 text-xs text-white hover:bg-emerald-700"
-            disabled={draftActionsDisabled}
-            onClick={onCreateDraft}
-          >
-            <Plus className="h-3.5 w-3.5" />
-            Create Draft SITREP
-          </Button>
-        </div>
-      )}
+        <Sparkles className="h-3.5 w-3.5" />
+        Generate Draft
+      </Button>
     </div>
   )
 }

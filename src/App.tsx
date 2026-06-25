@@ -742,7 +742,6 @@ import {
   resolveActiveIcs201Section,
 } from '@/features/ics201/utils'
 import {
-  createEmptySitrepDraft,
   createInitialSitrepForm,
   SITREP_AI_COMPATIBLE_SECTIONS,
   SITREP_SECTION_PRIMARY,
@@ -750,7 +749,6 @@ import {
 import type { SitrepFormState, SitrepSection, SitrepVersion, SitrepViewMode } from '@/features/sitrep/types'
 import {
   clearSitrepSectionEdits,
-  filterSitrepVersionsForMode,
   formatSitrepLastEditor,
   getHumanSitrepAuthorName,
   getLatestSitrepVersion,
@@ -758,14 +756,13 @@ import {
   getSitrepVersionLabel,
   isSitrepVersionSigned,
   isSitrepVersionSubmitted,
-  sitrepViewModeEmptyLabel,
 } from '@/features/sitrep/editor-utils'
 import {
+  SitrepGenerateDraftAction,
   SitrepHistoricalBanner,
   SitrepReviewTargetBanner,
   SitrepScopeHeader,
   SitrepVersionToolbar,
-  SitrepViewModeTabs,
 } from '@/features/sitrep/SitrepChrome'
 import { SitrepVersionDialogs } from '@/features/sitrep/SitrepVersionDialogs'
 import { useSitrepEditorState } from '@/hooks/useSitrepEditorState'
@@ -7689,34 +7686,6 @@ function App() {
     })
   )
   const sitrepAuthorColorRef = useRef('#16a34a')
-  const createNewSitrepDraft = () => {
-    const seedSnapshot = createEmptySitrepDraft(INITIAL_SITREP_FORM)
-    if (liveSitrepFormRef.current === null) {
-      liveSitrepFormRef.current = sitrepForm
-    }
-    setSitrepForm(seedSnapshot)
-    setSitrepSectionEdits({
-      'executive-summary': null,
-      'ongoing-incidents': null,
-      'readiness-assessment': null,
-      'risk-to-mission': null,
-      'outstanding-rfi-rfr': null,
-      'previous-critical-incident-comms': null,
-      'general-comments': null,
-      'imagery': null,
-    })
-    setViewingSitrepVersion(null)
-    setViewingSitrepVersionOrigin(null)
-    setSitrepReviewTargetId(null)
-    setIsCreatingSignedSitrepVersion(false)
-    setSitrepViewMode('current')
-    pushSitrepVersionRef.current(seedSnapshot, {
-      authorRole: 'Technical Specialist',
-      creatorName: 'You',
-      creatorColor: sitrepAuthorColorRef.current,
-      creatorRole: 'Technical Specialist',
-    })
-  }
   const [sitrepActiveSection, setSitrepActiveSection] = useState<SitrepSection>('executive-summary')
   type SitrepSectionType = 'manual' | 'ai'
   type SitrepOutputFormat = 'paragraph' | 'table' | 'list'
@@ -33297,9 +33266,6 @@ function App() {
                           version={viewingSitrepVersion}
                           originMode={viewingSitrepVersionOrigin}
                           onBack={() => {
-                            if (viewingSitrepVersionOrigin) {
-                              setSitrepViewMode(viewingSitrepVersionOrigin)
-                            }
                             viewLatestSitrep()
                           }}
                         />
@@ -33309,7 +33275,6 @@ function App() {
                           version={sitrepReviewTarget}
                           onExitReview={() => {
                             viewLatestSitrep()
-                            setSitrepViewMode('review-queue')
                           }}
                         />
                       )}
@@ -33322,14 +33287,8 @@ function App() {
                         scopeOptions={SITREP_SCOPE_OPTIONS}
                         onScopeChange={applySitrepScope}
                       />
-                      <SitrepViewModeTabs
-                        viewMode={sitrepViewMode}
-                        onViewModeChange={setSitrepViewMode}
-                        toggleGroupClassName={glassToggleGroupClasses}
-                        showDraftActions={
-                          sitrepViewMode === 'current' || sitrepViewMode === 'drafts'
-                        }
-                        draftActionsDisabled={
+                      <SitrepGenerateDraftAction
+                        disabled={
                           viewingSitrepVersion !== null ||
                           isCreatingSignedSitrepVersion ||
                           sitrepGeneratingFromScope !== null
@@ -33370,9 +33329,8 @@ function App() {
                           setIsPratusAiSelectingContext(false)
                           setIsPratusAiDrawerOpen(true)
                         }}
-                        onCreateDraft={createNewSitrepDraft}
                       />
-                      {sitrepViewMode === 'current' && !viewingSitrepVersion && (
+                      {!viewingSitrepVersion && (
                         <SitrepVersionToolbar
                           latestVersion={sitrepEditor.latestVersion}
                           isLatestSigned={sitrepEditor.isLatestSigned}
@@ -33410,248 +33368,8 @@ function App() {
                         />
                       )}
                     </div>
-                    {!viewingSitrepVersion && sitrepViewMode !== 'current' && (() => {
-                      const mode = sitrepViewMode
-                      const filtered = filterSitrepVersionsForMode(sitrepVersions, mode)
-                      return (
-                        <div className="space-y-2">
-                          <div className="overflow-hidden rounded-md border">
-                            {filtered.length === 0 ? (
-                              <div className="px-4 py-8 text-center text-xs text-muted-foreground">
-                                {sitrepViewModeEmptyLabel[mode]}
-                              </div>
-                            ) : (
-                              <ul className="divide-y">
-                                {filtered.map((version) => {
-                                  const created = new Date(version.createdAt)
-                                  const indexInAll = sitrepVersions.findIndex(
-                                    (entry) => entry.id === version.id
-                                  )
-                                  const versionLabel =
-                                    indexInAll === sitrepVersions.length - 1
-                                      ? 'Current'
-                                      : `v${indexInAll + 1}`
-                                  const preview =
-                                    version.snapshot.executiveSummary.slice(0, 80) +
-                                    (version.snapshot.executiveSummary.length > 80 ? '…' : '')
-                                  const createdAtLabel = created.toLocaleTimeString([], {
-                                    hour: '2-digit',
-                                    minute: '2-digit',
-                                    second: '2-digit',
-                                  })
-                                  const statusBadge =
-                                    mode === 'historical'
-                                      ? null
-                                      : version.signatures.length > 0 ? (
-                                          <span
-                                            className="flex max-w-full items-center gap-1 rounded-full border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-800 dark:border-emerald-500/50 dark:bg-emerald-500/10 dark:text-emerald-300"
-                                            title={version.signatures
-                                              .map(
-                                                (signature) =>
-                                                  `${signature.name} (${signature.role}) at ${new Date(
-                                                    signature.signedAt
-                                                  ).toLocaleTimeString([], {
-                                                    hour: '2-digit',
-                                                    minute: '2-digit',
-                                                  })}`
-                                              )
-                                              .join(', ')}
-                                          >
-                                            <Check className="h-3 w-3 shrink-0" />
-                                            <span className="truncate">
-                                              Signed by{' '}
-                                              {version.signatures
-                                                .map(
-                                                  (signature) =>
-                                                    `${signature.name} (${signature.role})`
-                                                )
-                                                .join(', ')}
-                                            </span>
-                                          </span>
-                                        ) : version.submittedForReviewTo &&
-                                          version.submittedForReviewTo.filter(
-                                            (recipient) =>
-                                              recipient.role === 'Situation Unit Leader'
-                                          ).length > 0 ? (
-                                          (() => {
-                                            const sulRecipients =
-                                              version.submittedForReviewTo!.filter(
-                                                (recipient) =>
-                                                  recipient.role === 'Situation Unit Leader'
-                                              )
-                                            const storedApproval =
-                                              sitrepDraftSulApprovals[version.id]
-                                            const firstSulRecipient = sulRecipients[0]
-                                            const inferredReviewQueueApproval =
-                                              mode === 'review-queue' && firstSulRecipient
-                                                ? {
-                                                    name: firstSulRecipient.name,
-                                                    role: firstSulRecipient.role,
-                                                    approvedAt:
-                                                      (version.submittedForReviewAt ??
-                                                        version.createdAt) +
-                                                      5 * 60 * 1000,
-                                                  }
-                                                : null
-                                            const approval =
-                                              storedApproval ?? inferredReviewQueueApproval
-                                            if (approval) {
-                                              const approvedAtLabel = new Date(
-                                                approval.approvedAt
-                                              ).toLocaleTimeString([], {
-                                                hour: '2-digit',
-                                                minute: '2-digit',
-                                                second: '2-digit',
-                                              })
-                                              return (
-                                                <div className="flex flex-col items-start gap-1">
-                                                  <span className="flex max-w-full items-start gap-1 rounded-md border border-emerald-300 bg-emerald-50 px-2 py-1 text-left text-[10px] font-medium text-emerald-800 dark:border-emerald-500/50 dark:bg-emerald-500/10 dark:text-emerald-300">
-                                                    <Check className="mt-[2px] h-3 w-3 shrink-0" />
-                                                    <span className="whitespace-normal break-words">
-                                                      Approved by{' '}
-                                                      <span className="font-semibold">
-                                                        {approval.role} {approval.name}
-                                                      </span>{' '}
-                                                      at{' '}
-                                                      <span className="font-semibold">
-                                                        {approvedAtLabel}
-                                                      </span>
-                                                    </span>
-                                                  </span>
-                                                  <span className="flex max-w-full items-start gap-1 rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-left text-[10px] font-medium text-amber-800 dark:border-amber-500/50 dark:bg-amber-500/10 dark:text-amber-300">
-                                                    <Clock className="mt-[2px] h-3 w-3 shrink-0" />
-                                                    <span className="whitespace-normal break-words">
-                                                      Pending Review by Planning Section Chief
-                                                    </span>
-                                                  </span>
-                                                </div>
-                                              )
-                                            }
-                                            const sulNames = sulRecipients.map(
-                                              (recipient) => recipient.name
-                                            )
-                                            const firstSul = sulRecipients[0]
-                                            return (
-                                              <button
-                                                type="button"
-                                                onClick={() =>
-                                                  markSitrepDraftSulApproved(version.id, {
-                                                    name: firstSul.name,
-                                                    role: firstSul.role,
-                                                  })
-                                                }
-                                                className="flex max-w-full cursor-pointer items-start gap-1 rounded-md border border-emerald-300 bg-emerald-50 px-2 py-1 text-left text-[10px] font-medium text-emerald-800 hover:bg-emerald-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 dark:border-emerald-500/50 dark:bg-emerald-500/10 dark:text-emerald-300 dark:hover:bg-emerald-500/20"
-                                              >
-                                                <Check className="mt-[2px] h-3 w-3 shrink-0" />
-                                                <span className="whitespace-normal break-words">
-                                                  Submitted for Review to Situation Unit
-                                                  Leader{sulNames.length > 1 ? '(s)' : ''}:{' '}
-                                                  {sulNames.join(', ')}
-                                                </span>
-                                              </button>
-                                            )
-                                          })()
-                                        ) : (
-                                          <span className="flex items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-800 dark:border-amber-500/50 dark:bg-amber-500/10 dark:text-amber-300">
-                                            Not Submitted for Review
-                                          </span>
-                                        )
-                                  const viewButton = (
-                                    <Button
-                                      type="button"
-                                      size="sm"
-                                      variant="outline"
-                                      className="h-7 text-xs"
-                                      onClick={() => {
-                                        openSitrepVersionFromList(version, mode)
-                                      }}
-                                    >
-                                      View
-                                    </Button>
-                                  )
-                                  if (mode === 'drafts' || mode === 'review-queue') {
-                                    return (
-                                      <li
-                                        key={version.id}
-                                        className="flex flex-col gap-1.5 px-3 py-2 text-xs hover:bg-muted/40"
-                                      >
-                                        <div className="flex items-center gap-3">
-                                          <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                                            <div className="text-muted-foreground">
-                                              Created by{' '}
-                                              <span className="font-medium text-foreground">
-                                                {version.creatorRole} {version.creatorName}
-                                              </span>
-                                            </div>
-                                            {(() => {
-                                              const isSubmittedDraft =
-                                                version.signatures.length === 0 &&
-                                                !!version.submittedForReviewTo &&
-                                                version.submittedForReviewTo.length > 0
-                                              const submittedAtTimestamp =
-                                                version.submittedForReviewAt ?? version.createdAt
-                                              const submittedAtLabel = new Date(
-                                                submittedAtTimestamp
-                                              ).toLocaleTimeString([], {
-                                                hour: '2-digit',
-                                                minute: '2-digit',
-                                                second: '2-digit',
-                                              })
-                                              return (
-                                                <div className="text-muted-foreground">
-                                                  {isSubmittedDraft ? 'Submitted for Review by ' : 'Last updated by '}
-                                                  <span className="font-medium text-foreground">
-                                                    {version.authorRole} {version.authorName}
-                                                  </span>{' '}
-                                                  at{' '}
-                                                  {isSubmittedDraft ? submittedAtLabel : createdAtLabel}
-                                                </div>
-                                              )
-                                            })()}
-                                          </div>
-                                          {viewButton}
-                                        </div>
-                                        {statusBadge && (
-                                          <div className="flex justify-start">{statusBadge}</div>
-                                        )}
-                                      </li>
-                                    )
-                                  }
-                                  return (
-                                    <li
-                                      key={version.id}
-                                      className="flex items-center gap-3 px-3 py-2 text-xs hover:bg-muted/40"
-                                    >
-                                      <div className="flex w-24 shrink-0 flex-col">
-                                        <span className="font-medium">{versionLabel}</span>
-                                        <span className="text-muted-foreground">
-                                          {createdAtLabel}
-                                        </span>
-                                      </div>
-                                      <span
-                                        className="flex h-5 items-center gap-1 rounded-full px-2 text-[10px] font-semibold text-white"
-                                        style={{ backgroundColor: version.authorColor }}
-                                      >
-                                        {version.authorName}
-                                      </span>
-                                      <span className="flex-1 truncate text-muted-foreground">
-                                        {preview || '(no summary changes)'}
-                                      </span>
-                                      {statusBadge}
-                                      {viewButton}
-                                    </li>
-                                  )
-                                })}
-                              </ul>
-                            )}
-                          </div>
-                        </div>
-                      )
-                    })()}
-                    {(sitrepViewMode === 'current' || viewingSitrepVersion !== null) && (
-                      <div className="space-y-3">
-                        {sitrepViewMode === 'current' &&
-                          viewingSitrepVersion === null &&
+                    <div className="space-y-3">
+                        {viewingSitrepVersion === null &&
                           !sitrepReviewTargetId &&
                           !isCreatingSignedSitrepVersion &&
                           (() => {
@@ -34425,7 +34143,6 @@ function App() {
                                     return next
                                   })
                                   viewLatestSitrep()
-                                  setSitrepViewMode('review-queue')
                                   toast.error(
                                     `Rejected draft last edited by ${authorRole} ${authorName}. Returned to the originator.`
                                   )
@@ -34454,7 +34171,6 @@ function App() {
                                     submittedForReviewAt: undefined,
                                   })
                                   viewLatestSitrep()
-                                  setSitrepViewMode('review-queue')
                                   toast.success(
                                     `Approved draft last edited by ${authorRole} ${authorName}.`
                                   )
@@ -34485,7 +34201,6 @@ function App() {
                           )
                         })()}
                       </div>
-                    )}
                   </div>
                 )}
 
