@@ -31,7 +31,8 @@ import type { OrgMemberSearchResult } from '@/lib/workspace-service'
 import type { ResourceCategoryLifecycle } from '@/lib/workspace-resource-category-types'
 import {
   filterResourceCategoriesByLifecycle,
-  PositionResourceCategoryCreateControl,
+  PositionResourceCategoryCreateButton,
+  PositionResourceCategoryCreateForm,
   PositionResourceCategoryRow,
 } from '@/features/roster/PositionResourceCategoryRow'
 
@@ -268,13 +269,15 @@ function PositionAssignmentActionBar({
   onToggleInvite: (mode: RosterInviteAssignmentMode) => void
   onInviteToPosition?: (position: string, mode: RosterInviteAssignmentMode) => void
 }) {
+  const [resourceCategoryFormOpen, setResourceCategoryFormOpen] = useState(false)
+
   return (
     <div className="space-y-1.5 pt-1">
       <div className="flex flex-wrap gap-1.5">
-        {showResourceCategory && onCreateResourceCategory ? (
-          <PositionResourceCategoryCreateControl
+        {showResourceCategory && onCreateResourceCategory && !resourceCategoryFormOpen ? (
+          <PositionResourceCategoryCreateButton
             disabled={disabled}
-            onCreate={onCreateResourceCategory}
+            onClick={() => setResourceCategoryFormOpen(true)}
           />
         ) : null}
         <PositionMemberAssignPicker
@@ -311,6 +314,16 @@ function PositionAssignmentActionBar({
           />
         ) : null}
       </div>
+      {showResourceCategory && onCreateResourceCategory && resourceCategoryFormOpen ? (
+        <PositionResourceCategoryCreateForm
+          disabled={disabled}
+          onCreate={(name) => {
+            onCreateResourceCategory(name)
+            setResourceCategoryFormOpen(false)
+          }}
+          onCancel={() => setResourceCategoryFormOpen(false)}
+        />
+      ) : null}
       {memberEmptyMessage && !onSearchOrgMembers ? (
         <p className="px-1 text-[11px] text-muted-foreground">{memberEmptyMessage}</p>
       ) : null}

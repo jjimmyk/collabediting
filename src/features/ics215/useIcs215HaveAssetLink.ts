@@ -6,15 +6,16 @@ import type {
   Ics215WorkAssignmentsDraft,
 } from '@/features/ics215/types'
 import {
-  applyHaveAssetLink,
+  applyHaveRosterLink,
   applyManualHaveValue,
-  buildHaveAssetLinkIndex,
-  clearHaveAssetLink,
-  collectLinkedAssetKeysInForm,
-  getConflictingHaveAssetKeys,
-  partitionHaveLinkAssets,
-  removeHaveAssetLinkKeys,
-  type Ics215HaveAssetLinkLocation,
+  assetKeyToHaveRef,
+  buildHaveLinkIndex,
+  clearHaveRosterLink,
+  getConflictingHaveRefs,
+  getLinkedHaveRefs,
+  partitionHaveLinkRefs,
+  removeHaveRosterLinkRefs,
+  type Ics215HaveLinkLocation,
 } from '@/features/ics215/ics215-have-asset-link'
 import {
   EMPTY_RESOURCE_VALUE,
@@ -23,7 +24,12 @@ import {
 import type { ResourceListItemData } from '@/features/resources/types'
 import { rankWorkspaceAssetsForResourceQuery } from '@/features/resources/workspace-asset-relevance'
 import { matchWorkspaceAssetsViaApi } from '@/lib/match-workspace-assets-service'
-import type { WorkAssignmentTargetOption } from '@/lib/work-assignment-target-options'
+import {
+  buildHaveLinkTargetOptions,
+  mergeLegacyHaveLinkTargetOptions,
+  type WorkAssignmentTargetOption,
+} from '@/lib/work-assignment-target-options'
+import type { WorkspaceRosterMember } from '@/lib/workspace-types'
 import { toast } from 'sonner'
 
 export type HaveLinkDialogState = {
@@ -34,11 +40,13 @@ export type HaveLinkDialogState = {
   workAssignmentContext: string
 } | null
 
-type UseIcs215HaveAssetLinkOptions = {
+type UseIcs215HaveRosterLinkOptions = {
   workAssignments: Ics215WorkAssignmentRow[]
   resourceColumns: Ics215ResourceColumn[]
   workspaceAssets: ResourceListItemData[]
   workAssignmentTargetOptions?: WorkAssignmentTargetOption[]
+  roster?: WorkspaceRosterMember[]
+  assetsByKey?: Record<string, ResourceListItemData>
   workspaceId?: string | null
   isSupabaseEnabled?: boolean
   getAccessToken?: () => Promise<string | null>
@@ -46,25 +54,32 @@ type UseIcs215HaveAssetLinkOptions = {
   onPersistWorkAssignments?: (draft: Ics215WorkAssignmentsDraft) => void
 }
 
-export function useIcs215HaveAssetLink({
+export function useIcs215HaveRosterLink({
   workAssignments,
   resourceColumns,
   workspaceAssets,
   workAssignmentTargetOptions = [],
+  roster = [],
+  assetsByKey = {},
   workspaceId,
   isSupabaseEnabled = false,
   getAccessToken,
   onApplyWorkAssignmentsDraft,
   onPersistWorkAssignments,
-}: UseIcs215HaveAssetLinkOptions) {
+}: UseIcs215HaveRosterLinkOptions) {
   const [dialogState, setDialogState] = useState<HaveLinkDialogState>(null)
   const [isRanking, setIsRanking] = useState(false)
-  const [suggestedKeys, setSuggestedKeys] = useState<string[]>([])
+  const [suggestedAssetKeys, setSuggestedAssetKeys] = useState<string[]>([])
   const [rankingEngine, setRankingEngine] = useState<'lexical' | 'openai' | undefined>()
 
   const currentDraft = useMemo(
     (): Ics215WorkAssignmentsDraft => ({ resourceColumns, workAssignments }),
     [resourceColumns, workAssignments]
+  )
+
+  const baseHaveLinkTargetOptions = useMemo(
+    () => buildHaveLinkTargetOptions(workAssignmentTargetOptions),
+    [workAssignmentTargetOptions]
   )
 
   const applyAndPersistDraft = useCallback(
@@ -85,9 +100,27 @@ export function useIcs215HaveAssetLink({
     [workAssignmentTargetOptions]
   )
 
-  const linkedAssetLocations = useMemo(() => {
-    if (!dialogState) return new Map<string, Ics215HaveAssetLinkLocation>()
-    return buildHaveAssetLinkIndex(
+  const dialogRow = dialogState
+    ? workAssignments.find((row) => row.id === dialogState.rowId)
+    : undefined
+
+  const dialogValue = dialogState
+    ? dialogRow?.resourceValues[dialogState.columnId] ?? EMPTY_RESOURCE_VALUE
+    : EMPTY_RESOURCE_VALUE
+
+  const linkedRefs = getLinkedHaveRefs(dialogValue)
+
+  const haveLinkTargetOptions = useMemo(
+    () =>
+      mergeLegacyHaveLinkTargetOptions(baseHaveLinkTargetOptions, linkedRefs, roster, {
+        assetsByKey,
+      }),
+    [baseHaveLinkTargetOptions, linkedRefs, roster, assetsByKey]
+  )
+
+  const linkedRefLocations = useMemo(() => {
+    if (!dialogState) return new Map<string, Ics215HaveLinkLocation>()
+    return buildHaveLinkIndex(
       workAssignments,
       resourceColumns,
       resolveAssigneeLabel,
@@ -104,7 +137,7 @@ export function useIcs215HaveAssetLink({
       workAssignmentContext: string
     }) => {
       setDialogState(params)
-      setSuggestedKeys([])
+      setSuggestedAssetKeys([])
       setRankingEngine(undefined)
       setIsRanking(true)
 
@@ -132,7 +165,7 @@ export function useIcs215HaveAssetLink({
         }
       }
 
-      setSuggestedKeys(nextSuggested)
+      setSuggestedAssetKeys(nextSuggested)
       setRankingEngine(engine)
       setIsRanking(false)
     },
@@ -141,13 +174,13 @@ export function useIcs215HaveAssetLink({
 
   const closeHaveLinkDialog = useCallback(() => {
     setDialogState(null)
-    setSuggestedKeys([])
+    setSuggestedAssetKeys([])
     setRankingEngine(undefined)
     setIsRanking(false)
   }, [])
 
   const confirmHaveLink = useCallback(
-    (selectedKeys: string[]) => {
+    (selectedRefs: string[]) => {
       if (!dialogState) return
 
       const current =
@@ -155,32 +188,32 @@ export function useIcs215HaveAssetLink({
           dialogState.columnId
         ] ?? EMPTY_RESOURCE_VALUE
 
-      if (selectedKeys.length === 0) {
+      if (selectedRefs.length === 0) {
         const nextDraft = patchResourceValueInDraft(
           currentDraft,
           dialogState.rowId,
           dialogState.columnId,
-          clearHaveAssetLink(current)
+          clearHaveRosterLink(current)
         )
         applyAndPersistDraft(nextDraft, 'Have link cleared')
         closeHaveLinkDialog()
         return
       }
 
-      const fullIndex = buildHaveAssetLinkIndex(
+      const fullIndex = buildHaveLinkIndex(
         workAssignments,
         resourceColumns,
         resolveAssigneeLabel
       )
-      const conflicts = getConflictingHaveAssetKeys(selectedKeys, dialogState, fullIndex)
+      const conflicts = getConflictingHaveRefs(selectedRefs, dialogState, fullIndex)
       if (conflicts.length > 0) {
-        toast.error('One or more assets are already linked elsewhere', {
+        toast.error('One or more roster items are already linked elsewhere', {
           description: 'Unlink them from the other Have cell first, then try again.',
         })
         return
       }
 
-      const nextValue = applyHaveAssetLink(current, selectedKeys, workspaceAssets)
+      const nextValue = applyHaveRosterLink(current, selectedRefs, baseHaveLinkTargetOptions)
       const nextDraft = patchResourceValueInDraft(
         currentDraft,
         dialogState.rowId,
@@ -196,26 +229,26 @@ export function useIcs215HaveAssetLink({
       resourceColumns,
       resolveAssigneeLabel,
       currentDraft,
-      workspaceAssets,
+      baseHaveLinkTargetOptions,
       closeHaveLinkDialog,
       applyAndPersistDraft,
     ]
   )
 
-  const unlinkAssetFromOtherCell = useCallback(
-    (location: Ics215HaveAssetLinkLocation, assetKey: string) => {
+  const unlinkRefFromOtherCell = useCallback(
+    (location: Ics215HaveLinkLocation, ref: string) => {
       const row = workAssignments.find((entry) => entry.id === location.rowId)
       const current = row?.resourceValues[location.columnId] ?? EMPTY_RESOURCE_VALUE
-      const nextValue = removeHaveAssetLinkKeys(current, [assetKey], workspaceAssets)
+      const nextValue = removeHaveRosterLinkRefs(current, [ref], baseHaveLinkTargetOptions)
       const nextDraft = patchResourceValueInDraft(
         currentDraft,
         location.rowId,
         location.columnId,
         nextValue
       )
-      applyAndPersistDraft(nextDraft, 'Asset unlinked')
+      applyAndPersistDraft(nextDraft, 'Roster link removed')
     },
-    [workAssignments, currentDraft, workspaceAssets, applyAndPersistDraft]
+    [workAssignments, currentDraft, baseHaveLinkTargetOptions, applyAndPersistDraft]
   )
 
   const patchManualHave = useCallback(
@@ -234,39 +267,36 @@ export function useIcs215HaveAssetLink({
     [workAssignments, currentDraft, onApplyWorkAssignmentsDraft]
   )
 
-  const dialogRow = dialogState
-    ? workAssignments.find((row) => row.id === dialogState.rowId)
-    : undefined
+  const { staleRefs } = partitionHaveLinkRefs(haveLinkTargetOptions, linkedRefs)
 
-  const dialogValue = dialogState
-    ? dialogRow?.resourceValues[dialogState.columnId] ?? EMPTY_RESOURCE_VALUE
-    : EMPTY_RESOURCE_VALUE
-
-  const linkedKeys = dialogValue.linkedAssetKeys ?? []
-  const { staleKeys } = partitionHaveLinkAssets(workspaceAssets, linkedKeys)
-
-  const linkedElsewhereCounts = useMemo(() => {
-    if (!dialogState) return {}
-    return collectLinkedAssetKeysInForm(workAssignments, {
-      rowId: dialogState.rowId,
-      columnId: dialogState.columnId,
-    })
-  }, [dialogState, workAssignments])
+  const suggestedRefs = useMemo(
+    () =>
+      suggestedAssetKeys.map((assetKey) =>
+        assetKeyToHaveRef(assetKey, baseHaveLinkTargetOptions)
+      ),
+    [suggestedAssetKeys, baseHaveLinkTargetOptions]
+  )
 
   return {
     dialogState,
     dialogOpen: dialogState !== null,
     isRanking,
-    suggestedKeys,
+    suggestedRefs,
+    suggestedAssetKeys,
     rankingEngine,
-    dialogInitialSelectedKeys: linkedKeys,
-    staleLinkedKeys: staleKeys,
-    linkedAssetLocations,
-    linkedElsewhereCounts,
+    dialogInitialSelectedRefs: linkedRefs,
+    staleLinkedRefs: staleRefs,
+    haveLinkTargetOptions,
+    linkedRefLocations,
     openHaveLinkDialog,
     closeHaveLinkDialog,
     confirmHaveLink,
-    unlinkAssetFromOtherCell,
+    unlinkRefFromOtherCell,
     patchManualHave,
   }
 }
+
+/** @deprecated Use useIcs215HaveRosterLink */
+export const useIcs215HaveAssetLink = useIcs215HaveRosterLink
+
+export type Ics215HaveAssetLinkLocation = Ics215HaveLinkLocation

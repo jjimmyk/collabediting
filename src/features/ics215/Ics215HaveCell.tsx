@@ -7,7 +7,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
-import { isHaveLinkedToAssets } from '@/features/ics215/ics215-have-asset-link'
+import { isHaveLinkedToRoster } from '@/features/ics215/ics215-have-asset-link'
 import type { Ics215ResourceValue } from '@/features/ics215/types'
 import { cn } from '@/lib/utils'
 
@@ -39,7 +39,7 @@ export function HaveLinkSparkleButton({
             variant="ghost"
             size="icon"
             disabled={disabled || columnLabel.trim().length < 2}
-            aria-label={`Link assets to Have for ${columnLabel}`}
+            aria-label={`Link roster resources to Have for ${columnLabel}`}
             className="h-6 w-6 shrink-0 text-muted-foreground hover:text-foreground"
             onClick={(event) => {
               event.stopPropagation()
@@ -50,7 +50,7 @@ export function HaveLinkSparkleButton({
           </Button>
         </TooltipTrigger>
         <TooltipContent className="max-w-xs">
-          Link workspace assets to Have for “{columnLabel.trim() || 'resource'}”.
+          Link roster resources to Have for “{columnLabel.trim() || 'resource'}”.
         </TooltipContent>
       </Tooltip>
     </TooltipProvider>
@@ -66,7 +66,7 @@ export function Ics215HaveCell({
   onManualChange,
   onOpenLinkDialog,
 }: Ics215HaveCellProps) {
-  const linked = isHaveLinkedToAssets(value)
+  const linked = isHaveLinkedToRoster(value)
   const displayValue = value.have.trim()
   const showLinkSparkle = editing || canLinkAssets
 
@@ -87,7 +87,7 @@ export function Ics215HaveCell({
               'min-w-0 flex-1 rounded px-1 py-1 text-left text-[11px] leading-tight underline decoration-dotted underline-offset-2',
               'hover:bg-muted/40'
             )}
-            title={`${displayValue} assets linked — click to review`}
+            title={`${displayValue} linked — click to review`}
             onClick={onOpenLinkDialog}
           >
             {displayValue}
@@ -128,7 +128,7 @@ export function Ics215HaveCell({
           }
         }}
         placeholder="H"
-        title={linked ? 'Linked assets — click to review' : 'Have'}
+        title={linked ? 'Linked roster resources — click to review' : 'Have'}
         className={cn(
           'h-7 min-w-0 flex-1 rounded border bg-transparent px-1 text-[11px] outline-none',
           linked && 'border-primary/40 bg-primary/5'

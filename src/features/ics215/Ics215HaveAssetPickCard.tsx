@@ -10,8 +10,8 @@ import {
 } from '@/components/ui/collapsible'
 import { Ics215HaveAssetDetailFields } from '@/features/ics215/Ics215HaveAssetDetailFields'
 import { AssetStatusIndicator } from '@/features/resources/AssetStatusIndicator'
-import type { Ics215HaveAssetLinkLocation } from '@/features/ics215/ics215-have-asset-link'
-import { formatHaveAssetLinkLocation } from '@/features/ics215/ics215-have-asset-link'
+import type { Ics215HaveLinkLocation } from '@/features/ics215/ics215-have-asset-link'
+import { formatHaveLinkLocation } from '@/features/ics215/ics215-have-asset-link'
 import type { ScoredWorkspaceAsset } from '@/features/resources/workspace-asset-relevance'
 import { cn } from '@/lib/utils'
 
@@ -20,7 +20,7 @@ type Ics215HaveAssetPickCardProps = {
   checked: boolean
   disabled?: boolean
   linkedToThisCell?: boolean
-  linkedElsewhere?: Ics215HaveAssetLinkLocation
+  linkedElsewhere?: Ics215HaveLinkLocation
   onToggle: () => void
   onUnlinkFromElsewhere?: () => void
 }
@@ -78,7 +78,7 @@ export function Ics215HaveAssetPickCard({
             ) : null}
             {linkedElsewhere ? (
               <p className="text-[11px] text-amber-700 dark:text-amber-300">
-                Assigned to {formatHaveAssetLinkLocation(linkedElsewhere)}
+                Assigned to {formatHaveLinkLocation(linkedElsewhere)}
               </p>
             ) : null}
           </div>

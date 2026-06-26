@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Plus, Trash2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -10,62 +10,87 @@ import type { PositionResourceCategoryEntry } from '@/lib/workspace-resource-cat
 import type { ResourceCategoryLifecycle } from '@/lib/workspace-resource-category-types'
 import type { WorkspaceRosterMember } from '@/lib/workspace-types'
 
-export function PositionResourceCategoryCreateControl({
+export function PositionResourceCategoryCreateButton({
+  disabled,
+  onClick,
+}: {
+  disabled: boolean
+  onClick: () => void
+}) {
+  return (
+    <Button
+      type="button"
+      size="sm"
+      variant="outline"
+      className="h-7 gap-1 px-2 text-[11px]"
+      disabled={disabled}
+      onClick={onClick}
+    >
+      <Plus className="h-3.5 w-3.5 shrink-0" />
+      Resource Category
+    </Button>
+  )
+}
+
+export function PositionResourceCategoryCreateForm({
   disabled,
   onCreate,
+  onCancel,
 }: {
   disabled: boolean
   onCreate: (name: string) => void
+  onCancel: () => void
 }) {
-  const [expanded, setExpanded] = useState(false)
   const [name, setName] = useState('')
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    inputRef.current?.focus()
+  }, [])
 
   const submit = () => {
     const trimmed = name.trim()
     if (!trimmed) return
     onCreate(trimmed)
     setName('')
-    setExpanded(false)
-  }
-
-  if (!expanded) {
-    return (
-      <Button
-        type="button"
-        size="sm"
-        variant="outline"
-        className="h-7 gap-1 px-2 text-[11px]"
-        disabled={disabled}
-        onClick={() => setExpanded(true)}
-      >
-        <Plus className="h-3.5 w-3.5 shrink-0" />
-        Resource Category
-      </Button>
-    )
   }
 
   return (
-    <div className="min-w-[10rem] flex-1 space-y-1">
-      <div className="flex gap-1">
-        <Input
-          value={name}
-          onChange={(event) => setName(event.target.value)}
-          placeholder="Category name"
-          className="h-7 text-[11px]"
-          aria-label="Resource category name"
-        />
-        <Button type="button" size="sm" className="h-7 px-2 text-[11px]" disabled={disabled || !name.trim()} onClick={submit}>
-          Add
+    <div className="w-full space-y-2 rounded-md border bg-muted/10 px-2.5 py-2">
+      <Input
+        ref={inputRef}
+        value={name}
+        onChange={(event) => setName(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') {
+            event.preventDefault()
+            submit()
+          }
+          if (event.key === 'Escape') {
+            event.preventDefault()
+            onCancel()
+          }
+        }}
+        placeholder="Resource category name"
+        className="h-8 w-full text-xs"
+        aria-label="Resource category name"
+      />
+      <div className="flex flex-wrap gap-1.5">
+        <Button
+          type="button"
+          size="sm"
+          className="h-7 px-2 text-[11px]"
+          disabled={disabled || !name.trim()}
+          onClick={submit}
+        >
+          Add category
         </Button>
         <Button
           type="button"
           size="sm"
           variant="ghost"
           className="h-7 px-2 text-[11px]"
-          onClick={() => {
-            setExpanded(false)
-            setName('')
-          }}
+          onClick={onCancel}
         >
           Cancel
         </Button>

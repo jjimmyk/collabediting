@@ -1,15 +1,17 @@
 import { describe, expect, it } from 'vitest'
 import {
   applyHaveAssetLink,
+  applyHaveRosterLink,
   applyManualHaveValue,
-  buildHaveAssetLinkIndex,
-  clearHaveAssetLink,
-  formatHaveAssetLinkLocation,
-  getConflictingHaveAssetKeys,
-  isAssetLinkedElsewhere,
-  isHaveLinkedToAssets,
+  buildHaveLinkIndex,
+  clearHaveRosterLink,
+  formatHaveLinkLocation,
+  getConflictingHaveRefs,
+  getLinkedHaveRefs,
+  isHaveLinkedToRoster,
+  isHaveRefLinkedElsewhere,
   normalizeIcs215ResourceValue,
-  removeHaveAssetLinkKeys,
+  removeHaveRosterLinkRefs,
 } from '@/features/ics215/ics215-have-asset-link'
 import {
   patchResourceValueInDraft,
@@ -23,6 +25,8 @@ import {
   scoreAssetRelevance,
 } from '@/features/resources/workspace-asset-relevance'
 import type { ResourceListItemData } from '@/features/resources/types'
+import type { WorkAssignmentTargetOption } from '@/lib/work-assignment-target-options'
+import { buildHaveLinkTargetOptions } from '@/lib/work-assignment-target-options'
 
 const helicopter: ResourceListItemData = {
   assetKey: 'helo-1',
@@ -73,6 +77,31 @@ const helicopter: ResourceListItemData = {
   competencyFunction: null,
 }
 
+const heloRef = 'org_chart_asset:helo-1'
+const positionRef = 'position:Air Ops Branch'
+const memberRef = 'member:member-1\x1eAir Ops Branch'
+
+const sampleHaveLinkOptions: WorkAssignmentTargetOption[] = buildHaveLinkTargetOptions([
+  {
+    value: positionRef,
+    label: 'Air Ops Branch',
+    group: 'Positions (active roster)',
+    targetType: 'position',
+  },
+  {
+    value: memberRef,
+    label: 'jane@example.com · Air Ops Branch',
+    group: 'Members (active roster)',
+    targetType: 'member',
+  },
+  {
+    value: heloRef,
+    label: 'MH-65 Dolphin Helicopter',
+    group: 'Assets (active roster)',
+    targetType: 'org_chart_asset',
+  },
+])
+
 describe('workspace-asset-relevance', () => {
   it('scores helicopter assets for helicopter query', () => {
     const score = scoreAssetRelevance(helicopter, 'Helicopter')
@@ -87,34 +116,35 @@ describe('workspace-asset-relevance', () => {
   })
 })
 
-describe('ics215-have-asset-link', () => {
-  it('normalizes linked resource values', () => {
+describe('ics215-have-roster-link', () => {
+  it('normalizes legacy linked asset keys into linkedHaveRefs', () => {
     const normalized = normalizeIcs215ResourceValue({
       required: '2',
       have: '1',
       need: '1',
       linkedAssetKeys: ['helo-1'],
     })
-    expect(normalized.haveSource).toBe('linked-assets')
-    expect(normalized.linkedAssetKeys).toEqual(['helo-1'])
+    expect(normalized.haveSource).toBe('linked-roster')
+    expect(normalized.linkedHaveRefs).toEqual([heloRef])
+    expect(normalized.linkedAssetKeys).toBeUndefined()
   })
 
   it('applies manual have and clears links', () => {
-    const linked = applyHaveAssetLink(
+    const linked = applyHaveRosterLink(
       { required: '3', have: '', need: '' },
-      ['helo-1'],
-      [helicopter]
+      [heloRef],
+      sampleHaveLinkOptions
     )
-    expect(isHaveLinkedToAssets(linked)).toBe(true)
+    expect(isHaveLinkedToRoster(linked)).toBe(true)
     expect(linked.have).toBe('1')
 
     const manual = applyManualHaveValue(linked, '5')
     expect(manual.haveSource).toBe('manual')
-    expect(manual.linkedAssetKeys).toBeUndefined()
+    expect(manual.linkedHaveRefs).toBeUndefined()
     expect(manual.need).toBe('0')
   })
 
-  it('builds a single Have-cell index per asset key', () => {
+  it('builds a single Have-cell index per roster ref', () => {
     const columns: Ics215ResourceColumn[] = [{ id: 'col-helo', label: 'Helicopter' }]
     const rows: Ics215WorkAssignmentRow[] = [
       {
@@ -122,10 +152,10 @@ describe('ics215-have-asset-link', () => {
         assignee: 'unit-a',
         workAssignment: 'SAR hoist ops',
         resourceValues: {
-          'col-helo': applyHaveAssetLink(
+          'col-helo': applyHaveRosterLink(
             { required: '1', have: '', need: '' },
-            ['helo-1'],
-            [helicopter]
+            [heloRef],
+            sampleHaveLinkOptions
           ),
         },
         overheadPositions: '',
@@ -136,21 +166,21 @@ describe('ics215-have-asset-link', () => {
       },
     ]
 
-    const index = buildHaveAssetLinkIndex(rows, columns, (key) =>
+    const index = buildHaveLinkIndex(rows, columns, (key) =>
       key === 'unit-a' ? 'Air Ops Branch' : key
     )
 
-    expect(index.get('helo-1')).toMatchObject({
+    expect(index.get(heloRef)).toMatchObject({
       rowId: 1,
       columnId: 'col-helo',
       assigneeLabel: 'Air Ops Branch',
       workAssignment: 'SAR hoist ops',
       columnLabel: 'Helicopter',
     })
-    expect(formatHaveAssetLinkLocation(index.get('helo-1')!)).toContain('Air Ops Branch')
+    expect(formatHaveLinkLocation(index.get(heloRef)!)).toContain('Air Ops Branch')
   })
 
-  it('detects assets linked in other Have cells', () => {
+  it('detects roster refs linked in other Have cells', () => {
     const columns: Ics215ResourceColumn[] = [{ id: 'col-helo', label: 'Helicopter' }]
     const rows: Ics215WorkAssignmentRow[] = [
       {
@@ -158,10 +188,10 @@ describe('ics215-have-asset-link', () => {
         assignee: 'unit-a',
         workAssignment: 'Alpha',
         resourceValues: {
-          'col-helo': applyHaveAssetLink(
+          'col-helo': applyHaveRosterLink(
             { required: '1', have: '', need: '' },
-            ['helo-1'],
-            [helicopter]
+            [heloRef],
+            sampleHaveLinkOptions
           ),
         },
         overheadPositions: '',
@@ -183,63 +213,87 @@ describe('ics215-have-asset-link', () => {
       },
     ]
 
-    const index = buildHaveAssetLinkIndex(rows, columns, (key) => key)
+    const index = buildHaveLinkIndex(rows, columns, (key) => key)
     expect(
-      isAssetLinkedElsewhere('helo-1', { rowId: 2, columnId: 'col-helo' }, index)
+      isHaveRefLinkedElsewhere(heloRef, { rowId: 2, columnId: 'col-helo' }, index)
     ).toBe(true)
-    expect(getConflictingHaveAssetKeys(['helo-1'], { rowId: 2, columnId: 'col-helo' }, index)).toEqual([
-      'helo-1',
+    expect(getConflictingHaveRefs([heloRef], { rowId: 2, columnId: 'col-helo' }, index)).toEqual([
+      heloRef,
     ])
     expect(
-      getConflictingHaveAssetKeys(['helo-1'], { rowId: 1, columnId: 'col-helo' }, index)
+      getConflictingHaveRefs([heloRef], { rowId: 1, columnId: 'col-helo' }, index)
     ).toEqual([])
   })
 
-  it('clears linked Have state when no assets remain', () => {
-    const linked = applyHaveAssetLink(
+  it('clears linked Have state when no refs remain', () => {
+    const linked = applyHaveRosterLink(
       { required: '2', have: '', need: '' },
-      ['helo-1'],
-      [helicopter]
+      [heloRef],
+      sampleHaveLinkOptions
     )
-    expect(isHaveLinkedToAssets(linked)).toBe(true)
+    expect(isHaveLinkedToRoster(linked)).toBe(true)
 
-    const cleared = clearHaveAssetLink(linked)
-    expect(isHaveLinkedToAssets(cleared)).toBe(false)
+    const cleared = clearHaveRosterLink(linked)
+    expect(isHaveLinkedToRoster(cleared)).toBe(false)
     expect(cleared.haveSource).toBe('manual')
-    expect(cleared.linkedAssetKeys).toBeUndefined()
+    expect(cleared.linkedHaveRefs).toBeUndefined()
     expect(cleared.have).toBe('')
     expect(cleared.need).toBe('2')
   })
 
-  it('applyHaveAssetLink with empty keys clears links', () => {
+  it('applyHaveRosterLink with empty refs clears links', () => {
+    const linked = applyHaveRosterLink(
+      { required: '1', have: '', need: '' },
+      [heloRef],
+      sampleHaveLinkOptions
+    )
+    const cleared = applyHaveRosterLink(linked, [], sampleHaveLinkOptions)
+    expect(isHaveLinkedToRoster(cleared)).toBe(false)
+    expect(cleared.have).toBe('')
+  })
+
+  it('removeHaveRosterLinkRefs drops one of two linked refs', () => {
+    const boatRef = 'org_chart_asset:boat-1'
+    const options: WorkAssignmentTargetOption[] = [
+      ...sampleHaveLinkOptions,
+      {
+        value: boatRef,
+        label: 'Small Boat',
+        group: 'Assets (active roster)',
+        targetType: 'org_chart_asset',
+      },
+    ]
+    const linked = applyHaveRosterLink(
+      { required: '2', have: '', need: '' },
+      [heloRef, boatRef],
+      options
+    )
+    expect(linked.have).toBe('2')
+
+    const partial = removeHaveRosterLinkRefs(linked, [boatRef], options)
+    expect(getLinkedHaveRefs(partial)).toEqual([heloRef])
+    expect(partial.have).toBe('1')
+    expect(isHaveLinkedToRoster(partial)).toBe(true)
+  })
+
+  it('counts positions and members as one each', () => {
+    const linked = applyHaveRosterLink(
+      { required: '5', have: '', need: '' },
+      [positionRef, memberRef, heloRef],
+      sampleHaveLinkOptions
+    )
+    expect(linked.have).toBe('3')
+    expect(linked.need).toBe('2')
+  })
+
+  it('legacy applyHaveAssetLink still works via org_chart_asset refs', () => {
     const linked = applyHaveAssetLink(
       { required: '1', have: '', need: '' },
       ['helo-1'],
       [helicopter]
     )
-    const cleared = applyHaveAssetLink(linked, [], [helicopter])
-    expect(isHaveLinkedToAssets(cleared)).toBe(false)
-    expect(cleared.have).toBe('')
-  })
-
-  it('removeHaveAssetLinkKeys drops one of two linked assets', () => {
-    const boat: ResourceListItemData = {
-      ...helicopter,
-      assetKey: 'boat-1',
-      name: 'Small Boat',
-      type: 'Boat',
-    }
-    const linked = applyHaveAssetLink(
-      { required: '2', have: '', need: '' },
-      ['helo-1', 'boat-1'],
-      [helicopter, boat]
-    )
-    expect(linked.have).toBe('2')
-
-    const partial = removeHaveAssetLinkKeys(linked, ['boat-1'], [helicopter, boat])
-    expect(partial.linkedAssetKeys).toEqual(['helo-1'])
-    expect(partial.have).toBe('1')
-    expect(isHaveLinkedToAssets(partial)).toBe(true)
+    expect(getLinkedHaveRefs(linked)).toEqual([heloRef])
+    expect(linked.have).toBe('1')
   })
 
   it('patchResourceValueInDraft updates one cell in a draft', () => {
@@ -259,14 +313,14 @@ describe('ics215-have-asset-link', () => {
         },
       ],
     }
-    const linked = applyHaveAssetLink(
+    const linked = applyHaveRosterLink(
       { required: '1', have: '', need: '' },
-      ['helo-1'],
-      [helicopter]
+      [heloRef],
+      sampleHaveLinkOptions
     )
     const next = patchResourceValueInDraft(draft, 1, 'col-helo', linked)
     expect(next.workAssignments[0]?.resourceValues['col-helo']?.have).toBe('1')
-    expect(next.workAssignments[0]?.resourceValues['col-helo']?.linkedAssetKeys).toEqual(['helo-1'])
+    expect(next.workAssignments[0]?.resourceValues['col-helo']?.linkedHaveRefs).toEqual([heloRef])
   })
 })
 

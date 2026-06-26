@@ -1,13 +1,13 @@
-import { useRef } from 'react'
+import { useMemo, useRef } from 'react'
 import { Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Ics202ReadOnlyField } from '@/features/ics202/Ics202SectionToolbar'
 import { WorkAssignmentTargetPicker } from '@/features/work-assignments/WorkAssignmentTargetPicker'
-import { Ics215HaveAssetLinkDialog } from '@/features/ics215/Ics215HaveAssetLinkDialog'
+import { Ics215HaveRosterLinkDialog } from '@/features/ics215/Ics215HaveAssetLinkDialog'
 import { Ics215HaveCell } from '@/features/ics215/Ics215HaveCell'
-import { isHaveLinkedToAssets } from '@/features/ics215/ics215-have-asset-link'
-import { useIcs215HaveAssetLink } from '@/features/ics215/useIcs215HaveAssetLink'
+import { isHaveLinkedToRoster } from '@/features/ics215/ics215-have-asset-link'
+import { useIcs215HaveRosterLink } from '@/features/ics215/useIcs215HaveAssetLink'
 import type { Ics215ResourceValue } from '@/features/ics215/types'
 import {
   EMPTY_RESOURCE_VALUE,
@@ -180,11 +180,18 @@ export function Ics215WorkAssignmentsLegacyTable({
     onHaveFillComplete,
   })
 
-  const haveLink = useIcs215HaveAssetLink({
+  const assetsByKey = useMemo(
+    () => Object.fromEntries(workspaceAssets.map((asset) => [asset.assetKey, asset])),
+    [workspaceAssets]
+  )
+
+  const haveLink = useIcs215HaveRosterLink({
     workAssignments,
     resourceColumns,
     workspaceAssets,
     workAssignmentTargetOptions,
+    roster,
+    assetsByKey,
     workspaceId,
     isSupabaseEnabled,
     getAccessToken,
@@ -508,7 +515,7 @@ export function Ics215WorkAssignmentsLegacyTable({
                                   rowId: row.id,
                                   columnId: column.id,
                                   columnLabel: column.label,
-                                  mode: isHaveLinkedToAssets(value) ? 'review' : 'create',
+                                  mode: isHaveLinkedToRoster(value) ? 'review' : 'create',
                                   workAssignmentContext,
                                 })
                               }
@@ -572,7 +579,7 @@ export function Ics215WorkAssignmentsLegacyTable({
       ) : null}
     </div>
 
-    <Ics215HaveAssetLinkDialog
+    <Ics215HaveRosterLinkDialog
       open={haveLink.dialogOpen}
       onOpenChange={(open) => {
         if (!open) haveLink.closeHaveLinkDialog()
@@ -580,15 +587,16 @@ export function Ics215WorkAssignmentsLegacyTable({
       columnLabel={haveLink.dialogState?.columnLabel ?? ''}
       workAssignmentContext={haveLink.dialogState?.workAssignmentContext}
       workspaceAssets={workspaceAssets}
-      initialSelectedKeys={haveLink.dialogInitialSelectedKeys}
-      suggestedKeys={haveLink.suggestedKeys}
-      staleLinkedKeys={haveLink.staleLinkedKeys}
-      linkedAssetLocations={haveLink.linkedAssetLocations}
+      haveLinkTargetOptions={haveLink.haveLinkTargetOptions}
+      initialSelectedRefs={haveLink.dialogInitialSelectedRefs}
+      suggestedRefs={haveLink.suggestedRefs}
+      staleLinkedRefs={haveLink.staleLinkedRefs}
+      linkedRefLocations={haveLink.linkedRefLocations}
       mode={haveLink.dialogState?.mode ?? 'create'}
       isLoading={haveLink.isRanking}
       rankingEngine={haveLink.rankingEngine}
       onConfirm={haveLink.confirmHaveLink}
-      onUnlinkFromOtherCell={haveLink.unlinkAssetFromOtherCell}
+      onUnlinkFromOtherCell={haveLink.unlinkRefFromOtherCell}
     />
     </>
   )

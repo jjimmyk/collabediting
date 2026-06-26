@@ -391,6 +391,46 @@ export function buildWorkAssignmentTargetOptions(
   })
 }
 
+const HAVE_LINKABLE_TARGET_TYPES: WorkAssignmentTargetType[] = [
+  'position',
+  'member',
+  'single_resource',
+  'position_asset',
+  'org_chart_asset',
+  'resource_category',
+]
+
+export function buildHaveLinkTargetOptions(
+  options: WorkAssignmentTargetOption[]
+): WorkAssignmentTargetOption[] {
+  return options.filter(
+    (option) => HAVE_LINKABLE_TARGET_TYPES.includes(option.targetType) && !option.disabled
+  )
+}
+
+export function mergeLegacyHaveLinkTargetOptions(
+  options: WorkAssignmentTargetOption[],
+  linkedRefs: string[],
+  roster: WorkspaceRosterMember[] = [],
+  context: Parameters<typeof parseWorkAssignmentTarget>[2] = {}
+): WorkAssignmentTargetOption[] {
+  const merged = [...options]
+  for (const ref of linkedRefs) {
+    const trimmed = ref.trim()
+    if (!trimmed || merged.some((option) => option.value === trimmed)) continue
+    const parsed = parseWorkAssignmentTarget(trimmed, roster, context)
+    merged.push({
+      value: trimmed,
+      label: `${formatWorkAssignmentTargetLabel(trimmed, roster, context)} (no longer on roster)`,
+      group: 'Previously linked',
+      disabled: true,
+      disabledReason: 'Not on current roster',
+      targetType: parsed.type === 'unassigned' ? 'position' : parsed.type,
+    })
+  }
+  return merged
+}
+
 export function toAssignedUnitOptions(
   options: WorkAssignmentTargetOption[]
 ): Array<{ value: string; label: string; disabled?: boolean }> {

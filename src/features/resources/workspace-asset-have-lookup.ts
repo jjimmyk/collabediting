@@ -1,5 +1,5 @@
 import type { Ics215ResourceValue } from '@/features/ics215/types'
-import { isHaveLinkedToAssets } from '@/features/ics215/ics215-have-asset-link'
+import { isHaveLinkedToRoster } from '@/features/ics215/ics215-have-asset-link'
 import type { Ics204ResourceRequirementRow } from '@/features/ics204/types'
 import type { ResourceListItemData } from '@/features/resources/types'
 import {
@@ -163,7 +163,7 @@ export type FillHaveOptions = {
 }
 
 export function shouldFillHaveValue(currentHave: string, options: FillHaveOptions, value?: Ics215ResourceValue): boolean {
-  if (value && isHaveLinkedToAssets(value)) return false
+  if (value && isHaveLinkedToRoster(value)) return false
   if (options.overwrite) return true
   if (options.onlyIfHaveEmpty ?? true) {
     return currentHave.trim().length === 0
