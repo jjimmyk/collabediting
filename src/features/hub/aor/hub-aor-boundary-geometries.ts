@@ -8,7 +8,8 @@ import {
 } from './aor-boundary-map-keys'
 import { HUB_AOR_HIERARCHY_NODES } from './hub-aor-hierarchy-nodes'
 import { HUB_AOR_DISTRICTS, USCG_COAST_GUARD_AREAS } from './hub-aor-districts'
-import type { HubAorBoundaryDefinition, HUB_AOR_BOUNDARY_STORAGE_KEY } from './hub-aor-boundary-types'
+import type { HubAorBoundaryDefinition } from './hub-aor-boundary-types'
+import { HUB_AOR_BOUNDARY_STORAGE_KEY } from './hub-aor-boundary-types'
 
 export function centroidBoundingPolygon(
   [longitude, latitude]: [number, number],
