@@ -35,6 +35,51 @@ import {
   PositionResourceCategoryCreateForm,
   PositionResourceCategoryRow,
 } from '@/features/roster/PositionResourceCategoryRow'
+import { cn } from '@/lib/utils'
+
+export type PositionAssignmentSectionsLayout = 'stacked' | 'timeline'
+
+function PositionAssignmentSectionsLayout({
+  layout,
+  assignedNow,
+  scheduledAssign,
+  scheduledOrgChart,
+  scheduledUnassign,
+}: {
+  layout: PositionAssignmentSectionsLayout
+  assignedNow: ReactNode
+  scheduledAssign: ReactNode
+  scheduledOrgChart: ReactNode
+  scheduledUnassign: ReactNode
+}) {
+  if (layout === 'stacked') {
+    return (
+      <div className="space-y-3">
+        {assignedNow}
+        {scheduledAssign}
+        {scheduledOrgChart}
+        {scheduledUnassign}
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="hidden gap-3 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground md:grid md:grid-cols-2">
+        <span>Current OP</span>
+        <span>Next OP</span>
+      </div>
+      <div className="grid gap-3 md:grid-cols-2 md:items-start">
+        <div className="min-h-[12rem]">{assignedNow}</div>
+        <div className="space-y-3">
+          {scheduledAssign}
+          {scheduledOrgChart}
+          {scheduledUnassign}
+        </div>
+      </div>
+    </div>
+  )
+}
 
 function PositionAssignmentLifecycleSection({
   title,
@@ -43,6 +88,7 @@ function PositionAssignmentLifecycleSection({
   visible,
   children,
   actions,
+  className,
 }: {
   title: string
   icon?: ReactNode
@@ -50,11 +96,12 @@ function PositionAssignmentLifecycleSection({
   visible: boolean
   children: ReactNode
   actions?: ReactNode
+  className?: string
 }) {
   if (!visible) return null
 
   return (
-    <div className="space-y-1.5 rounded-md border bg-muted/10 px-2.5 py-2">
+    <div className={cn('space-y-1.5 rounded-md border bg-muted/10 px-2.5 py-2', className)}>
       <p className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground">
         {icon}
         {title}
@@ -389,6 +436,7 @@ export type PositionRosterUnifiedAssignmentSectionsProps = {
   onFillResourceCategoryMember?: (categoryId: string, memberId: string) => void
   onFillResourceCategoryAsset?: (categoryId: string, assetKey: string) => void
   onClearResourceCategoryFill?: (categoryId: string) => void
+  assignmentSectionsLayout?: PositionAssignmentSectionsLayout
 } & PositionRosterAssetHandlers
 
 export function PositionRosterUnifiedAssignmentSections({
@@ -439,6 +487,7 @@ export function PositionRosterUnifiedAssignmentSections({
   onFillResourceCategoryMember,
   onFillResourceCategoryAsset,
   onClearResourceCategoryFill,
+  assignmentSectionsLayout = 'stacked',
 }: PositionRosterUnifiedAssignmentSectionsProps) {
   const [expandedAssetKey, setExpandedAssetKey] = useState<string | null>(null)
   const [expandedInviteMode, setExpandedInviteMode] = useState<RosterInviteAssignmentMode | null>(
@@ -573,7 +622,9 @@ export function PositionRosterUnifiedAssignmentSections({
   )
 
   return (
-    <>
+    <PositionAssignmentSectionsLayout
+      layout={assignmentSectionsLayout}
+      assignedNow={
       <PositionAssignmentLifecycleSection
         title="Assigned now"
         emptyMessage={assignNowHasRows ? '' : assignNowEmpty}
@@ -663,7 +714,8 @@ export function PositionRosterUnifiedAssignmentSections({
           : null}
         {renderResourceCategoryRows('active', 'Assigned now', canAssignNow, assignable, assignableAssets)}
       </PositionAssignmentLifecycleSection>
-
+      }
+      scheduledAssign={
       <PositionAssignmentLifecycleSection
         title="Scheduled assign (next OP)"
         icon={<CalendarClock className="h-3.5 w-3.5" />}
@@ -756,7 +808,8 @@ export function PositionRosterUnifiedAssignmentSections({
           scheduleAssignableAssets
         )}
       </PositionAssignmentLifecycleSection>
-
+      }
+      scheduledOrgChart={
       <PositionAssignmentLifecycleSection
         title="Scheduled org chart (next OP)"
         icon={<CalendarClock className="h-3.5 w-3.5" />}
@@ -805,7 +858,8 @@ export function PositionRosterUnifiedAssignmentSections({
             )
           : null}
       </PositionAssignmentLifecycleSection>
-
+      }
+      scheduledUnassign={
       <PositionAssignmentLifecycleSection
         title="Scheduled unassign (next OP)"
         icon={<CalendarClock className="h-3.5 w-3.5" />}
@@ -898,6 +952,7 @@ export function PositionRosterUnifiedAssignmentSections({
           scheduleUnassignableAssets
         )}
       </PositionAssignmentLifecycleSection>
-    </>
+      }
+    />
   )
 }

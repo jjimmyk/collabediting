@@ -293,6 +293,7 @@ export function PositionRosterCard({
             <DialogTitle className="sr-only">{entry.position}</DialogTitle>
             <PositionRosterDetailPanel
               {...panelProps}
+              assignmentSectionsLayout="timeline"
               glassItemBorderClasses={glassItemBorderClasses}
               showOpAdvanceLabels={showOpAdvanceLabels}
               positionMeta={positionMeta}

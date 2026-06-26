@@ -594,7 +594,7 @@ export function WorkspacePositionRosterTable({
       >
         <DialogContent
           overlayClassName="bg-black/20 backdrop-blur-sm"
-          className="flex max-h-[min(75vh,40rem)] w-full max-w-[min(32rem,calc(100vw-2rem))] flex-col gap-0 overflow-hidden p-0 sm:max-w-[min(32rem,calc(100vw-2rem))]"
+          className="flex max-h-[min(80vh,44rem)] w-full !max-w-[min(48rem,calc(100%-2rem))] flex-col gap-0 overflow-hidden p-0 sm:!max-w-[min(48rem,calc(100%-2rem))] !w-[48rem]"
         >
           {managedEntry ? (
             <>
@@ -610,6 +610,7 @@ export function WorkspacePositionRosterTable({
               <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-3">
                 <PositionRosterDetailPanel
                   entry={managedEntry}
+                  assignmentSectionsLayout="timeline"
                   assignable={assignableByPosition[managedEntry.position] ?? []}
                   scheduleAssignable={scheduleAssignableByPosition[managedEntry.position] ?? []}
                   scheduleUnassignable={scheduleUnassignableByPosition[managedEntry.position] ?? []}

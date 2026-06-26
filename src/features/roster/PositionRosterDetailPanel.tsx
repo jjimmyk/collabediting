@@ -14,7 +14,10 @@ import {
 } from '@/features/roster/PositionRosterPropertySections'
 import type { PositionRosterAssetHandlers } from '@/features/roster/PositionRosterAssetSections'
 import { PositionRosterUnifiedAssignmentSections } from '@/features/roster/PositionRosterAssignmentSections'
-import type { PositionRosterUnifiedAssignmentSectionsProps } from '@/features/roster/PositionRosterAssignmentSections'
+import type {
+  PositionAssignmentSectionsLayout,
+  PositionRosterUnifiedAssignmentSectionsProps,
+} from '@/features/roster/PositionRosterAssignmentSections'
 import type { ResourceListItemData } from '@/features/resources/types'
 import type { WorkspacePositionMeta, WorkspacePositionCatalog } from '@/features/roster/workspace-positions'
 import { PositionIdentitySection } from '@/features/roster/PositionIdentitySection'
@@ -90,6 +93,7 @@ type PositionRosterDetailPanelProps = {
   onFillResourceCategoryMember?: (categoryId: string, memberId: string) => void
   onFillResourceCategoryAsset?: (categoryId: string, assetKey: string) => void
   onClearResourceCategoryFill?: (categoryId: string) => void
+  assignmentSectionsLayout?: PositionAssignmentSectionsLayout
 } & Partial<PositionRosterAssetHandlers>
 
 export function PositionRosterDetailPanel({
@@ -157,6 +161,7 @@ export function PositionRosterDetailPanel({
   onFillResourceCategoryMember,
   onFillResourceCategoryAsset,
   onClearResourceCategoryFill,
+  assignmentSectionsLayout = 'stacked',
 }: PositionRosterDetailPanelProps) {
   const assetsHandlersReady = Boolean(
     onAssignAsset &&
@@ -287,6 +292,7 @@ export function PositionRosterDetailPanel({
         onFillResourceCategoryMember={onFillResourceCategoryMember}
         onFillResourceCategoryAsset={onFillResourceCategoryAsset}
         onClearResourceCategoryFill={onClearResourceCategoryFill}
+        assignmentSectionsLayout={assignmentSectionsLayout}
       />
 
       {canManageRoster && onRemoveFromRoster ? (
