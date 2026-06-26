@@ -150,3 +150,35 @@ export function groupWeatherLayersByCategory(
     layers: catalog.filter((entry) => entry.group === group),
   }))
 }
+
+export type WeatherLayerMapFocus = {
+  center: [number, number]
+  scale: number
+}
+
+const WEATHER_LAYER_GROUP_FOCUS: Record<WeatherLayerGroup, WeatherLayerMapFocus> = {
+  radar: { center: [-98.5, 39.5], scale: 20_000_000 },
+  alerts: { center: [-98.5, 39.5], scale: 20_000_000 },
+  forecast: { center: [-98.5, 39.5], scale: 20_000_000 },
+}
+
+export function getWeatherLayerMapFocus(definition: WeatherLayerDefinition): WeatherLayerMapFocus {
+  return WEATHER_LAYER_GROUP_FOCUS[definition.group]
+}
+
+export function searchWeatherMapLayers(
+  query: string,
+  catalog: readonly WeatherLayerDefinition[] = HUB_WEATHER_LAYER_CATALOG
+): WeatherLayerDefinition[] {
+  const normalizedQuery = query.trim().toLowerCase()
+  if (!normalizedQuery) {
+    return []
+  }
+
+  return catalog.filter((entry) =>
+    [entry.label, entry.description, entry.group, WEATHER_LAYER_GROUP_LABELS[entry.group]]
+      .join(' ')
+      .toLowerCase()
+      .includes(normalizedQuery)
+  )
+}

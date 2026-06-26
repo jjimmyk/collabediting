@@ -757,8 +757,12 @@ import {
   type HubMapVisibleItem,
 } from '@/features/hub/map/hub-map-visible-items'
 import {
+  getWeatherLayerDefinition,
+  getWeatherLayerMapFocus,
   loadEnabledWeatherLayerIds,
   saveEnabledWeatherLayerIds,
+  searchWeatherMapLayers,
+  WEATHER_LAYER_GROUP_LABELS,
 } from '@/features/hub/map-layers/weather-layer-catalog'
 import { useHubWeatherMapLayers } from '@/features/hub/map-layers/useHubWeatherMapLayers'
 import { ProductToursMenu } from '@/components/ProductToursMenu'
@@ -4316,6 +4320,7 @@ type SearchResult = {
     | 'exercise'
     | 'event'
     | 'hub-aor'
+    | 'map-layer'
   title: string
   subtitle: string
   location: [number, number]
@@ -11842,6 +11847,27 @@ function App() {
     })
     setIsMapVisible(true)
   }, [])
+  const zoomToWeatherMapLayer = useCallback(async (layerId: string) => {
+    const definition = getWeatherLayerDefinition(layerId)
+    if (!definition) {
+      return
+    }
+
+    const { center, scale } = getWeatherLayerMapFocus(definition)
+    setIsMapVisible(true)
+
+    const view = mapViewRef.current
+    if (!view) {
+      return
+    }
+
+    try {
+      view.padding = getMapViewportPadding()
+      await view.goTo({ center, scale }, { animate: false })
+    } catch {
+      // Ignore goTo interruption.
+    }
+  }, [])
   const hideAllWeatherMapLayers = useCallback(() => {
     setEnabledWeatherLayerIds(() => {
       const next = new Set<string>()
@@ -18326,6 +18352,14 @@ function App() {
     analyticsResolutionKindFilter,
   ])
 
+  const searchFilteredMapLayers = useMemo(() => {
+    if (isInWorkspaceContext || !normalizedQuery) {
+      return []
+    }
+
+    return searchWeatherMapLayers(normalizedQuery)
+  }, [isInWorkspaceContext, normalizedQuery])
+
   const searchResults: SearchResult[] = normalizedQuery
     ? [
         ...searchFilteredNotifications.map((item) => ({
@@ -18400,6 +18434,18 @@ function App() {
           location: item.location,
           scale: item.kind === 'hub-aor-district' ? 10_000_000 : 300_000,
         })),
+        ...searchFilteredMapLayers.map((layer) => {
+          const focus = getWeatherLayerMapFocus(layer)
+          const isEnabled = enabledWeatherLayerIds.has(layer.id)
+          return {
+            id: layer.id,
+            kind: 'map-layer' as const,
+            title: layer.label,
+            subtitle: `${WEATHER_LAYER_GROUP_LABELS[layer.group]} • ${isEnabled ? 'On map' : 'Off map'}`,
+            location: focus.center,
+            scale: focus.scale,
+          }
+        }),
       ]
     : []
 
@@ -18445,6 +18491,10 @@ function App() {
       if (result.id.startsWith('hub-aor-asset-')) {
         setExpandedItemId(result.id)
       }
+    }
+
+    if (result.kind === 'map-layer') {
+      setActiveTab('map-layers')
     }
 
     setSearchQuery(result.title)
@@ -25924,7 +25974,11 @@ function App() {
                             setSelectedSearchResult(result)
                             setSearchQuery('')
                             setIsSearchResultsOpen(false)
-                            void focusMapItem(result.id, result.location, result.scale)
+                            if (result.kind === 'map-layer') {
+                              void zoomToWeatherMapLayer(result.id)
+                            } else {
+                              void focusMapItem(result.id, result.location, result.scale)
+                            }
                           }}
                           onKeyDown={(event) => {
                             if (event.key === 'Enter' || event.key === ' ') {
@@ -25932,7 +25986,11 @@ function App() {
                               setSelectedSearchResult(result)
                               setSearchQuery('')
                               setIsSearchResultsOpen(false)
-                              void focusMapItem(result.id, result.location, result.scale)
+                              if (result.kind === 'map-layer') {
+                                void zoomToWeatherMapLayer(result.id)
+                              } else {
+                                void focusMapItem(result.id, result.location, result.scale)
+                              }
                             }
                           }}
                         >
@@ -25940,10 +25998,35 @@ function App() {
                             <div>
                               <p className="text-sm font-medium">{result.title}</p>
                               <p className="text-xs text-muted-foreground">
-                                {result.kind.toUpperCase()} • {result.subtitle}
+                                {result.kind === 'map-layer' ? 'MAP LAYER' : result.kind.toUpperCase()} •{' '}
+                                {result.subtitle}
                               </p>
                             </div>
-                            {(
+                            {result.kind === 'map-layer' ? (
+                              <div className="flex items-center gap-1">
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={(event) => {
+                                    event.stopPropagation()
+                                    toggleWeatherMapLayer(result.id)
+                                  }}
+                                >
+                                  {enabledWeatherLayerIds.has(result.id) ? 'Turn off' : 'Turn on'}
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  onClick={(event) => {
+                                    event.stopPropagation()
+                                    void zoomToWeatherMapLayer(result.id)
+                                  }}
+                                >
+                                  Zoom to
+                                </Button>
+                              </div>
+                            ) : (
                               result.kind === 'notification' ||
                               result.kind === 'resource' ||
                               result.kind === 'resource-request' ||
@@ -25986,6 +26069,15 @@ function App() {
                 </Card>
               )}
             </div>
+            {!isInWorkspaceContext && hubMapVisibleItems.length > 0 ? (
+              <HubMapVisibleItemsPill
+                items={hubMapVisibleItems}
+                glassItemBorderClasses={glassItemBorderClasses}
+                className={cn('h-10 shrink-0', glassSearchClasses)}
+                onRemoveItem={handleRemoveHubMapVisibleItem}
+                onClearAll={handleClearAllHubMapVisibleItems}
+              />
+            ) : null}
             <Button
               type="button"
               variant="outline"
@@ -26077,18 +26169,6 @@ function App() {
           isMapVisible ? 'opacity-100' : 'pointer-events-none opacity-0'
         )}
       />
-      {isMapVisible && !isInWorkspaceContext ? (
-        <HubMapVisibleItemsPill
-          items={hubMapVisibleItems}
-          glassItemBorderClasses={glassItemBorderClasses}
-          className={cn(
-            'pointer-events-auto absolute top-3 z-20',
-            isPratusAiDrawerOpen ? 'right-[calc(33.333vw+0.75rem)]' : 'right-3'
-          )}
-          onRemoveItem={handleRemoveHubMapVisibleItem}
-          onClearAll={handleClearAllHubMapVisibleItems}
-        />
-      ) : null}
       <div
         ref={leftPanelRef}
         className={cn(

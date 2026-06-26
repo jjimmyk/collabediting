@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import {
+  getWeatherLayerMapFocus,
   groupWeatherLayersByCategory,
   HUB_WEATHER_LAYER_CATALOG,
   HUB_WEATHER_LAYER_STORAGE_KEY,
   isWeatherLayerId,
   loadEnabledWeatherLayerIds,
   saveEnabledWeatherLayerIds,
+  searchWeatherMapLayers,
 } from '@/features/hub/map-layers/weather-layer-catalog'
 
 describe('weather-layer-catalog', () => {
@@ -23,6 +25,24 @@ describe('weather-layer-catalog', () => {
   it('validates weather layer ids', () => {
     expect(isWeatherLayerId('radar-base-reflectivity')).toBe(true)
     expect(isWeatherLayerId('not-a-layer')).toBe(false)
+  })
+
+  it('searches catalog entries by label, group, and description', () => {
+    expect(searchWeatherMapLayers('radar').map((entry) => entry.id)).toEqual([
+      'radar-base-reflectivity',
+    ])
+    expect(searchWeatherMapLayers('warnings').map((entry) => entry.id)).toEqual(['wwa-warnings'])
+    expect(searchWeatherMapLayers('day 2').map((entry) => entry.id)).toEqual(['wpc-ero-day2'])
+    expect(searchWeatherMapLayers('')).toEqual([])
+  })
+
+  it('returns CONUS map focus per weather layer group', () => {
+    const radar = HUB_WEATHER_LAYER_CATALOG.find((entry) => entry.group === 'radar')
+    expect(radar).toBeDefined()
+    expect(getWeatherLayerMapFocus(radar!)).toEqual({
+      center: [-98.5, 39.5],
+      scale: 20_000_000,
+    })
   })
 
   it('persists enabled layer ids in localStorage', () => {

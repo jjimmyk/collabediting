@@ -53,7 +53,8 @@ export function HubMapVisibleItemsPill({
           size="sm"
           variant="secondary"
           className={cn(
-            'h-8 rounded-full border bg-background/90 px-3 shadow-sm backdrop-blur',
+            'rounded-full border bg-background/90 px-3 shadow-sm backdrop-blur',
+            'h-8',
             glassItemBorderClasses,
             className
           )}
