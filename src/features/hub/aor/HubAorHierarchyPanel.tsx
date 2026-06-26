@@ -20,6 +20,8 @@ import type { HubAorNodeView } from '@/features/hub/aor/hub-aor-types'
 import { filterHubAorAreaViews, searchHubAorHierarchy } from '@/features/hub/aor/hub-aor-search'
 import { buildHubAorAreaViews } from '@/features/hub/aor/hub-aor-tree'
 import type { HubAorDistrict } from '@/features/hub/aor/hub-aor-types'
+import { hubAorAreaBoundaryId, hubAorDistrictBoundaryId } from '@/features/hub/aor/aor-boundary-map-keys'
+import { HubAorMapBoundaryToggle } from '@/features/hub/aor/HubAorMapBoundaryToggle'
 
 type HubAorHierarchyPanelProps = {
   assets: ResourceListItemData[]
@@ -34,6 +36,9 @@ type HubAorHierarchyPanelProps = {
   isAssetAssignmentsLoading: boolean
   onAssetAssignmentChange: (assetKey: string, workspaceId: string | null) => void
   onFocusMap: (mapKey: string, location: [number, number], scale: number) => void
+  enabledBoundaryIds: Set<string>
+  onToggleBoundary: (boundaryId: string, checked: boolean) => void
+  onHideAllBoundaries: () => void
 }
 
 export function HubAorHierarchyPanel({
@@ -49,6 +54,9 @@ export function HubAorHierarchyPanel({
   isAssetAssignmentsLoading,
   onAssetAssignmentChange,
   onFocusMap,
+  enabledBoundaryIds,
+  onToggleBoundary,
+  onHideAllBoundaries,
 }: HubAorHierarchyPanelProps) {
   const [localSearchQuery, setLocalSearchQuery] = useState('')
   const [expandedAreaKeys, setExpandedAreaKeys] = useState<Set<string>>(new Set())
@@ -155,6 +163,14 @@ export function HubAorHierarchyPanel({
 
   return (
     <div className="space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-muted/10 px-3 py-2.5">
+        <p className="text-xs text-muted-foreground">
+          Toggle area, district, and sector boundaries on the map.
+        </p>
+        <Button type="button" size="sm" variant="ghost" onClick={onHideAllBoundaries}>
+          Hide all boundaries
+        </Button>
+      </div>
       <HubAorSearchBar
         value={localSearchQuery}
         onChange={setLocalSearchQuery}
@@ -204,6 +220,12 @@ export function HubAorHierarchyPanel({
                   </ItemDescription>
                 </ItemContent>
                 <ItemActions>
+                  <HubAorMapBoundaryToggle
+                    boundaryId={hubAorAreaBoundaryId(areaView.area.key)}
+                    enabledBoundaryIds={enabledBoundaryIds}
+                    ariaLabel={`Show ${areaView.area.name} on map`}
+                    onToggleBoundary={onToggleBoundary}
+                  />
                   <Button
                     variant="ghost"
                     size="icon"
@@ -212,7 +234,7 @@ export function HubAorHierarchyPanel({
                       event.stopPropagation()
                       onSelectPanelItem(areaPanelKey)
                       onFocusMap(
-                        `fema-aor-area-${areaView.area.key}`,
+                        hubAorAreaBoundaryId(areaView.area.key),
                         areaView.area.location,
                         20_000_000
                       )
@@ -341,6 +363,8 @@ export function HubAorHierarchyPanel({
                           isAssetAssignmentsLoading={isAssetAssignmentsLoading}
                           onAssetAssignmentChange={onAssetAssignmentChange}
                           onFocusMap={onFocusMap}
+                          enabledBoundaryIds={enabledBoundaryIds}
+                          onToggleBoundary={onToggleBoundary}
                         />
                       ))}
                     </div>
@@ -448,6 +472,8 @@ type HubAorDistrictRowProps = {
   isAssetAssignmentsLoading: boolean
   onAssetAssignmentChange: (assetKey: string, workspaceId: string | null) => void
   onFocusMap: (mapKey: string, location: [number, number], scale: number) => void
+  enabledBoundaryIds: Set<string>
+  onToggleBoundary: (boundaryId: string, checked: boolean) => void
 }
 
 function HubAorDistrictRow({
@@ -469,6 +495,8 @@ function HubAorDistrictRow({
   isAssetAssignmentsLoading,
   onAssetAssignmentChange,
   onFocusMap,
+  enabledBoundaryIds,
+  onToggleBoundary,
 }: HubAorDistrictRowProps) {
   const panelKey = `aor-${district.id}`
   const isDirectMatch = searchResult.directMatchDistrictIds.has(district.id)
@@ -500,6 +528,12 @@ function HubAorDistrictRow({
             <ItemDescription>{district.lead}</ItemDescription>
           </ItemContent>
           <ItemActions>
+            <HubAorMapBoundaryToggle
+              boundaryId={hubAorDistrictBoundaryId(district.id)}
+              enabledBoundaryIds={enabledBoundaryIds}
+              ariaLabel={`Show ${district.name} on map`}
+              onToggleBoundary={onToggleBoundary}
+            />
             <Button
               variant="ghost"
               size="icon"
@@ -507,7 +541,7 @@ function HubAorDistrictRow({
               onClick={(event) => {
                 event.stopPropagation()
                 onSelectPanelItem(panelKey)
-                onFocusMap(`fema-aor-${district.id}`, district.location, 10_000_000)
+                onFocusMap(hubAorDistrictBoundaryId(district.id), district.location, 10_000_000)
               }}
             >
               <MapIcon className="h-4 w-4" />
@@ -613,6 +647,8 @@ function HubAorDistrictRow({
                     isAssetAssignmentsLoading={isAssetAssignmentsLoading}
                     onAssetAssignmentChange={onAssetAssignmentChange}
                     onFocusMap={onFocusMap}
+                    enabledBoundaryIds={enabledBoundaryIds}
+                    onToggleBoundary={onToggleBoundary}
                   />
                 ))}
               </div>

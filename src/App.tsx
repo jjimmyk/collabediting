@@ -714,7 +714,6 @@ import {
   canSetOpAdvanceLabelForPosition,
 } from '@/features/roster/workspace-positions'
 import { OperationalPeriodHistoricalRosterShell } from '@/features/operational-periods/OperationalPeriodHistoricalRosterShell'
-import { femaRegionGeometries } from '@/data/fema-regions'
 import { HubAorHierarchyPanel } from '@/features/hub/aor/HubAorHierarchyPanel'
 import { HUB_AOR_DISTRICTS, type FemaAorItem } from '@/features/hub/aor/hub-aor-districts'
 import {
@@ -739,6 +738,18 @@ import { Ics201TutorialWizard } from '@/features/ics201/Ics201TutorialWizard'
 import { UscgInitialResponseTutorialWizard } from '@/features/uscg-workspace/UscgInitialResponseTutorialWizard'
 import { HubTutorialWizard } from '@/features/hub/HubTutorialWizard'
 import { HubMapLayersPanel } from '@/features/hub/map-layers/HubMapLayersPanel'
+import {
+  applyLiveDistrictSummaryToGraphic,
+  isHubAorBoundaryGraphicAttributes,
+} from '@/features/hub/aor/build-aor-boundary-graphic'
+import {
+  applyHubAorBoundaryToggle,
+  getHubAorBoundaryDefinition,
+  loadEnabledHubAorBoundaryIds,
+  saveEnabledHubAorBoundaryIds,
+} from '@/features/hub/aor/hub-aor-boundary-geometries'
+import { hubAorDistrictBoundaryId } from '@/features/hub/aor/aor-boundary-map-keys'
+import { useHubAorBoundaryMapLayers } from '@/features/hub/aor/useHubAorBoundaryMapLayers'
 import {
   loadEnabledWeatherLayerIds,
   saveEnabledWeatherLayerIds,
@@ -1304,8 +1315,6 @@ type AorItem = {
   notes: string
   location: [number, number]
 }
-
-type FemaAorGraphicItem = FemaAorItem
 
 type RosterPositionItem = {
   id: number
@@ -2971,51 +2980,6 @@ const SITREP_ONGOING_INCIDENTS: IncidentListItem[] = [
   },
 ]
 
-const getOngoingIncidentsForFemaAor = (aorName: string) =>
-  SITREP_ONGOING_INCIDENTS.filter((entry) => entry.region === aorName)
-
-const buildFemaAorGraphicAttributes = (
-  aor: FemaAorGraphicItem,
-  liveSummary?: { executiveSummary: string; sitrepUpdatedBy: string }
-) => {
-  const regionIncidents = getOngoingIncidentsForFemaAor(aor.name)
-  return {
-    mapKey: `fema-aor-${aor.id}`,
-    femaAorId: aor.id,
-    title: aor.name,
-    kind: 'AOR',
-    lead: aor.lead,
-    incidents: String(aor.incidents),
-    population: aor.population,
-    evacuationStatus: aor.evacuationStatus,
-    priority: aor.priority,
-    lastUpdate: aor.lastUpdate,
-    sitrep: liveSummary?.executiveSummary ?? aor.sitrep,
-    sitrepUpdatedBy: liveSummary?.sitrepUpdatedBy ?? aor.sitrepUpdatedBy,
-    ongoingIncidentsSummary:
-      regionIncidents.length > 0
-        ? regionIncidents
-            .map((incident) => `${incident.name} (${incident.severity})`)
-            .join('; ')
-        : 'None recorded',
-    sitrepSourcesSummary: aor.sitrepSources.join('; '),
-  }
-}
-
-const FEMA_AOR_POPUP_TEMPLATE = {
-  title: '{title}',
-  content:
-    '<b>Lead:</b> {lead}<br/>' +
-    '<b>Active Incidents:</b> {incidents}<br/>' +
-    '<b>Population:</b> {population}<br/>' +
-    '<b>Evacuation:</b> {evacuationStatus}<br/>' +
-    '<b>Priority:</b> {priority}<br/>' +
-    '<b>Updated:</b> {lastUpdate}<br/>' +
-    '<b>Latest SITREP:</b> {sitrep} <i>(last updated by {sitrepUpdatedBy})</i><br/>' +
-    '<b>Ongoing Incidents:</b> {ongoingIncidentsSummary}<br/>' +
-    '<b>Data Sources:</b> {sitrepSourcesSummary}',
-}
-
 const RESOURCE_AT_RISK_POPUP_DETAILS =
   '<b>Type:</b> {kind}<br/><b>Status:</b> {status}<br/><b>ID:</b> {assetId}<br/><b>Updated:</b> {updatedAt}<br/><b>Description:</b> {description}'
 
@@ -3023,22 +2987,6 @@ const RESOURCE_AT_RISK_POPUP_TEMPLATE = {
   title: '{title}',
   content: RESOURCE_AT_RISK_POPUP_DETAILS,
 }
-
-const applyFemaAorPopupState = (
-  graphic: Graphic,
-  aor: FemaAorGraphicItem,
-  liveSummary?: { executiveSummary: string; sitrepUpdatedBy: string }
-) => {
-  graphic.attributes = buildFemaAorGraphicAttributes(aor, liveSummary)
-  graphic.popupTemplate = FEMA_AOR_POPUP_TEMPLATE
-}
-
-const isFemaAorGraphicAttributes = (
-  attrs: Record<string, unknown> | undefined
-): attrs is Record<string, unknown> & { femaAorId: number; kind: 'AOR' } =>
-  attrs !== undefined &&
-  typeof attrs.femaAorId === 'number' &&
-  attrs.kind === 'AOR'
 
 const isClusterGraphicAttributes = (attrs: Record<string, unknown> | undefined) =>
   attrs !== undefined && typeof attrs.cluster_count === 'number'
@@ -3070,11 +3018,9 @@ const getGraphicMapLocation = (graphic: Graphic): [number, number] | null => {
 
 type MapClickTarget =
   | { type: 'item'; graphic: Graphic; mapKey: string }
-  | { type: 'fema'; femaAorId: number }
   | { type: 'cluster'; graphic: Graphic }
 
 const resolveMapClickTarget = (results: ViewHitTestResult['results']): MapClickTarget | null => {
-  let femaFallback: { type: 'fema'; femaAorId: number } | null = null
   let polygonItemFallback: { type: 'item'; graphic: Graphic; mapKey: string } | null = null
 
   for (const result of results) {
@@ -3091,14 +3037,6 @@ const resolveMapClickTarget = (results: ViewHitTestResult['results']): MapClickT
 
     const mapKey = attrs?.mapKey
     if (typeof mapKey !== 'string') {
-      if (isFemaAorGraphicAttributes(attrs)) {
-        femaFallback = { type: 'fema', femaAorId: attrs.femaAorId as number }
-      }
-      continue
-    }
-
-    if (isFemaAorGraphicAttributes(attrs)) {
-      femaFallback = { type: 'fema', femaAorId: attrs.femaAorId as number }
       continue
     }
 
@@ -3113,10 +3051,6 @@ const resolveMapClickTarget = (results: ViewHitTestResult['results']): MapClickT
 
   if (polygonItemFallback) {
     return polygonItemFallback
-  }
-
-  if (femaFallback) {
-    return femaFallback
   }
 
   return null
@@ -6537,11 +6471,6 @@ function App() {
   const searchComponentRef = useRef<HTMLDivElement | null>(null)
   const mapViewRef = useRef<MapView | null>(null)
   const mapGraphicsLayerRef = useRef<GraphicsLayer | null>(null)
-  const femaRegionsLayerRef = useRef<GraphicsLayer | null>(null)
-  const femaRegionGraphicsRef = useRef(new globalThis.Map<number, Graphic>())
-  const openFemaAorMapPopupRef = useRef<
-    (aorId: number, mapPoint: Point) => Promise<void>
-  >(() => Promise.resolve())
   const openMapGraphicPopupRef = useRef<
     (
       graphic: Graphic,
@@ -6558,6 +6487,7 @@ function App() {
   const analyticsResolutionLayerZoomTargetRef = useRef<string | null>(null)
   const analyticsResolutionBulkZoomRecordsRef = useRef<AnalyticsSeedRecord[] | null>(null)
   const mapGraphicsRef = useRef(new globalThis.Map<string, Graphic>())
+  const aorBoundaryGraphicsRef = useRef(new globalThis.Map<string, Graphic>())
   const createIncidentMapContainerRef = useRef<HTMLDivElement | null>(null)
   const createIncidentMapViewRef = useRef<MapView | null>(null)
   const createIncidentDrawLayerRef = useRef<GraphicsLayer | null>(null)
@@ -6680,6 +6610,9 @@ function App() {
     useState<Set<string>>(() => new Set())
   const [enabledWeatherLayerIds, setEnabledWeatherLayerIds] = useState<Set<string>>(() =>
     loadEnabledWeatherLayerIds()
+  )
+  const [enabledAorBoundaryIds, setEnabledAorBoundaryIds] = useState<Set<string>>(() =>
+    loadEnabledHubAorBoundaryIds()
   )
   const [analyticsResolutionKindFilter, setAnalyticsResolutionKindFilter] =
     useState<AnalyticsResolutionKindFilter>('incidents')
@@ -9609,394 +9542,22 @@ function App() {
     const analyticsResolutionLayers = initializeAnalyticsResolutionLayers(
       analyticsResolutionLayersRef.current
     )
-    if (!femaRegionsLayerRef.current) {
-      const femaLayer = new GraphicsLayer({
-        id: 'fema-regions-layer',
-        title: 'Areas of Responsibility',
-        listMode: 'hide',
-      })
-      femaRegionGraphicsRef.current = new globalThis.Map<number, Graphic>()
-      femaAors.forEach((aor) => {
-        const femaGeometry = femaRegionGeometries.find((entry) => entry.id === aor.id)
-        let rings: number[][][]
-        if (femaGeometry) {
-          rings = femaGeometry.rings.map((ring) => ring.map((pt) => [pt[0], pt[1]]))
-        } else {
-          const [longitude, latitude] = aor.location
-          const lonOffset = 0.12
-          const latOffset = 0.09
-          rings = [
-            [
-              [longitude - lonOffset, latitude - latOffset],
-              [longitude + lonOffset, latitude - latOffset],
-              [longitude + lonOffset, latitude + latOffset],
-              [longitude - lonOffset, latitude + latOffset],
-              [longitude - lonOffset, latitude - latOffset],
-            ],
-          ]
-        }
-        const graphic = new Graphic({
-          geometry: {
-            type: 'polygon',
-            rings,
-          },
-          symbol: {
-            type: 'simple-fill',
-            color: [124, 58, 237, 0.05], // 95% transparency
-            outline: {
-              color: [255, 255, 255, 1],
-              width: 1.2,
-            },
-          },
-          attributes: buildFemaAorGraphicAttributes(aor),
-          popupTemplate: FEMA_AOR_POPUP_TEMPLATE,
-        })
-        femaLayer.add(graphic)
-        femaRegionGraphicsRef.current.set(aor.id, graphic)
-      })
-      femaRegionsLayerRef.current = femaLayer
-    }
-    const notificationThreatPointGraphics = notifications.flatMap((notification) =>
-      (notification.regionalThreats?.threats ?? []).map((threat, threatIndex) => ({
-        mapKey: `notification-${notification.id}-threat-${threatIndex}`,
-        title: threat.resource,
-        kind: `Asset at Risk — ${notification.regionalThreats?.region ?? ''}`,
-        coordinates: threat.location,
-        color: [234, 88, 12, 0.95] as [number, number, number, number],
-        status: notification.severity,
-        assetId: threat.id,
-        updatedAt: notification.timestamp,
-        description: threat.risk,
-        isResourceAtRisk: true as const,
-      }))
-    )
-    const pointGraphics = [
-      ...notifications
-        .filter((item) => !item.recipientEmail)
-        .map((item) => ({
-        mapKey: `notification-${item.id}`,
-        title: item.title,
-        kind: 'Notification',
-        coordinates: item.location,
-        color: [220, 38, 38, 0.9] as [number, number, number, number],
-        status: item.status,
-        owner: item.owner,
-        timestamp: item.timestamp,
-        impact: item.impact,
-      })),
-      ...notificationThreatPointGraphics,
-      ...hubAssets.map((item) => ({
-        mapKey: getAssetMapKey(item.assetKey),
-        title: item.name,
-        kind: 'Asset',
-        coordinates: item.mapLocation,
-        color: [14, 116, 144, 0.9] as [number, number, number, number],
-        status: item.status,
-        owner: item.owner,
-        timestamp: item.eta,
-        impact: `${item.type} at ${item.location}`,
-      })),
-      ...safetyAnalyses.map((item) => ({
-        mapKey: `safety-${item.id}`,
-        title: item.hazard,
-        kind: 'Safety Analysis',
-        coordinates: item.location,
-        color: [245, 158, 11, 0.9] as [number, number, number, number],
-        status: item.status,
-        owner: item.owner,
-        timestamp: item.reviewedAt,
-        impact: item.controls,
-      })),
-      ...calendarItems.map((item) => ({
-        mapKey: `calendar-${item.id}`,
-        title: item.title,
-        kind: 'Calendar Event',
-        coordinates: item.location,
-        color: [59, 130, 246, 0.9] as [number, number, number, number],
-        status: item.status,
-        owner: item.owner,
-        timestamp: item.timeWindow,
-        impact: `${item.eventType} • ${item.notes}`,
-      })),
-      ...incidentBriefings.map((item) => ({
-        mapKey: `briefing-${item.id}`,
-        title: item.title,
-        kind: 'Incident Briefing ICS-201',
-        coordinates: item.location,
-        color: [168, 85, 247, 0.9] as [number, number, number, number],
-        status: item.priority,
-        owner: item.presenter,
-        timestamp: item.briefingTime,
-        impact: item.summary,
-      })),
-      ...SITREP_ONGOING_INCIDENTS.map((item) => ({
-        mapKey: `sitrep-ongoing-${item.id}`,
-        title: item.name,
-        kind: 'Ongoing Incident',
-        coordinates: item.location,
-        color: [234, 88, 12, 0.9] as [number, number, number, number],
-        status: item.status,
-        owner: item.lead,
-        timestamp: item.lastUpdate,
-        updatedByLine: `${item.lastUpdate} by You`,
-        executiveSummary:
-          ONGOING_INCIDENT_SITREP_CONTENT[item.id]?.executiveSummary ?? item.summary,
-      })),
-      ...eventList.map((item) => ({
-        mapKey: `event-list-${item.id}`,
-        title: item.name,
-        kind: 'Event',
-        coordinates: item.location,
-        color: [16, 185, 129, 0.9] as [number, number, number, number],
-        status: item.status,
-        owner: item.lead,
-        timestamp: item.lastUpdate,
-        impact: `${item.type} · ${item.severity} · ${item.region}`,
-        isEvent: true as const,
-        creationLabel: getEventCreationLabel(item),
-        updatedByLine: formatEventUpdatedLine(item),
-        eventReport: getEventReportSummary(item),
-      })),
-    ].map((item) => {
-      const usesExecutiveSummary = 'executiveSummary' in item
-      const isResourceAtRisk = 'isResourceAtRisk' in item && item.isResourceAtRisk
-      const isEvent = 'isEvent' in item && item.isEvent
-      const graphic = new Graphic({
-        geometry: {
-          type: 'point',
-          longitude: item.coordinates[0],
-          latitude: item.coordinates[1],
-        },
-        symbol: {
-          type: 'simple-marker',
-          color: item.color,
-          size: 10,
-          outline: {
-            color: [255, 255, 255, 1],
-            width: 1.2,
-          },
-        },
-        attributes: isResourceAtRisk
-          ? {
-              mapKey: item.mapKey,
-              title: item.title,
-              kind: item.kind,
-              status: item.status,
-              assetId: item.assetId,
-              updatedAt: item.updatedAt,
-              description: item.description,
-            }
-          : {
-              mapKey: item.mapKey,
-              title: item.title,
-              kind: item.kind,
-              status: item.status,
-              owner: 'owner' in item ? item.owner : '',
-              ...(isEvent
-                ? {
-                    creationLabel: item.creationLabel,
-                    updatedByLine: item.updatedByLine,
-                    eventReport: item.eventReport,
-                  }
-                : usesExecutiveSummary
-                  ? {
-                      executiveSummary: item.executiveSummary,
-                      updatedByLine: item.updatedByLine,
-                    }
-                  : {
-                      timestamp: 'timestamp' in item ? item.timestamp : '',
-                      impact: 'impact' in item ? item.impact : '',
-                    }),
-            },
-        popupTemplate: isResourceAtRisk
-          ? RESOURCE_AT_RISK_POPUP_TEMPLATE
-          : {
-              title: '{title}',
-              content: isEvent
-                ? '<b>Type:</b> {kind}<br/><b>Status:</b> {status}<br/><b>Created:</b> {creationLabel}<br/><b>Updated:</b> {updatedByLine}<br/><b>Event Report:</b> {eventReport}'
-                : usesExecutiveSummary
-                  ? '<b>Type:</b> {kind}<br/><b>Status:</b> {status}<br/><b>Owner:</b> {owner}<br/><b>Updated:</b> {updatedByLine}<br/><b>Executive Summary:</b> {executiveSummary}'
-                  : '<b>Type:</b> {kind}<br/><b>Status:</b> {status}<br/><b>Owner:</b> {owner}<br/><b>Updated:</b> {timestamp}<br/><b>Impact:</b> {impact}',
-            },
-      })
-      return { mapKey: item.mapKey, graphic }
-    })
-    const aorPolygonGraphics = aors
-      .filter((item) => item.itemType === 'Objective')
-      .map((item) => {
-      const [longitude, latitude] = item.location
-      const lonOffset = 0.12
-      const latOffset = 0.09
-
-      const graphic = new Graphic({
-        geometry: {
-          type: 'polygon',
-          rings: [
-            [
-              [longitude - lonOffset, latitude - latOffset],
-              [longitude + lonOffset, latitude - latOffset],
-              [longitude + lonOffset, latitude + latOffset],
-              [longitude - lonOffset, latitude + latOffset],
-              [longitude - lonOffset, latitude - latOffset],
-            ],
-          ],
-        },
-        symbol: {
-          type: 'simple-fill',
-          color: [124, 58, 237, 0.05], // 95% transparency
-          outline: {
-            color: [255, 255, 255, 1],
-            width: 1.2,
-          },
-        },
-        attributes: {
-          mapKey: `aor-${item.id}`,
-          title: item.name,
-          kind: item.itemType,
-          lead: item.lead,
-          incidents: item.incidents,
-          population: item.population,
-          evacuationStatus: item.evacuationStatus,
-          lastUpdate: item.lastUpdate,
-        },
-        popupTemplate: {
-          title: '{title}',
-          content:
-            '<b>Type:</b> {kind}<br/><b>Lead:</b> {lead}<br/><b>Linked Incidents:</b> {incidents}<br/><b>Population:</b> {population}<br/><b>Evacuation:</b> {evacuationStatus}<br/><b>Updated:</b> {lastUpdate}',
-        },
-      })
-
-      return { mapKey: `aor-${item.id}`, graphic }
-    })
-    const rosterPolygonGraphics = rosterPositions.map((item) => {
-      const [longitude, latitude] = item.location
-      const lonOffset = 0.08
-      const latOffset = 0.06
-
-      const graphic = new Graphic({
-        geometry: {
-          type: 'polygon',
-          rings: [
-            [
-              [longitude - lonOffset, latitude - latOffset],
-              [longitude + lonOffset, latitude - latOffset],
-              [longitude + lonOffset, latitude + latOffset],
-              [longitude - lonOffset, latitude + latOffset],
-              [longitude - lonOffset, latitude - latOffset],
-            ],
-          ],
-        },
-        symbol: {
-          type: 'simple-fill',
-          color: [234, 88, 12, 0.05], // 95% transparency
-          outline: {
-            color: [255, 255, 255, 1],
-            width: 1.2,
-          },
-        },
-        attributes: {
-          mapKey: `incident-${item.id}`,
-          title: item.position,
-          kind: 'Roster Position',
-          status: item.staffingStatus,
-          supervisor: item.supervisor,
-          shift: item.shift,
-          assignedUsers: item.assignedUsers.join(', '),
-          summary: item.notes,
-        },
-        popupTemplate: {
-          title: '{title}',
-          content:
-            '<b>Type:</b> {kind}<br/><b>Staffing:</b> {status}<br/><b>Supervisor:</b> {supervisor}<br/><b>Shift:</b> {shift}<br/><b>Assigned:</b> {assignedUsers}<br/>{summary}',
-        },
-      })
-
-      return { mapKey: `incident-${item.id}`, graphic }
-    })
-    const incidentPolygonGraphics = incidentList.map((item) => {
-      const primaryCategory = getIncidentPrimaryCategory(item)
-      const [red, green, blue] = getIncidentCategoryRgb(primaryCategory)
-      const [longitude, latitude] = item.location
-      const lonOffset = 0.12
-      const latOffset = 0.09
-
-      const graphic = new Graphic({
-        geometry: {
-          type: 'polygon',
-          rings: [
-            [
-              [longitude - lonOffset, latitude - latOffset],
-              [longitude + lonOffset, latitude - latOffset],
-              [longitude + lonOffset, latitude + latOffset],
-              [longitude - lonOffset, latitude + latOffset],
-              [longitude - lonOffset, latitude - latOffset],
-            ],
-          ],
-        },
-        symbol: {
-          type: 'simple-fill',
-          color: getIncidentCategoryFillColor(primaryCategory),
-          outline: {
-            color: [red, green, blue, 0.95],
-            width: 2,
-          },
-        },
-        attributes: {
-          mapKey: `incident-list-${item.id}`,
-          title: item.name,
-          kind: 'Incident',
-          status: item.status,
-          category: item.category,
-          owner: item.lead,
-          region: item.region,
-          timestamp: item.lastUpdate,
-          summary: item.summary,
-        },
-        popupTemplate: {
-          title: '{title}',
-          content:
-            '<b>Type:</b> {kind}<br/><b>Category:</b> {category}<br/><b>Status:</b> {status}<br/><b>AOR:</b> {region}<br/><b>Lead:</b> {owner}<br/><b>Updated:</b> {timestamp}<br/><b>Summary:</b> {summary}',
-        },
-      })
-
-      return { mapKey: `incident-list-${item.id}`, graphic }
-    })
-    const allGraphics = [
-      ...pointGraphics,
-      ...aorPolygonGraphics,
-      ...rosterPolygonGraphics,
-      ...incidentPolygonGraphics,
-    ]
-    mapGraphicsRef.current = new globalThis.Map(
-      allGraphics.map((entry) => [entry.mapKey, entry.graphic])
-    )
-    femaRegionGraphicsRef.current.forEach((graphic, regionNumber) => {
-      mapGraphicsRef.current.set(`fema-aor-${regionNumber}`, graphic)
-    })
+    mapGraphicsRef.current = new globalThis.Map()
     mapGraphicsLayerRef.current = syncHubMapGraphicsLayer(
       mapViewRef.current,
       mapGraphicsLayerRef.current,
-      allGraphics.map((entry) => entry.graphic)
+      []
     )
     const graphicsLayer = mapGraphicsLayerRef.current
 
     if (!mapViewRef.current) {
-      const femaLayer = femaRegionsLayerRef.current
       const sketchLayer = ics201SketchLayerRef.current
-      const baseLayers = femaLayer
-        ? [
-            femaLayer,
-            graphicsLayer,
-            ...analyticsCategoryLayers,
-            ...analyticsResolutionLayers,
-            drawLocationLayerRef.current,
-          ]
-        : [
-            graphicsLayer,
-            ...analyticsCategoryLayers,
-            ...analyticsResolutionLayers,
-            drawLocationLayerRef.current,
-          ]
+      const baseLayers = [
+        graphicsLayer,
+        ...analyticsCategoryLayers,
+        ...analyticsResolutionLayers,
+        drawLocationLayerRef.current,
+      ]
       const map = new ArcGISMap({
         basemap: 'streets-navigation-vector',
         layers: sketchLayer ? [...baseLayers, sketchLayer] : baseLayers,
@@ -10046,10 +9607,7 @@ function App() {
               location,
               target.mapKey
             )
-            return
           }
-
-          void openFemaAorMapPopupRef.current(target.femaAorId, event.mapPoint)
         })
       })
     }
@@ -10070,21 +9628,7 @@ function App() {
       cancelled = true
       cancelAnimationFrame(layoutRafId)
     }
-  }, [
-    aors,
-    eventList,
-    femaAors,
-    incidentBriefings,
-    incidentList,
-    calendarItems,
-    notifications,
-    hubAssets,
-    rosterPositions,
-    safetyAnalyses,
-    isCreateIncidentOpen,
-    isCreateExerciseOpen,
-    isMapVisible,
-  ])
+  }, [isCreateIncidentOpen, isCreateExerciseOpen, isMapVisible])
 
   useEffect(() => {
     if (!isCreateIncidentOpen && !isCreateExerciseOpen) {
@@ -10103,8 +9647,6 @@ function App() {
     mapViewRef.current?.destroy()
     mapViewRef.current = null
     mapGraphicsLayerRef.current = null
-    femaRegionsLayerRef.current = null
-    femaRegionGraphicsRef.current = new globalThis.Map()
     drawLocationLayerRef.current = null
     drawLocationGraphicRef.current = null
     ics201SketchLayerRef.current = null
@@ -10130,8 +9672,6 @@ function App() {
       mapViewRef.current = null
       mapGraphicsRef.current = new globalThis.Map()
       mapGraphicsLayerRef.current = null
-      femaRegionsLayerRef.current = null
-      femaRegionGraphicsRef.current = new globalThis.Map()
       drawLocationLayerRef.current = null
       drawLocationGraphicRef.current = null
       ics201SketchLayerRef.current = null
@@ -10965,7 +10505,8 @@ function App() {
     location: [number, number],
     scale = 50000
   ) => {
-    const targetGraphic = mapGraphicsRef.current.get(mapKey)
+    const targetGraphic =
+      mapGraphicsRef.current.get(mapKey) ?? aorBoundaryGraphicsRef.current.get(mapKey)
     if (!targetGraphic) {
       const view = mapViewRef.current
       if (!view) {
@@ -11011,6 +10552,28 @@ function App() {
     setSelectedPanelItemId(mapKey)
     setIsMapVisible(true)
 
+    const attrs = graphic.attributes as Record<string, unknown> | undefined
+    const boundaryDefinition = isHubAorBoundaryGraphicAttributes(attrs)
+      ? getHubAorBoundaryDefinition(mapKey)
+      : undefined
+
+    if (
+      boundaryDefinition?.level === 'district' &&
+      boundaryDefinition.district &&
+      isSupabaseEnabled &&
+      activeOrganizationId
+    ) {
+      try {
+        const summary = await fetchSitrepLiveSummaryForAor(
+          activeOrganizationId,
+          String(boundaryDefinition.district.id)
+        )
+        applyLiveDistrictSummaryToGraphic(graphic, boundaryDefinition, summary ?? undefined)
+      } catch {
+        // Keep catalog SITREP when live fetch fails.
+      }
+    }
+
     const popupLocation = new Point({
       longitude: location[0],
       latitude: location[1],
@@ -11018,20 +10581,28 @@ function App() {
 
     try {
       view.padding = getMapViewportPadding()
-      await view.goTo(
-        {
-          center: location,
-          scale: scale ?? view.scale,
-        },
-        {
-          animate: false,
-        }
-      )
+      if (graphic.geometry?.type === 'polygon') {
+        await view.goTo(graphic.geometry, { animate: false })
+      } else {
+        await view.goTo(
+          {
+            center: location,
+            scale: scale ?? view.scale,
+          },
+          {
+            animate: false,
+          }
+        )
+      }
     } catch {
       return
     }
 
-    await alignMapPointInVisibleArea(view, location, 0.68)
+    await alignMapPointInVisibleArea(
+      view,
+      location,
+      graphic.geometry?.type === 'polygon' ? 0.62 : 0.68
+    )
 
     const popup = view.popup
     if (!popup) {
@@ -11045,67 +10616,6 @@ function App() {
     })
 
     await adjustMapViewForOpenPopup(view, graphic, popupLocation)
-    popup.alignment = 'auto'
-  }
-
-  openFemaAorMapPopupRef.current = async (aorId, mapPoint) => {
-    const view = mapViewRef.current
-    const aor = femaAors.find((entry) => entry.id === aorId)
-    const polygonGraphic = femaRegionGraphicsRef.current.get(aorId)
-    if (!view || !aor || !polygonGraphic) {
-      return
-    }
-
-    let liveSummary: { executiveSummary: string; sitrepUpdatedBy: string } | undefined
-    if (isSupabaseEnabled && activeOrganizationId) {
-      try {
-        const summary = await fetchSitrepLiveSummaryForAor(
-          activeOrganizationId,
-          String(aorId)
-        )
-        if (summary) {
-          liveSummary = summary
-        }
-      } catch {
-        liveSummary = undefined
-      }
-    }
-
-    applyFemaAorPopupState(polygonGraphic, aor, liveSummary)
-
-    try {
-      const geometry = polygonGraphic.geometry
-      if (!geometry) {
-        return
-      }
-
-      view.padding = getMapViewportPadding()
-      await view.goTo(geometry, { animate: false })
-    } catch {
-      return
-    }
-
-    const popupLocation =
-      mapPoint ??
-      new Point({
-        longitude: aor.location[0],
-        latitude: aor.location[1],
-      })
-
-    await alignMapPointInVisibleArea(view, [aor.location[0], aor.location[1]], 0.62)
-
-    const popup = view.popup
-    if (!popup) {
-      return
-    }
-
-    popup.alignment = 'top-right'
-    view.openPopup({
-      features: [polygonGraphic],
-      location: popupLocation,
-    })
-
-    await adjustMapViewForOpenPopup(view, polygonGraphic, popupLocation)
     popup.alignment = 'auto'
   }
 
@@ -12330,6 +11840,27 @@ function App() {
     setEnabledWeatherLayerIds(() => {
       const next = new Set<string>()
       saveEnabledWeatherLayerIds(next)
+      return next
+    })
+  }, [])
+  useHubAorBoundaryMapLayers({
+    enabled: !isInWorkspaceContext && isMapVisible,
+    mapViewRef,
+    enabledBoundaryIds: enabledAorBoundaryIds,
+    boundaryGraphicsRef: aorBoundaryGraphicsRef,
+  })
+  const toggleAorBoundary = useCallback((boundaryId: string, checked: boolean) => {
+    setEnabledAorBoundaryIds((previous) => {
+      const next = applyHubAorBoundaryToggle(previous, boundaryId, checked)
+      saveEnabledHubAorBoundaryIds(next)
+      return next
+    })
+    setIsMapVisible(true)
+  }, [])
+  const hideAllAorBoundaries = useCallback(() => {
+    setEnabledAorBoundaryIds(() => {
+      const next = new Set<string>()
+      saveEnabledHubAorBoundaryIds(next)
       return next
     })
   }, [])
@@ -19061,77 +18592,25 @@ function App() {
     })
 
   const openSitrepOngoingIncidentOnMap = (incident: IncidentListItem) => {
-    const key = `sitrep-ongoing-${incident.id}`
-    setSelectedPanelItemId(key)
+    setSelectedPanelItemId(`sitrep-ongoing-${incident.id}`)
     setIsMapVisible(true)
 
     const matchingAor = femaAors.find((aor) => aor.name === incident.region)
-    const view = mapViewRef.current
-    const polygonGraphic =
-      matchingAor !== undefined
-        ? femaRegionGraphicsRef.current.get(matchingAor.id)
-        : undefined
-
-    if (!view || !matchingAor || !polygonGraphic) {
-      void focusMapItem(key, incident.location, 500_000)
+    if (matchingAor) {
+      setEnabledAorBoundaryIds((previous) => {
+        const next = applyHubAorBoundaryToggle(
+          previous,
+          hubAorDistrictBoundaryId(matchingAor.id),
+          true
+        )
+        saveEnabledHubAorBoundaryIds(next)
+        return next
+      })
+      void focusMapItem(hubAorDistrictBoundaryId(matchingAor.id), incident.location, 500_000)
       return
     }
 
-    const executiveSummary =
-      ONGOING_INCIDENT_SITREP_CONTENT[incident.id]?.executiveSummary ?? incident.summary
-    const latestVersion = getLatestSitrepVersion(sitrepVersions)
-    const updatedByLine = `${incident.lastUpdate} by ${getHumanSitrepAuthorName(latestVersion)}`
-
-    polygonGraphic.attributes = {
-      ...polygonGraphic.attributes,
-      title: incident.name,
-      kind: incident.type,
-      status: incident.status,
-      owner: incident.lead,
-      timestamp: incident.lastUpdate,
-      updatedByLine,
-      executiveSummary,
-    }
-    polygonGraphic.popupTemplate = {
-      title: '{title}',
-      content:
-        '<b>Type:</b> {kind}<br/><b>Status:</b> {status}<br/><b>Owner:</b> {owner}<br/><b>Updated:</b> {updatedByLine}<br/><b>Executive Summary:</b> {executiveSummary}',
-    }
-
-    void (async () => {
-      try {
-        const geometry = polygonGraphic.geometry
-        if (!geometry) {
-          return
-        }
-
-        view.padding = getMapViewportPadding()
-        await view.goTo(geometry, { animate: false })
-      } catch {
-        return
-      }
-
-      await alignMapPointInVisibleArea(view, incident.location)
-
-      const popupLocation = new Point({
-        longitude: incident.location[0],
-        latitude: incident.location[1],
-      })
-
-      const popup = view.popup
-      if (!popup) {
-        return
-      }
-
-      popup.alignment = 'top-right'
-      view.openPopup({
-        features: [polygonGraphic],
-        location: popupLocation,
-      })
-
-      await adjustMapViewForOpenPopup(view, polygonGraphic, popupLocation)
-      popup.alignment = 'auto'
-    })()
+    void focusMapItem(`sitrep-ongoing-${incident.id}`, incident.location, 500_000)
   }
 
   const updateAorActionTiming = (
@@ -27849,7 +27328,7 @@ function App() {
                                     : null
                                   if (linkedAor) {
                                     void focusMapItem(
-                                      `fema-aor-${linkedAor.id}`,
+                                      hubAorDistrictBoundaryId(linkedAor.id),
                                       linkedAor.location,
                                       10_000_000
                                     )
@@ -30062,6 +29541,9 @@ function App() {
                     onFocusMap={(mapKey, location, scale) => {
                       void focusMapItem(mapKey, location, scale)
                     }}
+                    enabledBoundaryIds={enabledAorBoundaryIds}
+                    onToggleBoundary={toggleAorBoundary}
+                    onHideAllBoundaries={hideAllAorBoundaries}
                   />
                 )}
 

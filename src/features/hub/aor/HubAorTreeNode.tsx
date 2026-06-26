@@ -14,6 +14,8 @@ import {
 } from '@/features/hub/aor/highlight-match'
 import type { HubAorNodeView, HubAorSearchResult } from '@/features/hub/aor/hub-aor-types'
 import { HUB_AOR_NODE_KIND_LABELS } from '@/features/hub/aor/hub-aor-types'
+import { hubAorSectorBoundaryId } from '@/features/hub/aor/aor-boundary-map-keys'
+import { HubAorMapBoundaryToggle } from '@/features/hub/aor/HubAorMapBoundaryToggle'
 
 type HubAorTreeNodeProps = {
   nodeView: HubAorNodeView
@@ -32,6 +34,8 @@ type HubAorTreeNodeProps = {
   isAssetAssignmentsLoading: boolean
   onAssetAssignmentChange: (assetKey: string, workspaceId: string | null) => void
   onFocusMap: (mapKey: string, location: [number, number], scale: number) => void
+  enabledBoundaryIds: Set<string>
+  onToggleBoundary: (boundaryId: string, checked: boolean) => void
 }
 
 export function HubAorTreeNode({
@@ -51,6 +55,8 @@ export function HubAorTreeNode({
   isAssetAssignmentsLoading,
   onAssetAssignmentChange,
   onFocusMap,
+  enabledBoundaryIds,
+  onToggleBoundary,
 }: HubAorTreeNodeProps) {
   const { node, children, assets } = nodeView
   const panelKey = `hub-aor-node-${node.id}`
@@ -98,6 +104,14 @@ export function HubAorTreeNode({
               ) : null}
             </ItemContent>
             <ItemActions>
+              {node.kind === 'sector' ? (
+                <HubAorMapBoundaryToggle
+                  boundaryId={hubAorSectorBoundaryId(node.id)}
+                  enabledBoundaryIds={enabledBoundaryIds}
+                  ariaLabel={`Show ${node.name} on map`}
+                  onToggleBoundary={onToggleBoundary}
+                />
+              ) : null}
               <Button
                 variant="ghost"
                 size="icon"
@@ -105,7 +119,11 @@ export function HubAorTreeNode({
                 onClick={(event) => {
                   event.stopPropagation()
                   onSelectPanelItem(panelKey)
-                  onFocusMap(`hub-aor-node-${node.id}`, mapLocation, 500_000)
+                  const mapKey =
+                    node.kind === 'sector'
+                      ? hubAorSectorBoundaryId(node.id)
+                      : `hub-aor-node-${node.id}`
+                  onFocusMap(mapKey, mapLocation, 500_000)
                 }}
               >
                 <MapIcon className="h-4 w-4" />
@@ -172,6 +190,8 @@ export function HubAorTreeNode({
                     isAssetAssignmentsLoading={isAssetAssignmentsLoading}
                     onAssetAssignmentChange={onAssetAssignmentChange}
                     onFocusMap={onFocusMap}
+                    enabledBoundaryIds={enabledBoundaryIds}
+                    onToggleBoundary={onToggleBoundary}
                   />
                 ))}
               </div>
