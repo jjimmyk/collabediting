@@ -4,18 +4,22 @@ import type {
   MselInjectDeliveryGroup,
   MselInjectSnapshot,
 } from './types'
+import { normalizeSnapshotMapFeatures } from './msel-geometry-utils'
 import { getExerciseObjectiveLabel } from './msel-utils'
 
 export function buildMselInjectSnapshot(inject: MselInject): MselInjectSnapshot {
-  return {
+  const normalized = normalizeSnapshotMapFeatures({
     id: inject.id,
     objectiveId: inject.objectiveId ?? null,
     scheduledTime: inject.scheduledTime ?? '',
     category: inject.category ?? 'Operations',
     inject: inject.inject ?? '',
     expectedAction: inject.expectedAction ?? '',
+    mapFeatures: inject.mapFeatures,
     mapLocation: inject.mapLocation ?? null,
-  }
+  })
+
+  return normalized
 }
 
 export function buildMselInjectNotificationContent(options: {
@@ -66,7 +70,9 @@ export function mapDeliveryRow(row: Record<string, unknown>): MselInjectDelivery
     title: String(row.title),
     summary: String(row.summary),
     severity: String(row.severity ?? 'Medium'),
-    injectSnapshot: (row.inject_snapshot ?? row.injectSnapshot) as MselInjectSnapshot,
+    injectSnapshot: normalizeSnapshotMapFeatures(
+      (row.inject_snapshot ?? row.injectSnapshot) as MselInjectSnapshot
+    ),
     sentByEmail:
       row.sent_by_email != null
         ? String(row.sent_by_email)

@@ -14,8 +14,9 @@ import {
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { cn } from '@/lib/utils'
+import { MSEL_INJECT_CATEGORIES } from './constants'
 import type { ExerciseMselState, MselInject } from './types'
-import { getExerciseObjectiveLabel } from './msel-utils'
+import { getExerciseObjectiveLabel, nextMselInjectId } from './msel-utils'
 
 export type FunctionalMselInjectsEditorProps = {
   objectives: ExerciseMselState['objectives']
@@ -25,6 +26,7 @@ export type FunctionalMselInjectsEditorProps = {
   onInjectsChange: (updater: (previous: MselInject[]) => MselInject[]) => void
   renderExtraActions?: (inject: MselInject) => ReactNode
   renderInjectSummarySuffix?: (inject: MselInject) => ReactNode
+  renderExpandedSection?: (inject: MselInject) => ReactNode
 }
 
 export function FunctionalMselInjectsEditor({
@@ -35,9 +37,10 @@ export function FunctionalMselInjectsEditor({
   onInjectsChange,
   renderExtraActions,
   renderInjectSummarySuffix,
+  renderExpandedSection,
 }: FunctionalMselInjectsEditorProps) {
   const addInject = () => {
-    const nextId = injects.length > 0 ? Math.max(...injects.map((row) => row.id)) + 1 : 1
+    const nextId = nextMselInjectId(injects)
     onInjectsChange((previous) => [
       ...previous,
       {
@@ -47,6 +50,7 @@ export function FunctionalMselInjectsEditor({
         category: 'Operations',
         inject: '',
         expectedAction: '',
+        mapFeatures: [],
         mapLocation: null,
       },
     ])
@@ -175,18 +179,33 @@ export function FunctionalMselInjectsEditor({
                   </div>
                   <div className="grid gap-2">
                     <Label htmlFor={`exercise-msel-category-${row.id}`}>Category</Label>
-                    <Input
-                      id={`exercise-msel-category-${row.id}`}
-                      value={row.category}
-                      onChange={(event) => {
-                        const value = event.target.value
+                    <Select
+                      value={row.category || 'Operations'}
+                      onValueChange={(value) => {
                         onInjectsChange((previous) =>
                           previous.map((entry) =>
                             entry.id === row.id ? { ...entry, category: value } : entry
                           )
                         )
                       }}
-                    />
+                    >
+                      <SelectTrigger id={`exercise-msel-category-${row.id}`}>
+                        <SelectValue placeholder="Select category" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {MSEL_INJECT_CATEGORIES.map((category) => (
+                          <SelectItem key={category} value={category}>
+                            {category}
+                          </SelectItem>
+                        ))}
+                        {!MSEL_INJECT_CATEGORIES.includes(
+                          row.category as (typeof MSEL_INJECT_CATEGORIES)[number]
+                        ) &&
+                          row.category.trim() && (
+                            <SelectItem value={row.category}>{row.category}</SelectItem>
+                          )}
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div className="grid gap-2 md:col-span-2">
                     <Label htmlFor={`exercise-msel-inject-${row.id}`}>Inject</Label>
@@ -222,6 +241,9 @@ export function FunctionalMselInjectsEditor({
                       placeholder="Describe the expected participant or controller response."
                     />
                   </div>
+                  {renderExpandedSection ? (
+                    <div className="md:col-span-2">{renderExpandedSection(row)}</div>
+                  ) : null}
                 </div>
               </CollapsibleContent>
             </Collapsible>

@@ -4,6 +4,7 @@ import {
   buildMselInjectPopupContent,
   defaultExerciseMselState,
   getExerciseObjectiveLabel,
+  getInjectMapFeatures,
   normalizeExerciseMselState,
 } from '@/features/exercise-msel/msel-utils'
 import {
@@ -38,6 +39,7 @@ describe('exercise-msel utils', () => {
     })
 
     expect(state.injects[0].mapLocation).toEqual([-97.74, 30.27])
+    expect(getInjectMapFeatures(state.injects[0])).toHaveLength(1)
     expect('mode' in state).toBe(false)
   })
 
@@ -69,19 +71,24 @@ describe('exercise-msel utils', () => {
 })
 
 describe('exercise-msel map utils', () => {
-  it('creates graphic attributes for inject popup sync', () => {
-    const attributes = buildMselInjectGraphicAttributes(
-      {
-        id: 4,
-        objectiveId: 1,
-        scheduledTime: '10:00',
-        category: 'Operations',
-        inject: 'Power outage',
-        expectedAction: 'Assess grid',
-        mapLocation: [-95.36, 29.76],
-      },
-      'Life safety'
-    )
+  it('creates graphics for point map features', () => {
+    const inject = {
+      id: 4,
+      objectiveId: 1,
+      scheduledTime: '10:00',
+      category: 'Operations',
+      inject: 'Power outage',
+      expectedAction: 'Assess grid',
+      mapFeatures: [
+        {
+          id: 'point-1',
+          type: 'point' as const,
+          coordinates: [-95.36, 29.76] as [number, number],
+        },
+      ],
+      mapLocation: [-95.36, 29.76] as [number, number],
+    }
+    const attributes = buildMselInjectGraphicAttributes(inject, 'Life safety', inject.mapFeatures![0])
 
     expect(attributes.kind).toBe(MSEL_INJECT_MAP_KIND)
     expect(attributes.injectId).toBe(4)
@@ -98,6 +105,8 @@ describe('exercise-msel map utils', () => {
           category: 'Operations',
           inject: '',
           expectedAction: '',
+          mapFeatures: [],
+          mapLocation: null,
         },
         defaultExerciseMselState().objectives
       )

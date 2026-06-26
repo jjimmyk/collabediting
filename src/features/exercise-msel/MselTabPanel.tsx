@@ -1,7 +1,8 @@
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
-import type { ExerciseMselState, MselInject, MselInjectDelivery, MselViewTab } from './types'
+import type { ExerciseMselState, MselInject, MselInjectDelivery, MselMapPlacementMode, MselViewTab } from './types'
+import { ExerciseObjectivesEditor } from './ExerciseObjectivesEditor'
 import { FunctionalMselInjectsEditor } from './FunctionalMselInjectsEditor'
 import { TabletopMselInjectsEditor } from './TabletopMselInjectsEditor'
 import { InjectsReceivedList } from './InjectsReceivedList'
@@ -15,11 +16,17 @@ export type MselTabPanelProps = {
   injects: MselInject[]
   expandedInjectId: number | null
   onExpandedInjectIdChange: (injectId: number | null) => void
+  onObjectivesChange: (
+    updater: (previous: ExerciseMselState['objectives']) => ExerciseMselState['objectives']
+  ) => void
   onInjectsChange: (updater: (previous: MselInject[]) => MselInject[]) => void
   activePlacementInjectId: number | null
-  onStartPlacement: (injectId: number) => void
+  activePlacementMode: MselMapPlacementMode | null
+  onStartPlacement: (injectId: number, mode: MselMapPlacementMode) => void
   onFocusOnMap: (inject: MselInject) => void
   onFocusDeliveryOnMap?: (delivery: MselInjectDelivery) => void
+  onRemoveMapFeature: (injectId: number, featureId: string) => void
+  onClearMapFeatures: (injectId: number) => void
   deliveryCountByInjectId: Record<number, number>
   onSendInject: (inject: MselInject) => void
   deliveries: MselInjectDelivery[]
@@ -37,11 +44,15 @@ export function MselTabPanel({
   injects,
   expandedInjectId,
   onExpandedInjectIdChange,
+  onObjectivesChange,
   onInjectsChange,
   activePlacementInjectId,
+  activePlacementMode,
   onStartPlacement,
   onFocusOnMap,
   onFocusDeliveryOnMap,
+  onRemoveMapFeature,
+  onClearMapFeatures,
   deliveryCountByInjectId,
   onSendInject,
   deliveries,
@@ -94,6 +105,15 @@ export function MselTabPanel({
         </div>
       )}
 
+      {viewTab !== 'received' && (
+        <ExerciseObjectivesEditor
+          objectives={objectives}
+          injects={injects}
+          onObjectivesChange={onObjectivesChange}
+          onInjectsChange={onInjectsChange}
+        />
+      )}
+
       {isTabletopWorkspace && viewTab === 'received' ? (
         <InjectsReceivedList
           deliveries={deliveries}
@@ -113,8 +133,11 @@ export function MselTabPanel({
           onExpandedInjectIdChange={onExpandedInjectIdChange}
           onInjectsChange={onInjectsChange}
           activePlacementInjectId={activePlacementInjectId}
+          activePlacementMode={activePlacementMode}
           onStartPlacement={onStartPlacement}
           onFocusOnMap={onFocusOnMap}
+          onRemoveMapFeature={onRemoveMapFeature}
+          onClearMapFeatures={onClearMapFeatures}
           deliveryCountByInjectId={deliveryCountByInjectId}
           onSendInject={onSendInject}
         />

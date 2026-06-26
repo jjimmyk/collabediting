@@ -874,7 +874,18 @@ import {
 import { useExerciseMselPersistence } from '@/features/exercise-msel/useExerciseMselPersistence'
 import { useMselInjectDeliveries } from '@/features/exercise-msel/useMselInjectDeliveries'
 import { useMselInjectMapLayer } from '@/features/exercise-msel/useMselInjectMapLayer'
-import type { MselInject, MselInjectDelivery, MselViewTab } from '@/features/exercise-msel/types'
+import {
+  getInjectMapFeatures,
+  getMapFeaturesExtent,
+  normalizeInjectMapFeatures,
+} from '@/features/exercise-msel/msel-geometry-utils'
+import type {
+  MselInject,
+  MselInjectDelivery,
+  MselMapFeature,
+  MselMapPlacementMode,
+  MselViewTab,
+} from '@/features/exercise-msel/types'
 import { sendMselInjectViaApi } from '@/lib/exercise-msel-delivery-service'
 import type { WorkspaceMetadataRecord } from '@/lib/workspace-types'
 import { ICS_POSITIONS, WORKSPACE_ROSTER_POSITIONS } from '@/lib/ics-positions'
@@ -12087,6 +12098,9 @@ function App() {
   const [activeMselPlacementInjectId, setActiveMselPlacementInjectId] = useState<number | null>(
     null
   )
+  const [activeMselPlacementMode, setActiveMselPlacementMode] = useState<MselMapPlacementMode | null>(
+    null
+  )
   const activeExerciseAccessibleMetadata = useMemo(() => {
     if (!isSupabaseEnabled || !activeWorkspaceSupabaseId) {
       return null
@@ -12122,8 +12136,103 @@ function App() {
   useEffect(() => {
     if (activeTab !== 'msel' || !isActiveTabletopExerciseWorkspace || mselViewTab !== 'schedule') {
       setActiveMselPlacementInjectId(null)
+      setActiveMselPlacementMode(null)
     }
   }, [activeTab, isActiveTabletopExerciseWorkspace, mselViewTab])
+  const focusMselMapFeatures = useCallback((features: ReturnType<typeof getInjectMapFeatures>) => {
+    const view = mapViewRef.current
+    if (!view || features.length === 0) {
+      return
+    }
+
+    if (features.length === 1 && features[0]?.type === 'point') {
+      const [longitude, latitude] = features[0].coordinates
+      void view.goTo({ center: [longitude, latitude], zoom: 12 })
+      return
+    }
+
+    const extent = getMapFeaturesExtent(features)
+    if (!extent) {
+      return
+    }
+
+    const span = Math.max(extent.xmax - extent.xmin, extent.ymax - extent.ymin)
+    const zoom = span > 5 ? 6 : span > 1 ? 8 : span > 0.2 ? 10 : 12
+    void view.goTo({
+      center: [(extent.xmin + extent.xmax) / 2, (extent.ymin + extent.ymax) / 2],
+      zoom,
+    })
+  }, [])
+  const focusMselInjectOnMap = useCallback(
+    (inject: MselInject) => {
+      focusMselMapFeatures(getInjectMapFeatures(inject))
+    },
+    [focusMselMapFeatures]
+  )
+  const focusMselDeliveryOnMap = useCallback(
+    (delivery: MselInjectDelivery) => {
+      focusMselMapFeatures(getInjectMapFeatures(delivery.injectSnapshot))
+    },
+    [focusMselMapFeatures]
+  )
+  const handleAddMselMapFeature = useCallback(
+    (injectId: number, feature: MselMapFeature) => {
+      setWorkspaceMselState((previous) => ({
+        ...previous,
+        injects: previous.injects.map((inject) => {
+          if (inject.id !== injectId) {
+            return inject
+          }
+          return normalizeInjectMapFeatures({
+            ...inject,
+            mapFeatures: [...getInjectMapFeatures(inject), feature],
+          })
+        }),
+      }))
+      setActiveMselPlacementInjectId(null)
+      setActiveMselPlacementMode(null)
+    },
+    [setWorkspaceMselState]
+  )
+  const handleRemoveMselMapFeature = useCallback(
+    (injectId: number, featureId: string) => {
+      setWorkspaceMselState((previous) => ({
+        ...previous,
+        injects: previous.injects.map((inject) => {
+          if (inject.id !== injectId) {
+            return inject
+          }
+          return normalizeInjectMapFeatures({
+            ...inject,
+            mapFeatures: getInjectMapFeatures(inject).filter((feature) => feature.id !== featureId),
+          })
+        }),
+      }))
+    },
+    [setWorkspaceMselState]
+  )
+  const handleClearMselMapFeatures = useCallback(
+    (injectId: number) => {
+      setWorkspaceMselState((previous) => ({
+        ...previous,
+        injects: previous.injects.map((inject) =>
+          inject.id === injectId
+            ? normalizeInjectMapFeatures({ ...inject, mapFeatures: [], mapLocation: null })
+            : inject
+        ),
+      }))
+      if (activeMselPlacementInjectId === injectId) {
+        setActiveMselPlacementInjectId(null)
+        setActiveMselPlacementMode(null)
+      }
+    },
+    [activeMselPlacementInjectId, setWorkspaceMselState]
+  )
+  const handleStartMselPlacement = useCallback((injectId: number, mode: MselMapPlacementMode) => {
+    setActiveMselPlacementInjectId(injectId)
+    setActiveMselPlacementMode(mode)
+    setWorkspaceMselExpandedInjectId(injectId)
+  }, [])
   const {
     deliveries: mselInjectDeliveries,
     appendDeliveries: appendMselInjectDeliveries,
@@ -12137,48 +12246,14 @@ function App() {
     () => countDeliveriesByInjectId(mselInjectDeliveries),
     [mselInjectDeliveries]
   )
-  const focusMselInjectOnMap = useCallback((inject: MselInject) => {
-    const view = mapViewRef.current
-    if (!view || !inject.mapLocation) {
-      return
-    }
-    const [longitude, latitude] = inject.mapLocation
-    void view.goTo({ center: [longitude, latitude], zoom: 12 })
-  }, [])
-  const focusMselDeliveryOnMap = useCallback((delivery: MselInjectDelivery) => {
-    const location = delivery.injectSnapshot.mapLocation
-    if (!location) {
-      return
-    }
-    focusMselInjectOnMap({
-      id: delivery.injectId,
-      objectiveId: delivery.injectSnapshot.objectiveId,
-      scheduledTime: delivery.injectSnapshot.scheduledTime,
-      category: delivery.injectSnapshot.category,
-      inject: delivery.injectSnapshot.inject,
-      expectedAction: delivery.injectSnapshot.expectedAction,
-      mapLocation: location,
-    })
-  }, [focusMselInjectOnMap])
-  const handlePlaceMselInjectOnMap = useCallback(
-    (injectId: number, location: [number, number]) => {
-      setWorkspaceMselState((previous) => ({
-        ...previous,
-        injects: previous.injects.map((inject) =>
-          inject.id === injectId ? { ...inject, mapLocation: location } : inject
-        ),
-      }))
-      setActiveMselPlacementInjectId(null)
-    },
-    [setWorkspaceMselState]
-  )
   useMselInjectMapLayer({
     enabled: showMselMapLayer,
     mapViewRef,
     injects: workspaceMselState.injects,
     objectives: workspaceMselState.objectives,
     activePlacementInjectId: activeMselPlacementInjectId,
-    onPlaceInject: handlePlaceMselInjectOnMap,
+    activePlacementMode: activeMselPlacementMode,
+    onAddMapFeature: handleAddMselMapFeature,
     onSelectInjectFromMap: (injectId) => {
       setWorkspaceMselExpandedInjectId(injectId)
     },
@@ -33217,10 +33292,19 @@ function App() {
                         injects: updater(previous.injects),
                       }))
                     }
+                    onObjectivesChange={(updater) =>
+                      setWorkspaceMselState((previous) => ({
+                        ...previous,
+                        objectives: updater(previous.objectives),
+                      }))
+                    }
                     activePlacementInjectId={activeMselPlacementInjectId}
-                    onStartPlacement={setActiveMselPlacementInjectId}
+                    activePlacementMode={activeMselPlacementMode}
+                    onStartPlacement={handleStartMselPlacement}
                     onFocusOnMap={focusMselInjectOnMap}
                     onFocusDeliveryOnMap={focusMselDeliveryOnMap}
+                    onRemoveMapFeature={handleRemoveMselMapFeature}
+                    onClearMapFeatures={handleClearMselMapFeatures}
                     deliveryCountByInjectId={mselDeliveryCountByInjectId}
                     onSendInject={(inject) => {
                       setSendMselInjectTarget(inject)

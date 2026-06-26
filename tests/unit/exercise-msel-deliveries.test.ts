@@ -8,6 +8,7 @@ import {
   groupDeliveriesByInject,
   mapDeliveryRow,
 } from '@/features/exercise-msel/delivery-utils'
+import { getInjectMapFeatures } from '@/features/exercise-msel/msel-geometry-utils'
 import type { MselInjectDelivery } from '@/features/exercise-msel/types'
 
 const baseInject = {
@@ -61,7 +62,8 @@ describe('exercise-msel delivery utils', () => {
       'Regional Tabletop'
     )
 
-    expect(bundle.snapshot.mapLocation).toEqual([-97.74, 30.27])
+    expect(bundle.snapshot.mapFeatures?.[0]?.type).toBe('point')
+    expect(getInjectMapFeatures(bundle.snapshot)[0]?.type).toBe('point')
     expect(bundle.title).toBe('Bridge closure reported')
   })
 

@@ -5,6 +5,7 @@ type NormalizedMselInject = {
   category: string
   inject: string
   expectedAction: string
+  mapFeatures?: unknown[]
   mapLocation?: [number, number] | null
 }
 
@@ -79,6 +80,9 @@ export function normalizeExerciseMselMetadata(raw: unknown): NormalizedExerciseM
             normalized.mapLocation = inject.mapLocation
           } else if (inject.mapLocation === null) {
             normalized.mapLocation = null
+          }
+          if (Array.isArray(inject.mapFeatures)) {
+            normalized.mapFeatures = inject.mapFeatures
           }
           return normalized
         })

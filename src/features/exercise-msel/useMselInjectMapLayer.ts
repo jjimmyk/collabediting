@@ -3,7 +3,10 @@ import GraphicsLayer from '@arcgis/core/layers/GraphicsLayer'
 import SketchViewModel from '@arcgis/core/widgets/Sketch/SketchViewModel'
 import type MapView from '@arcgis/core/views/MapView'
 import type Point from '@arcgis/core/geometry/Point'
-import type { ExerciseMselState, MselInject } from './types'
+import type Geometry from '@arcgis/core/geometry/Geometry'
+import type Polygon from '@arcgis/core/geometry/Polygon'
+import { createMselMapFeatureId } from './msel-geometry-utils'
+import type { ExerciseMselState, MselInject, MselMapFeature, MselMapPlacementMode } from './types'
 import { isMselInjectGraphicHit, syncMselInjectGraphics } from './msel-map-utils'
 
 type UseMselInjectMapLayerOptions = {
@@ -12,8 +15,48 @@ type UseMselInjectMapLayerOptions = {
   injects: MselInject[]
   objectives: ExerciseMselState['objectives']
   activePlacementInjectId: number | null
-  onPlaceInject: (injectId: number, location: [number, number]) => void
+  activePlacementMode: MselMapPlacementMode | null
+  onAddMapFeature: (injectId: number, feature: MselMapFeature) => void
   onSelectInjectFromMap: (injectId: number) => void
+}
+
+function geometryToMapFeature(geometry: Geometry): MselMapFeature | null {
+  if (geometry.type === 'point') {
+    const point = geometry as Point
+    const latitude = point.latitude
+    const longitude = point.longitude
+    if (latitude == null || longitude == null) {
+      return null
+    }
+    return {
+      id: createMselMapFeatureId(),
+      type: 'point',
+      coordinates: [longitude, latitude],
+    }
+  }
+
+  if (geometry.type === 'polygon') {
+    const polygon = geometry as Polygon
+    const rings = polygon.rings
+      ?.map((ring) =>
+        ring
+          .filter((pair) => pair.length >= 2)
+          .map((pair) => [pair[0], pair[1]] as [number, number])
+      )
+      .filter((ring) => ring.length >= 3)
+
+    if (!rings || rings.length === 0) {
+      return null
+    }
+
+    return {
+      id: createMselMapFeatureId(),
+      type: 'polygon',
+      rings,
+    }
+  }
+
+  return null
 }
 
 export function useMselInjectMapLayer(options: UseMselInjectMapLayerOptions) {
@@ -121,13 +164,12 @@ export function useMselInjectMapLayer(options: UseMselInjectMapLayerOptions) {
   useEffect(() => {
     const view = options.mapViewRef.current
     const placementLayer = placementLayerRef.current
-    if (!view || !placementLayer || !options.enabled) {
-      return
-    }
+    const injectId = options.activePlacementInjectId
+    const placementMode = options.activePlacementMode
 
-    if (options.activePlacementInjectId == null) {
+    if (!view || !placementLayer || !options.enabled || injectId == null || placementMode == null) {
       sketchRef.current?.cancel()
-      placementLayer.removeAll()
+      placementLayer?.removeAll()
       return
     }
 
@@ -142,6 +184,14 @@ export function useMselInjectMapLayer(options: UseMselInjectMapLayerOptions) {
       view,
       layer: placementLayer,
       updateOnGraphicClick: false,
+      polygonSymbol: {
+        type: 'simple-fill',
+        color: [168, 85, 247, 0.25],
+        outline: {
+          color: [168, 85, 247, 0.95],
+          width: 1.6,
+        },
+      },
     })
 
     sketch.on('create', (event) => {
@@ -149,28 +199,18 @@ export function useMselInjectMapLayer(options: UseMselInjectMapLayerOptions) {
         return
       }
 
-      const geometry = event.graphic.geometry
-      if (geometry.type !== 'point') {
+      const feature = geometryToMapFeature(event.graphic.geometry)
+      const activeInjectId = optionsRef.current.activePlacementInjectId
+      if (!feature || activeInjectId == null) {
         return
       }
 
-      const latitude = geometry.latitude
-      const longitude = geometry.longitude
-      if (latitude == null || longitude == null) {
-        return
-      }
-
-      const injectId = optionsRef.current.activePlacementInjectId
-      if (injectId == null) {
-        return
-      }
-
-      optionsRef.current.onPlaceInject(injectId, [longitude, latitude])
+      optionsRef.current.onAddMapFeature(activeInjectId, feature)
       placementLayer.removeAll()
       sketch.cancel()
     })
 
-    sketch.create('point')
+    sketch.create(placementMode)
     sketchRef.current = sketch
 
     return () => {
@@ -179,7 +219,12 @@ export function useMselInjectMapLayer(options: UseMselInjectMapLayerOptions) {
         sketchRef.current = null
       }
     }
-  }, [options.activePlacementInjectId, options.enabled, options.mapViewRef])
+  }, [
+    options.activePlacementInjectId,
+    options.activePlacementMode,
+    options.enabled,
+    options.mapViewRef,
+  ])
 
   useEffect(() => {
     return () => {

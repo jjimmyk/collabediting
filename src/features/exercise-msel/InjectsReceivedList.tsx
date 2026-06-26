@@ -1,5 +1,4 @@
 import { ChevronDown, MapPin } from 'lucide-react'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { Item } from '@/components/ui/item'
@@ -8,6 +7,8 @@ import {
   formatMselDeliveryTimestamp,
   groupDeliveriesByInject,
 } from '@/features/exercise-msel/delivery-utils'
+import { hasInjectMapGeometry } from '@/features/exercise-msel/msel-geometry-utils'
+import { MselInjectDetailPanel } from '@/features/exercise-msel/MselInjectDetailPanel'
 import type { MselInjectDelivery, MselInjectDeliveryGroup } from '@/features/exercise-msel/types'
 import { getExerciseObjectiveLabel } from '@/features/exercise-msel/msel-utils'
 import type { ExerciseMselState } from '@/features/exercise-msel/types'
@@ -65,11 +66,11 @@ export function InjectsReceivedList({
             className="flex-col items-stretch"
             data-testid={`msel-received-group-${group.injectId}`}
           >
-            <Collapsible defaultOpen>
+            <Collapsible defaultOpen={false}>
               <div className="flex items-center gap-2 px-3 py-2.5">
                 <CollapsibleTrigger asChild>
                   <Button type="button" variant="ghost" size="icon" aria-label={`Toggle ${title}`}>
-                    <ChevronDown className="h-4 w-4" />
+                    <ChevronDown className="h-4 w-4 transition-transform [[data-state=open]_&]:rotate-180" />
                   </Button>
                 </CollapsibleTrigger>
                 <div className="min-w-0 flex-1">
@@ -80,7 +81,7 @@ export function InjectsReceivedList({
                     {group.deliveries.length === 1 ? 'y' : 'ies'}
                   </p>
                 </div>
-                {snapshot.mapLocation && onFocusOnMap && (
+                {hasInjectMapGeometry(snapshot) && onFocusOnMap && (
                   <Button
                     type="button"
                     variant="outline"
@@ -93,25 +94,35 @@ export function InjectsReceivedList({
                 )}
               </div>
               <CollapsibleContent>
-                <div className="space-y-2 border-t px-3 py-3">
-                  {group.deliveries.map((delivery) => (
-                    <div
-                      key={delivery.id}
-                      className={cn('rounded-md border px-3 py-2 text-sm')}
-                      data-testid={`msel-received-delivery-${delivery.id}`}
-                    >
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <span className="font-medium">{delivery.recipientEmail}</span>
-                        <span className="text-xs text-muted-foreground">
-                          {formatMselDeliveryTimestamp(delivery.createdAt)}
-                        </span>
+                <div className="space-y-3 border-t px-3 py-3">
+                  <MselInjectDetailPanel
+                    snapshot={snapshot}
+                    objectives={objectives}
+                    deliveries={group.deliveries}
+                    onFocusOnMap={
+                      onFocusOnMap
+                        ? () => onFocusOnMap(group.deliveries[0])
+                        : undefined
+                    }
+                  />
+                  <div className="grid gap-2 border-t pt-3">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                      Notification summary
+                    </p>
+                    {group.deliveries.map((delivery) => (
+                      <div
+                        key={delivery.id}
+                        className={cn('rounded-md border px-3 py-2 text-xs text-muted-foreground')}
+                        data-testid={`msel-received-delivery-summary-${delivery.id}`}
+                      >
+                        <span className="font-medium text-foreground">{delivery.recipientEmail}</span>
+                        {' · '}
+                        {formatMselDeliveryTimestamp(delivery.createdAt)}
+                        {' · '}
+                        {delivery.summary}
                       </div>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        Sent by {delivery.sentByEmail ?? 'Unknown'} · {delivery.severity}
-                      </p>
-                      <p className="mt-2 text-xs">{delivery.summary}</p>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
               </CollapsibleContent>
             </Collapsible>

@@ -1,3 +1,9 @@
+import { normalizeMselCategory } from './constants'
+import {
+  getInjectMapFeatures,
+  hasInjectMapGeometry,
+  normalizeInjectMapFeatures,
+} from './msel-geometry-utils'
 import type { ExerciseMselState, MselInject } from './types'
 
 function escapeHtml(value: string): string {
@@ -40,7 +46,7 @@ function normalizeInject(raw: unknown): MselInject | null {
           ? null
           : null,
     scheduledTime: typeof record.scheduledTime === 'string' ? record.scheduledTime : '',
-    category: typeof record.category === 'string' ? record.category : 'Operations',
+    category: normalizeMselCategory(record.category),
     inject: typeof record.inject === 'string' ? record.inject : '',
     expectedAction: typeof record.expectedAction === 'string' ? record.expectedAction : '',
   }
@@ -51,7 +57,11 @@ function normalizeInject(raw: unknown): MselInject | null {
     inject.mapLocation = null
   }
 
-  return inject
+  if (Array.isArray(record.mapFeatures)) {
+    inject.mapFeatures = record.mapFeatures as MselInject['mapFeatures']
+  }
+
+  return normalizeInjectMapFeatures(inject)
 }
 
 export function defaultExerciseMselInjects(): MselInject[] {
@@ -63,6 +73,7 @@ export function defaultExerciseMselInjects(): MselInject[] {
       category: 'Operations',
       inject: '',
       expectedAction: '',
+      mapFeatures: [],
       mapLocation: null,
     },
   ]
@@ -126,10 +137,7 @@ export function buildExerciseMselFromParts(options: {
 }): ExerciseMselState {
   return normalizeExerciseMselState({
     objectives: options.objectives,
-    injects: options.injects.map((inject) => ({
-      ...inject,
-      mapLocation: inject.mapLocation ?? null,
-    })),
+    injects: options.injects,
   })
 }
 
@@ -155,6 +163,11 @@ export function buildMselInjectPopupContent(
   const category = inject.category.trim() || 'Uncategorized'
   const injectText = inject.inject.trim() || 'No inject text'
   const expectedAction = inject.expectedAction.trim() || 'No expected action'
+  const mapFeatureCount = getInjectMapFeatures(inject).length
+  const mapLine =
+    mapFeatureCount > 0
+      ? `<b>Map:</b> ${mapFeatureCount} shape${mapFeatureCount === 1 ? '' : 's'}`
+      : null
 
   return [
     `<b>Scheduled Time:</b> ${escapeHtml(scheduledTime)}`,
@@ -162,12 +175,17 @@ export function buildMselInjectPopupContent(
     `<b>Objective:</b> ${escapeHtml(objectiveLabel)}`,
     `<b>Inject:</b> ${escapeHtml(injectText)}`,
     `<b>Expected Action:</b> ${escapeHtml(expectedAction)}`,
-  ].join('<br/>')
+    mapLine,
+  ]
+    .filter((line): line is string => Boolean(line))
+    .join('<br/>')
 }
 
 export function mergeMselInjectUpdate(inject: MselInject, patch: Partial<MselInject>): MselInject {
-  return { ...inject, ...patch }
+  return normalizeInjectMapFeatures({ ...inject, ...patch })
 }
+
+export { getInjectMapFeatures, hasInjectMapGeometry }
 
 export function exerciseMselStorageKey(workspaceKey: string): string {
   return `exercise-msel-${workspaceKey}`
@@ -197,4 +215,16 @@ export function writeLocalExerciseMsel(workspaceKey: string, state: ExerciseMsel
     return
   }
   window.localStorage.setItem(exerciseMselStorageKey(workspaceKey), JSON.stringify(state))
+}
+
+export function countLinkedInjectsForObjective(injects: MselInject[], objectiveId: number): number {
+  return injects.filter((inject) => inject.objectiveId === objectiveId).length
+}
+
+export function nextExerciseObjectiveId(objectives: ExerciseMselState['objectives']): number {
+  return objectives.length > 0 ? Math.max(...objectives.map((row) => row.id)) + 1 : 1
+}
+
+export function nextMselInjectId(injects: MselInject[]): number {
+  return injects.length > 0 ? Math.max(...injects.map((row) => row.id)) + 1 : 1
 }
