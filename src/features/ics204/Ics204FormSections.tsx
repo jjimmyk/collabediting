@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { ChevronDown, Trash2 } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
   Collapsible,
@@ -41,6 +42,7 @@ import { ResourceHaveFillButton } from '@/features/resources/ResourceHaveFillBut
 import { fillHaveForResourceRequirementRow } from '@/features/resources/workspace-asset-have-lookup'
 import type { ResourceListItemData } from '@/features/resources/types'
 import { cn } from '@/lib/utils'
+import { is215SyncedResourceRow } from '@/features/ics204/sync-ics215-have-resources'
 
 type Ics204FormSectionsProps = {
   form: Ics204FormState
@@ -61,6 +63,7 @@ type Ics204FormSectionsProps = {
     value: Ics204FormSectionDrafts[S]
   ) => void
   onOpenResourcePicker: () => void
+  onOpenRosterResourcePicker?: () => void
   onOpenIcs204a?: (rowId: number) => void
   onFocusResourceMap?: (resourceId: number, mapLocation: [number, number]) => void
   assigneeOptions?: Ics204AssignedUnitOption[]
@@ -100,6 +103,7 @@ export function Ics204FormSections({
   onGenerateSection,
   onPatchDraft,
   onOpenResourcePicker,
+  onOpenRosterResourcePicker,
   onOpenIcs204a,
   onFocusResourceMap,
   assigneeOptions = [],
@@ -526,19 +530,30 @@ export function Ics204FormSections({
                       key={row.id}
                       className="grid grid-cols-[minmax(0,1fr)_14rem_3.5rem_auto] items-start gap-2"
                     >
-                      <ResourceListItemCard
-                        resource={resourceSnapshot}
-                        glassItemBorderClasses={glassItemBorderClasses}
-                        onFocusMap={
-                          onFocusResourceMap
-                            ? () =>
-                                onFocusResourceMap(
-                                  resourceSnapshot.id,
-                                  resourceSnapshot.mapLocation
-                                )
-                            : undefined
-                        }
-                      />
+                      <div className="min-w-0 space-y-1">
+                        <ResourceListItemCard
+                          resource={resourceSnapshot}
+                          glassItemBorderClasses={glassItemBorderClasses}
+                          onFocusMap={
+                            onFocusResourceMap
+                              ? () =>
+                                  onFocusResourceMap(
+                                    resourceSnapshot.id,
+                                    resourceSnapshot.mapLocation
+                                  )
+                              : undefined
+                          }
+                        />
+                        {is215SyncedResourceRow(row) ? (
+                          <Badge variant="secondary" className="text-[10px]">
+                            From ICS-215 Have
+                          </Badge>
+                        ) : row.manualRosterRef ? (
+                          <Badge variant="outline" className="text-[10px]">
+                            Manual roster
+                          </Badge>
+                        ) : null}
+                      </div>
                       <div className="min-w-0">
                         {editingResources ? (
                           <Textarea
@@ -617,9 +632,21 @@ export function Ics204FormSections({
           </div>
         </div>,
         isSectionEditing(editingSections, 'resources-assigned') ? (
-          <Button type="button" size="sm" variant="outline" onClick={onOpenResourcePicker}>
-            + Add Resource
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button type="button" size="sm" variant="outline" onClick={onOpenResourcePicker}>
+              + Add Resource
+            </Button>
+            {onOpenRosterResourcePicker ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={onOpenRosterResourcePicker}
+              >
+                + Add from Roster
+              </Button>
+            ) : null}
+          </div>
         ) : null
       )}
 

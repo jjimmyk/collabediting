@@ -263,6 +263,15 @@ import {
   syncIcs204WorkAssignmentsToIcs215,
   syncIcs215WorkAssignmentsToLinkedIcs204Forms,
 } from '@/features/ics204/sync-ics215-work-assignments'
+import {
+  buildInitialResourcesAssignedFromIcs215,
+  collectExistingResourceRefKeys,
+  createManualIcs204ResourceAssignedRowFromRef,
+  syncIcs215HaveResourcesToLinkedIcs204Forms,
+  unlinkHaveRefFromIcs215Form,
+  type Ics204HaveResourcesSyncContext,
+} from '@/features/ics204/sync-ics215-have-resources'
+import { Ics204RosterResourceAddDialog } from '@/features/ics204/Ics204RosterResourceAddDialog'
 import { Ics204ExportPreviewDialog } from '@/features/ics204/Ics204ExportPreviewDialog'
 import { Ics204aDocumentDialog } from '@/features/ics204a/Ics204aDocumentDialog'
 import {
@@ -559,6 +568,7 @@ import {
   normalizeIcs204AssignedUnitValue,
   resolveIcs204AssignedUnitRecipients,
 } from '@/features/ics204/ics204-assigned-unit-options'
+import { buildHaveLinkTargetOptions } from '@/lib/work-assignment-target-options'
 import {
   buildIcs204AssignmentNotificationSummary,
   buildIcs204AssignmentNotificationTitle,
@@ -7407,6 +7417,9 @@ function App() {
   const [isPratusAiLoading, setIsPratusAiLoading] = useState(false)
   const pratusAiLoadingTimerRef = useRef<number | null>(null)
   const [ics204ResourcePickerFormId, setIcs204ResourcePickerFormId] = useState<string | null>(null)
+  const [ics204RosterResourcePickerFormId, setIcs204RosterResourcePickerFormId] = useState<
+    string | null
+  >(null)
   const [isIcs204PreviewOpen, setIsIcs204PreviewOpen] = useState(false)
   const [ics204PreviewPages, setIcs204PreviewPages] = useState<Ics204PhysicalPage[]>([])
   const [ics204PreviewTitle, setIcs204PreviewTitle] = useState('ICS-204 Preview')
@@ -14624,6 +14637,29 @@ function App() {
       workspaceAssetsByKey,
       workspacePositionCatalog,
     ]
+  )
+  const resourceCategoriesById = useMemo(() => {
+    const map: Record<
+      string,
+      import('@/lib/workspace-resource-category-types').PositionResourceCategoryEntry & {
+        positionName: string
+      }
+    > = {}
+    for (const entry of positionRosterEntries) {
+      for (const category of entry.resourceCategories) {
+        map[category.id] = { ...category, positionName: entry.position }
+      }
+    }
+    return map
+  }, [positionRosterEntries])
+  const ics204HaveResourcesSyncContext = useMemo(
+    (): Ics204HaveResourcesSyncContext => ({
+      roster: activeWorkspaceRoster,
+      assetsByKey: workspaceAssetsByKey,
+      resourceCategoriesById,
+      haveLinkTargetOptions: buildHaveLinkTargetOptions(workAssignmentTargetOptions),
+    }),
+    [activeWorkspaceRoster, resourceCategoriesById, workAssignmentTargetOptions, workspaceAssetsByKey]
   )
   const ics204AssignedUnitOptionsKey = useMemo(
     () => serializeIcs204AssigneeOptionsKey(ics204AssignedUnitOptions),
@@ -21874,6 +21910,85 @@ function App() {
     }
     setIcs204ResourcePickerFormId(null)
   }
+  const addIcs204RosterResourcesAssigned = (formId: string, refs: string[]) => {
+    const trimmedRefs = refs.map((ref) => ref.trim()).filter(Boolean)
+    if (trimmedRefs.length === 0) return
+
+    const currentForm = ics204Forms.find((entry) => entry.id === formId)
+    if (!currentForm) return
+
+    const existingKeys = collectExistingResourceRefKeys(
+      ics204SectionDraftsByFormId[formId]?.['resources-assigned'] ??
+        currentForm.resourcesAssigned
+    )
+    const newRefs = trimmedRefs.filter((ref) => !existingKeys.has(ref))
+    if (newRefs.length === 0) {
+      toast.message('Selected roster items are already on this ICS-204.')
+      setIcs204RosterResourcePickerFormId(null)
+      return
+    }
+
+    const isEditingResourcesAssigned = Boolean(
+      ics204EditingSectionsByFormId[formId]?.['resources-assigned']
+    )
+    const baseRows =
+      ics204SectionDraftsByFormId[formId]?.['resources-assigned'] ??
+      currentForm.resourcesAssigned
+    let nextId =
+      baseRows.length === 0 ? 1 : Math.max(...baseRows.map((row) => row.id)) + 1
+    const newRows = newRefs.map((ref) => {
+      const row = createManualIcs204ResourceAssignedRowFromRef(
+        baseRows,
+        ref,
+        ics204HaveResourcesSyncContext
+      )
+      const withId = { ...row, id: nextId }
+      nextId += 1
+      return withId
+    })
+    const nextRows = [...baseRows, ...newRows]
+
+    if (isEditingResourcesAssigned) {
+      setIcs204SectionDraftsByFormId((previous) => ({
+        ...previous,
+        [formId]: {
+          ...previous[formId],
+          'resources-assigned': nextRows,
+        },
+      }))
+    } else {
+      setIcs204Forms((previous) =>
+        previous.map((form) =>
+          form.id === formId
+            ? {
+                ...form,
+                resourcesAssigned: nextRows,
+              }
+            : form
+        )
+      )
+      const latestVersion = ics204VersionsById[formId]?.[ics204VersionsById[formId].length - 1]
+      if (latestVersion && latestVersion.signatures.length === 0) {
+        handleIcs204SaveDraft(formId, { ...currentForm, resourcesAssigned: nextRows }, latestVersion)
+      }
+      if (activeWorkspaceSupabaseId) {
+        void syncIcs204AttachmentsForDocument(
+          activeWorkspaceSupabaseId,
+          formId,
+          nextRows
+            .map(getIcs204ResourceRowAssetKey)
+            .filter((assetKey): assetKey is string => Boolean(assetKey))
+        ).catch((syncError) => {
+          console.error(syncError)
+          toast.error('Failed to sync resource attachment.')
+        })
+      }
+    }
+    setIcs204RosterResourcePickerFormId(null)
+    toast.success(
+      `Added ${newRows.length} roster resource${newRows.length === 1 ? '' : 's'} to ICS-204.`
+    )
+  }
   const handleIcs204AttachResourceClick = (formId: string, resource: ResourceListItemData) => {
     const attachedDocumentId = resource.ics204DocumentId
     if (attachedDocumentId && attachedDocumentId !== formId) {
@@ -21889,6 +22004,7 @@ function App() {
   const deleteIcs204ResourceAssignedRow = (formId: string, rowId: number) => {
     const currentForm = ics204Forms.find((entry) => entry.id === formId)
     if (!currentForm) return
+    const deletedRow = currentForm.resourcesAssigned.find((row) => row.id === rowId)
     const nextRows = currentForm.resourcesAssigned.filter((row) => row.id !== rowId)
     setIcs204Forms((previous) =>
       previous.map((form) =>
@@ -21900,6 +22016,20 @@ function App() {
           : form
       )
     )
+    const syncedRef = deletedRow?.rosterHaveRef?.trim()
+    if (syncedRef && ics215Form) {
+      const next215 = unlinkHaveRefFromIcs215Form(
+        ics215Form,
+        currentForm.assignedUnit,
+        syncedRef,
+        ics204HaveResourcesSyncContext
+      )
+      setIcs215Form(cloneIcs215FormState(next215))
+      const latest215Version = ics215Versions[ics215Versions.length - 1]
+      if (latest215Version && latest215Version.signatures.length === 0) {
+        handleIcs215SaveDraft(next215, latest215Version)
+      }
+    }
     if (activeWorkspaceSupabaseId) {
       void syncIcs204AttachmentsForDocument(
         activeWorkspaceSupabaseId,
@@ -22156,6 +22286,29 @@ function App() {
     }
 
     let synced215Form: Ics215FormState | null = null
+    if (section === 'resources-assigned' && ics215Form) {
+      const deletedSyncedRefs = currentForm.resourcesAssigned
+        .filter((row) => {
+          const ref = row.rosterHaveRef?.trim()
+          if (!ref) return false
+          return !nextForm.resourcesAssigned.some(
+            (nextRow) => nextRow.rosterHaveRef?.trim() === ref || nextRow.id === row.id
+          )
+        })
+        .map((row) => row.rosterHaveRef!.trim())
+      if (deletedSyncedRefs.length > 0) {
+        synced215Form = ics215Form
+        for (const ref of deletedSyncedRefs) {
+          synced215Form = unlinkHaveRefFromIcs215Form(
+            synced215Form,
+            nextForm.assignedUnit,
+            ref,
+            ics204HaveResourcesSyncContext
+          )
+        }
+      }
+    }
+
     if (section === 'work-assignments' && ics215Form) {
       synced215Form = syncIcs204WorkAssignmentsToIcs215(nextForm, ics215Form)
       if (synced215Form) {
@@ -22173,7 +22326,11 @@ function App() {
       if (latest215Version && latest215Version.signatures.length === 0) {
         handleIcs215SaveDraft(synced215Form, latest215Version)
       }
-      toast.success('Synced work assignments with ICS-215.')
+      if (section === 'work-assignments') {
+        toast.success('Synced work assignments with ICS-215.')
+      } else if (section === 'resources-assigned') {
+        toast.success('Removed ICS-215 Have link for deleted resource row.')
+      }
     }
     const latestVersion = ics204VersionsById[formId]?.[ics204VersionsById[formId].length - 1]
     if (latestVersion && latestVersion.signatures.length === 0) {
@@ -22204,7 +22361,12 @@ function App() {
       assignee,
       activeWorkspaceRoster
     )
-    const result = await createIcs204Form(partial)
+    const resourcesAssigned = buildInitialResourcesAssignedFromIcs215(
+      ics215FormFor204Import,
+      assignee,
+      ics204HaveResourcesSyncContext
+    )
+    const result = await createIcs204Form({ ...partial, resourcesAssigned })
     if (!result) {
       toast.error('Failed to create ICS-204 from ICS-215.')
       return
@@ -23432,26 +23594,72 @@ function App() {
     const nextForm = applyIcs215SectionDraft(ics215Form, 'work-assignments', draft)
     setIcs215Form(cloneIcs215FormState(nextForm))
 
-    const updated204Forms = syncIcs215WorkAssignmentsToLinkedIcs204Forms(nextForm, ics204Forms)
-    if (updated204Forms.length > 0) {
-      const updatedById = new Map(
-        updated204Forms.map((form) => [form.id, cloneIcs204FormState(form)])
-      )
+    const updated204FormsFromWork = syncIcs215WorkAssignmentsToLinkedIcs204Forms(nextForm, ics204Forms)
+    const workSyncById = new Map(updated204FormsFromWork.map((form) => [form.id, form]))
+    const base204Forms = ics204Forms.map((entry) => workSyncById.get(entry.id) ?? entry)
+    const resourceSyncSkipFormIds = new Set(
+      Object.entries(ics204EditingSectionsByFormId)
+        .filter(([, sections]) => sections?.['resources-assigned'])
+        .map(([formId]) => formId)
+    )
+    const updated204FormsFromResources = syncIcs215HaveResourcesToLinkedIcs204Forms(
+      nextForm,
+      base204Forms,
+      ics204HaveResourcesSyncContext,
+      resourceSyncSkipFormIds
+    )
+    const resourceSyncById = new Map(
+      updated204FormsFromResources.map((form) => [form.id, form])
+    )
+    const updated204FormIds = new Set([
+      ...updated204FormsFromWork.map((form) => form.id),
+      ...updated204FormsFromResources.map((form) => form.id),
+    ])
+    if (updated204FormIds.size > 0) {
       setIcs204Forms((previous) =>
-        previous.map((entry) => updatedById.get(entry.id) ?? entry)
+        previous.map((entry) => {
+          const next =
+            resourceSyncById.get(entry.id) ?? workSyncById.get(entry.id) ?? entry
+          return updated204FormIds.has(entry.id) ? cloneIcs204FormState(next) : entry
+        })
       )
-      for (const updated of updated204Forms) {
+      for (const formId of updated204FormIds) {
+        const updated = resourceSyncById.get(formId) ?? workSyncById.get(formId)
+        if (!updated) continue
         const cloned = cloneIcs204FormState(updated)
         const formVersions = ics204VersionsById[updated.id] ?? []
         const latest204Version = formVersions[formVersions.length - 1]
         if (latest204Version && latest204Version.signatures.length === 0) {
           handleIcs204SaveDraft(updated.id, cloned, latest204Version)
         }
+        if (activeWorkspaceSupabaseId) {
+          void syncIcs204AttachmentsForDocument(
+            activeWorkspaceSupabaseId,
+            updated.id,
+            cloned.resourcesAssigned
+              .map(getIcs204ResourceRowAssetKey)
+              .filter((assetKey): assetKey is string => Boolean(assetKey))
+          ).catch((syncError) => {
+            console.error(syncError)
+          })
+        }
       }
       if (options.closeEdit) {
-        toast.success(
-          `Synced work assignments to ${updated204Forms.length} ICS-204 list${updated204Forms.length === 1 ? '' : 's'}.`
-        )
+        const workCount = updated204FormsFromWork.length
+        const resourceCount = updated204FormsFromResources.length
+        if (workCount > 0 && resourceCount > 0) {
+          toast.success(
+            `Synced work assignments and resources to ${updated204FormIds.size} ICS-204 list${updated204FormIds.size === 1 ? '' : 's'}.`
+          )
+        } else if (workCount > 0) {
+          toast.success(
+            `Synced work assignments to ${workCount} ICS-204 list${workCount === 1 ? '' : 's'}.`
+          )
+        } else if (resourceCount > 0) {
+          toast.success(
+            `Synced resources assigned to ${resourceCount} ICS-204 list${resourceCount === 1 ? '' : 's'}.`
+          )
+        }
       }
     }
 
@@ -25184,6 +25392,17 @@ function App() {
     ics204ResourcePickerFormId === null
       ? null
       : ics204Forms.find((entry) => entry.id === ics204ResourcePickerFormId) ?? null
+  const ics204RosterPickerForm =
+    ics204RosterResourcePickerFormId === null
+      ? null
+      : ics204Forms.find((entry) => entry.id === ics204RosterResourcePickerFormId) ?? null
+  const ics204RosterPickerExcludedRefKeys = useMemo(() => {
+    if (!ics204RosterPickerForm) return new Set<string>()
+    const rows =
+      ics204SectionDraftsByFormId[ics204RosterPickerForm.id]?.['resources-assigned'] ??
+      ics204RosterPickerForm.resourcesAssigned
+    return collectExistingResourceRefKeys(rows)
+  }, [ics204RosterPickerForm, ics204SectionDraftsByFormId])
   const ics204AttachableResources: ResourceItem[] = useMemo(() => {
     if (!ics204PickerForm || !activeWorkspaceSupabaseId) return []
     const assignedToWorkspace = getAssetsForWorkspace(activeWorkspaceSupabaseId)
@@ -35530,6 +35749,9 @@ function App() {
                                         patchIcs204SectionDraft(form.id, section, value)
                                       }
                                       onOpenResourcePicker={() => setIcs204ResourcePickerFormId(form.id)}
+                                      onOpenRosterResourcePicker={() =>
+                                        setIcs204RosterResourcePickerFormId(form.id)
+                                      }
                                       onOpenIcs204a={(rowId) => openIcs204aDocument(form.id, rowId)}
                                       onFocusResourceMap={(resourceId, mapLocation) => {
                                         void focusMapItem(`resource-${resourceId}`, mapLocation, 30000)
@@ -37913,6 +38135,19 @@ function App() {
           </div>
         </DialogContent>
       </Dialog>
+      <Ics204RosterResourceAddDialog
+        open={ics204RosterResourcePickerFormId !== null}
+        onOpenChange={(open) => {
+          if (!open) setIcs204RosterResourcePickerFormId(null)
+        }}
+        haveLinkTargetOptions={ics204HaveResourcesSyncContext.haveLinkTargetOptions}
+        excludedRefKeys={ics204RosterPickerExcludedRefKeys}
+        onConfirm={(selectedRefs) => {
+          if (ics204RosterResourcePickerFormId !== null) {
+            addIcs204RosterResourcesAssigned(ics204RosterResourcePickerFormId, selectedRefs)
+          }
+        }}
+      />
       <Dialog
         open={ics204MoveConfirm !== null}
         onOpenChange={(open) => {

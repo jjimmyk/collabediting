@@ -5,6 +5,7 @@ import type {
   Ics215WorkAssignmentRow,
 } from '@/features/ics215/types'
 import type { ResourceListItemData } from '@/features/resources/types'
+import type { WorkAssignmentTargetType } from '@/lib/work-assignment-target'
 
 export type Ics204Ics215ImportSnapshot = {
   assignee: string
@@ -24,6 +25,11 @@ export type Ics204ResourceAssignedRow = {
   resourceSnapshot: Ics204ResourceSnapshot | null
   /** Optional ICS 204A-CG attachment when has204A is true. */
   ics204a?: Ics204aFormState | null
+  /** Set when row is managed by ICS-215 Have sync */
+  rosterHaveRef?: string | null
+  /** Same encoding for manually added roster items (not linked in ICS-215) */
+  manualRosterRef?: string | null
+  rosterHaveRefType?: WorkAssignmentTargetType | null
 }
 
 export type Ics204ResourceRequirementRow = {

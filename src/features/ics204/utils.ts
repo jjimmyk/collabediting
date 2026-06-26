@@ -18,7 +18,10 @@ import type {
   Ics204VersionRow,
   Ics204WorkAssignmentRow,
 } from '@/features/ics204/types'
-import { formatWorkAssignmentTargetLabel } from '@/lib/work-assignment-target'
+import { formatWorkAssignmentTargetLabel, parseWorkAssignmentTarget } from '@/lib/work-assignment-target'
+import type { WorkAssignmentTargetType } from '@/lib/work-assignment-target'
+import type { PositionResourceCategoryEntry } from '@/lib/workspace-resource-category-types'
+import type { WorkAssignmentTargetOption } from '@/lib/work-assignment-target-options'
 import type { WorkspaceRosterMember } from '@/lib/workspace-types'
 
 type LegacyIcs204ResourceAssignedRow = Partial<Ics204ResourceAssignedRow> & {
@@ -104,7 +107,145 @@ export function createIcs204ResourceAssignedRow(
     reportingInfoNotes,
     has204A,
     resourceSnapshot: snapshotFromResourceListItem(resource),
+    rosterHaveRef: null,
+    manualRosterRef: null,
+    rosterHaveRefType: null,
   }
+}
+
+function hashStringToPositiveInt(value: string): number {
+  let hash = 0
+  for (let index = 0; index < value.length; index += 1) {
+    hash = (hash * 31 + value.charCodeAt(index)) | 0
+  }
+  return Math.abs(hash) % 900_000 + 100_000
+}
+
+function rosterRefSyntheticAssetKey(ref: string): string {
+  return `ics204-roster-${hashStringToPositiveInt(ref)}`
+}
+
+export type Ics204RosterRefRowContext = {
+  roster?: WorkspaceRosterMember[]
+  assetsByKey?: Record<string, ResourceListItemData>
+  resourceCategoriesById?: Record<
+    string,
+    PositionResourceCategoryEntry & { positionName?: string }
+  >
+  haveLinkTargetOptions?: WorkAssignmentTargetOption[]
+}
+
+function buildRosterRefResourceSnapshot(
+  ref: string,
+  context: Ics204RosterRefRowContext
+): Ics204ResourceSnapshot {
+  const roster = context.roster ?? []
+  const assetsByKey = context.assetsByKey ?? {}
+  const resourceCategoriesById = context.resourceCategoriesById ?? {}
+  const parsed = parseWorkAssignmentTarget(ref, roster, { assetsByKey, resourceCategoriesById })
+  const label = formatWorkAssignmentTargetLabel(ref, roster, { assetsByKey, resourceCategoriesById })
+  const syntheticId = hashStringToPositiveInt(ref)
+
+  if (
+    (parsed.type === 'position_asset' || parsed.type === 'org_chart_asset') &&
+    parsed.assetKey &&
+    assetsByKey[parsed.assetKey]
+  ) {
+    return snapshotFromResourceListItem(assetsByKey[parsed.assetKey])
+  }
+
+  const snapshot = EMPTY_RESOURCE_SNAPSHOT(syntheticId, label)
+  snapshot.assetKey = rosterRefSyntheticAssetKey(ref)
+
+  switch (parsed.type) {
+    case 'position':
+      snapshot.type = 'Position'
+      snapshot.quantity = 1
+      snapshot.notes = `Position: ${parsed.position ?? label}`
+      break
+    case 'member':
+    case 'single_resource': {
+      snapshot.type = 'User'
+      snapshot.quantity = 1
+      const member = parsed.memberId
+        ? roster.find((entry) => entry.id === parsed.memberId)
+        : undefined
+      snapshot.teamLead = member?.competencyFunction ?? parsed.competencyFunction ?? ''
+      snapshot.pointOfContact = member?.email ?? label
+      snapshot.notes = parsed.type === 'single_resource' ? 'Single resource' : `Member at ${parsed.position ?? 'position'}`
+      break
+    }
+    case 'resource_category': {
+      snapshot.type = 'Resource Category'
+      snapshot.quantity = 1
+      const category = parsed.categoryId ? resourceCategoriesById[parsed.categoryId] : undefined
+      const fillLabel =
+        category?.filledMemberEmail ??
+        category?.filledAssetName ??
+        'Unfilled'
+      snapshot.notes = category
+        ? `${category.name}${category.positionName ? ` · ${category.positionName}` : ''} — ${fillLabel}`
+        : label
+      break
+    }
+    case 'position_asset':
+    case 'org_chart_asset':
+      snapshot.type = 'Asset'
+      snapshot.quantity = 1
+      if (parsed.assetKey) {
+        snapshot.assetKey = parsed.assetKey
+        snapshot.name = assetsByKey[parsed.assetKey]?.name ?? parsed.assetKey
+      }
+      break
+    default:
+      snapshot.type = 'Resource'
+      snapshot.notes = label
+      break
+  }
+
+  return snapshot
+}
+
+export function createIcs204ResourceAssignedRowFromRosterRef(
+  rowId: number,
+  ref: string,
+  context: Ics204RosterRefRowContext,
+  options: {
+    reportingInfoNotes?: string
+    has204A?: boolean
+    ics204a?: Ics204ResourceAssignedRow['ics204a']
+  } = {}
+): Ics204ResourceAssignedRow {
+  const snapshot = buildRosterRefResourceSnapshot(ref, context)
+  const parsed = parseWorkAssignmentTarget(ref, context.roster ?? [], {
+    assetsByKey: context.assetsByKey,
+    resourceCategoriesById: context.resourceCategoriesById,
+  })
+  const assetKey =
+    parsed.type === 'position_asset' || parsed.type === 'org_chart_asset'
+      ? parsed.assetKey
+      : snapshot.assetKey
+
+  return {
+    id: rowId,
+    resourceId: snapshot.id,
+    assetKey: assetKey ?? snapshot.assetKey,
+    reportingInfoNotes: options.reportingInfoNotes ?? '',
+    has204A: options.has204A ?? false,
+    resourceSnapshot: snapshot,
+    ics204a: options.has204A ? options.ics204a ?? null : null,
+    rosterHaveRef: null,
+    manualRosterRef: null,
+    rosterHaveRefType: parsed.type === 'unassigned' ? null : parsed.type,
+  }
+}
+
+export function getIcs204ResourceRowRefKey(row: Ics204ResourceAssignedRow): string | null {
+  const synced = row.rosterHaveRef?.trim()
+  if (synced) return synced
+  const manual = row.manualRosterRef?.trim()
+  if (manual) return manual
+  return null
 }
 
 export function buildDemoIcs204ResourceSnapshot(input: {
@@ -168,6 +309,9 @@ export function normalizeIcs204ResourceAssignedRow(
     resourceSnapshot,
     ics204a:
       row.has204A && row.ics204a != null ? cloneEmbeddedIcs204a(row.ics204a as Ics204aFormState) : null,
+    rosterHaveRef: row.rosterHaveRef ?? null,
+    manualRosterRef: row.manualRosterRef ?? null,
+    rosterHaveRefType: row.rosterHaveRefType ?? null,
   }
 }
 

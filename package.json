@@ -33,6 +33,7 @@
     "verify:ics204-export": "npx vite-node scripts/verify-ics204-export.ts",
     "verify:ics204-from-ics215": "npx vite-node scripts/verify-ics204-from-ics215.ts",
     "verify:ics215-ics204-work-sync": "npx vite-node scripts/verify-ics215-ics204-work-sync.ts",
+    "verify:ics215-ics204-have-resources-sync": "npx vite-node scripts/verify-ics215-ics204-have-resources-sync.ts",
     "verify:workspace-asset-have-lookup": "npx vite-node scripts/verify-workspace-asset-have-lookup.ts",
     "verify:add-workspace-member": "npx vite-node scripts/verify-add-workspace-member.ts",
     "verify:multi-position-assignment": "npx vite-node scripts/verify-multi-position-assignment.ts",
