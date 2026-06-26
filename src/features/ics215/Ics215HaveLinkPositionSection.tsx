@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { ChevronDown, ChevronRight, Info } from 'lucide-react'
+import { ChevronDown, ChevronRight } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -9,14 +9,7 @@ import {
   CollapsibleTrigger,
 } from '@/components/ui/collapsible'
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '@/components/ui/tooltip'
-import {
-  getAssignedToPositionChildren,
-  getAssignedToPositionSelectableRefs,
+  partitionAssignedToPositionChildren,
   type HaveLinkPositionChild,
   type HaveLinkPositionTreeNode,
 } from '@/features/ics215/build-have-link-position-tree'
@@ -33,9 +26,6 @@ const SECTION_LABELS: Record<HaveLinkPositionChild['section'], string> = {
   resource_categories: 'Resource categories',
 }
 
-const ASSIGNED_TO_POSITION_TOOLTIP =
-  'When selected, any person or asset directly assigned to this position will count toward this resource need.'
-
 function childToOption(
   child: HaveLinkPositionChild,
   group = SECTION_LABELS[child.section]
@@ -49,6 +39,56 @@ function childToOption(
     targetType: child.targetType,
     rosterPresence: child.presence ?? undefined,
   }
+}
+
+function AssignedToPositionColumn({
+  title,
+  emptyMessage,
+  children,
+  selectedRefs,
+  linkedToThisCellRefs,
+  linkedRefLocations,
+  onToggleRef,
+  onUnlinkFromElsewhere,
+}: {
+  title: string
+  emptyMessage: string
+  children: HaveLinkPositionChild[]
+  selectedRefs: Set<string>
+  linkedToThisCellRefs: Set<string>
+  linkedRefLocations: Map<string, Ics215HaveLinkLocation>
+  onToggleRef: (ref: string) => void
+  onUnlinkFromElsewhere?: (location: Ics215HaveLinkLocation, ref: string) => void
+}) {
+  return (
+    <div className="space-y-2">
+      <p className="text-[10px] font-medium text-muted-foreground">{title}</p>
+      {children.length === 0 ? (
+        <p className="rounded-md border border-dashed px-2 py-2 text-center text-[11px] text-muted-foreground">
+          {emptyMessage}
+        </p>
+      ) : (
+        <div className="space-y-2">
+          {children.map((child) => (
+            <Ics215HaveRosterRefPickRow
+              key={child.ref}
+              option={childToOption(child, ASSIGNED_TO_POSITION_GROUP)}
+              checked={selectedRefs.has(child.ref)}
+              disabled={child.disabled}
+              linkedToThisCell={linkedToThisCellRefs.has(child.ref)}
+              linkedElsewhere={linkedRefLocations.get(child.ref)}
+              onToggle={() => onToggleRef(child.ref)}
+              onUnlinkFromElsewhere={
+                linkedRefLocations.get(child.ref) && onUnlinkFromElsewhere
+                  ? () => onUnlinkFromElsewhere(linkedRefLocations.get(child.ref)!, child.ref)
+                  : undefined
+              }
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  )
 }
 
 type Ics215HaveLinkPositionSectionProps = {
@@ -85,9 +125,8 @@ export function Ics215HaveLinkPositionSection({
           ? true
           : 'indeterminate'
 
-  const assignedChildren = useMemo(() => getAssignedToPositionChildren(node), [node])
-  const assignedSelectableRefs = useMemo(
-    () => getAssignedToPositionSelectableRefs(node),
+  const { currentOp, nextOp } = useMemo(
+    () => partitionAssignedToPositionChildren(node),
     [node]
   )
   const resourceCategoryChildren = useMemo(
@@ -95,40 +134,11 @@ export function Ics215HaveLinkPositionSection({
     [node.children]
   )
 
-  const positionRefSelected = Boolean(node.positionRef && selectedRefs.has(node.positionRef))
-  const hasSelectedAssignedChild = assignedSelectableRefs.some((ref) => selectedRefs.has(ref))
-
   const summaryParts = [
-    node.summary.assigned > 0
-      ? `${node.summary.assigned} assigned`
-      : null,
+    node.summary.currentOp > 0 ? `${node.summary.currentOp} current OP` : null,
+    node.summary.nextOp > 0 ? `${node.summary.nextOp} next OP` : null,
     node.summary.categories > 0 ? `${node.summary.categories} categories` : null,
   ].filter(Boolean)
-
-  const handleTogglePositionRef = () => {
-    if (!node.positionRef || node.positionDisabled) {
-      return
-    }
-
-    if (positionRefSelected) {
-      onToggleRef(node.positionRef)
-      return
-    }
-
-    for (const ref of assignedSelectableRefs) {
-      if (selectedRefs.has(ref)) {
-        onToggleRef(ref)
-      }
-    }
-    onToggleRef(node.positionRef)
-  }
-
-  const handleToggleAssignedRef = (ref: string) => {
-    if (node.positionRef && positionRefSelected) {
-      onToggleRef(node.positionRef)
-    }
-    onToggleRef(ref)
-  }
 
   return (
     <Collapsible open={expanded} onOpenChange={onExpandedChange}>
@@ -192,73 +202,31 @@ export function Ics215HaveLinkPositionSection({
 
         <CollapsibleContent className="space-y-3 border-t px-3 py-3">
           <div className="space-y-2">
-            <div className="flex items-center gap-2">
-              {node.positionRef ? (
-                <Checkbox
-                  checked={positionRefSelected}
-                  disabled={
-                    node.positionDisabled ||
-                    (hasSelectedAssignedChild && !positionRefSelected)
-                  }
-                  onCheckedChange={handleTogglePositionRef}
-                  aria-label={`Select position slot for ${node.position}`}
-                />
-              ) : null}
-              <div className="flex min-w-0 flex-1 items-center gap-1.5">
-                <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                  Assigned to Position
-                </p>
-                <TooltipProvider delayDuration={150}>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <button
-                        type="button"
-                        className="inline-flex h-4 w-4 items-center justify-center rounded-full text-muted-foreground hover:bg-muted/60 hover:text-foreground"
-                        aria-label="About assigned to position selection"
-                      >
-                        <Info className="h-3 w-3" />
-                      </button>
-                    </TooltipTrigger>
-                    <TooltipContent side="top" className="max-w-xs text-xs">
-                      {ASSIGNED_TO_POSITION_TOOLTIP}
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              </div>
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+              Assigned to Position
+            </p>
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              <AssignedToPositionColumn
+                title="Current OP"
+                emptyMessage="No one or asset assigned for current OP."
+                children={currentOp}
+                selectedRefs={selectedRefs}
+                linkedToThisCellRefs={linkedToThisCellRefs}
+                linkedRefLocations={linkedRefLocations}
+                onToggleRef={onToggleRef}
+                onUnlinkFromElsewhere={onUnlinkFromElsewhere}
+              />
+              <AssignedToPositionColumn
+                title="Next OP"
+                emptyMessage="No one or asset scheduled for next OP."
+                children={nextOp}
+                selectedRefs={selectedRefs}
+                linkedToThisCellRefs={linkedToThisCellRefs}
+                linkedRefLocations={linkedRefLocations}
+                onToggleRef={onToggleRef}
+                onUnlinkFromElsewhere={onUnlinkFromElsewhere}
+              />
             </div>
-
-            {assignedChildren.length === 0 ? (
-              <p className="text-[11px] text-muted-foreground">
-                No direct assignees for this position.
-              </p>
-            ) : (
-              <div className="space-y-2 pl-6">
-                {assignedChildren.map((child) => {
-                  const blockedByPositionRef =
-                    positionRefSelected && !linkedToThisCellRefs.has(child.ref)
-                  return (
-                    <Ics215HaveRosterRefPickRow
-                      key={child.ref}
-                      option={childToOption(child, ASSIGNED_TO_POSITION_GROUP)}
-                      checked={selectedRefs.has(child.ref)}
-                      disabled={child.disabled || blockedByPositionRef}
-                      linkedToThisCell={linkedToThisCellRefs.has(child.ref)}
-                      linkedElsewhere={linkedRefLocations.get(child.ref)}
-                      onToggle={() => handleToggleAssignedRef(child.ref)}
-                      onUnlinkFromElsewhere={
-                        linkedRefLocations.get(child.ref) && onUnlinkFromElsewhere
-                          ? () =>
-                              onUnlinkFromElsewhere(
-                                linkedRefLocations.get(child.ref)!,
-                                child.ref
-                              )
-                          : undefined
-                      }
-                    />
-                  )
-                })}
-              </div>
-            )}
           </div>
 
           {resourceCategoryChildren.length > 0 ? (

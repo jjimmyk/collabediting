@@ -4,6 +4,7 @@ import {
   filterHaveLinkPositionTree,
   getAssignedToPositionChildren,
   getAssignedToPositionSelectableRefs,
+  partitionAssignedToPositionChildren,
 } from '@/features/ics215/build-have-link-position-tree'
 import type { PositionRosterEntry } from '@/features/roster/workspace-position-roster'
 import type { WorkspaceRosterMember } from '@/lib/workspace-types'
@@ -103,9 +104,11 @@ describe('build-have-link-position-tree', () => {
     })
     expect(tree.positions).toHaveLength(1)
     const node = tree.positions[0]!
-    expect(node.summary.assigned).toBe(3)
+    expect(node.summary.currentOp).toBe(2)
+    expect(node.summary.nextOp).toBe(1)
     expect(node.summary.categories).toBe(1)
-    expect(node.selectableRefs.length).toBeGreaterThanOrEqual(4)
+    expect(node.selectableRefs).toHaveLength(4)
+    expect(node.selectableRefs).not.toContain(node.positionRef)
   })
 
   it('returns assigned children sorted active before scheduled next OP', () => {
@@ -137,6 +140,19 @@ describe('build-have-link-position-tree', () => {
       expect(assignedRefs).not.toContain(categoryRef)
     }
     expect(assignedRefs.length).toBe(3)
+  })
+
+  it('partitions assigned children into current and next OP columns', () => {
+    const tree = buildHaveLinkPositionTree({
+      positionEntries: [activePosition],
+      roster: [member, scheduledMember],
+    })
+    const node = tree.positions[0]!
+    const { currentOp, nextOp } = partitionAssignedToPositionChildren(node)
+    expect(currentOp).toHaveLength(2)
+    expect(nextOp).toHaveLength(1)
+    expect(currentOp.every((child) => child.presence === 'active')).toBe(true)
+    expect(nextOp.every((child) => child.presence === 'scheduled_next_op')).toBe(true)
   })
 
   it('filters tree by query and keeps matching positions', () => {

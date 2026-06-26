@@ -38,7 +38,7 @@ export type HaveLinkPositionTreeNode = {
   isPlanned: boolean
   positionDisabled: boolean
   positionDisabledReason?: string
-  summary: { assigned: number; categories: number }
+  summary: { currentOp: number; nextOp: number; categories: number }
   children: HaveLinkPositionChild[]
   selectableRefs: string[]
 }
@@ -76,6 +76,32 @@ export function getAssignedToPositionSelectableRefs(node: HaveLinkPositionTreeNo
   return getAssignedToPositionChildren(node)
     .filter((child) => !child.disabled)
     .map((child) => child.ref)
+}
+
+export function partitionAssignedToPositionChildren(node: HaveLinkPositionTreeNode): {
+  currentOp: HaveLinkPositionChild[]
+  nextOp: HaveLinkPositionChild[]
+} {
+  const assigned = getAssignedToPositionChildren(node)
+  return {
+    currentOp: assigned.filter((child) => child.presence === 'active'),
+    nextOp: assigned.filter((child) => child.presence === 'scheduled_next_op'),
+  }
+}
+
+function summarizeAssignedChildren(children: HaveLinkPositionChild[]): {
+  currentOp: number
+  nextOp: number
+  categories: number
+} {
+  const assigned = children.filter(
+    (child) => child.section === 'people' || child.section === 'assets'
+  )
+  return {
+    currentOp: assigned.filter((child) => child.presence === 'active').length,
+    nextOp: assigned.filter((child) => child.presence === 'scheduled_next_op').length,
+    categories: children.filter((child) => child.section === 'resource_categories').length,
+  }
 }
 
 export type HaveLinkPositionTree = {
@@ -306,9 +332,6 @@ function buildPositionNode(
     !positionEligibility.disabled && positionEligibility.presence
       ? positionTarget.value
       : null
-  if (positionRef) {
-    selectableRefs.unshift(positionRef)
-  }
 
   return {
     position: entry.position,
@@ -320,10 +343,7 @@ function buildPositionNode(
     isPlanned: Boolean(entry.isPlanned),
     positionDisabled: positionEligibility.disabled,
     positionDisabledReason: positionEligibility.disabledReason,
-    summary: {
-      assigned: people.length + assets.length,
-      categories: categories.length,
-    },
+    summary: summarizeAssignedChildren(children),
     children,
     selectableRefs,
   }
@@ -440,19 +460,11 @@ export function filterHaveLinkPositionTree(
       if (!positionMatches && children.length === 0) return null
       const nextChildren = positionMatches ? node.children : children
       const selectableRefs = nextChildren.filter((child) => !child.disabled).map((child) => child.ref)
-      if (node.positionRef && !node.positionDisabled) {
-        selectableRefs.unshift(node.positionRef)
-      }
       return {
         ...node,
         children: nextChildren,
         selectableRefs,
-        summary: {
-          assigned: nextChildren.filter(
-            (child) => child.section === 'people' || child.section === 'assets'
-          ).length,
-          categories: nextChildren.filter((child) => child.section === 'resource_categories').length,
-        },
+        summary: summarizeAssignedChildren(nextChildren),
       }
     })
     .filter((node): node is HaveLinkPositionTreeNode => Boolean(node))
