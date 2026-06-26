@@ -38,9 +38,44 @@ export type HaveLinkPositionTreeNode = {
   isPlanned: boolean
   positionDisabled: boolean
   positionDisabledReason?: string
-  summary: { people: number; assets: number; categories: number }
+  summary: { assigned: number; categories: number }
   children: HaveLinkPositionChild[]
   selectableRefs: string[]
+}
+
+const ASSIGNED_PRESENCE_ORDER: Record<RosterPresence | 'unknown', number> = {
+  active: 0,
+  scheduled_next_op: 1,
+  unknown: 2,
+}
+
+function compareAssignedToPositionChildren(
+  left: HaveLinkPositionChild,
+  right: HaveLinkPositionChild
+): number {
+  const leftPresence = left.presence ?? 'unknown'
+  const rightPresence = right.presence ?? 'unknown'
+  const presenceCompare =
+    ASSIGNED_PRESENCE_ORDER[leftPresence] - ASSIGNED_PRESENCE_ORDER[rightPresence]
+  if (presenceCompare !== 0) {
+    return presenceCompare
+  }
+
+  return left.label.localeCompare(right.label)
+}
+
+export function getAssignedToPositionChildren(
+  node: HaveLinkPositionTreeNode
+): HaveLinkPositionChild[] {
+  return node.children
+    .filter((child) => child.section === 'people' || child.section === 'assets')
+    .sort(compareAssignedToPositionChildren)
+}
+
+export function getAssignedToPositionSelectableRefs(node: HaveLinkPositionTreeNode): string[] {
+  return getAssignedToPositionChildren(node)
+    .filter((child) => !child.disabled)
+    .map((child) => child.ref)
 }
 
 export type HaveLinkPositionTree = {
@@ -286,8 +321,7 @@ function buildPositionNode(
     positionDisabled: positionEligibility.disabled,
     positionDisabledReason: positionEligibility.disabledReason,
     summary: {
-      people: people.length,
-      assets: assets.length,
+      assigned: people.length + assets.length,
       categories: categories.length,
     },
     children,
@@ -414,8 +448,9 @@ export function filterHaveLinkPositionTree(
         children: nextChildren,
         selectableRefs,
         summary: {
-          people: nextChildren.filter((child) => child.section === 'people').length,
-          assets: nextChildren.filter((child) => child.section === 'assets').length,
+          assigned: nextChildren.filter(
+            (child) => child.section === 'people' || child.section === 'assets'
+          ).length,
           categories: nextChildren.filter((child) => child.section === 'resource_categories').length,
         },
       }

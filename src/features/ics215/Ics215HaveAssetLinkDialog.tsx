@@ -281,7 +281,7 @@ export function Ics215HaveRosterLinkDialog({
           <DialogDescription>
             {workAssignmentContext
               ? `Work assignment: ${workAssignmentContext}`
-              : 'Expand a position to link people, assets, or resource categories. Retiring items are shown but cannot be selected.'}
+              : 'Expand a position to link direct assignees or resource categories. Select Assigned to Position to link the position slot, or pick individual people and assets.'}
             {rankingEngine ? ` Asset suggestions ranked via ${rankingEngine}.` : ''}
             {' Each item can only be linked to one Have cell.'}
           </DialogDescription>

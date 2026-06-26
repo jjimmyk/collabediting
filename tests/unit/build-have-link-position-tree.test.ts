@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import {
   buildHaveLinkPositionTree,
   filterHaveLinkPositionTree,
+  getAssignedToPositionChildren,
+  getAssignedToPositionSelectableRefs,
 } from '@/features/ics215/build-have-link-position-tree'
 import type { PositionRosterEntry } from '@/features/roster/workspace-position-roster'
 import type { WorkspaceRosterMember } from '@/lib/workspace-types'
@@ -101,10 +103,40 @@ describe('build-have-link-position-tree', () => {
     })
     expect(tree.positions).toHaveLength(1)
     const node = tree.positions[0]!
-    expect(node.summary.people).toBe(2)
-    expect(node.summary.assets).toBe(1)
+    expect(node.summary.assigned).toBe(3)
     expect(node.summary.categories).toBe(1)
     expect(node.selectableRefs.length).toBeGreaterThanOrEqual(4)
+  })
+
+  it('returns assigned children sorted active before scheduled next OP', () => {
+    const tree = buildHaveLinkPositionTree({
+      positionEntries: [activePosition],
+      roster: [member, scheduledMember],
+    })
+    const node = tree.positions[0]!
+    const assigned = getAssignedToPositionChildren(node)
+    expect(assigned).toHaveLength(3)
+    expect(assigned.every((child) => child.section === 'people' || child.section === 'assets')).toBe(
+      true
+    )
+    expect(assigned.slice(0, 2).every((child) => child.presence === 'active')).toBe(true)
+    expect(assigned[2]?.presence).toBe('scheduled_next_op')
+  })
+
+  it('excludes resource categories from assigned selectable refs', () => {
+    const tree = buildHaveLinkPositionTree({
+      positionEntries: [activePosition],
+      roster: [member, scheduledMember],
+    })
+    const node = tree.positions[0]!
+    const assignedRefs = getAssignedToPositionSelectableRefs(node)
+    const categoryRefs = node.children
+      .filter((child) => child.section === 'resource_categories')
+      .map((child) => child.ref)
+    for (const categoryRef of categoryRefs) {
+      expect(assignedRefs).not.toContain(categoryRef)
+    }
+    expect(assignedRefs.length).toBe(3)
   })
 
   it('filters tree by query and keeps matching positions', () => {
