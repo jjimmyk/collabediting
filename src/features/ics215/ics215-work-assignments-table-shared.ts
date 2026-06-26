@@ -1,4 +1,5 @@
 import { fillHaveForResourceValue } from '@/features/resources/workspace-asset-have-lookup'
+import { resolveHaveDisplayValue } from '@/features/ics215/ics215-have-asset-link'
 import type { ResourceListItemData } from '@/features/resources/types'
 import type {
   Ics215ResourceColumn,
@@ -305,7 +306,9 @@ export function useIcs215WorkAssignmentsTable({
 
 export function formatResourceValueDisplay(value: Ics215ResourceValue | undefined): string {
   if (!value) return '—'
-  const parts = [value.required, value.have, value.need].map((part) => part.trim())
+  const parts = [value.required, resolveHaveDisplayValue(value), value.need].map((part) =>
+    part.trim()
+  )
   if (parts.every((part) => part.length === 0)) return '—'
   return parts.join(', ')
 }

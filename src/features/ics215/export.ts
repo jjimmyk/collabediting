@@ -1,4 +1,5 @@
 import { ICS215_SECTION_LABELS } from '@/features/ics215/constants'
+import { resolveHaveDisplayValue } from '@/features/ics215/ics215-have-asset-link'
 import { type Ics215ExportContext } from '@/features/ics215/export-layout'
 import type { Ics215FormState } from '@/features/ics215/types'
 import { computeIcs215ColumnTotals, computeIcs215ResourceTotals } from '@/features/ics215/utils'
@@ -131,7 +132,7 @@ export function buildIcs215DocxBlocks(
           value.need.trim().length > 0
         if (!hasValue) continue
         pushParagraph(
-          `${column.label}: Req ${value.required || '—'}, Have ${value.have || '—'}, Need ${value.need || '—'}`
+          `${column.label}: Req ${value.required || '—'}, Have ${resolveHaveDisplayValue(value) || '—'}, Need ${value.need || '—'}`
         )
       }
       pushField('Overhead Position(s)', row.overheadPositions)

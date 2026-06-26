@@ -10,13 +10,14 @@ import type { Ics215ResourceValue } from '@/features/ics215/types'
 import {
   EMPTY_RESOURCE_VALUE,
   applyIcs215NeedRecalc,
+  computeIcs215Need,
   formatResourceValueDisplay,
   ICS215_OVERFLOW_COLUMNS,
   type Ics215WorkAssignmentsTableBaseProps,
   useIcs215WorkAssignmentsTable,
 } from '@/features/ics215/ics215-work-assignments-table-shared'
 import { useIcs215HaveRosterLink } from '@/features/ics215/useIcs215HaveAssetLink'
-import { isHaveLinkedToRoster } from '@/features/ics215/ics215-have-asset-link'
+import { isHaveLinkedToRoster, resolveHaveDisplayValue } from '@/features/ics215/ics215-have-asset-link'
 import type { WorkAssignmentTargetOption } from '@/lib/work-assignment-target-options'
 import { mergeLegacyWorkAssignmentTargetOptions } from '@/lib/work-assignment-target-options'
 import { normalizeWorkAssignmentTargetValue } from '@/lib/work-assignment-target'
@@ -51,7 +52,7 @@ function ResourceValueCell({
   if (!editing) {
     const linked = isHaveLinkedToRoster(value)
     const display = formatResourceValueDisplay(value)
-    if (linked && value.have.trim().length > 0) {
+    if (linked && resolveHaveDisplayValue(value).length > 0) {
       return (
         <div className="flex items-start gap-0.5">
           {canLinkAssets ? (
@@ -104,7 +105,7 @@ function ResourceValueCell({
         title="Need (Required − Have)"
         className="flex h-7 items-center rounded border border-transparent bg-muted/20 px-1 text-[11px] text-muted-foreground"
       >
-        {applyIcs215NeedRecalc(value).need || '—'}
+        {computeIcs215Need(value.required, resolveHaveDisplayValue(value)) || '—'}
       </span>
     </div>
   )

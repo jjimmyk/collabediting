@@ -12,6 +12,7 @@ import {
   isHaveRefLinkedElsewhere,
   normalizeIcs215ResourceValue,
   removeHaveRosterLinkRefs,
+  resolveHaveDisplayValue,
 } from '@/features/ics215/ics215-have-asset-link'
 import {
   patchResourceValueInDraft,
@@ -274,6 +275,39 @@ describe('ics215-have-roster-link', () => {
     expect(getLinkedHaveRefs(partial)).toEqual([heloRef])
     expect(partial.have).toBe('1')
     expect(isHaveLinkedToRoster(partial)).toBe(true)
+  })
+
+  it('counts all linked refs even when an asset ref is not in eligible options', () => {
+    const legacyOnlyAssetRef = 'org_chart_asset:incident-only-boat'
+    const linked = applyHaveRosterLink(
+      { required: '4', have: '', need: '' },
+      [positionRef, memberRef, heloRef, legacyOnlyAssetRef],
+      sampleHaveLinkOptions
+    )
+    expect(getLinkedHaveRefs(linked)).toHaveLength(4)
+    expect(linked.have).toBe('4')
+    expect(linked.need).toBe('0')
+  })
+
+  it('normalizes stale Have count from linkedHaveRefs on load', () => {
+    const normalized = normalizeIcs215ResourceValue({
+      required: '4',
+      have: '3',
+      need: '1',
+      haveSource: 'linked-roster',
+      linkedHaveRefs: [positionRef, memberRef, heloRef, 'org_chart_asset:incident-only-boat'],
+    })
+    expect(normalized.have).toBe('4')
+    expect(normalized.need).toBe('0')
+  })
+
+  it('resolveHaveDisplayValue uses linked ref count', () => {
+    const value = applyHaveRosterLink(
+      { required: '4', have: '', need: '' },
+      [positionRef, memberRef, heloRef, 'org_chart_asset:incident-only-boat'],
+      sampleHaveLinkOptions
+    )
+    expect(resolveHaveDisplayValue({ ...value, have: '3' })).toBe('4')
   })
 
   it('counts positions and members as one each', () => {

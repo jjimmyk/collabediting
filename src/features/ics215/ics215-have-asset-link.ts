@@ -66,22 +66,24 @@ export function isHaveLinked(value: Ics215ResourceValue | undefined): boolean {
   return isHaveLinkedToRoster(value)
 }
 
-export function countLinkedHaveRefs(
-  selectedRefs: string[],
-  eligibleOptions: WorkAssignmentTargetOption[] = []
-): number {
-  const eligibleValues = new Set(eligibleOptions.map((option) => option.value))
-  if (eligibleValues.size === 0) {
-    return [...new Set(selectedRefs.map((entry) => entry.trim()).filter(Boolean))].length
-  }
-  return selectedRefs.filter((ref) => eligibleValues.has(ref)).length
+export function countLinkedHaveRefs(selectedRefs: string[]): number {
+  return [...new Set(selectedRefs.map((entry) => entry.trim()).filter(Boolean))].length
 }
 
-export function formatHaveCountFromRefs(
-  selectedRefs: string[],
-  eligibleOptions: WorkAssignmentTargetOption[] = []
-): string {
-  return String(countLinkedHaveRefs(selectedRefs, eligibleOptions))
+export function formatHaveCountFromRefs(selectedRefs: string[]): string {
+  return String(countLinkedHaveRefs(selectedRefs))
+}
+
+/** Have count shown in the cell — derived from linked refs when roster-linked. */
+export function resolveHaveDisplayValue(value: Ics215ResourceValue | undefined): string {
+  if (!value) return ''
+  if (isHaveLinkedToRoster(value)) {
+    const refs = getLinkedHaveRefs(value)
+    if (refs.length > 0) {
+      return String(refs.length)
+    }
+  }
+  return value.have.trim()
 }
 
 export function applyManualHaveValue(
@@ -109,7 +111,7 @@ export function applyHaveRosterLink(
   if (uniqueRefs.length === 0) {
     return clearHaveRosterLink(value, options)
   }
-  const have = formatHaveCountFromRefs(uniqueRefs, eligibleOptions)
+  const have = formatHaveCountFromRefs(uniqueRefs)
   const linked: Ics215ResourceValue = {
     ...value,
     linkedHaveRefs: uniqueRefs,
@@ -226,13 +228,26 @@ export function normalizeIcs215ResourceValue(raw: unknown): Ics215ResourceValue 
     haveSource = 'linked-roster'
   }
 
-  return {
+  const normalized: Ics215ResourceValue = {
     required: String(record.required ?? ''),
     have: String(record.have ?? ''),
     need: String(record.need ?? ''),
     linkedHaveRefs: migratedRefs,
     haveSource: haveSource ?? 'manual',
   }
+
+  if (
+    migratedRefs &&
+    migratedRefs.length > 0 &&
+    (normalized.haveSource === 'linked-roster' || normalized.haveSource === 'linked-assets')
+  ) {
+    return applyIcs215NeedRecalc({
+      ...normalized,
+      have: formatHaveCountFromRefs(migratedRefs),
+    })
+  }
+
+  return normalized
 }
 
 export function partitionHaveLinkRefs(

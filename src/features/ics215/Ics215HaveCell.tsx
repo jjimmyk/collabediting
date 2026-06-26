@@ -7,7 +7,10 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
-import { isHaveLinkedToRoster } from '@/features/ics215/ics215-have-asset-link'
+import {
+  isHaveLinkedToRoster,
+  resolveHaveDisplayValue,
+} from '@/features/ics215/ics215-have-asset-link'
 import type { Ics215ResourceValue } from '@/features/ics215/types'
 import { cn } from '@/lib/utils'
 
@@ -67,7 +70,7 @@ export function Ics215HaveCell({
   onOpenLinkDialog,
 }: Ics215HaveCellProps) {
   const linked = isHaveLinkedToRoster(value)
-  const displayValue = value.have.trim()
+  const displayValue = resolveHaveDisplayValue(value)
   const showLinkSparkle = editing || canLinkAssets
 
   if (!editing) {
@@ -119,7 +122,7 @@ export function Ics215HaveCell({
         onOpenLinkDialog={onOpenLinkDialog}
       />
       <input
-        value={value.have}
+        value={linked ? displayValue : value.have}
         onChange={(event) => onManualChange(event.target.value)}
         onClick={(event) => {
           if (linked) {
