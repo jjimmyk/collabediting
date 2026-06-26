@@ -2,7 +2,6 @@ import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
 import type { ExerciseMselState, MselInject, MselInjectDelivery, MselMapPlacementMode, MselViewTab } from './types'
-import { ExerciseObjectivesEditor } from './ExerciseObjectivesEditor'
 import { FunctionalMselInjectsEditor } from './FunctionalMselInjectsEditor'
 import { TabletopMselInjectsEditor } from './TabletopMselInjectsEditor'
 import { InjectsReceivedList } from './InjectsReceivedList'
@@ -16,9 +15,6 @@ export type MselTabPanelProps = {
   injects: MselInject[]
   expandedInjectId: number | null
   onExpandedInjectIdChange: (injectId: number | null) => void
-  onObjectivesChange: (
-    updater: (previous: ExerciseMselState['objectives']) => ExerciseMselState['objectives']
-  ) => void
   onInjectsChange: (updater: (previous: MselInject[]) => MselInject[]) => void
   activePlacementInjectId: number | null
   activePlacementMode: MselMapPlacementMode | null
@@ -44,7 +40,6 @@ export function MselTabPanel({
   injects,
   expandedInjectId,
   onExpandedInjectIdChange,
-  onObjectivesChange,
   onInjectsChange,
   activePlacementInjectId,
   activePlacementMode,
@@ -103,15 +98,6 @@ export function MselTabPanel({
             Show only injects sent to me
           </Label>
         </div>
-      )}
-
-      {viewTab !== 'received' && (
-        <ExerciseObjectivesEditor
-          objectives={objectives}
-          injects={injects}
-          onObjectivesChange={onObjectivesChange}
-          onInjectsChange={onInjectsChange}
-        />
       )}
 
       {isTabletopWorkspace && viewTab === 'received' ? (

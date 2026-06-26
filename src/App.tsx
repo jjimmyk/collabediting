@@ -53,6 +53,7 @@ import {
   Home,
   Image as ImageIcon,
   Info,
+  ListChecks,
   LogOut,
   Map as MapIcon,
   MapPin,
@@ -861,6 +862,7 @@ import {
 } from '@/lib/workspace-format'
 import { EXERCISE_WORKFLOW_OPTIONS } from '@/features/workspace-settings/constants'
 import { FunctionalMselInjectsEditor } from '@/features/exercise-msel/FunctionalMselInjectsEditor'
+import { ExerciseObjectivesEditor } from '@/features/exercise-msel/ExerciseObjectivesEditor'
 import { MselTabPanel } from '@/features/exercise-msel/MselTabPanel'
 import { SendMselInjectDialog } from '@/features/exercise-msel/SendMselInjectDialog'
 import {
@@ -4259,6 +4261,7 @@ type LeftTab =
   | 'analytics'
   | 'briefing'
   | 'msel'
+  | 'exercise-objectives'
   | 'sitreps'
   | 'seerist'
   | 'workspace-settings'
@@ -4282,6 +4285,10 @@ const WORKSPACE_FORMS_MENU: Array<{ id: string; tab: LeftTab; label: string }> =
   { id: 'ICS-208', tab: 'form-ICS-208', label: 'Safety & Health Plan / ICS-208' },
   { id: 'ICS-208HM', tab: 'form-ICS-208HM', label: 'HM Site Safety & Control Plan / ICS-208HM' },
   { id: 'ICS-209', tab: 'form-ICS-209', label: 'Incident Status Summary / ICS-209' },
+]
+
+const EXERCISE_WORKSPACE_MORE_MENU: Array<{ tab: LeftTab; label: string }> = [
+  { tab: 'exercise-objectives', label: 'Exercise Objectives' },
 ]
 
 const WORKSPACE_MORE_MENU: Array<{ tab: LeftTab; label: string }> = [
@@ -10605,6 +10612,7 @@ function App() {
     if (tab === 'analytics') return 'Analytics'
     if (tab === 'briefing') return 'Incident Briefing ICS-201'
     if (tab === 'msel') return 'MSEL'
+    if (tab === 'exercise-objectives') return 'Exercise Objectives'
     if (tab === 'sitreps') return 'SITREPs'
     if (tab === 'seerist') return 'Seerist'
     if (tab === 'workspace-settings') {
@@ -12010,6 +12018,7 @@ function App() {
   const isInWorkspaceContext = isInIncidentWorkspace || isInExerciseWorkspace
   const isWorkspaceMoreTabActive =
     activeTab === 'aors' ||
+    activeTab === 'exercise-objectives' ||
     activeTab === 'fema-regions' ||
     activeTab === 'events' ||
     activeTab === 'analytics' ||
@@ -12020,10 +12029,12 @@ function App() {
     () => WORKSPACE_FORMS_MENU.find((form) => form.tab === activeTab) ?? null,
     [activeTab]
   )
-  const selectedWorkspaceMoreMenuItem = useMemo(
-    () => WORKSPACE_MORE_MENU.find((item) => item.tab === activeTab) ?? null,
-    [activeTab]
-  )
+  const selectedWorkspaceMoreMenuItem = useMemo(() => {
+    if (activeTab === 'exercise-objectives') {
+      return EXERCISE_WORKSPACE_MORE_MENU[0] ?? null
+    }
+    return WORKSPACE_MORE_MENU.find((item) => item.tab === activeTab) ?? null
+  }, [activeTab])
   const workspaceFormsTriggerLabel = formatWorkspaceDropdownTriggerLabel(
     'Forms',
     selectedWorkspaceFormMenuItem?.id ?? null
@@ -12470,6 +12481,8 @@ function App() {
   }, [activeWorkspaceRosterKey])
   useEffect(() => {
     if (activeTab === 'msel' && !isInExerciseWorkspace) {
+      setActiveTab('sitreps')
+    } else if (activeTab === 'exercise-objectives' && !isInExerciseWorkspace) {
       setActiveTab('sitreps')
     } else if (
       activeTab === 'workspace-settings' &&
@@ -17226,44 +17239,49 @@ function App() {
     setActiveTab('workspace-settings')
   }
   const workspaceMoreMenuGroups = useMemo((): WorkspaceSearchableTabMenuGroup[] => {
+    const mapMoreMenuItem = (item: { tab: LeftTab; label: string }) => {
+      const itemLabel =
+        item.tab === 'workspace-settings'
+          ? isInExerciseWorkspace
+            ? 'Exercise Settings'
+            : 'Incident Settings'
+          : item.label
+
+      return {
+        id: item.tab,
+        value: itemLabel,
+        label: itemLabel,
+        icon:
+          item.tab === 'exercise-objectives' ? (
+            <ListChecks className="h-4 w-4" />
+          ) : item.tab === 'aors' ? (
+            <Target className="h-4 w-4" />
+          ) : item.tab === 'fema-regions' ? (
+            <MapPin className="h-4 w-4" />
+          ) : item.tab === 'events' ? (
+            <Radio className="h-4 w-4" />
+          ) : item.tab === 'analytics' ? (
+            <BarChart3 className="h-4 w-4" />
+          ) : item.tab === 'sitreps' ? (
+            <FileText className="h-4 w-4" />
+          ) : item.tab === 'seerist' ? (
+            <Radar className="h-4 w-4" />
+          ) : (
+            <Settings className="h-4 w-4" />
+          ),
+        isSelected: activeTab === item.tab,
+        onSelect: () =>
+          item.tab === 'workspace-settings' ? openWorkspaceSettingsTab() : setActiveTab(item.tab),
+      }
+    }
+
     return [
       {
         heading: 'More',
-        items: WORKSPACE_MORE_MENU.map((item) => {
-          const itemLabel =
-            item.tab === 'workspace-settings'
-              ? isInExerciseWorkspace
-                ? 'Exercise Settings'
-                : 'Incident Settings'
-              : item.label
-
-          return {
-            id: item.tab,
-            value: itemLabel,
-            label: itemLabel,
-            icon:
-              item.tab === 'aors' ? (
-                <Target className="h-4 w-4" />
-              ) : item.tab === 'fema-regions' ? (
-                <MapPin className="h-4 w-4" />
-              ) : item.tab === 'events' ? (
-                <Radio className="h-4 w-4" />
-              ) : item.tab === 'analytics' ? (
-                <BarChart3 className="h-4 w-4" />
-              ) : item.tab === 'sitreps' ? (
-                <FileText className="h-4 w-4" />
-              ) : item.tab === 'seerist' ? (
-                <Radar className="h-4 w-4" />
-              ) : (
-                <Settings className="h-4 w-4" />
-              ),
-            isSelected: activeTab === item.tab,
-            onSelect: () =>
-              item.tab === 'workspace-settings'
-                ? openWorkspaceSettingsTab()
-                : setActiveTab(item.tab),
-          }
-        }),
+        items: [
+          ...(isInExerciseWorkspace ? EXERCISE_WORKSPACE_MORE_MENU.map(mapMoreMenuItem) : []),
+          ...WORKSPACE_MORE_MENU.map(mapMoreMenuItem),
+        ],
       },
     ]
   }, [activeTab, isInExerciseWorkspace, openWorkspaceSettingsTab])
@@ -26541,6 +26559,7 @@ function App() {
                   {activeTab === 'analytics' && 'Analytics'}
                   {activeTab === 'briefing' && 'Incident Briefing ICS-201'}
                   {activeTab === 'msel' && 'MSEL'}
+                  {activeTab === 'exercise-objectives' && 'Exercise Objectives'}
                   {activeTab === 'sitreps' && null}
                   {activeTab === 'seerist' && 'Seerist'}
                   {activeTab === 'workspace-settings' &&
@@ -33292,12 +33311,6 @@ function App() {
                         injects: updater(previous.injects),
                       }))
                     }
-                    onObjectivesChange={(updater) =>
-                      setWorkspaceMselState((previous) => ({
-                        ...previous,
-                        objectives: updater(previous.objectives),
-                      }))
-                    }
                     activePlacementInjectId={activeMselPlacementInjectId}
                     activePlacementMode={activeMselPlacementMode}
                     onStartPlacement={handleStartMselPlacement}
@@ -33314,6 +33327,25 @@ function App() {
                     profileEmail={profileEmail}
                     showMineOnly={mselReceivedMineOnly}
                     onShowMineOnlyChange={setMselReceivedMineOnly}
+                  />
+                )}
+
+                {activeTab === 'exercise-objectives' && isInExerciseWorkspace && (
+                  <ExerciseObjectivesEditor
+                    objectives={workspaceMselState.objectives}
+                    injects={workspaceMselState.injects}
+                    onObjectivesChange={(updater) =>
+                      setWorkspaceMselState((previous) => ({
+                        ...previous,
+                        objectives: updater(previous.objectives),
+                      }))
+                    }
+                    onInjectsChange={(updater) =>
+                      setWorkspaceMselState((previous) => ({
+                        ...previous,
+                        injects: updater(previous.injects),
+                      }))
+                    }
                   />
                 )}
 
