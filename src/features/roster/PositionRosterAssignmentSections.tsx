@@ -269,7 +269,7 @@ function NewUserInviteControl({
   )
 }
 
-function PositionAssignmentActionBar({
+export function PositionAssignmentActionBar({
   showAssetActions,
   showNewUser,
   showResourceCategory,

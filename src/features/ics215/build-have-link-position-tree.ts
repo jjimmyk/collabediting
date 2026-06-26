@@ -1,6 +1,8 @@
 import type { PositionRosterEntry } from '@/features/roster/workspace-position-roster'
 import type { PositionAssetRosterEntry } from '@/lib/workspace-position-asset-types'
 import type { PositionResourceCategoryEntry } from '@/lib/workspace-resource-category-types'
+import type { ResourceCategoryLifecycle } from '@/lib/workspace-resource-category-types'
+import type { PositionMemberSchedulePolicy } from '@/lib/roster-member-schedule-policy'
 import {
   classifyMemberAtPositionEligibility,
   classifyPositionAssigneeEligibility,
@@ -28,6 +30,7 @@ export type HaveLinkPositionChild = {
   section: HaveLinkPositionChildSection
   disabled: boolean
   disabledReason?: string
+  resourceCategoryLifecycle?: ResourceCategoryLifecycle
 }
 
 export type HaveLinkPositionTreeNode = {
@@ -38,6 +41,8 @@ export type HaveLinkPositionTreeNode = {
   isPlanned: boolean
   positionDisabled: boolean
   positionDisabledReason?: string
+  memberSchedulePolicy: PositionMemberSchedulePolicy
+  showPositionAssets: boolean
   summary: { currentOp: number; nextOp: number; categories: number }
   children: HaveLinkPositionChild[]
   selectableRefs: string[]
@@ -89,6 +94,28 @@ export function partitionAssignedToPositionChildren(node: HaveLinkPositionTreeNo
   }
 }
 
+export function partitionPositionChildrenByOp(node: HaveLinkPositionTreeNode): {
+  currentOp: HaveLinkPositionChild[]
+  nextOp: HaveLinkPositionChild[]
+  scheduledUnassignCategories: HaveLinkPositionChild[]
+} {
+  const { currentOp, nextOp } = partitionAssignedToPositionChildren(node)
+  const categories = node.children.filter((child) => child.section === 'resource_categories')
+  return {
+    currentOp: [
+      ...currentOp,
+      ...categories.filter((child) => child.resourceCategoryLifecycle === 'active'),
+    ],
+    nextOp: [
+      ...nextOp,
+      ...categories.filter((child) => child.resourceCategoryLifecycle === 'scheduled_assign'),
+    ],
+    scheduledUnassignCategories: categories.filter(
+      (child) => child.resourceCategoryLifecycle === 'scheduled_unassign'
+    ),
+  }
+}
+
 function summarizeAssignedChildren(children: HaveLinkPositionChild[]): {
   currentOp: number
   nextOp: number
@@ -114,6 +141,7 @@ export type BuildHaveLinkPositionTreeInput = {
   positionEntries: PositionRosterEntry[]
   roster: WorkspaceRosterMember[]
   assetsByKey?: Record<string, ResourceListItemData>
+  showPositionAssets?: boolean
 }
 
 function childFromEligibility(
@@ -295,7 +323,9 @@ function buildCategoryChildren(
       eligibility,
       { unfilled }
     )
-    if (child) children.push(child)
+    if (child) {
+      children.push({ ...child, resourceCategoryLifecycle: category.lifecycle })
+    }
   }
 
   return children
@@ -308,7 +338,8 @@ function buildPositionNode(
   resourceCategoriesById: Record<
     string,
     PositionResourceCategoryEntry & { positionName: string }
-  >
+  >,
+  showPositionAssets: boolean
 ): HaveLinkPositionTreeNode | null {
   if (!entry.allowWorkAssignment) return null
   if (entry.opAdvanceLabel === 'retire_on_op_advance') return null
@@ -343,6 +374,8 @@ function buildPositionNode(
     isPlanned: Boolean(entry.isPlanned),
     positionDisabled: positionEligibility.disabled,
     positionDisabledReason: positionEligibility.disabledReason,
+    memberSchedulePolicy: entry.memberSchedulePolicy,
+    showPositionAssets,
     summary: summarizeAssignedChildren(children),
     children,
     selectableRefs,
@@ -412,6 +445,7 @@ export function buildHaveLinkPositionTree(
 ): HaveLinkPositionTree {
   const roster = input.roster ?? []
   const assetsByKey = input.assetsByKey ?? {}
+  const showPositionAssets = input.showPositionAssets ?? true
   const resourceCategoriesById: Record<
     string,
     PositionResourceCategoryEntry & { positionName: string }
@@ -424,7 +458,9 @@ export function buildHaveLinkPositionTree(
   }
 
   const positions = input.positionEntries
-    .map((entry) => buildPositionNode(entry, roster, assetsByKey, resourceCategoriesById))
+    .map((entry) =>
+      buildPositionNode(entry, roster, assetsByKey, resourceCategoriesById, showPositionAssets)
+    )
     .filter((node): node is HaveLinkPositionTreeNode => Boolean(node))
     .sort((left, right) => left.position.localeCompare(right.position))
 

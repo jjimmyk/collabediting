@@ -14,6 +14,7 @@ import {
   createNextIcs215WorkAssignmentId,
 } from '@/features/ics215/utils'
 import { normalizeWorkAssignmentTargetValue } from '@/lib/work-assignment-target'
+import type { HaveLinkRosterActions } from '@/features/ics215/have-link-roster-actions'
 import type { WorkspaceRosterMember } from '@/lib/workspace-types'
 
 export const ICS215_OVERFLOW_COLUMNS = [
@@ -91,6 +92,10 @@ export type Ics215WorkAssignmentsTableBaseProps = {
   }) => void
   onHaveFillComplete?: (filledCount: number) => void
   onPersistWorkAssignments?: (draft: Ics215WorkAssignmentsDraft) => void
+  createHaveLinkRosterActions?: (
+    onAssignmentAdded?: (ref: string) => void
+  ) => HaveLinkRosterActions | undefined
+  showPositionAssets?: boolean
 }
 
 export function patchResourceValueInDraft(

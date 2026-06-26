@@ -9,16 +9,17 @@ import {
   CollapsibleTrigger,
 } from '@/components/ui/collapsible'
 import {
-  partitionAssignedToPositionChildren,
+  partitionPositionChildrenByOp,
   type HaveLinkPositionChild,
   type HaveLinkPositionTreeNode,
 } from '@/features/ics215/build-have-link-position-tree'
+import { HaveLinkPositionOpColumn } from '@/features/ics215/HaveLinkPositionOpColumn'
+import type { HaveLinkRosterActions } from '@/features/ics215/have-link-roster-actions'
 import { Ics215HaveRosterRefPickRow } from '@/features/ics215/Ics215HaveRosterRefPickRow'
 import type { Ics215HaveLinkLocation } from '@/features/ics215/ics215-have-asset-link'
+import type { PositionRosterEntry } from '@/features/roster/workspace-position-roster'
 import { ROSTER_PRESENCE_LABELS } from '@/lib/work-assignment-roster-eligibility'
 import type { WorkAssignmentTargetOption } from '@/lib/work-assignment-target-options'
-
-export const ASSIGNED_TO_POSITION_GROUP = 'Assigned to Position'
 
 const SECTION_LABELS: Record<HaveLinkPositionChild['section'], string> = {
   people: 'People',
@@ -41,58 +42,9 @@ function childToOption(
   }
 }
 
-function AssignedToPositionColumn({
-  title,
-  emptyMessage,
-  children,
-  selectedRefs,
-  linkedToThisCellRefs,
-  linkedRefLocations,
-  onToggleRef,
-  onUnlinkFromElsewhere,
-}: {
-  title: string
-  emptyMessage: string
-  children: HaveLinkPositionChild[]
-  selectedRefs: Set<string>
-  linkedToThisCellRefs: Set<string>
-  linkedRefLocations: Map<string, Ics215HaveLinkLocation>
-  onToggleRef: (ref: string) => void
-  onUnlinkFromElsewhere?: (location: Ics215HaveLinkLocation, ref: string) => void
-}) {
-  return (
-    <div className="space-y-2">
-      <p className="text-[10px] font-medium text-muted-foreground">{title}</p>
-      {children.length === 0 ? (
-        <p className="rounded-md border border-dashed px-2 py-2 text-center text-[11px] text-muted-foreground">
-          {emptyMessage}
-        </p>
-      ) : (
-        <div className="space-y-2">
-          {children.map((child) => (
-            <Ics215HaveRosterRefPickRow
-              key={child.ref}
-              option={childToOption(child, ASSIGNED_TO_POSITION_GROUP)}
-              checked={selectedRefs.has(child.ref)}
-              disabled={child.disabled}
-              linkedToThisCell={linkedToThisCellRefs.has(child.ref)}
-              linkedElsewhere={linkedRefLocations.get(child.ref)}
-              onToggle={() => onToggleRef(child.ref)}
-              onUnlinkFromElsewhere={
-                linkedRefLocations.get(child.ref) && onUnlinkFromElsewhere
-                  ? () => onUnlinkFromElsewhere(linkedRefLocations.get(child.ref)!, child.ref)
-                  : undefined
-              }
-            />
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
-
 type Ics215HaveLinkPositionSectionProps = {
   node: HaveLinkPositionTreeNode
+  positionEntry?: PositionRosterEntry | null
   expanded: boolean
   onExpandedChange: (expanded: boolean) => void
   selectedRefs: Set<string>
@@ -101,10 +53,12 @@ type Ics215HaveLinkPositionSectionProps = {
   onToggleRef: (ref: string) => void
   onTogglePositionRefs: (refs: string[], select: boolean) => void
   onUnlinkFromElsewhere?: (location: Ics215HaveLinkLocation, ref: string) => void
+  rosterActions?: HaveLinkRosterActions
 }
 
 export function Ics215HaveLinkPositionSection({
   node,
+  positionEntry = null,
   expanded,
   onExpandedChange,
   selectedRefs,
@@ -113,6 +67,7 @@ export function Ics215HaveLinkPositionSection({
   onToggleRef,
   onTogglePositionRefs,
   onUnlinkFromElsewhere,
+  rosterActions,
 }: Ics215HaveLinkPositionSectionProps) {
   const selectableRefs = node.selectableRefs
   const selectedSelectableCount = selectableRefs.filter((ref) => selectedRefs.has(ref)).length
@@ -125,13 +80,9 @@ export function Ics215HaveLinkPositionSection({
           ? true
           : 'indeterminate'
 
-  const { currentOp, nextOp } = useMemo(
-    () => partitionAssignedToPositionChildren(node),
+  const { currentOp, nextOp, scheduledUnassignCategories } = useMemo(
+    () => partitionPositionChildrenByOp(node),
     [node]
-  )
-  const resourceCategoryChildren = useMemo(
-    () => node.children.filter((child) => child.section === 'resource_categories'),
-    [node.children]
   )
 
   const summaryParts = [
@@ -206,20 +157,32 @@ export function Ics215HaveLinkPositionSection({
               Assigned to Position
             </p>
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-              <AssignedToPositionColumn
+              <HaveLinkPositionOpColumn
                 title="Current OP"
-                emptyMessage="No one or asset assigned for current OP."
+                emptyMessage="No one, asset, or category assigned for current OP."
+                op="current"
+                position={node.position}
+                positionEntry={positionEntry}
+                memberSchedulePolicy={node.memberSchedulePolicy}
+                showPositionAssets={node.showPositionAssets}
                 children={currentOp}
+                rosterActions={rosterActions}
                 selectedRefs={selectedRefs}
                 linkedToThisCellRefs={linkedToThisCellRefs}
                 linkedRefLocations={linkedRefLocations}
                 onToggleRef={onToggleRef}
                 onUnlinkFromElsewhere={onUnlinkFromElsewhere}
               />
-              <AssignedToPositionColumn
+              <HaveLinkPositionOpColumn
                 title="Next OP"
-                emptyMessage="No one or asset scheduled for next OP."
+                emptyMessage="No one, asset, or category scheduled for next OP."
+                op="next"
+                position={node.position}
+                positionEntry={positionEntry}
+                memberSchedulePolicy={node.memberSchedulePolicy}
+                showPositionAssets={node.showPositionAssets}
                 children={nextOp}
+                rosterActions={rosterActions}
                 selectedRefs={selectedRefs}
                 linkedToThisCellRefs={linkedToThisCellRefs}
                 linkedRefLocations={linkedRefLocations}
@@ -229,13 +192,13 @@ export function Ics215HaveLinkPositionSection({
             </div>
           </div>
 
-          {resourceCategoryChildren.length > 0 ? (
+          {scheduledUnassignCategories.length > 0 ? (
             <div className="space-y-2">
               <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                {SECTION_LABELS.resource_categories}
+                Scheduled unassign (next OP)
               </p>
               <div className="space-y-2">
-                {resourceCategoryChildren.map((child) => (
+                {scheduledUnassignCategories.map((child) => (
                   <Ics215HaveRosterRefPickRow
                     key={child.ref}
                     option={childToOption(child)}

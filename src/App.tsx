@@ -391,6 +391,8 @@ import {
   ics215AuthorColor,
 } from '@/features/ics215/utils'
 import { recalcIcs215WorkAssignmentsDraftNeed } from '@/features/ics215/ics215-work-assignments-table-shared'
+import { buildHaveLinkRosterActions } from '@/features/ics215/build-have-link-roster-actions'
+import { resolveMemberHaveRefByEmail } from '@/features/ics215/have-link-roster-actions'
 import { useIcs215WorkspaceForm } from '@/hooks/useIcs215WorkspaceForm'
 import { ICS215A_SECTION_PROMPTS } from '@/features/ics215a/constants'
 import { Ics215aWorkspacePanel } from '@/features/ics215a/Ics215aWorkspacePanel'
@@ -13677,6 +13679,10 @@ function App() {
     () => activeWorkspaceRoster.filter((member) => member.status !== 'removed'),
     [activeWorkspaceRoster]
   )
+  const activeWorkspaceRosterRef = useRef(activeWorkspaceRoster)
+  activeWorkspaceRosterRef.current = activeWorkspaceRoster
+  const workspaceResourceCategoriesRef = useRef(workspaceResourceCategories)
+  workspaceResourceCategoriesRef.current = workspaceResourceCategories
   const opAdvanceLifecycleSummary = useMemo(() => {
     const summary = buildOpAdvanceLifecycleSummary(workspacePositionCatalog)
     if (workspaceMemberSchedules.length === 0) {
@@ -16347,6 +16353,102 @@ function App() {
         : `Removed asset from next OP unassign schedule for ${position}.`
     )
   }
+  const reloadRosterForHaveLink = useCallback(async () => {
+    if (!isSupabaseEnabled || !activeWorkspaceSupabaseId) {
+      return
+    }
+    const [roster] = await Promise.all([
+      fetchWorkspaceRoster(activeWorkspaceSupabaseId),
+      reloadWorkspaceMemberSchedules(),
+      reloadWorkspacePositionAssets(),
+      reloadWorkspaceResourceCategories(),
+    ])
+    setSupabaseWorkspaceRoster(roster)
+  }, [
+    activeWorkspaceSupabaseId,
+    isSupabaseEnabled,
+    reloadWorkspaceMemberSchedules,
+    reloadWorkspacePositionAssets,
+    reloadWorkspaceResourceCategories,
+  ])
+  const createHaveLinkRosterActions = useCallback(
+    (onAssignmentAdded?: (ref: string) => void) => {
+      if (!effectiveCanManageRoster) {
+        return undefined
+      }
+
+      return buildHaveLinkRosterActions({
+        canManageRoster: effectiveCanManageRoster,
+        isSupabaseEnabled,
+        showPositionAssets,
+        isPositionBusy: (position) => rosterAssigningPosition === position,
+        assignableByPosition,
+        scheduleAssignableByPosition,
+        assignableAssetsByPosition,
+        scheduleAssignableAssetsByPosition,
+        pocMembers: rosterPocMembers,
+        workspaceRosterMembers: activeWorkspaceRoster,
+        workspaceResourceCategories,
+        assetsByKey: workspaceAssetsByKey,
+        onSearchOrgMembers: isSupabaseEnabled ? searchOrgMembersForActiveWorkspace : undefined,
+        reloadRosterForHaveLink,
+        getRosterSnapshot: () => activeWorkspaceRosterRef.current,
+        getResourceCategoriesSnapshot: () => workspaceResourceCategoriesRef.current,
+        onAssignmentAdded,
+        assignExistingMemberToPosition,
+        scheduleAssignMemberToPosition,
+        assignOrgMemberToPositionRow,
+        submitInlinePositionInvite,
+        assignAssetToPosition,
+        scheduleAssignAssetToPosition,
+        createResourceCategoryForPosition,
+        inlinePositionInvite: isSupabaseEnabled
+          ? {
+              isSupabaseEnabled,
+              isSubmitting: rosterAssigningPosition !== null,
+              onSubmit: async (params, confirmPasswordOverwrite) => {
+                const result = await submitInlinePositionInvite(params, confirmPasswordOverwrite)
+                if (result === 'success') {
+                  await reloadRosterForHaveLink()
+                  const ref = resolveMemberHaveRefByEmail(
+                    params.email,
+                    params.position,
+                    activeWorkspaceRosterRef.current
+                  )
+                  if (ref) {
+                    onAssignmentAdded?.(ref)
+                  }
+                }
+                return result
+              },
+            }
+          : undefined,
+      })
+    },
+    [
+      activeWorkspaceRoster,
+      assignableAssetsByPosition,
+      assignableByPosition,
+      assignAssetToPosition,
+      assignExistingMemberToPosition,
+      assignOrgMemberToPositionRow,
+      createResourceCategoryForPosition,
+      effectiveCanManageRoster,
+      isSupabaseEnabled,
+      reloadRosterForHaveLink,
+      rosterAssigningPosition,
+      rosterPocMembers,
+      scheduleAssignableAssetsByPosition,
+      scheduleAssignableByPosition,
+      scheduleAssignAssetToPosition,
+      scheduleAssignMemberToPosition,
+      searchOrgMembersForActiveWorkspace,
+      showPositionAssets,
+      submitInlinePositionInvite,
+      workspaceAssetsByKey,
+      workspaceResourceCategories,
+    ]
+  )
   const updateAssetPointOfContact = async (assetKey: string, memberId: string | null) => {
     if (!isSupabaseEnabled || !activeWorkspaceSupabaseId) {
       toast.error('This workspace is not synced to Supabase yet.')
@@ -34498,6 +34600,8 @@ function App() {
                     onAutoFillHaveFromAssetsChange={setAutoFillHaveFromWorkspaceAssets}
                     onHaveFillComplete={handleHaveFillComplete}
                     onWorkAssignmentsLayoutModeChange={handleIcs215WorkAssignmentsLayoutModeChange}
+                    createHaveLinkRosterActions={createHaveLinkRosterActions}
+                    showPositionAssets={showPositionAssets}
                     onAppendVersion={handleIcs215AppendVersion}
                     onSignReview={handleIcs215SignReview}
                   />

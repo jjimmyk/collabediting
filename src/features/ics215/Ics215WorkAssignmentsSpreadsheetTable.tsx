@@ -130,6 +130,8 @@ export function Ics215WorkAssignmentsSpreadsheetTable({
   onChange,
   onHaveFillComplete,
   onPersistWorkAssignments,
+  createHaveLinkRosterActions,
+  showPositionAssets = true,
   tableLayout = 'default',
 }: Ics215WorkAssignmentsSpreadsheetTableProps) {
   const {
@@ -531,6 +533,8 @@ export function Ics215WorkAssignmentsSpreadsheetTable({
         rankingEngine={haveLink.rankingEngine}
         onConfirm={haveLink.confirmHaveLink}
         onUnlinkFromOtherCell={haveLink.unlinkRefFromOtherCell}
+        createHaveLinkRosterActions={createHaveLinkRosterActions}
+        showPositionAssets={showPositionAssets}
       />
     </>
   )

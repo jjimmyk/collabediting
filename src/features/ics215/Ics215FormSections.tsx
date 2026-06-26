@@ -32,6 +32,7 @@ import {
   fillAllIcs215WorkAssignmentsHaveInDraft,
   normalizeIcs215WorkAssignmentsLayoutMode,
 } from '@/features/ics215/utils'
+import type { HaveLinkRosterActions } from '@/features/ics215/have-link-roster-actions'
 import type { PositionRosterEntry } from '@/features/roster/workspace-position-roster'
 import type { WorkAssignmentTargetOption } from '@/lib/work-assignment-target-options'
 import type { WorkspaceRosterMember } from '@/lib/workspace-types'
@@ -57,6 +58,10 @@ type Ics215FormSectionsProps = {
   onAutoFillHaveFromAssetsChange?: (enabled: boolean) => void
   onHaveFillComplete?: (filledCount: number) => void
   onWorkAssignmentsLayoutModeChange?: (mode: Ics215WorkAssignmentsLayoutMode) => void
+  createHaveLinkRosterActions?: (
+    onAssignmentAdded?: (ref: string) => void
+  ) => HaveLinkRosterActions | undefined
+  showPositionAssets?: boolean
   editingSections: Partial<Record<Ics215SectionId, boolean>>
   drafts: Ics215FormSectionDrafts
   onStartSectionEdit: (section: Ics215SectionId) => void
@@ -106,6 +111,8 @@ export function Ics215FormSections({
   onAutoFillHaveFromAssetsChange,
   onHaveFillComplete,
   onWorkAssignmentsLayoutModeChange,
+  createHaveLinkRosterActions,
+  showPositionAssets = true,
 }: Ics215FormSectionsProps) {
   const [workAssignmentsMaximized, setWorkAssignmentsMaximized] = useState(false)
 
@@ -256,6 +263,8 @@ export function Ics215FormSections({
       onChange={(next) => onPatchDraft('work-assignments', next)}
       onPersistWorkAssignments={onPersistWorkAssignmentsDraft}
       onHaveFillComplete={onHaveFillComplete}
+      createHaveLinkRosterActions={createHaveLinkRosterActions}
+      showPositionAssets={showPositionAssets}
     />
   )
 

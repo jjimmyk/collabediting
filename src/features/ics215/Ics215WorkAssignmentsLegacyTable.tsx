@@ -150,6 +150,8 @@ export function Ics215WorkAssignmentsLegacyTable({
   onChange,
   onHaveFillComplete,
   onPersistWorkAssignments,
+  createHaveLinkRosterActions,
+  showPositionAssets = true,
   tableLayout = 'default',
 }: Ics215WorkAssignmentsLegacyTableProps) {
   const {
@@ -600,6 +602,8 @@ export function Ics215WorkAssignmentsLegacyTable({
       rankingEngine={haveLink.rankingEngine}
       onConfirm={haveLink.confirmHaveLink}
       onUnlinkFromOtherCell={haveLink.unlinkRefFromOtherCell}
+      createHaveLinkRosterActions={createHaveLinkRosterActions}
+      showPositionAssets={showPositionAssets}
     />
     </>
   )

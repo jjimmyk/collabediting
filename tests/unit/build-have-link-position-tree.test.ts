@@ -5,6 +5,7 @@ import {
   getAssignedToPositionChildren,
   getAssignedToPositionSelectableRefs,
   partitionAssignedToPositionChildren,
+  partitionPositionChildrenByOp,
 } from '@/features/ics215/build-have-link-position-tree'
 import type { PositionRosterEntry } from '@/features/roster/workspace-position-roster'
 import type { WorkspaceRosterMember } from '@/lib/workspace-types'
@@ -153,6 +154,19 @@ describe('build-have-link-position-tree', () => {
     expect(nextOp).toHaveLength(1)
     expect(currentOp.every((child) => child.presence === 'active')).toBe(true)
     expect(nextOp.every((child) => child.presence === 'scheduled_next_op')).toBe(true)
+  })
+
+  it('partitions resource categories by lifecycle into OP columns', () => {
+    const tree = buildHaveLinkPositionTree({
+      positionEntries: [activePosition],
+      roster: [member, scheduledMember],
+    })
+    const node = tree.positions[0]!
+    const partitioned = partitionPositionChildrenByOp(node)
+    expect(partitioned.currentOp.some((child) => child.section === 'resource_categories')).toBe(true)
+    expect(partitioned.nextOp.some((child) => child.section === 'resource_categories')).toBe(false)
+    expect(node.memberSchedulePolicy).toBeDefined()
+    expect(node.showPositionAssets).toBe(true)
   })
 
   it('filters tree by query and keeps matching positions', () => {

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -34,6 +34,7 @@ import {
 import type { WorkAssignmentTargetOption } from '@/lib/work-assignment-target-options'
 import type { PositionRosterEntry } from '@/features/roster/workspace-position-roster'
 import type { WorkspaceRosterMember } from '@/lib/workspace-types'
+import type { HaveLinkRosterActions } from '@/features/ics215/have-link-roster-actions'
 import { toast } from 'sonner'
 
 export type Ics215HaveRosterLinkDialogProps = {
@@ -54,6 +55,10 @@ export type Ics215HaveRosterLinkDialogProps = {
   rankingEngine?: 'lexical' | 'openai'
   onConfirm: (selectedRefs: string[]) => void
   onUnlinkFromOtherCell?: (location: Ics215HaveLinkLocation, ref: string) => void
+  createHaveLinkRosterActions?: (
+    onAssignmentAdded?: (ref: string) => void
+  ) => HaveLinkRosterActions | undefined
+  showPositionAssets?: boolean
 }
 
 export function Ics215HaveRosterLinkDialog({
@@ -74,6 +79,8 @@ export function Ics215HaveRosterLinkDialog({
   rankingEngine,
   onConfirm,
   onUnlinkFromOtherCell,
+  createHaveLinkRosterActions,
+  showPositionAssets = true,
 }: Ics215HaveRosterLinkDialogProps) {
   const [filterQuery, setFilterQuery] = useState('')
   const [expandedPositions, setExpandedPositions] = useState<Set<string>>(new Set())
@@ -84,14 +91,20 @@ export function Ics215HaveRosterLinkDialog({
     [workspaceAssets]
   )
 
+  const positionEntriesByPosition = useMemo(
+    () => Object.fromEntries(positionRosterEntries.map((entry) => [entry.position, entry])),
+    [positionRosterEntries]
+  )
+
   const positionTree = useMemo(() => {
     const built = buildHaveLinkPositionTree({
       positionEntries: positionRosterEntries,
       roster,
       assetsByKey,
+      showPositionAssets,
     })
     return filterHaveLinkPositionTree(built, filterQuery)
-  }, [assetsByKey, filterQuery, positionRosterEntries, roster])
+  }, [assetsByKey, filterQuery, positionRosterEntries, roster, showPositionAssets])
 
   const ranked = useMemo(
     () => rankWorkspaceAssetsForResourceQuery(workspaceAssets, columnLabel),
@@ -166,6 +179,23 @@ export function Ics215HaveRosterLinkDialog({
     }
     toggleRef(ref)
   }
+
+  const handleAssignmentAdded = useCallback(
+    (ref: string) => {
+      if (linkedRefLocations.has(ref) && !linkedToThisCellRefs.has(ref)) {
+        return
+      }
+      if (!selectedRefs.has(ref)) {
+        toggleRef(ref)
+      }
+    },
+    [linkedRefLocations, linkedToThisCellRefs, selectedRefs, toggleRef]
+  )
+
+  const rosterActions = useMemo(
+    () => createHaveLinkRosterActions?.(handleAssignmentAdded),
+    [createHaveLinkRosterActions, handleAssignmentAdded]
+  )
 
   const handleTogglePositionRefs = (refs: string[], select: boolean) => {
     if (select) {
@@ -281,7 +311,7 @@ export function Ics215HaveRosterLinkDialog({
           <DialogDescription>
             {workAssignmentContext
               ? `Work assignment: ${workAssignmentContext}`
-              : 'Expand a position to link assignees for current or next OP, or resource categories.'}
+              : 'Expand a position to link assignees or add people, assets, and categories for current or next OP.'}
             {rankingEngine ? ` Asset suggestions ranked via ${rankingEngine}.` : ''}
             {' Each item can only be linked to one Have cell.'}
           </DialogDescription>
@@ -366,6 +396,7 @@ export function Ics215HaveRosterLinkDialog({
                       <Ics215HaveLinkPositionSection
                         key={node.position}
                         node={node}
+                        positionEntry={positionEntriesByPosition[node.position] ?? null}
                         expanded={expandedPositions.has(node.position)}
                         onExpandedChange={(nextExpanded) => {
                           setExpandedPositions((previous) => {
@@ -381,6 +412,7 @@ export function Ics215HaveRosterLinkDialog({
                         onToggleRef={handleToggleRef}
                         onTogglePositionRefs={handleTogglePositionRefs}
                         onUnlinkFromElsewhere={onUnlinkFromOtherCell}
+                        rosterActions={rosterActions}
                       />
                     ))}
                   </div>
