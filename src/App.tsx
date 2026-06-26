@@ -29988,6 +29988,21 @@ function App() {
                       onSaveCustomPosition={(input) => {
                         void handleSaveCustomPosition(input)
                       }}
+                      onCreateResourceCategory={(position, name, lifecycle) => {
+                        void createResourceCategoryForPosition(position, name, lifecycle)
+                      }}
+                      onDeleteResourceCategory={(categoryId) => {
+                        void deleteResourceCategoryById(categoryId)
+                      }}
+                      onFillResourceCategoryMember={(categoryId, memberId) => {
+                        void fillResourceCategoryMember(categoryId, memberId)
+                      }}
+                      onFillResourceCategoryAsset={(categoryId, assetKey) => {
+                        void fillResourceCategoryAsset(categoryId, assetKey)
+                      }}
+                      onClearResourceCategoryFill={(categoryId) => {
+                        void clearResourceCategoryFillById(categoryId)
+                      }}
                       isSavingAssetOrgChartPlacement={isSavingAssetOrgChartPlacement}
                       onAssetOrgChartPlacementChange={(assetKey, reportsTo) => {
                         void handleAssetOrgChartPlacementChange(assetKey, reportsTo)

@@ -153,6 +153,15 @@ type WorkspaceOrgChartRosterProps = {
     name?: string
     reportsTo?: string
   }) => void | Promise<void>
+  onCreateResourceCategory?: (
+    position: string,
+    name: string,
+    lifecycle: import('@/lib/workspace-resource-category-types').ResourceCategoryLifecycle
+  ) => void
+  onDeleteResourceCategory?: (categoryId: string) => void
+  onFillResourceCategoryMember?: (categoryId: string, memberId: string) => void
+  onFillResourceCategoryAsset?: (categoryId: string, assetKey: string) => void
+  onClearResourceCategoryFill?: (categoryId: string) => void
   isSavingAssetOrgChartPlacement?: boolean
   onAssetOrgChartPlacementChange?: (assetKey: string, reportsTo: string | null) => void
   isUpdatingSingleResourcePlacement?: string | null
@@ -235,6 +244,15 @@ type OrgChartRenderProps = {
     name?: string
     reportsTo?: string
   }) => void | Promise<void>
+  onCreateResourceCategory?: (
+    position: string,
+    name: string,
+    lifecycle: import('@/lib/workspace-resource-category-types').ResourceCategoryLifecycle
+  ) => void
+  onDeleteResourceCategory?: (categoryId: string) => void
+  onFillResourceCategoryMember?: (categoryId: string, memberId: string) => void
+  onFillResourceCategoryAsset?: (categoryId: string, assetKey: string) => void
+  onClearResourceCategoryFill?: (categoryId: string) => void
   exportMode?: boolean
   isProjected: boolean
   rosterTimeHorizon: OrgChartExportScope
@@ -574,6 +592,11 @@ function PositionNode({
   positionCatalog,
   isUpdatingPositionIdentity,
   onSaveCustomPosition,
+  onCreateResourceCategory,
+  onDeleteResourceCategory,
+  onFillResourceCategoryMember,
+  onFillResourceCategoryAsset,
+  onClearResourceCategoryFill,
   onOpenOrgChartAssetDetail,
   onOpenSingleResourceDetail,
   competencyOptions,
@@ -767,6 +790,11 @@ function PositionNode({
             positionCatalog={positionCatalog}
             isUpdatingPositionIdentity={isUpdatingPositionIdentity === position}
             onSaveCustomPosition={onSaveCustomPosition}
+            onCreateResourceCategory={onCreateResourceCategory}
+            onDeleteResourceCategory={onDeleteResourceCategory}
+            onFillResourceCategoryMember={onFillResourceCategoryMember}
+            onFillResourceCategoryAsset={onFillResourceCategoryAsset}
+            onClearResourceCategoryFill={onClearResourceCategoryFill}
           />
         </OrgChartCardAnchor>
       ) : (
@@ -842,6 +870,11 @@ function PositionNode({
           positionCatalog={positionCatalog}
           isUpdatingPositionIdentity={isUpdatingPositionIdentity === position}
           onSaveCustomPosition={onSaveCustomPosition}
+          onCreateResourceCategory={onCreateResourceCategory}
+          onDeleteResourceCategory={onDeleteResourceCategory}
+          onFillResourceCategoryMember={onFillResourceCategoryMember}
+          onFillResourceCategoryAsset={onFillResourceCategoryAsset}
+          onClearResourceCategoryFill={onClearResourceCategoryFill}
         />
       )}
       {!suppressChildren ? (
@@ -1202,6 +1235,11 @@ export function WorkspaceOrgChartRoster({
   positionCatalog,
   isUpdatingPositionIdentity = null,
   onSaveCustomPosition,
+  onCreateResourceCategory,
+  onDeleteResourceCategory,
+  onFillResourceCategoryMember,
+  onFillResourceCategoryAsset,
+  onClearResourceCategoryFill,
   isSavingAssetOrgChartPlacement = false,
   onAssetOrgChartPlacementChange,
   isUpdatingSingleResourcePlacement = null,
@@ -1321,6 +1359,11 @@ export function WorkspaceOrgChartRoster({
     positionCatalog,
     isUpdatingPositionIdentity,
     onSaveCustomPosition,
+    onCreateResourceCategory,
+    onDeleteResourceCategory,
+    onFillResourceCategoryMember,
+    onFillResourceCategoryAsset,
+    onClearResourceCategoryFill,
     exportMode,
     onOpenOrgChartAssetDetail: exportMode ? () => undefined : setSelectedAssetKey,
     onOpenSingleResourceDetail: exportMode ? () => undefined : setSelectedSingleResourceMemberId,
