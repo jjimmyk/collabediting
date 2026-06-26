@@ -127,31 +127,6 @@ export function SitrepScopeHeader({
   )
 }
 
-type SitrepGenerateDraftActionProps = {
-  disabled: boolean
-  onGenerateDraft: () => void
-}
-
-export function SitrepGenerateDraftAction({
-  disabled,
-  onGenerateDraft,
-}: SitrepGenerateDraftActionProps) {
-  return (
-    <div className="flex items-center justify-end">
-      <Button
-        type="button"
-        size="sm"
-        className="h-8 gap-1 bg-blue-600 text-xs text-white hover:bg-blue-700"
-        disabled={disabled}
-        onClick={onGenerateDraft}
-      >
-        <Sparkles className="h-3.5 w-3.5" />
-        Generate Draft
-      </Button>
-    </div>
-  )
-}
-
 type SitrepVersionToolbarProps = {
   latestVersion: SitrepVersion | null
   isLatestSigned: boolean
@@ -165,6 +140,8 @@ type SitrepVersionToolbarProps = {
   onOpenVersionHistory: () => void
   onOpenSignedVersions: () => void
   onCreateSignedOrNewVersion: () => void
+  onGenerateDraft?: () => void
+  generateDraftDisabled?: boolean
   onRequestApproval?: () => void
   canRequestApproval?: boolean
   approvalRequested?: boolean
@@ -183,6 +160,8 @@ export function SitrepVersionToolbar({
   onOpenVersionHistory,
   onOpenSignedVersions,
   onCreateSignedOrNewVersion,
+  onGenerateDraft,
+  generateDraftDisabled = false,
   onRequestApproval,
   canRequestApproval,
   approvalRequested,
@@ -264,18 +243,32 @@ export function SitrepVersionToolbar({
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center justify-start gap-2">
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          className="h-7 gap-1 text-xs"
-          disabled={viewingHistorical || isCreatingSignedVersion}
-          onClick={onCreateSignedOrNewVersion}
-        >
-          <Plus className="h-3.5 w-3.5" />
-          {isLatestSigned ? 'Create New Version' : 'Create New Signed Version'}
-        </Button>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-7 gap-1 text-xs"
+            disabled={viewingHistorical || isCreatingSignedVersion}
+            onClick={onCreateSignedOrNewVersion}
+          >
+            <Plus className="h-3.5 w-3.5" />
+            {isLatestSigned ? 'Create New Version' : 'Create New Signed Version'}
+          </Button>
+          {onGenerateDraft ? (
+            <Button
+              type="button"
+              size="sm"
+              className="h-7 gap-1 bg-blue-600 text-xs text-white hover:bg-blue-700"
+              disabled={generateDraftDisabled}
+              onClick={onGenerateDraft}
+            >
+              <Sparkles className="h-3.5 w-3.5" />
+              Generate Draft
+            </Button>
+          ) : null}
+        </div>
         {canRequestApproval && onRequestApproval ? (
           <Button
             type="button"

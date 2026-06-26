@@ -808,7 +808,6 @@ import {
   isSitrepVersionSubmitted,
 } from '@/features/sitrep/editor-utils'
 import {
-  SitrepGenerateDraftAction,
   SitrepHistoricalBanner,
   SitrepReviewTargetBanner,
   SitrepScopeHeader,
@@ -33452,49 +33451,6 @@ function App() {
                         scopeOptions={SITREP_SCOPE_OPTIONS}
                         onScopeChange={applySitrepScope}
                       />
-                      <SitrepGenerateDraftAction
-                        disabled={
-                          viewingSitrepVersion !== null ||
-                          isCreatingSignedSitrepVersion ||
-                          sitrepGeneratingFromScope !== null
-                        }
-                        onGenerateDraft={() => {
-                          const selectedScope = SITREP_SCOPE_OPTIONS.find(
-                            (option) => option.id === selectedSitrepScopeId
-                          )
-                          const scopeLabel = selectedScope?.label ?? 'the selected scope'
-                          const scopeKindLabel = getSitrepScopeKindLabel(selectedScope?.kind)
-                          const scopeContextId = selectedScope
-                            ? `sitrep-scope:${selectedScope.id}`
-                            : 'sitrep-scope:none'
-                          const scopeContextLabel = selectedScope?.label ?? 'SITREPs'
-                          setPratusAiIntent('sitrep-generation')
-                          setPratusAiDraftMessage(
-                            `Generate a SITREP draft for ${scopeKindLabel} ${scopeLabel} using the selected sources. ` +
-                              'A draft will be generated for every compatible section of the SITREP — every section except Ongoing Incidents and Imagery.'
-                          )
-                          setPratusAiDataSources((previous) => ({
-                            ...previous,
-                            files: true,
-                            organizationData: true,
-                            incidentData: true,
-                          }))
-                          setPratusAiSelectedFiles([])
-                          setPratusAiSelectedContexts((previous) => {
-                            const withoutSitrepScopes = previous.filter(
-                              (entry) =>
-                                entry.id !== 'tab:sitreps' &&
-                                !entry.id.startsWith('sitrep-scope:')
-                            )
-                            return [
-                              ...withoutSitrepScopes,
-                              { id: scopeContextId, label: scopeContextLabel },
-                            ]
-                          })
-                          setIsPratusAiSelectingContext(false)
-                          setIsPratusAiDrawerOpen(true)
-                        }}
-                      />
                       {!viewingSitrepVersion && (
                         <SitrepVersionToolbar
                           latestVersion={sitrepEditor.latestVersion}
@@ -33509,6 +33465,46 @@ function App() {
                           onOpenVersionHistory={() => setIsSitrepVersionDialogOpen(true)}
                           onOpenSignedVersions={() => setIsSitrepSignedVersionsDialogOpen(true)}
                           onCreateSignedOrNewVersion={handleSitrepCreateSignedOrNewVersion}
+                          generateDraftDisabled={
+                            isCreatingSignedSitrepVersion ||
+                            sitrepGeneratingFromScope !== null
+                          }
+                          onGenerateDraft={() => {
+                            const selectedScope = SITREP_SCOPE_OPTIONS.find(
+                              (option) => option.id === selectedSitrepScopeId
+                            )
+                            const scopeLabel = selectedScope?.label ?? 'the selected scope'
+                            const scopeKindLabel = getSitrepScopeKindLabel(selectedScope?.kind)
+                            const scopeContextId = selectedScope
+                              ? `sitrep-scope:${selectedScope.id}`
+                              : 'sitrep-scope:none'
+                            const scopeContextLabel = selectedScope?.label ?? 'SITREPs'
+                            setPratusAiIntent('sitrep-generation')
+                            setPratusAiDraftMessage(
+                              `Generate a SITREP draft for ${scopeKindLabel} ${scopeLabel} using the selected sources. ` +
+                                'A draft will be generated for every compatible section of the SITREP — every section except Ongoing Incidents and Imagery.'
+                            )
+                            setPratusAiDataSources((previous) => ({
+                              ...previous,
+                              files: true,
+                              organizationData: true,
+                              incidentData: true,
+                            }))
+                            setPratusAiSelectedFiles([])
+                            setPratusAiSelectedContexts((previous) => {
+                              const withoutSitrepScopes = previous.filter(
+                                (entry) =>
+                                  entry.id !== 'tab:sitreps' &&
+                                  !entry.id.startsWith('sitrep-scope:')
+                              )
+                              return [
+                                ...withoutSitrepScopes,
+                                { id: scopeContextId, label: scopeContextLabel },
+                              ]
+                            })
+                            setIsPratusAiSelectingContext(false)
+                            setIsPratusAiDrawerOpen(true)
+                          }}
                           canRequestApproval={
                             !!sitrepEditor.latestUnsignedVersion &&
                             !sitrepEditor.isLatestSigned &&
