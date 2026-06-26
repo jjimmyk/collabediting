@@ -814,6 +814,7 @@ import {
   SitrepVersionToolbar,
 } from '@/features/sitrep/SitrepChrome'
 import { SitrepVersionDialogs } from '@/features/sitrep/SitrepVersionDialogs'
+import { SitrepExerciseVersionTimeline } from '@/features/sitrep/SitrepExerciseVersionTimeline'
 import { useSitrepEditorState } from '@/hooks/useSitrepEditorState'
 import {
   buildDefaultSitrepForAor,
@@ -10061,6 +10062,8 @@ function App() {
     isCreateExerciseOpen,
     activeIncidentWorkspaceId,
     activeExerciseWorkspaceId,
+    activeTab,
+    sitrepVersions.length,
   ])
 
   useEffect(() => {
@@ -10332,11 +10335,16 @@ function App() {
     const leftBlockWidth = leftPanelRef.current?.getBoundingClientRect().width ?? 0
     const mapWidth = mapContainerRef.current?.getBoundingClientRect().width ?? window.innerWidth
     const drawerWidth = isPratusAiDrawerOpen ? mapWidth / 3 : 0
+    const showSitrepExerciseTimeline =
+      activeExerciseWorkspaceId !== null &&
+      activeTab === 'sitreps' &&
+      isMapVisible &&
+      sitrepVersions.length > 0
     return {
       left: Math.round(leftBlockWidth + padding),
       right: Math.round(drawerWidth + padding),
       top: padding,
-      bottom: padding,
+      bottom: padding + (showSitrepExerciseTimeline ? 56 : 0),
     }
   }
 
@@ -26168,6 +26176,35 @@ function App() {
           isMapVisible ? 'opacity-100' : 'pointer-events-none opacity-0'
         )}
       />
+      {activeExerciseWorkspaceId !== null &&
+      activeTab === 'sitreps' &&
+      isMapVisible &&
+      sitrepVersions.length > 0 ? (
+        <div
+          className={cn(
+            'pointer-events-none absolute bottom-4 z-20 flex justify-center px-4',
+            isPratusAiDrawerOpen ? 'right-[33.333vw] left-0' : 'right-0 left-0'
+          )}
+        >
+          <SitrepExerciseVersionTimeline
+            versions={sitrepVersions}
+            activeVersionId={
+              viewingSitrepVersion?.id ??
+              getLatestSitrepVersion(sitrepVersions)?.id ??
+              null
+            }
+            className="pointer-events-auto"
+            onSelectVersion={(version) => {
+              const latest = getLatestSitrepVersion(sitrepVersions)
+              if (latest?.id === version.id) {
+                viewLatestSitrep()
+                return
+              }
+              openSitrepVersionFromList(version, 'historical', { viewOnly: true })
+            }}
+          />
+        </div>
+      ) : null}
       <div
         ref={leftPanelRef}
         className={cn(
@@ -33442,15 +33479,17 @@ function App() {
                           }}
                         />
                       )}
-                      <SitrepScopeHeader
-                        isInWorkspaceContext={isInWorkspaceContext}
-                        scopeKindLabel={getSitrepScopeKindLabel(selectedSitrepScope?.kind)}
-                        scopeLabel={selectedSitrepScope?.label ?? ''}
-                        scopeKind={selectedSitrepScope?.kind}
-                        selectedScopeId={selectedSitrepScopeId}
-                        scopeOptions={SITREP_SCOPE_OPTIONS}
-                        onScopeChange={applySitrepScope}
-                      />
+                      {!(isInExerciseWorkspace && activeTab === 'sitreps') ? (
+                        <SitrepScopeHeader
+                          isInWorkspaceContext={isInWorkspaceContext}
+                          scopeKindLabel={getSitrepScopeKindLabel(selectedSitrepScope?.kind)}
+                          scopeLabel={selectedSitrepScope?.label ?? ''}
+                          scopeKind={selectedSitrepScope?.kind}
+                          selectedScopeId={selectedSitrepScopeId}
+                          scopeOptions={SITREP_SCOPE_OPTIONS}
+                          onScopeChange={applySitrepScope}
+                        />
+                      ) : null}
                       {!viewingSitrepVersion && (
                         <SitrepVersionToolbar
                           latestVersion={sitrepEditor.latestVersion}
