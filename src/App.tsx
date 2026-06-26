@@ -53,6 +53,7 @@ import {
   Home,
   Image as ImageIcon,
   Info,
+  Layers,
   ListChecks,
   LogOut,
   Map as MapIcon,
@@ -737,6 +738,12 @@ import { Ics201SectionEditorBadges } from '@/features/ics201/Ics201SectionEditor
 import { Ics201TutorialWizard } from '@/features/ics201/Ics201TutorialWizard'
 import { UscgInitialResponseTutorialWizard } from '@/features/uscg-workspace/UscgInitialResponseTutorialWizard'
 import { HubTutorialWizard } from '@/features/hub/HubTutorialWizard'
+import { HubMapLayersPanel } from '@/features/hub/map-layers/HubMapLayersPanel'
+import {
+  loadEnabledWeatherLayerIds,
+  saveEnabledWeatherLayerIds,
+} from '@/features/hub/map-layers/weather-layer-catalog'
+import { useHubWeatherMapLayers } from '@/features/hub/map-layers/useHubWeatherMapLayers'
 import { ProductToursMenu } from '@/components/ProductToursMenu'
 import { CreateHubNotificationDialog } from '@/components/CreateHubNotificationDialog'
 import {
@@ -4280,6 +4287,7 @@ type LeftTab =
   | 'exercises'
   | 'events'
   | 'analytics'
+  | 'map-layers'
   | 'briefing'
   | 'msel'
   | 'exercise-objectives'
@@ -4324,6 +4332,7 @@ const WORKSPACE_MORE_MENU: Array<{ tab: LeftTab; label: string }> = [
 
 const HUB_MORE_MENU: Array<{ tab: LeftTab; label: string }> = [
   { tab: 'analytics', label: 'Analytics' },
+  { tab: 'map-layers', label: 'Map Layers' },
   { tab: 'seerist', label: 'Seerist' },
   { tab: 'resources', label: 'Assets' },
   { tab: 'exercises', label: 'Exercises' },
@@ -6669,6 +6678,9 @@ function App() {
   )
   const [analyticsVisibleResolutionLayerKeys, setAnalyticsVisibleResolutionLayerKeys] =
     useState<Set<string>>(() => new Set())
+  const [enabledWeatherLayerIds, setEnabledWeatherLayerIds] = useState<Set<string>>(() =>
+    loadEnabledWeatherLayerIds()
+  )
   const [analyticsResolutionKindFilter, setAnalyticsResolutionKindFilter] =
     useState<AnalyticsResolutionKindFilter>('incidents')
   const [analyticsSpendKindFilter, setAnalyticsSpendKindFilter] =
@@ -12296,6 +12308,31 @@ function App() {
       setWorkspaceMselExpandedInjectId(injectId)
     },
   })
+  const { layerStatuses: weatherLayerStatuses } = useHubWeatherMapLayers({
+    enabled: !isInWorkspaceContext && isMapVisible,
+    mapViewRef,
+    enabledLayerIds: enabledWeatherLayerIds,
+  })
+  const toggleWeatherMapLayer = useCallback((layerId: string) => {
+    setEnabledWeatherLayerIds((previous) => {
+      const next = new Set(previous)
+      if (next.has(layerId)) {
+        next.delete(layerId)
+      } else {
+        next.add(layerId)
+      }
+      saveEnabledWeatherLayerIds(next)
+      return next
+    })
+    setIsMapVisible(true)
+  }, [])
+  const hideAllWeatherMapLayers = useCallback(() => {
+    setEnabledWeatherLayerIds(() => {
+      const next = new Set<string>()
+      saveEnabledWeatherLayerIds(next)
+      return next
+    })
+  }, [])
   const activeLocalRosterPlan =
     activeWorkspaceRosterKey !== null
       ? localRosterPlansByKey[activeWorkspaceRosterKey]
@@ -17476,6 +17513,8 @@ function App() {
           icon:
             item.tab === 'analytics' ? (
               <BarChart3 className="h-4 w-4" />
+            ) : item.tab === 'map-layers' ? (
+              <Layers className="h-4 w-4" />
             ) : item.tab === 'seerist' ? (
               <Radar className="h-4 w-4" />
             ) : item.tab === 'resources' ? (
@@ -26916,6 +26955,7 @@ function App() {
                       'Events'
                     ))}
                   {activeTab === 'analytics' && 'Analytics'}
+                  {activeTab === 'map-layers' && 'Map Layers'}
                   {activeTab === 'briefing' && 'Incident Briefing ICS-201'}
                   {activeTab === 'msel' && 'MSEL'}
                   {activeTab === 'exercise-objectives' && 'Exercise Objectives'}
@@ -31529,6 +31569,16 @@ function App() {
                       </div>
                     </section>
                   </div>
+                )}
+
+                {activeTab === 'map-layers' && !isInWorkspaceContext && (
+                  <HubMapLayersPanel
+                    enabledLayerIds={enabledWeatherLayerIds}
+                    layerStatuses={weatherLayerStatuses}
+                    glassItemBorderClasses={glassItemBorderClasses}
+                    onToggleLayer={toggleWeatherMapLayer}
+                    onHideAll={hideAllWeatherMapLayers}
+                  />
                 )}
 
                 {activeTab === 'briefing' && (isInIncidentWorkspace || isInExerciseWorkspace) && (
