@@ -216,6 +216,15 @@ export function applyHubAorBoundaryToggle(
   return next
 }
 
+export function removeSingleHubAorBoundaryId(
+  enabledIds: Set<string>,
+  boundaryId: string
+): Set<string> {
+  const next = new Set(enabledIds)
+  next.delete(boundaryId)
+  return next
+}
+
 export function loadEnabledHubAorBoundaryIds(): Set<string> {
   if (typeof window === 'undefined') {
     return new Set()

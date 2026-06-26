@@ -746,10 +746,16 @@ import {
   applyHubAorBoundaryToggle,
   getHubAorBoundaryDefinition,
   loadEnabledHubAorBoundaryIds,
+  removeSingleHubAorBoundaryId,
   saveEnabledHubAorBoundaryIds,
 } from '@/features/hub/aor/hub-aor-boundary-geometries'
 import { hubAorDistrictBoundaryId } from '@/features/hub/aor/aor-boundary-map-keys'
 import { useHubAorBoundaryMapLayers } from '@/features/hub/aor/useHubAorBoundaryMapLayers'
+import { HubMapVisibleItemsPill } from '@/features/hub/map/HubMapVisibleItemsPill'
+import {
+  buildHubMapVisibleItems,
+  type HubMapVisibleItem,
+} from '@/features/hub/map/hub-map-visible-items'
 import {
   loadEnabledWeatherLayerIds,
   saveEnabledWeatherLayerIds,
@@ -11864,6 +11870,36 @@ function App() {
       return next
     })
   }, [])
+  const hubMapVisibleItems = useMemo(
+    () =>
+      buildHubMapVisibleItems(
+        enabledWeatherLayerIds,
+        enabledAorBoundaryIds,
+        weatherLayerStatuses
+      ),
+    [enabledWeatherLayerIds, enabledAorBoundaryIds, weatherLayerStatuses]
+  )
+  const handleRemoveHubMapVisibleItem = useCallback((item: HubMapVisibleItem) => {
+    if (item.source === 'weather') {
+      setEnabledWeatherLayerIds((previous) => {
+        const next = new Set(previous)
+        next.delete(item.id)
+        saveEnabledWeatherLayerIds(next)
+        return next
+      })
+      return
+    }
+
+    setEnabledAorBoundaryIds((previous) => {
+      const next = removeSingleHubAorBoundaryId(previous, item.id)
+      saveEnabledHubAorBoundaryIds(next)
+      return next
+    })
+  }, [])
+  const handleClearAllHubMapVisibleItems = useCallback(() => {
+    hideAllWeatherMapLayers()
+    hideAllAorBoundaries()
+  }, [hideAllAorBoundaries, hideAllWeatherMapLayers])
   const activeLocalRosterPlan =
     activeWorkspaceRosterKey !== null
       ? localRosterPlansByKey[activeWorkspaceRosterKey]
@@ -26041,6 +26077,18 @@ function App() {
           isMapVisible ? 'opacity-100' : 'pointer-events-none opacity-0'
         )}
       />
+      {isMapVisible && !isInWorkspaceContext ? (
+        <HubMapVisibleItemsPill
+          items={hubMapVisibleItems}
+          glassItemBorderClasses={glassItemBorderClasses}
+          className={cn(
+            'pointer-events-auto absolute top-3 z-20',
+            isPratusAiDrawerOpen ? 'right-[calc(33.333vw+0.75rem)]' : 'right-3'
+          )}
+          onRemoveItem={handleRemoveHubMapVisibleItem}
+          onClearAll={handleClearAllHubMapVisibleItems}
+        />
+      ) : null}
       <div
         ref={leftPanelRef}
         className={cn(
