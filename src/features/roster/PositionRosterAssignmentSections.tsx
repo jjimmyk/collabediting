@@ -28,6 +28,12 @@ import { RosterMemberCheckInStatusSelect } from '@/features/roster/RosterMemberC
 import { CompetencyFunctionSelect } from '@/features/roster/CompetencyFunctionSelect'
 import type { WorkspaceMemberCheckInStatus, WorkspaceRosterMember } from '@/lib/workspace-types'
 import type { OrgMemberSearchResult } from '@/lib/workspace-service'
+import type { ResourceCategoryLifecycle } from '@/lib/workspace-resource-category-types'
+import {
+  filterResourceCategoriesByLifecycle,
+  PositionResourceCategoryCreateControl,
+  PositionResourceCategoryRow,
+} from '@/features/roster/PositionResourceCategoryRow'
 
 function PositionAssignmentLifecycleSection({
   title,
@@ -178,7 +184,7 @@ function NewUserInviteControl({
           onClick={onToggle}
         >
           <Plus className="h-3.5 w-3.5 shrink-0" />
-          {expanded ? 'Cancel' : 'New user'}
+          {expanded ? 'Cancel' : 'New Person'}
         </Button>
         {expanded ? (
           <PositionRosterInviteForm
@@ -210,7 +216,7 @@ function NewUserInviteControl({
       onClick={() => onInviteToPosition?.(position, mode)}
     >
       <Plus className="h-3.5 w-3.5 shrink-0" />
-      New user
+      New Person
     </Button>
   )
 }
@@ -218,6 +224,7 @@ function NewUserInviteControl({
 function PositionAssignmentActionBar({
   showAssetActions,
   showNewUser,
+  showResourceCategory,
   disabled,
   assignableMembers,
   assignableAssets,
@@ -230,6 +237,7 @@ function PositionAssignmentActionBar({
   onAssignOrgMember,
   rosterMembersForOrgDedupe,
   onSelectAsset,
+  onCreateResourceCategory,
   position,
   inviteMode,
   expandedInviteMode,
@@ -239,6 +247,7 @@ function PositionAssignmentActionBar({
 }: {
   showAssetActions: boolean
   showNewUser: boolean
+  showResourceCategory?: boolean
   disabled: boolean
   assignableMembers: WorkspaceRosterMember[]
   assignableAssets: ResourceListItemData[]
@@ -251,6 +260,7 @@ function PositionAssignmentActionBar({
   onAssignOrgMember?: (userId: string) => void
   rosterMembersForOrgDedupe?: WorkspaceRosterMember[]
   onSelectAsset?: (assetKey: string, pointOfContactMemberId?: string) => void
+  onCreateResourceCategory?: (name: string) => void
   position: string
   inviteMode: RosterInviteAssignmentMode
   expandedInviteMode: RosterInviteAssignmentMode | null
@@ -261,8 +271,14 @@ function PositionAssignmentActionBar({
   return (
     <div className="space-y-1.5 pt-1">
       <div className="flex flex-wrap gap-1.5">
+        {showResourceCategory && onCreateResourceCategory ? (
+          <PositionResourceCategoryCreateControl
+            disabled={disabled}
+            onCreate={onCreateResourceCategory}
+          />
+        ) : null}
         <PositionMemberAssignPicker
-          label="Existing user"
+          label="Existing Person"
           disabled={disabled}
           position={position}
           assignableMembers={assignableMembers}
@@ -355,6 +371,11 @@ export type PositionRosterUnifiedAssignmentSectionsProps = {
   onInviteToPosition: (position: string, mode: RosterInviteAssignmentMode) => void
   onUnassignMember: (memberId: string, position: string) => void
   inlinePositionInvite?: PositionRosterInlineInviteProps
+  onCreateResourceCategory?: (position: string, name: string, lifecycle: ResourceCategoryLifecycle) => void
+  onDeleteResourceCategory?: (categoryId: string) => void
+  onFillResourceCategoryMember?: (categoryId: string, memberId: string) => void
+  onFillResourceCategoryAsset?: (categoryId: string, assetKey: string) => void
+  onClearResourceCategoryFill?: (categoryId: string) => void
 } & PositionRosterAssetHandlers
 
 export function PositionRosterUnifiedAssignmentSections({
@@ -400,6 +421,11 @@ export function PositionRosterUnifiedAssignmentSections({
   onRemoveScheduledAssignAsset,
   onRemoveScheduledUnassignAsset,
   onUpdateAssetPointOfContact,
+  onCreateResourceCategory,
+  onDeleteResourceCategory,
+  onFillResourceCategoryMember,
+  onFillResourceCategoryAsset,
+  onClearResourceCategoryFill,
 }: PositionRosterUnifiedAssignmentSectionsProps) {
   const [expandedAssetKey, setExpandedAssetKey] = useState<string | null>(null)
   const [expandedInviteMode, setExpandedInviteMode] = useState<RosterInviteAssignmentMode | null>(
@@ -439,16 +465,47 @@ export function PositionRosterUnifiedAssignmentSections({
   const scheduleOrgChartEmpty = scheduleOrgChartCombinedEmptyMessage(entry, assetsEnabled)
   const scheduleUnassignEmpty = scheduleUnassignCombinedEmptyMessage(entry, assetsEnabled)
 
-  const assignNowHasRows = entry.members.length > 0 || (assetsEnabled && entry.assets.length > 0)
+  const assignNowHasRows =
+    entry.members.length > 0 ||
+    (assetsEnabled && entry.assets.length > 0) ||
+    filterResourceCategoriesByLifecycle(entry.resourceCategories, 'active').length > 0
   const scheduleAssignHasRows =
     entry.scheduledAssignees.length > 0 ||
-    (assetsEnabled && entry.scheduledAssignAssets.length > 0)
+    (assetsEnabled && entry.scheduledAssignAssets.length > 0) ||
+    filterResourceCategoriesByLifecycle(entry.resourceCategories, 'scheduled_assign').length > 0
   const scheduleOrgChartHasRows =
     entry.scheduledOrgChartMembers.length > 0 ||
     (assetsEnabled && entry.scheduledOrgChartAssets.length > 0)
   const scheduleUnassignHasRows =
     entry.scheduledUnassignees.length > 0 ||
-    (assetsEnabled && entry.scheduledUnassignAssets.length > 0)
+    (assetsEnabled && entry.scheduledUnassignAssets.length > 0) ||
+    filterResourceCategoriesByLifecycle(entry.resourceCategories, 'scheduled_unassign').length > 0
+
+  const renderResourceCategoryRows = (
+    lifecycle: ResourceCategoryLifecycle,
+    lifecycleLabel: string,
+    canManageSection: boolean,
+    assignableMembersForFill: WorkspaceRosterMember[],
+    assignableAssetsForFill: ResourceListItemData[]
+  ) =>
+    filterResourceCategoriesByLifecycle(entry.resourceCategories, lifecycle).map((category) => (
+      <PositionResourceCategoryRow
+        key={`resource-category-${lifecycle}-${entry.position}-${category.id}`}
+        category={category}
+        position={entry.position}
+        lifecycleLabel={lifecycleLabel}
+        canManage={canManageRoster && canManageSection}
+        isBusy={isBusy}
+        assignableMembers={assignableMembersForFill}
+        assignableAssets={assignableAssetsForFill}
+        pocMembers={pocMembers}
+        assetsEnabled={assetsEnabled}
+        onDelete={() => onDeleteResourceCategory?.(category.id)}
+        onFillMember={(memberId) => onFillResourceCategoryMember?.(category.id, memberId)}
+        onFillAsset={(assetKey) => onFillResourceCategoryAsset?.(category.id, assetKey)}
+        onClearFill={() => onClearResourceCategoryFill?.(category.id)}
+      />
+    ))
 
   const renderAssetListItem = (
     asset: (typeof entry.assets)[number],
@@ -513,6 +570,7 @@ export function PositionRosterUnifiedAssignmentSections({
             <PositionAssignmentActionBar
               showAssetActions={assetsEnabled}
               showNewUser
+              showResourceCategory
               disabled={isBusy}
               assignableMembers={assignable}
               assignableAssets={assignableAssets}
@@ -520,6 +578,11 @@ export function PositionRosterUnifiedAssignmentSections({
               requireAssetPoc
               memberEmptyMessage={assignExistingMembersEmptyMessage(entry, assignable.length)}
               assetEmptyMessage={assignableAssetsEmptyMessage(assetsEnabled)}
+              onCreateResourceCategory={
+                onCreateResourceCategory
+                  ? (name) => onCreateResourceCategory(entry.position, name, 'active')
+                  : undefined
+              }
               onSelectMember={(memberId) => onAssignExistingMember(memberId, entry.position)}
               onSearchOrgMembers={onSearchOrgMembers}
               onAssignOrgMember={
@@ -585,6 +648,7 @@ export function PositionRosterUnifiedAssignmentSections({
               })
             )
           : null}
+        {renderResourceCategoryRows('active', 'Assigned now', canAssignNow, assignable, assignableAssets)}
       </PositionAssignmentLifecycleSection>
 
       <PositionAssignmentLifecycleSection
@@ -597,6 +661,7 @@ export function PositionRosterUnifiedAssignmentSections({
             <PositionAssignmentActionBar
               showAssetActions={assetsEnabled}
               showNewUser
+              showResourceCategory
               disabled={isBusy}
               assignableMembers={scheduleAssignable}
               assignableAssets={scheduleAssignableAssets}
@@ -604,6 +669,11 @@ export function PositionRosterUnifiedAssignmentSections({
               requireAssetPoc={false}
               memberEmptyMessage={scheduleAssignMembersEmptyMessage(scheduleAssignable.length)}
               assetEmptyMessage={assignableAssetsEmptyMessage(assetsEnabled)}
+              onCreateResourceCategory={
+                onCreateResourceCategory
+                  ? (name) => onCreateResourceCategory(entry.position, name, 'scheduled_assign')
+                  : undefined
+              }
               onSelectMember={(memberId) => onScheduleAssignMember(memberId, entry.position)}
               onSelectAsset={
                 assetsEnabled
@@ -665,6 +735,13 @@ export function PositionRosterUnifiedAssignmentSections({
               })
             )
           : null}
+        {renderResourceCategoryRows(
+          'scheduled_assign',
+          'Scheduled assign',
+          canScheduleAssign,
+          scheduleAssignable,
+          scheduleAssignableAssets
+        )}
       </PositionAssignmentLifecycleSection>
 
       <PositionAssignmentLifecycleSection
@@ -726,6 +803,7 @@ export function PositionRosterUnifiedAssignmentSections({
             <PositionAssignmentActionBar
               showAssetActions={assetsEnabled}
               showNewUser={false}
+              showResourceCategory
               disabled={isBusy}
               assignableMembers={scheduleUnassignable}
               assignableAssets={scheduleUnassignableAssets}
@@ -733,6 +811,11 @@ export function PositionRosterUnifiedAssignmentSections({
               requireAssetPoc={false}
               memberEmptyMessage={scheduleUnassignMembersEmptyMessage(entry, scheduleUnassignable.length)}
               assetEmptyMessage={scheduleUnassignAssetsEmptyMessage()}
+              onCreateResourceCategory={
+                onCreateResourceCategory
+                  ? (name) => onCreateResourceCategory(entry.position, name, 'scheduled_unassign')
+                  : undefined
+              }
               onSelectMember={(memberId) => onScheduleUnassignMember(memberId, entry.position)}
               onSelectAsset={
                 assetsEnabled
@@ -794,6 +877,13 @@ export function PositionRosterUnifiedAssignmentSections({
               })
             )
           : null}
+        {renderResourceCategoryRows(
+          'scheduled_unassign',
+          'Scheduled unassign',
+          canScheduleUnassign,
+          scheduleUnassignable,
+          scheduleUnassignableAssets
+        )}
       </PositionAssignmentLifecycleSection>
     </>
   )

@@ -67,6 +67,7 @@ export function projectPositionRosterEntryForExport(
       scheduledAssignAssets: [],
       scheduledUnassignAssets: [],
       scheduledOrgChartAssets: [],
+      resourceCategories: [],
     }
   }
 
@@ -89,6 +90,12 @@ export function projectPositionRosterEntryForExport(
     scheduledAssignAssets: [],
     scheduledUnassignAssets: [],
     scheduledOrgChartAssets: [],
+    resourceCategories: [
+      ...entry.resourceCategories.filter((category) => category.lifecycle === 'active'),
+      ...entry.resourceCategories
+        .filter((category) => category.lifecycle === 'scheduled_assign')
+        .map((category) => ({ ...category, lifecycle: 'active' as const })),
+    ],
   }
 }
 

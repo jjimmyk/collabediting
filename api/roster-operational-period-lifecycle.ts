@@ -12,7 +12,10 @@ import {
   applyPendingSingleResourceAssignmentsOnOperationalPeriodAdvance,
   validatePendingSingleResourceAssignmentsBeforeOpAdvance,
 } from './roster-pending-assignments-shared.js'
-import { defaultAllowWorkAssignmentForApi } from './roster-operations-work-assignment.js'
+import {
+  applyResourceCategoriesOnOperationalPeriodAdvance,
+  clearResourceCategoriesForPosition,
+} from './roster-resource-category-shared.js'
 import { ICS_POSITIONS } from './roster-shared.js'
 
 type DbCustomPositionRow = {
@@ -473,6 +476,7 @@ async function applyRosterLifecycleOnOperationalPeriodAdvance(
     await removeMembersFromPosition(admin, workspaceId, positionName, context)
     await clearPositionDependencies(admin, workspaceId, positionName)
     await clearPositionAssetDependencies(admin, workspaceId, positionName)
+    await clearResourceCategoriesForPosition(admin, workspaceId, positionName)
   }
 
   for (const custom of context.customPositions) {
@@ -547,4 +551,5 @@ export async function snapshotAndApplyRosterLifecycleOnOperationalPeriodAdvance(
   await applyPendingSingleResourceAssignmentsOnOperationalPeriodAdvance(admin, workspaceId)
   await applyAssetSchedulesOnOperationalPeriodAdvance(admin, workspaceId)
   await applyPendingAssetOrgChartOnOperationalPeriodAdvance(admin, workspaceId)
+  await applyResourceCategoriesOnOperationalPeriodAdvance(admin, workspaceId)
 }

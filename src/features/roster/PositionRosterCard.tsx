@@ -111,6 +111,15 @@ type PositionRosterCardProps = {
     name?: string
     reportsTo?: string
   }) => void | Promise<void>
+  onCreateResourceCategory?: (
+    position: string,
+    name: string,
+    lifecycle: import('@/lib/workspace-resource-category-types').ResourceCategoryLifecycle
+  ) => void
+  onDeleteResourceCategory?: (categoryId: string) => void
+  onFillResourceCategoryMember?: (categoryId: string, memberId: string) => void
+  onFillResourceCategoryAsset?: (categoryId: string, assetKey: string) => void
+  onClearResourceCategoryFill?: (categoryId: string) => void
   rosterTimeHorizon?: OrgChartExportScope
   managementEntry?: PositionRosterEntry
 } & Partial<PositionRosterAssetHandlers>
@@ -177,6 +186,11 @@ export function PositionRosterCard({
   positionCatalog,
   isUpdatingPositionIdentity = false,
   onSaveCustomPosition,
+  onCreateResourceCategory,
+  onDeleteResourceCategory,
+  onFillResourceCategoryMember,
+  onFillResourceCategoryAsset,
+  onClearResourceCategoryFill,
   rosterTimeHorizon = 'current_op',
   managementEntry,
 }: PositionRosterCardProps) {
@@ -234,6 +248,11 @@ export function PositionRosterCard({
     positionCatalog,
     isUpdatingPositionIdentity,
     onSaveCustomPosition,
+    onCreateResourceCategory,
+    onDeleteResourceCategory,
+    onFillResourceCategoryMember,
+    onFillResourceCategoryAsset,
+    onClearResourceCategoryFill,
   }
 
   if (isOrg) {

@@ -29,7 +29,8 @@ export function buildIcs204AssignedUnitOptions(
     string,
     { assignMemberIds: string[]; unassignMemberIds: string[] }
   > = {},
-  catalog?: WorkspacePositionCatalog
+  catalog?: WorkspacePositionCatalog,
+  assetsByKey: Record<string, import('@/features/resources/types').ResourceListItemData> = {}
 ): Ics204AssignedUnitOption[] {
   return toAssignedUnitOptions(
     buildWorkAssignmentTargetOptions({
@@ -38,6 +39,7 @@ export function buildIcs204AssignedUnitOptions(
       catalog,
       competencyOptions,
       schedulesByPosition,
+      assetsByKey,
     })
   )
 }
@@ -50,7 +52,8 @@ export function buildIcs204AssignedUnitTargetOptions(
     string,
     { assignMemberIds: string[]; unassignMemberIds: string[] }
   > = {},
-  catalog?: WorkspacePositionCatalog
+  catalog?: WorkspacePositionCatalog,
+  assetsByKey: Record<string, import('@/features/resources/types').ResourceListItemData> = {}
 ): WorkAssignmentTargetOption[] {
   return buildWorkAssignmentTargetOptions({
     roster,
@@ -58,6 +61,7 @@ export function buildIcs204AssignedUnitTargetOptions(
     catalog,
     competencyOptions,
     schedulesByPosition,
+    assetsByKey,
   })
 }
 

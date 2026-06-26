@@ -23,6 +23,7 @@ import {
   resolvePositionAssetEntry,
   resolveScheduledPositionAssets,
 } from '@/lib/workspace-position-asset-roster'
+import type { PositionResourceCategoryEntry } from '@/lib/workspace-resource-category-types'
 
 export type PositionPermissionMap = Record<string, { editIcs201: boolean }>
 
@@ -36,6 +37,7 @@ export type PositionRosterEntry = {
   scheduledAssignAssets: PositionAssetRosterEntry[]
   scheduledUnassignAssets: PositionAssetRosterEntry[]
   scheduledOrgChartAssets: PositionAssetRosterEntry[]
+  resourceCategories: PositionResourceCategoryEntry[]
   memberSchedulePolicy: PositionMemberSchedulePolicy
   editIcs201: boolean
   allowWorkAssignment: boolean
@@ -118,7 +120,8 @@ export function buildPositionRosterEntries(
   > = {},
   assetsByKey: Record<string, ResourceListItemData> = {},
   workspaceMetaByAssetKey: Record<string, PositionAssetWorkspaceMeta> = {},
-  assetScheduleCompetencyByKey: Record<string, string | null> = {}
+  assetScheduleCompetencyByKey: Record<string, string | null> = {},
+  resourceCategoriesByPosition: Record<string, PositionResourceCategoryEntry[]> = {}
 ): PositionRosterEntry[] {
   const normalizedQuery = searchQuery.trim().toLowerCase()
   const memberById = new Map(roster.map((member) => [member.id, member]))
@@ -199,6 +202,17 @@ export function buildPositionRosterEntries(
         scheduledAssignAssets,
         scheduledUnassignAssets,
         scheduledOrgChartAssets,
+        resourceCategories: (resourceCategoriesByPosition[position] ?? []).map((category) => ({
+          ...category,
+          filledMemberEmail:
+            category.filledMemberId != null
+              ? (memberById.get(category.filledMemberId)?.email ?? null)
+              : null,
+          filledAssetName:
+            category.filledAssetKey != null
+              ? (assetsByKey[category.filledAssetKey]?.name ?? category.filledAssetKey)
+              : null,
+        })),
         memberSchedulePolicy: getPositionMemberSchedulePolicy(meta),
         editIcs201: permissions[position]?.editIcs201 ?? !catalog.customPositionNames.has(position),
         allowWorkAssignment: resolveAllowWorkAssignment(position, settings, catalog),

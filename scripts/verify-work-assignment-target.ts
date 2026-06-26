@@ -58,6 +58,7 @@ const positionEntries: PositionRosterEntry[] = [
     scheduledAssignAssets: [],
     scheduledUnassignAssets: [],
     scheduledOrgChartAssets: [],
+    resourceCategories: [],
     memberSchedulePolicy: {
       allowActiveAssignment: true,
       allowScheduleAssign: true,
@@ -82,6 +83,7 @@ const positionEntries: PositionRosterEntry[] = [
     scheduledAssignAssets: [],
     scheduledUnassignAssets: [],
     scheduledOrgChartAssets: [],
+    resourceCategories: [],
     memberSchedulePolicy: {
       allowActiveAssignment: true,
       allowScheduleAssign: true,

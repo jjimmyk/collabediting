@@ -72,7 +72,12 @@ export function WorkAssignmentTargetPicker({
         {groupedOptions.map(([group, groupOptions]) => (
           <optgroup key={group} label={group}>
             {groupOptions.map((option) => (
-              <option key={option.value} value={option.value} disabled={option.disabled}>
+              <option
+                key={option.value}
+                value={option.value}
+                disabled={option.disabled}
+                title={option.disabledReason}
+              >
                 {option.label}
               </option>
             ))}

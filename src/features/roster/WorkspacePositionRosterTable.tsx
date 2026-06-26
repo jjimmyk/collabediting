@@ -115,6 +115,15 @@ type WorkspacePositionRosterTableProps = {
     name?: string
     reportsTo?: string
   }) => void | Promise<void>
+  onCreateResourceCategory?: (
+    position: string,
+    name: string,
+    lifecycle: import('@/lib/workspace-resource-category-types').ResourceCategoryLifecycle
+  ) => void
+  onDeleteResourceCategory?: (categoryId: string) => void
+  onFillResourceCategoryMember?: (categoryId: string, memberId: string) => void
+  onFillResourceCategoryAsset?: (categoryId: string, assetKey: string) => void
+  onClearResourceCategoryFill?: (categoryId: string) => void
 } & Partial<PositionRosterAssetHandlers>
 
 function AssignedMembersList({
@@ -266,6 +275,11 @@ export function WorkspacePositionRosterTable({
   onUpdateAssetPointOfContact,
   isUpdatingPositionIdentity = null,
   onSaveCustomPosition,
+  onCreateResourceCategory,
+  onDeleteResourceCategory,
+  onFillResourceCategoryMember,
+  onFillResourceCategoryAsset,
+  onClearResourceCategoryFill,
 }: WorkspacePositionRosterTableProps) {
   const tableColumnCount =
     3 +
@@ -659,6 +673,11 @@ export function WorkspacePositionRosterTable({
                     isUpdatingPositionIdentity === managedEntry.position
                   }
                   onSaveCustomPosition={onSaveCustomPosition}
+                  onCreateResourceCategory={onCreateResourceCategory}
+                  onDeleteResourceCategory={onDeleteResourceCategory}
+                  onFillResourceCategoryMember={onFillResourceCategoryMember}
+                  onFillResourceCategoryAsset={onFillResourceCategoryAsset}
+                  onClearResourceCategoryFill={onClearResourceCategoryFill}
                   canRemoveFromRoster={canRemovePositionFromRoster?.(managedEntry) ?? false}
                   removalBlockedReason={positionRemovalBlockedReason?.(managedEntry) ?? null}
                   isRemovingFromRoster={isDeletingCustomPosition === managedEntry.position}

@@ -81,6 +81,15 @@ type PositionRosterDetailPanelProps = {
     name?: string
     reportsTo?: string
   }) => void | Promise<void>
+  onCreateResourceCategory?: (
+    position: string,
+    name: string,
+    lifecycle: import('@/lib/workspace-resource-category-types').ResourceCategoryLifecycle
+  ) => void
+  onDeleteResourceCategory?: (categoryId: string) => void
+  onFillResourceCategoryMember?: (categoryId: string, memberId: string) => void
+  onFillResourceCategoryAsset?: (categoryId: string, assetKey: string) => void
+  onClearResourceCategoryFill?: (categoryId: string) => void
 } & Partial<PositionRosterAssetHandlers>
 
 export function PositionRosterDetailPanel({
@@ -143,6 +152,11 @@ export function PositionRosterDetailPanel({
   positionCatalog,
   isUpdatingPositionIdentity = false,
   onSaveCustomPosition,
+  onCreateResourceCategory,
+  onDeleteResourceCategory,
+  onFillResourceCategoryMember,
+  onFillResourceCategoryAsset,
+  onClearResourceCategoryFill,
 }: PositionRosterDetailPanelProps) {
   const assetsHandlersReady = Boolean(
     onAssignAsset &&
@@ -268,6 +282,11 @@ export function PositionRosterDetailPanel({
         onRemoveScheduledAssignAsset={onRemoveScheduledAssignAsset ?? (() => {})}
         onRemoveScheduledUnassignAsset={onRemoveScheduledUnassignAsset ?? (() => {})}
         onUpdateAssetPointOfContact={onUpdateAssetPointOfContact ?? (() => {})}
+        onCreateResourceCategory={onCreateResourceCategory}
+        onDeleteResourceCategory={onDeleteResourceCategory}
+        onFillResourceCategoryMember={onFillResourceCategoryMember}
+        onFillResourceCategoryAsset={onFillResourceCategoryAsset}
+        onClearResourceCategoryFill={onClearResourceCategoryFill}
       />
 
       {canManageRoster && onRemoveFromRoster ? (

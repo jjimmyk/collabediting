@@ -1,0 +1,184 @@
+import { useState } from 'react'
+import { Plus, Trash2 } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import type { ResourceListItemData } from '@/features/resources/types'
+import { PositionMemberAssignPicker } from '@/features/roster/PositionMemberAssignPicker'
+import { PositionAssetPickerPopover } from '@/features/roster/PositionRosterAssetSections'
+import type { PositionResourceCategoryEntry } from '@/lib/workspace-resource-category-types'
+import type { ResourceCategoryLifecycle } from '@/lib/workspace-resource-category-types'
+import type { WorkspaceRosterMember } from '@/lib/workspace-types'
+
+export function PositionResourceCategoryCreateControl({
+  disabled,
+  onCreate,
+}: {
+  disabled: boolean
+  onCreate: (name: string) => void
+}) {
+  const [expanded, setExpanded] = useState(false)
+  const [name, setName] = useState('')
+
+  const submit = () => {
+    const trimmed = name.trim()
+    if (!trimmed) return
+    onCreate(trimmed)
+    setName('')
+    setExpanded(false)
+  }
+
+  if (!expanded) {
+    return (
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        className="h-7 gap-1 px-2 text-[11px]"
+        disabled={disabled}
+        onClick={() => setExpanded(true)}
+      >
+        <Plus className="h-3.5 w-3.5 shrink-0" />
+        Resource Category
+      </Button>
+    )
+  }
+
+  return (
+    <div className="min-w-[10rem] flex-1 space-y-1">
+      <div className="flex gap-1">
+        <Input
+          value={name}
+          onChange={(event) => setName(event.target.value)}
+          placeholder="Category name"
+          className="h-7 text-[11px]"
+          aria-label="Resource category name"
+        />
+        <Button type="button" size="sm" className="h-7 px-2 text-[11px]" disabled={disabled || !name.trim()} onClick={submit}>
+          Add
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          className="h-7 px-2 text-[11px]"
+          onClick={() => {
+            setExpanded(false)
+            setName('')
+          }}
+        >
+          Cancel
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+export function PositionResourceCategoryRow({
+  category,
+  position,
+  lifecycleLabel,
+  canManage,
+  isBusy,
+  assignableMembers,
+  assignableAssets,
+  pocMembers,
+  assetsEnabled,
+  onDelete,
+  onFillMember,
+  onFillAsset,
+  onClearFill,
+}: {
+  category: PositionResourceCategoryEntry
+  position: string
+  lifecycleLabel: string
+  canManage: boolean
+  isBusy: boolean
+  assignableMembers: WorkspaceRosterMember[]
+  assignableAssets: ResourceListItemData[]
+  pocMembers: WorkspaceRosterMember[]
+  assetsEnabled: boolean
+  onDelete: () => void
+  onFillMember: (memberId: string) => void
+  onFillAsset: (assetKey: string) => void
+  onClearFill: () => void
+}) {
+  const fillLabel =
+    category.filledMemberEmail ??
+    category.filledAssetName ??
+    'Unfilled — assign a person or asset'
+
+  return (
+    <div className="space-y-1.5 rounded-md border px-2 py-1.5">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-xs font-medium">{category.name}</p>
+          <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
+            <Badge variant="secondary" className="h-4 px-1.5 text-[9px]">
+              Resource Category
+            </Badge>
+            <Badge variant="outline" className="h-4 px-1.5 text-[9px]">
+              {lifecycleLabel}
+            </Badge>
+          </div>
+          <p className="mt-1 text-[11px] text-muted-foreground">{fillLabel}</p>
+        </div>
+        {canManage ? (
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            className="h-7 w-7 shrink-0 text-muted-foreground hover:text-destructive"
+            aria-label={`Remove resource category ${category.name}`}
+            disabled={isBusy}
+            onClick={onDelete}
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </Button>
+        ) : null}
+      </div>
+      {canManage ? (
+        <div className="flex flex-wrap gap-1.5">
+          <PositionMemberAssignPicker
+            label="Existing Person"
+            disabled={isBusy}
+            position={position}
+            assignableMembers={assignableMembers}
+            onSelectRosterMember={onFillMember}
+          />
+          {assetsEnabled ? (
+            <PositionAssetPickerPopover
+              label="Asset"
+              assets={assignableAssets}
+              pocMembers={pocMembers}
+              requirePoc={false}
+              disabled={isBusy}
+              emptyMessage="No assignable assets"
+              compact
+              onSelect={(assetKey) => onFillAsset(assetKey)}
+            />
+          ) : null}
+          {(category.filledMemberId || category.filledAssetKey) && (
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              className="h-7 px-2 text-[11px]"
+              disabled={isBusy}
+              onClick={onClearFill}
+            >
+              Clear fill
+            </Button>
+          )}
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+export function filterResourceCategoriesByLifecycle(
+  categories: PositionResourceCategoryEntry[],
+  lifecycle: ResourceCategoryLifecycle
+): PositionResourceCategoryEntry[] {
+  return categories.filter((category) => category.lifecycle === lifecycle)
+}

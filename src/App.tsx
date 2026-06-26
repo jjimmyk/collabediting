@@ -680,6 +680,17 @@ import {
   groupPositionAssetAssignmentsByPosition,
 } from '@/lib/workspace-position-asset-roster'
 import { getPositionMemberSchedulePolicy } from '@/lib/roster-member-schedule-policy'
+import {
+  createWorkspaceResourceCategory,
+  deleteWorkspaceResourceCategory,
+  fetchWorkspaceResourceCategories,
+  updateWorkspaceResourceCategoryFill,
+} from '@/lib/workspace-resource-category-service'
+import {
+  groupResourceCategoriesByPosition,
+  type ResourceCategoryLifecycle,
+  type WorkspaceResourceCategoryRow,
+} from '@/lib/workspace-resource-category-types'
 import type {
   PositionRosterInviteSubmitResult,
   RosterInviteAssignmentMode,
@@ -8650,6 +8661,9 @@ function App() {
   const [assetPendingOrgChartByKey, setAssetPendingOrgChartByKey] = useState<
     Record<string, import('@/lib/workspace-position-asset-service').AssetPendingOrgChartAssignment>
   >({})
+  const [workspaceResourceCategories, setWorkspaceResourceCategories] = useState<
+    WorkspaceResourceCategoryRow[]
+  >([])
   const [activeWorkspaceSupabaseId, setActiveWorkspaceSupabaseId] = useState<string | null>(null)
   const [assetAssignmentDisplayContext, setAssetAssignmentDisplayContext] =
     useState<ActiveWorkspaceAssetDisplayContext | null>(null)
@@ -12593,11 +12607,12 @@ function App() {
         setWorkspacePositionAssetAssignments([])
         setWorkspaceAssetSchedules([])
         setAssetPendingOrgChartByKey({})
+        setWorkspaceResourceCategories([])
         setIsRosterLoading(false)
         return
       }
 
-      const [roster, schedules, permissions, settings, positionAssets, assetSchedules, pendingOrgChart] =
+      const [roster, schedules, permissions, settings, positionAssets, assetSchedules, pendingOrgChart, resourceCategories] =
         await Promise.all([
         fetchWorkspaceRoster(workspaceId),
         fetchWorkspaceMemberSchedules(workspaceId),
@@ -12606,6 +12621,7 @@ function App() {
         fetchWorkspacePositionAssetAssignments(workspaceId),
         fetchWorkspaceAssetSchedules(workspaceId),
         fetchWorkspaceAssetPendingOrgChartReports(workspaceId),
+        fetchWorkspaceResourceCategories(workspaceId),
       ])
       if (cancelled) return
       setSupabaseWorkspaceRoster(roster)
@@ -12615,6 +12631,7 @@ function App() {
       setWorkspacePositionAssetAssignments(positionAssets)
       setWorkspaceAssetSchedules(assetSchedules)
       setAssetPendingOrgChartByKey(pendingOrgChart)
+      setWorkspaceResourceCategories(resourceCategories)
 
       setIsRosterLoading(false)
     }
@@ -13989,6 +14006,10 @@ function App() {
     () => groupAssetSchedulesByPosition(workspaceAssetSchedules),
     [workspaceAssetSchedules]
   )
+  const resourceCategoriesByPosition = useMemo(
+    () => groupResourceCategoriesByPosition(workspaceResourceCategories),
+    [workspaceResourceCategories]
+  )
   const positionAssetWorkspaceMetaByKey = useMemo(
     () => buildPositionAssetWorkspaceMetaByKey(workspaceAssignedAssetsWithPending, activeWorkspaceRoster),
     [workspaceAssignedAssetsWithPending, activeWorkspaceRoster]
@@ -14477,7 +14498,8 @@ function App() {
       assetSchedulesByPosition,
       workspaceAssetsByKey,
       positionAssetWorkspaceMetaByKey,
-      assetScheduleCompetencyByKey
+      assetScheduleCompetencyByKey,
+      resourceCategoriesByPosition
     )
   }, [
     activePanelSearchQuery,
@@ -14491,6 +14513,7 @@ function App() {
     memberSchedulesByPosition,
     positionAssetWorkspaceMetaByKey,
     positionAssetsByPosition,
+    resourceCategoriesByPosition,
     workspaceAssetsByKey,
     workspacePositionCatalog,
   ])
@@ -14571,13 +14594,15 @@ function App() {
         activeWorkspaceRoster,
         rosterCompetencyControls.organizationCompetencyOptions,
         memberSchedulesByPosition,
-        workspacePositionCatalog
+        workspacePositionCatalog,
+        workspaceAssetsByKey
       ),
     [
       activeWorkspaceRoster,
       memberSchedulesByPosition,
       positionRosterEntries,
       rosterCompetencyControls.organizationCompetencyOptions,
+      workspaceAssetsByKey,
       workspacePositionCatalog,
     ]
   )
@@ -14588,13 +14613,15 @@ function App() {
         activeWorkspaceRoster,
         rosterCompetencyControls.organizationCompetencyOptions,
         memberSchedulesByPosition,
-        workspacePositionCatalog
+        workspacePositionCatalog,
+        workspaceAssetsByKey
       ),
     [
       activeWorkspaceRoster,
       memberSchedulesByPosition,
       positionRosterEntries,
       rosterCompetencyControls.organizationCompetencyOptions,
+      workspaceAssetsByKey,
       workspacePositionCatalog,
     ]
   )
@@ -16209,6 +16236,119 @@ function App() {
     setWorkspaceAssetSchedules(assetSchedules)
     setAssetPendingOrgChartByKey(pendingOrgChart)
     await refreshAssignments()
+  }
+  const reloadWorkspaceResourceCategories = async () => {
+    if (!isSupabaseEnabled || !activeWorkspaceSupabaseId) return
+    const categories = await fetchWorkspaceResourceCategories(activeWorkspaceSupabaseId)
+    setWorkspaceResourceCategories(categories)
+  }
+  const createResourceCategoryForPosition = async (
+    position: string,
+    name: string,
+    lifecycle: ResourceCategoryLifecycle
+  ) => {
+    if (!isSupabaseEnabled || !activeWorkspaceSupabaseId) {
+      toast.error('This workspace is not synced to Supabase yet.')
+      return
+    }
+    const accessToken = await getAccessToken()
+    if (!accessToken) {
+      toast.error('Sign in again to manage resource categories.')
+      return
+    }
+    setRosterAssigningPosition(position)
+    const result = await createWorkspaceResourceCategory({
+      accessToken,
+      workspaceId: activeWorkspaceSupabaseId,
+      positionName: position,
+      name,
+      lifecycle,
+    })
+    setRosterAssigningPosition(null)
+    if (!result.ok) {
+      toast.error(result.message)
+      return
+    }
+    await reloadWorkspaceResourceCategories()
+    toast.success(`Added resource category "${name}"`)
+  }
+  const deleteResourceCategoryById = async (categoryId: string) => {
+    if (!isSupabaseEnabled || !activeWorkspaceSupabaseId) return
+    const accessToken = await getAccessToken()
+    if (!accessToken) {
+      toast.error('Sign in again to manage resource categories.')
+      return
+    }
+    const result = await deleteWorkspaceResourceCategory({
+      accessToken,
+      workspaceId: activeWorkspaceSupabaseId,
+      categoryId,
+    })
+    if (!result.ok) {
+      toast.error(result.message)
+      return
+    }
+    await reloadWorkspaceResourceCategories()
+  }
+  const fillResourceCategoryMember = async (categoryId: string, memberId: string) => {
+    if (!isSupabaseEnabled || !activeWorkspaceSupabaseId) return
+    const accessToken = await getAccessToken()
+    if (!accessToken) {
+      toast.error('Sign in again to manage resource categories.')
+      return
+    }
+    const result = await updateWorkspaceResourceCategoryFill({
+      accessToken,
+      workspaceId: activeWorkspaceSupabaseId,
+      categoryId,
+      filledMemberId: memberId,
+      filledAssetKey: null,
+    })
+    if (!result.ok) {
+      toast.error(result.message)
+      return
+    }
+    await reloadWorkspaceResourceCategories()
+  }
+  const fillResourceCategoryAsset = async (categoryId: string, assetKey: string) => {
+    if (!isSupabaseEnabled || !activeWorkspaceSupabaseId) return
+    const accessToken = await getAccessToken()
+    if (!accessToken) {
+      toast.error('Sign in again to manage resource categories.')
+      return
+    }
+    const result = await updateWorkspaceResourceCategoryFill({
+      accessToken,
+      workspaceId: activeWorkspaceSupabaseId,
+      categoryId,
+      filledMemberId: null,
+      filledAssetKey: assetKey,
+    })
+    if (!result.ok) {
+      toast.error(result.message)
+      return
+    }
+    await reloadWorkspaceResourceCategories()
+  }
+  const clearResourceCategoryFillById = async (categoryId: string) => {
+    if (!isSupabaseEnabled || !activeWorkspaceSupabaseId) return
+    const accessToken = await getAccessToken()
+    if (!accessToken) {
+      toast.error('Sign in again to manage resource categories.')
+      return
+    }
+    const result = await updateWorkspaceResourceCategoryFill({
+      accessToken,
+      workspaceId: activeWorkspaceSupabaseId,
+      categoryId,
+      filledMemberId: null,
+      filledAssetKey: null,
+    })
+    if (!result.ok) {
+      toast.error(result.message)
+      return
+    }
+    await reloadWorkspaceResourceCategories()
   }
   const updatePositionScheduleLists = async (
     position: string,
@@ -29978,6 +30118,21 @@ function App() {
                       }}
                       onUpdateAssetPointOfContact={(assetKey, memberId) => {
                         void updateAssetPointOfContact(assetKey, memberId)
+                      }}
+                      onCreateResourceCategory={(position, name, lifecycle) => {
+                        void createResourceCategoryForPosition(position, name, lifecycle)
+                      }}
+                      onDeleteResourceCategory={(categoryId) => {
+                        void deleteResourceCategoryById(categoryId)
+                      }}
+                      onFillResourceCategoryMember={(categoryId, memberId) => {
+                        void fillResourceCategoryMember(categoryId, memberId)
+                      }}
+                      onFillResourceCategoryAsset={(categoryId, assetKey) => {
+                        void fillResourceCategoryAsset(categoryId, assetKey)
+                      }}
+                      onClearResourceCategoryFill={(categoryId) => {
+                        void clearResourceCategoryFillById(categoryId)
                       }}
                     />
                       )}

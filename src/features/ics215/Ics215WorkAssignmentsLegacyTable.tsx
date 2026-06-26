@@ -19,6 +19,8 @@ import {
 import type { WorkAssignmentTargetOption } from '@/lib/work-assignment-target-options'
 import { mergeLegacyWorkAssignmentTargetOptions } from '@/lib/work-assignment-target-options'
 import { normalizeWorkAssignmentTargetValue } from '@/lib/work-assignment-target'
+import { validateWorkAssignmentAssigneeSelection } from '@/lib/work-assignment-target-options'
+import { toast } from 'sonner'
 import type { WorkspaceRosterMember } from '@/lib/workspace-types'
 import { cn } from '@/lib/utils'
 
@@ -433,11 +435,19 @@ export function Ics215WorkAssignmentsLegacyTable({
                               competencyOptions={competencyOptions}
                               showMemberCompetencyEditor
                               selectClassName="text-xs font-normal"
-                              onChange={(value) =>
+                              onChange={(value) => {
+                                const validationError = validateWorkAssignmentAssigneeSelection(
+                                  value,
+                                  targetOptionsForRow
+                                )
+                                if (validationError) {
+                                  toast.error(validationError)
+                                  return
+                                }
                                 patchRow(row.id, {
                                   assignee: normalizeWorkAssignmentTargetValue(value, roster),
                                 })
-                              }
+                              }}
                             />
                           ) : (
                             <Ics202ReadOnlyField

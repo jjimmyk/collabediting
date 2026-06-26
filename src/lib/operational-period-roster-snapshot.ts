@@ -57,6 +57,7 @@ export function buildPositionRosterEntriesFromSnapshot(
       scheduledAssignAssets: [],
       scheduledUnassignAssets: [],
       scheduledOrgChartAssets: [],
+      resourceCategories: [],
       memberSchedulePolicy: getPositionMemberSchedulePolicy({
         name: position.name,
         source: position.source,
