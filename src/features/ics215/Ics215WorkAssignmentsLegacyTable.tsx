@@ -136,6 +136,7 @@ export function Ics215WorkAssignmentsLegacyTable({
   workAssignments,
   workAssignmentTargetOptions,
   roster = [],
+  positionRosterEntries = [],
   competencyOptions = [],
   workspaceAssets = [],
   workspaceId = null,
@@ -588,6 +589,8 @@ export function Ics215WorkAssignmentsLegacyTable({
       workAssignmentContext={haveLink.dialogState?.workAssignmentContext}
       workspaceAssets={workspaceAssets}
       haveLinkTargetOptions={haveLink.haveLinkTargetOptions}
+      positionRosterEntries={positionRosterEntries}
+      roster={roster}
       initialSelectedRefs={haveLink.dialogInitialSelectedRefs}
       suggestedRefs={haveLink.suggestedRefs}
       staleLinkedRefs={haveLink.staleLinkedRefs}

@@ -1,5 +1,6 @@
 import { fillHaveForResourceValue } from '@/features/resources/workspace-asset-have-lookup'
 import { resolveHaveDisplayValue } from '@/features/ics215/ics215-have-asset-link'
+import type { PositionRosterEntry } from '@/features/roster/workspace-position-roster'
 import type { ResourceListItemData } from '@/features/resources/types'
 import type {
   Ics215ResourceColumn,
@@ -79,6 +80,7 @@ export type Ics215WorkAssignmentsTableBaseProps = {
   autoFillHaveFromAssets?: boolean
   lockedAssignee?: string
   roster?: WorkspaceRosterMember[]
+  positionRosterEntries?: PositionRosterEntry[]
   editing: boolean
   canLinkAssets?: boolean
   tableLayout?: Ics215WorkAssignmentsTableLayout

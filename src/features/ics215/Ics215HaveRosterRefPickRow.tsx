@@ -5,6 +5,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import type { Ics215HaveLinkLocation } from '@/features/ics215/ics215-have-asset-link'
 import { formatHaveLinkLocation } from '@/features/ics215/ics215-have-asset-link'
 import type { WorkAssignmentTargetOption } from '@/lib/work-assignment-target-options'
+import { ROSTER_PRESENCE_LABELS, type RosterPresence } from '@/lib/work-assignment-roster-eligibility'
 import { cn } from '@/lib/utils'
 
 const TARGET_TYPE_LABELS: Record<string, string> = {
@@ -61,6 +62,11 @@ export function Ics215HaveRosterRefPickRow({
             <Badge variant="outline" className="text-[10px]">
               {typeLabel}
             </Badge>
+            {option.rosterPresence ? (
+              <Badge variant="outline" className="text-[10px]">
+                {ROSTER_PRESENCE_LABELS[option.rosterPresence as RosterPresence]}
+              </Badge>
+            ) : null}
             {linkedToThisCell ? (
               <Badge variant="secondary" className="text-[10px]">
                 Linked here

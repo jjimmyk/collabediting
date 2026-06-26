@@ -9,14 +9,16 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
-import { Ics215HaveAssetPickCard } from '@/features/ics215/Ics215HaveAssetPickCard'
 import {
-  filterHaveLinkTargetOptions,
-  groupHaveLinkTargetOptions,
-  Ics215HaveRosterRefPickRow,
-  isAssetHaveLinkOption,
-  isRosterHaveLinkOption,
-} from '@/features/ics215/Ics215HaveRosterRefPickRow'
+  buildHaveLinkPositionTree,
+  filterHaveLinkPositionTree,
+} from '@/features/ics215/build-have-link-position-tree'
+import {
+  Ics215HaveLinkFlatRefSection,
+  Ics215HaveLinkPositionSection,
+} from '@/features/ics215/Ics215HaveLinkPositionSection'
+import { Ics215HaveAssetPickCard } from '@/features/ics215/Ics215HaveAssetPickCard'
+import { Ics215HaveRosterRefPickRow, isRosterHaveLinkOption } from '@/features/ics215/Ics215HaveRosterRefPickRow'
 import type { Ics215HaveLinkLocation } from '@/features/ics215/ics215-have-asset-link'
 import {
   assetKeyToHaveRef,
@@ -30,6 +32,8 @@ import {
   useHaveLinkSelection,
 } from '@/features/ics215/Ics215HaveCell'
 import type { WorkAssignmentTargetOption } from '@/lib/work-assignment-target-options'
+import type { PositionRosterEntry } from '@/features/roster/workspace-position-roster'
+import type { WorkspaceRosterMember } from '@/lib/workspace-types'
 import { toast } from 'sonner'
 
 export type Ics215HaveRosterLinkDialogProps = {
@@ -39,6 +43,8 @@ export type Ics215HaveRosterLinkDialogProps = {
   workAssignmentContext?: string
   workspaceAssets: ResourceListItemData[]
   haveLinkTargetOptions: WorkAssignmentTargetOption[]
+  positionRosterEntries?: PositionRosterEntry[]
+  roster?: WorkspaceRosterMember[]
   initialSelectedRefs: string[]
   suggestedRefs?: string[]
   staleLinkedRefs?: string[]
@@ -57,6 +63,8 @@ export function Ics215HaveRosterLinkDialog({
   workAssignmentContext,
   workspaceAssets,
   haveLinkTargetOptions,
+  positionRosterEntries = [],
+  roster = [],
   initialSelectedRefs,
   suggestedRefs = [],
   staleLinkedRefs = [],
@@ -68,16 +76,22 @@ export function Ics215HaveRosterLinkDialog({
   onUnlinkFromOtherCell,
 }: Ics215HaveRosterLinkDialogProps) {
   const [filterQuery, setFilterQuery] = useState('')
+  const [expandedPositions, setExpandedPositions] = useState<Set<string>>(new Set())
   const linkedToThisCellRefs = useMemo(() => new Set(initialSelectedRefs), [initialSelectedRefs])
 
-  const assetOptions = useMemo(
-    () => haveLinkTargetOptions.filter(isAssetHaveLinkOption),
-    [haveLinkTargetOptions]
+  const assetsByKey = useMemo(
+    () => Object.fromEntries(workspaceAssets.map((asset) => [asset.assetKey, asset])),
+    [workspaceAssets]
   )
-  const rosterOptions = useMemo(
-    () => haveLinkTargetOptions.filter(isRosterHaveLinkOption),
-    [haveLinkTargetOptions]
-  )
+
+  const positionTree = useMemo(() => {
+    const built = buildHaveLinkPositionTree({
+      positionEntries: positionRosterEntries,
+      roster,
+      assetsByKey,
+    })
+    return filterHaveLinkPositionTree(built, filterQuery)
+  }, [assetsByKey, filterQuery, positionRosterEntries, roster])
 
   const ranked = useMemo(
     () => rankWorkspaceAssetsForResourceQuery(workspaceAssets, columnLabel),
@@ -105,15 +119,23 @@ export function Ics215HaveRosterLinkDialog({
   useEffect(() => {
     if (!open) {
       setFilterQuery('')
+      setExpandedPositions(new Set())
       return
     }
     setRefs(startingSelection)
-  }, [open, startingSelection.join('|')])
-
-  const filteredRosterOptions = filterHaveLinkTargetOptions(rosterOptions, filterQuery)
-  const filteredAssetOptions = filterHaveLinkTargetOptions(assetOptions, filterQuery)
-  const rosterGroups = groupHaveLinkTargetOptions(filteredRosterOptions)
-  const assetGroups = groupHaveLinkTargetOptions(filteredAssetOptions)
+    const nextExpanded = new Set<string>()
+    for (const node of positionTree.positions) {
+      const hasLinkedHere = [...initialSelectedRefs, ...startingSelection].some(
+        (ref) =>
+          node.selectableRefs.includes(ref) ||
+          node.children.some((child) => child.ref === ref)
+      )
+      if (hasLinkedHere || filterQuery.trim().length > 0) {
+        nextExpanded.add(node.position)
+      }
+    }
+    setExpandedPositions(nextExpanded)
+  }, [open, startingSelection.join('|'), filterQuery, initialSelectedRefs.join('|'), positionTree.positions.map((node) => node.position).join('|')])
 
   const optionByValue = useMemo(
     () => new Map(haveLinkTargetOptions.map((option) => [option.value, option])),
@@ -143,6 +165,20 @@ export function Ics215HaveRosterLinkDialog({
       return
     }
     toggleRef(ref)
+  }
+
+  const handleTogglePositionRefs = (refs: string[], select: boolean) => {
+    if (select) {
+      for (const ref of refs) {
+        if (selectedRefs.has(ref)) continue
+        if (linkedRefLocations.has(ref) && !linkedToThisCellRefs.has(ref)) continue
+        toggleRef(ref)
+      }
+      return
+    }
+    for (const ref of refs) {
+      if (selectedRefs.has(ref)) toggleRef(ref)
+    }
   }
 
   const renderAssetPickCard = (entry: ScoredWorkspaceAsset) => {
@@ -228,12 +264,14 @@ export function Ics215HaveRosterLinkDialog({
       ? 'Confirm'
       : 'Confirm Have link'
 
-  const hasRosterItems = rosterGroups.some((group) => group.options.length > 0)
+  const hasPositionTree =
+    positionTree.positions.length > 0 ||
+    positionTree.singleResources.length > 0 ||
+    positionTree.orgChartAssets.length > 0
   const hasAssetItems =
     linkedToThisCellAssetEntries.length > 0 ||
     filteredSuggestedAssets.length > 0 ||
-    filteredOtherAssets.length > 0 ||
-    assetGroups.some((group) => group.options.length > 0)
+    filteredOtherAssets.length > 0
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -243,7 +281,7 @@ export function Ics215HaveRosterLinkDialog({
           <DialogDescription>
             {workAssignmentContext
               ? `Work assignment: ${workAssignmentContext}`
-              : 'Select roster positions, people, assets, or resource categories for this Have cell.'}
+              : 'Expand a position to link people, assets, or resource categories. Retiring items are shown but cannot be selected.'}
             {rankingEngine ? ` Asset suggestions ranked via ${rankingEngine}.` : ''}
             {' Each item can only be linked to one Have cell.'}
           </DialogDescription>
@@ -318,23 +356,60 @@ export function Ics215HaveRosterLinkDialog({
                 </div>
               ) : null}
 
-              {hasRosterItems ? (
+              {hasPositionTree ? (
                 <div className="space-y-3">
                   <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                    Roster
+                    Roster by position
                   </p>
-                  {rosterGroups.map((group) =>
-                    group.options.length > 0 ? (
-                      <div key={group.group} className="space-y-2">
-                        <p className="text-[11px] font-medium text-muted-foreground">{group.group}</p>
-                        <div className="space-y-2">
-                          {group.options
-                            .filter((option) => !linkedToThisCellRefs.has(option.value))
-                            .map((option) => renderRosterOption(option))}
-                        </div>
-                      </div>
-                    ) : null
-                  )}
+                  <div className="space-y-2">
+                    {positionTree.positions.map((node) => (
+                      <Ics215HaveLinkPositionSection
+                        key={node.position}
+                        node={node}
+                        expanded={expandedPositions.has(node.position)}
+                        onExpandedChange={(nextExpanded) => {
+                          setExpandedPositions((previous) => {
+                            const next = new Set(previous)
+                            if (nextExpanded) next.add(node.position)
+                            else next.delete(node.position)
+                            return next
+                          })
+                        }}
+                        selectedRefs={selectedRefs}
+                        linkedToThisCellRefs={linkedToThisCellRefs}
+                        linkedRefLocations={linkedRefLocations}
+                        onToggleRef={handleToggleRef}
+                        onTogglePositionRefs={handleTogglePositionRefs}
+                        onUnlinkFromElsewhere={onUnlinkFromOtherCell}
+                      />
+                    ))}
+                  </div>
+                  <Ics215HaveLinkFlatRefSection
+                    title="Single resources"
+                    description="Org-chart single resources not tied to a position row."
+                    selectedRefs={selectedRefs}
+                    linkedToThisCellRefs={linkedToThisCellRefs}
+                    linkedRefLocations={linkedRefLocations}
+                    onToggleRef={handleToggleRef}
+                    onUnlinkFromElsewhere={onUnlinkFromOtherCell}
+                  >
+                    {positionTree.singleResources.filter(
+                      (child) => !linkedToThisCellRefs.has(child.ref)
+                    )}
+                  </Ics215HaveLinkFlatRefSection>
+                  <Ics215HaveLinkFlatRefSection
+                    title="Org chart assets"
+                    description="Assets on the org chart not already listed under a position."
+                    selectedRefs={selectedRefs}
+                    linkedToThisCellRefs={linkedToThisCellRefs}
+                    linkedRefLocations={linkedRefLocations}
+                    onToggleRef={handleToggleRef}
+                    onUnlinkFromElsewhere={onUnlinkFromOtherCell}
+                  >
+                    {positionTree.orgChartAssets.filter(
+                      (child) => !linkedToThisCellRefs.has(child.ref)
+                    )}
+                  </Ics215HaveLinkFlatRefSection>
                 </div>
               ) : null}
 
@@ -354,13 +429,17 @@ export function Ics215HaveRosterLinkDialog({
                   <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                     Other assets assigned to this incident
                   </p>
+                  <p className="text-[11px] text-muted-foreground">
+                    Not on the org-chart roster; available because the asset is assigned to this
+                    incident.
+                  </p>
                   <div className="space-y-2">
                     {filteredOtherAssets.map((entry) => renderAssetPickCard(entry))}
                   </div>
                 </div>
               ) : null}
 
-              {!hasRosterItems && !hasAssetItems && staleEntries.length === 0 ? (
+              {!hasPositionTree && !hasAssetItems && staleEntries.length === 0 ? (
                 <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
                   No matching roster items for this filter.
                 </div>

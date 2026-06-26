@@ -32,6 +32,7 @@ import {
   fillAllIcs215WorkAssignmentsHaveInDraft,
   normalizeIcs215WorkAssignmentsLayoutMode,
 } from '@/features/ics215/utils'
+import type { PositionRosterEntry } from '@/features/roster/workspace-position-roster'
 import type { WorkAssignmentTargetOption } from '@/lib/work-assignment-target-options'
 import type { WorkspaceRosterMember } from '@/lib/workspace-types'
 import { Item } from '@/components/ui/item'
@@ -46,6 +47,7 @@ type Ics215FormSectionsProps = {
   assigneeOptions: Ics204AssignedUnitOption[]
   workAssignmentTargetOptions: WorkAssignmentTargetOption[]
   roster?: WorkspaceRosterMember[]
+  positionRosterEntries?: PositionRosterEntry[]
   competencyOptions?: string[]
   workspaceAssets?: ResourceListItemData[]
   workspaceId?: string | null
@@ -85,6 +87,7 @@ export function Ics215FormSections({
   assigneeOptions,
   workAssignmentTargetOptions,
   roster = [],
+  positionRosterEntries = [],
   competencyOptions = [],
   editingSections,
   drafts,
@@ -238,6 +241,7 @@ export function Ics215FormSections({
       workAssignments={workAssignmentsDraft.workAssignments}
       workAssignmentTargetOptions={workAssignmentTargetOptions}
       roster={roster}
+      positionRosterEntries={positionRosterEntries}
       competencyOptions={competencyOptions}
       workspaceAssets={workspaceAssets}
       workspaceId={workspaceId}

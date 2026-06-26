@@ -28,6 +28,7 @@ import type { Ics201VersionSignature } from '@/features/ics201/types'
 import type { Ics204AssignedUnitOption } from '@/features/ics204/ics204-assigned-unit-options'
 import type { Ics215Ics204WorkSyncTooltipState } from '@/features/ics204/sync-ics215-work-assignments'
 import type { ResourceListItemData } from '@/features/resources/types'
+import type { PositionRosterEntry } from '@/features/roster/workspace-position-roster'
 import type { WorkAssignmentTargetOption } from '@/lib/work-assignment-target-options'
 import type { WorkspaceRosterMember } from '@/lib/workspace-types'
 import { Ics215ExportPreviewDialog } from '@/features/ics215/Ics215ExportPreviewDialog'
@@ -64,6 +65,7 @@ type Ics215WorkspacePanelProps = {
   assigneeOptions: Ics204AssignedUnitOption[]
   workAssignmentTargetOptions: WorkAssignmentTargetOption[]
   roster?: WorkspaceRosterMember[]
+  positionRosterEntries?: PositionRosterEntry[]
   competencyOptions?: string[]
   editingSections: Partial<Record<Ics215SectionId, boolean>>
   sectionDrafts: Ics215FormSectionDrafts
@@ -110,6 +112,7 @@ export function Ics215WorkspacePanel({
   assigneeOptions,
   workAssignmentTargetOptions,
   roster = [],
+  positionRosterEntries = [],
   competencyOptions = [],
   editingSections,
   sectionDrafts,
@@ -499,6 +502,7 @@ export function Ics215WorkspacePanel({
             assigneeOptions={assigneeOptions}
             workAssignmentTargetOptions={workAssignmentTargetOptions}
             roster={roster}
+            positionRosterEntries={positionRosterEntries}
             competencyOptions={competencyOptions}
             editingSections={editingSections}
             drafts={sectionDrafts}

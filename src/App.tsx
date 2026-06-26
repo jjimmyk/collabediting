@@ -34784,6 +34784,7 @@ function App() {
                     assigneeOptions={ics204AssignedUnitOptions}
                     workAssignmentTargetOptions={workAssignmentTargetOptions}
                     roster={activeWorkspaceRoster}
+                    positionRosterEntries={positionRosterEntries}
                     competencyOptions={rosterCompetencyControls.organizationCompetencyOptions}
                     editingSections={ics215EditingSections}
                     sectionDrafts={ics215SectionDrafts}
