@@ -5,6 +5,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Ics202ReadOnlyField } from '@/features/ics202/Ics202SectionToolbar'
 import { WorkAssignmentTargetPicker } from '@/features/work-assignments/WorkAssignmentTargetPicker'
 import { Ics215HaveLinkPage } from '@/features/ics215/Ics215HaveLinkPage'
+import { Ics215TacticCell } from '@/features/ics215/Ics215TacticCell'
 import { Ics215HaveCell, HaveLinkSparkleButton } from '@/features/ics215/Ics215HaveCell'
 import type { Ics215ResourceValue } from '@/features/ics215/types'
 import {
@@ -137,6 +138,7 @@ export function Ics215WorkAssignmentsSpreadsheetTable({
   createHaveLinkRosterActions,
   showPositionAssets = true,
   tableLayout = 'default',
+  ics234Objectives = [],
   renderHaveLinkRosterPanel,
   haveLinkRosterWorkspaceControls,
 }: Ics215WorkAssignmentsSpreadsheetTableProps) {
@@ -151,6 +153,8 @@ export function Ics215WorkAssignmentsSpreadsheetTable({
     deleteResourceColumn,
     patchColumnLabel,
     fixedColumnClass,
+    workAssignmentColumnClass,
+    tacticColumnClass,
     resourceColumnClass,
     overflowColumnClass,
     tableMinWidthPx,
@@ -287,7 +291,10 @@ export function Ics215WorkAssignmentsSpreadsheetTable({
                       Assignee
                     </th>
                   ) : null}
-                  <th className={cn(fixedColumnClass, 'px-2 py-2 text-left font-semibold')}>
+                  <th className={cn(tacticColumnClass, 'px-2 py-2 text-left font-semibold')}>
+                    Tactic
+                  </th>
+                  <th className={cn(workAssignmentColumnClass, 'px-2 py-2 text-left font-semibold')}>
                     Work Assignment
                   </th>
                   {resourceColumns.map((column) => (
@@ -407,7 +414,17 @@ export function Ics215WorkAssignmentsSpreadsheetTable({
                             )}
                           </td>
                         ) : null}
-                        <td className={cn(fixedColumnClass, 'px-2 py-2')}>
+                        <td className={cn(tacticColumnClass, 'px-2 py-2')}>
+                          <Ics215TacticCell
+                            tacticRef={row.ics234TacticRef}
+                            objectives={ics234Objectives}
+                            editing={editing}
+                            onChange={(ics234TacticRef) =>
+                              patchRow(row.id, { ics234TacticRef })
+                            }
+                          />
+                        </td>
+                        <td className={cn(workAssignmentColumnClass, 'px-2 py-2')}>
                           {editing ? (
                             <Textarea
                               value={row.workAssignment}

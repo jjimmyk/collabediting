@@ -26,6 +26,7 @@ import type {
   Ics215WorkAssignmentsDraft,
   Ics215WorkAssignmentsLayoutMode,
 } from '@/features/ics215/types'
+import { normalizeIcs234TacticRef } from '@/features/ics215/resolve-ics234-tactic'
 
 type LegacyWorkAssignmentRow = Ics215WorkAssignmentRow & {
   branch?: string
@@ -63,6 +64,7 @@ export function cloneIcs215WorkAssignmentRows(
 ): Ics215WorkAssignmentRow[] {
   return rows.map((row) => ({
     ...row,
+    ics234TacticRef: normalizeIcs234TacticRef(row.ics234TacticRef),
     resourceValues: {
       ...createEmptyResourceValues(columns),
       ...Object.fromEntries(
@@ -98,6 +100,7 @@ export function createDefaultIcs215WorkAssignments(
     reportingLocation: '',
     requestedArrivalTime: '',
     status: '',
+    ics234TacticRef: null,
   }))
 }
 
@@ -164,6 +167,7 @@ function migrateLegacyWorkAssignmentRow(
     reportingLocation: String(row.reportingLocation ?? ''),
     requestedArrivalTime: String(row.requestedArrivalTime ?? ''),
     status: String(row.status ?? ''),
+    ics234TacticRef: normalizeIcs234TacticRef(row.ics234TacticRef),
   }
 }
 
@@ -200,6 +204,7 @@ function normalizeWorkAssignmentRow(
     reportingLocation: String(row.reportingLocation ?? ''),
     requestedArrivalTime: String(row.requestedArrivalTime ?? ''),
     status: String(row.status ?? ''),
+    ics234TacticRef: normalizeIcs234TacticRef(row.ics234TacticRef),
   }
 }
 
@@ -488,6 +493,7 @@ export function appendIcs215WorkAssignmentToDraft(
         reportingLocation: '',
         requestedArrivalTime: '',
         status: '',
+        ics234TacticRef: null,
       },
       ...draft.workAssignments,
     ],

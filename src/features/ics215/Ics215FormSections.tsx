@@ -15,6 +15,7 @@ import { Ics215WorkAssignmentsLayoutToggle } from '@/features/ics215/Ics215WorkA
 import { Ics215Ics204WorkAssignmentsSyncTooltip } from '@/features/ics204/Ics215Ics204WorkAssignmentsSyncTooltip'
 import type { Ics215Ics204WorkSyncTooltipState } from '@/features/ics204/sync-ics215-work-assignments'
 import type { ResourceListItemData } from '@/features/resources/types'
+import type { Ics234ObjectiveRow } from '@/features/ics234/types'
 import type {
   Ics215FormSectionDrafts,
   Ics215FormState,
@@ -67,6 +68,7 @@ type Ics215FormSectionsProps = {
   renderHaveLinkRosterPanel?: HaveLinkRosterPanelRenderer
   haveLinkRosterWorkspaceControls?: HaveLinkRosterWorkspaceControls
   showPositionAssets?: boolean
+  ics234Objectives?: Ics234ObjectiveRow[]
   editingSections: Partial<Record<Ics215SectionId, boolean>>
   drafts: Ics215FormSectionDrafts
   onStartSectionEdit: (section: Ics215SectionId) => void
@@ -120,6 +122,7 @@ export function Ics215FormSections({
   renderHaveLinkRosterPanel,
   haveLinkRosterWorkspaceControls,
   showPositionAssets = true,
+  ics234Objectives = [],
 }: Ics215FormSectionsProps) {
   const [workAssignmentsMaximized, setWorkAssignmentsMaximized] = useState(false)
 
@@ -274,6 +277,7 @@ export function Ics215FormSections({
       renderHaveLinkRosterPanel={renderHaveLinkRosterPanel}
       haveLinkRosterWorkspaceControls={haveLinkRosterWorkspaceControls}
       showPositionAssets={showPositionAssets}
+      ics234Objectives={ics234Objectives}
     />
   )
 

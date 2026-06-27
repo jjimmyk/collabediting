@@ -5,6 +5,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Ics202ReadOnlyField } from '@/features/ics202/Ics202SectionToolbar'
 import { WorkAssignmentTargetPicker } from '@/features/work-assignments/WorkAssignmentTargetPicker'
 import { Ics215HaveLinkPage } from '@/features/ics215/Ics215HaveLinkPage'
+import { Ics215TacticCell } from '@/features/ics215/Ics215TacticCell'
 import { Ics215HaveCell } from '@/features/ics215/Ics215HaveCell'
 import { isHaveLinkedToRoster } from '@/features/ics215/ics215-have-asset-link'
 import { useIcs215HaveRosterLink } from '@/features/ics215/useIcs215HaveAssetLink'
@@ -157,6 +158,7 @@ export function Ics215WorkAssignmentsLegacyTable({
   createHaveLinkRosterActions,
   showPositionAssets = true,
   tableLayout = 'default',
+  ics234Objectives = [],
   renderHaveLinkRosterPanel,
   haveLinkRosterWorkspaceControls,
 }: Ics215WorkAssignmentsLegacyTableProps) {
@@ -171,6 +173,8 @@ export function Ics215WorkAssignmentsLegacyTable({
     deleteResourceColumn,
     patchColumnLabel,
     fixedColumnClass,
+    workAssignmentColumnClass,
+    tacticColumnClass,
     legacyResourceColumnClass,
     overflowColumnClass,
     rhnStubColumnClass,
@@ -340,7 +344,10 @@ export function Ics215WorkAssignmentsLegacyTable({
                     Assignee
                   </th>
                 ) : null}
-                <th className={cn(fixedColumnClass, 'px-2 py-2 text-left font-semibold')}>
+                <th className={cn(tacticColumnClass, 'px-2 py-2 text-left font-semibold')}>
+                  Tactic
+                </th>
+                <th className={cn(workAssignmentColumnClass, 'px-2 py-2 text-left font-semibold')}>
                   Work Assignment
                 </th>
                 <th className={cn(rhnStubColumnClass, 'px-1 py-2 text-center font-semibold')} />
@@ -367,7 +374,8 @@ export function Ics215WorkAssignmentsLegacyTable({
               {resourceColumns.length > 0 ? (
                 <tr className="border-b bg-muted/20 text-[10px] uppercase tracking-wide text-muted-foreground">
                   {!hideAssigneeColumn ? <th className={fixedColumnClass} /> : null}
-                  <th className={fixedColumnClass} />
+                  <th className={tacticColumnClass} />
+                  <th className={workAssignmentColumnClass} />
                   <th className={rhnStubColumnClass} />
                   {resourceColumns.map((column) => (
                     <th
@@ -478,7 +486,19 @@ export function Ics215WorkAssignmentsLegacyTable({
                         </td>
                       ) : null}
                       {rhnIndex === 0 ? (
-                        <td rowSpan={3} className={cn(fixedColumnClass, 'border-b px-2 py-2')}>
+                        <td rowSpan={3} className={cn(tacticColumnClass, 'border-b px-2 py-2')}>
+                          <Ics215TacticCell
+                            tacticRef={row.ics234TacticRef}
+                            objectives={ics234Objectives}
+                            editing={editing}
+                            onChange={(ics234TacticRef) =>
+                              patchRow(row.id, { ics234TacticRef })
+                            }
+                          />
+                        </td>
+                      ) : null}
+                      {rhnIndex === 0 ? (
+                        <td rowSpan={3} className={cn(workAssignmentColumnClass, 'border-b px-2 py-2')}>
                           {editing ? (
                             <Textarea
                               value={row.workAssignment}

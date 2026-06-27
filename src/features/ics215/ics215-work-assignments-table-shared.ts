@@ -2,6 +2,7 @@ import { fillHaveForResourceValue } from '@/features/resources/workspace-asset-h
 import { resolveHaveDisplayValue } from '@/features/ics215/ics215-have-asset-link'
 import type { PositionRosterEntry } from '@/features/roster/workspace-position-roster'
 import type { ResourceListItemData } from '@/features/resources/types'
+import type { Ics234ObjectiveRow } from '@/features/ics234/types'
 import type {
   Ics215ResourceColumn,
   Ics215ResourceValue,
@@ -97,6 +98,7 @@ export type Ics215WorkAssignmentsTableBaseProps = {
     onAssignmentRemoved?: (ref: string) => void
   ) => HaveLinkRosterActions | undefined
   showPositionAssets?: boolean
+  ics234Objectives?: Ics234ObjectiveRow[]
 }
 
 export function patchResourceValueInDraft(
@@ -244,6 +246,7 @@ export function useIcs215WorkAssignmentsTable({
         reportingLocation: '',
         requestedArrivalTime: '',
         status: '',
+        ics234TacticRef: null,
       },
       ...workAssignments,
     ])
@@ -264,6 +267,8 @@ export function useIcs215WorkAssignmentsTable({
   }
 
   const fixedColumnClass = 'min-w-[8.5rem] align-top'
+  const workAssignmentColumnClass = 'min-w-[17rem] align-top'
+  const tacticColumnClass = 'min-w-[8rem] w-[8rem] max-w-[10rem] align-top'
   const resourceColumnClass = 'min-w-[7.5rem] align-top whitespace-nowrap'
   const legacyResourceColumnClass = 'min-w-[4.5rem] align-top text-center'
   const overflowColumnClass = 'min-w-[9rem] align-top'
@@ -271,7 +276,8 @@ export function useIcs215WorkAssignmentsTable({
   const tableMinWidthPx = Math.max(
     960,
     (hideAssigneeColumn ? 0 : 170) +
-      170 +
+      140 +
+      340 +
       48 +
       resourceColumns.length * 120 +
       ICS215_OVERFLOW_COLUMNS.length * 144 +
@@ -280,13 +286,14 @@ export function useIcs215WorkAssignmentsTable({
   const legacyTableMinWidthPx = Math.max(
     960,
     (hideAssigneeColumn ? 0 : 170) +
-      170 +
+      140 +
+      340 +
       48 +
       resourceColumns.length * 72 +
       ICS215_OVERFLOW_COLUMNS.length * 144 +
       (editing ? 40 : 0)
   )
-  const leadingColumnCount = hideAssigneeColumn ? 1 : 2
+  const leadingColumnCount = hideAssigneeColumn ? 2 : 3
 
   return {
     hideAssigneeColumn,
@@ -301,6 +308,8 @@ export function useIcs215WorkAssignmentsTable({
     deleteResourceColumn,
     patchColumnLabel,
     fixedColumnClass,
+    workAssignmentColumnClass,
+    tacticColumnClass,
     resourceColumnClass,
     legacyResourceColumnClass,
     overflowColumnClass,

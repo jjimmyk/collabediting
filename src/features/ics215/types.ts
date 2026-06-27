@@ -20,6 +20,13 @@ export type Ics215ResourceColumn = {
 
 export type Ics215WorkAssignmentsLayoutMode = 'spreadsheet' | 'legacy'
 
+/** Reference to a tactic row in the workspace ICS-234 work analysis matrix. */
+export type Ics234TacticRef = {
+  objectiveId: number
+  strategyId: number
+  tacticId: number
+}
+
 /** @deprecated Legacy per-row resource line — migrated to resourceValues on load */
 export type Ics215ResourceLine = {
   id: number
@@ -32,6 +39,8 @@ export type Ics215ResourceLine = {
 export type Ics215WorkAssignmentRow = {
   id: number
   assignee: string
+  /** Optional link to an ICS-234 tactic (workspace UI only; not exported). */
+  ics234TacticRef?: Ics234TacticRef | null
   workAssignment: string
   resourceValues: Record<string, Ics215ResourceValue>
   overheadPositions: string

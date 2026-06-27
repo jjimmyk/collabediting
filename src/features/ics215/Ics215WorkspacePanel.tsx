@@ -26,6 +26,7 @@ import {
 import { Input } from '@/components/ui/input'
 import type { Ics201VersionSignature } from '@/features/ics201/types'
 import type { Ics204AssignedUnitOption } from '@/features/ics204/ics204-assigned-unit-options'
+import type { Ics234ObjectiveRow } from '@/features/ics234/types'
 import type { Ics215Ics204WorkSyncTooltipState } from '@/features/ics204/sync-ics215-work-assignments'
 import type { ResourceListItemData } from '@/features/resources/types'
 import type { HaveLinkRosterActions } from '@/features/ics215/have-link-roster-actions'
@@ -97,6 +98,7 @@ type Ics215WorkspacePanelProps = {
   renderHaveLinkRosterPanel?: HaveLinkRosterPanelRenderer
   haveLinkRosterWorkspaceControls?: HaveLinkRosterWorkspaceControls
   showPositionAssets?: boolean
+  ics234Objectives?: Ics234ObjectiveRow[]
   onAppendVersion: (
     form: Ics215FormState,
     signatures?: Ics201VersionSignature[],
@@ -145,6 +147,7 @@ export function Ics215WorkspacePanel({
   renderHaveLinkRosterPanel,
   haveLinkRosterWorkspaceControls,
   showPositionAssets = true,
+  ics234Objectives = [],
   onAppendVersion,
   onSignReview,
 }: Ics215WorkspacePanelProps) {
@@ -539,6 +542,7 @@ export function Ics215WorkspacePanel({
             renderHaveLinkRosterPanel={renderHaveLinkRosterPanel}
             haveLinkRosterWorkspaceControls={haveLinkRosterWorkspaceControls}
             showPositionAssets={showPositionAssets}
+            ics234Objectives={ics234Objectives}
           />
         </div>
 

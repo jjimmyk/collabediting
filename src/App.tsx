@@ -35110,6 +35110,7 @@ function App() {
                     renderHaveLinkRosterPanel={renderHaveLinkRosterPanel}
                     haveLinkRosterWorkspaceControls={haveLinkRosterWorkspaceControls}
                     showPositionAssets={showPositionAssets}
+                    ics234Objectives={displayIcs234Form?.objectives ?? []}
                     onAppendVersion={handleIcs215AppendVersion}
                     onSignReview={handleIcs215SignReview}
                   />
