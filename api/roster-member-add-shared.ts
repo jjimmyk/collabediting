@@ -123,8 +123,8 @@ export async function provisionSingleResourceMemberWithEffectiveWhen(
     allowPasswordOverwrite: params.confirmPasswordOverwrite,
   })
 
-  if (!authResult.ok) {
-    return authResult
+  if (authResult.ok === false) {
+    return { ok: false, code: authResult.code }
   }
 
   await upsertMemberProfile(admin, authResult.userId, params.email)
@@ -171,8 +171,8 @@ export async function provisionIcsWorkspaceMemberWithEffectiveWhen(
     allowPasswordOverwrite: params.confirmPasswordOverwrite,
   })
 
-  if (!authResult.ok) {
-    return authResult
+  if (authResult.ok === false) {
+    return { ok: false, code: authResult.code }
   }
 
   await upsertMemberProfile(admin, authResult.userId, params.email)

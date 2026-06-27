@@ -415,8 +415,8 @@ export async function provisionWorkspaceSingleResourceMember(
     allowPasswordOverwrite: params.confirmPasswordOverwrite,
   })
 
-  if (!authResult.ok) {
-    return authResult
+  if (authResult.ok === false) {
+    return { ok: false, code: authResult.code }
   }
 
   await upsertMemberProfile(admin, authResult.userId, params.email)
@@ -451,7 +451,9 @@ export async function findUserIdByEmail(
       throw error
     }
 
-    const match = data.users.find((user) => user.email?.toLowerCase() === email)
+    const match = data.users.find(
+      (user: { id: string; email?: string | null }) => user.email?.toLowerCase() === email
+    )
     if (match) {
       return match.id
     }
@@ -547,8 +549,8 @@ export async function provisionWorkspaceRosterMember(
     allowPasswordOverwrite: params.confirmPasswordOverwrite,
   })
 
-  if (!authResult.ok) {
-    return authResult
+  if (authResult.ok === false) {
+    return { ok: false, code: authResult.code }
   }
 
   await upsertMemberProfile(admin, authResult.userId, params.email)
