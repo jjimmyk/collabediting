@@ -59,6 +59,15 @@ export type BuildHaveLinkRosterActionsInput = {
     name: string,
     lifecycle: ReturnType<typeof mapHaveLinkOpToCategoryLifecycle>
   ) => Promise<void>
+  scheduleResourceCategoryForNextOp: (categoryId: string, position: string) => Promise<void>
+  unassignMemberFromPosition: (memberId: string, position: string) => Promise<void>
+  removeScheduledAssignFromPosition: (memberId: string, position: string) => Promise<void>
+  removeScheduledUnassignFromPosition: (memberId: string, position: string) => Promise<void>
+  unassignAssetFromPosition: (assetKey: string, position: string) => Promise<void>
+  removeScheduledAssignAssetFromPosition: (assetKey: string, position: string) => Promise<void>
+  removeScheduledUnassignAssetFromPosition: (assetKey: string, position: string) => Promise<void>
+  deleteResourceCategoryById: (categoryId: string) => Promise<void>
+  onAssignmentRemoved?: (ref: string) => void
 }
 
 function notifyAssignmentAdded(
@@ -70,12 +79,26 @@ function notifyAssignmentAdded(
   }
 }
 
+function notifyAssignmentRemoved(
+  ref: string | null,
+  onAssignmentRemoved?: (ref: string) => void
+) {
+  if (ref && onAssignmentRemoved) {
+    onAssignmentRemoved(ref)
+  }
+}
+
 export function buildHaveLinkRosterActions(
   input: BuildHaveLinkRosterActionsInput
 ): HaveLinkRosterActions {
   const afterMutation = async (resolveRef: () => string | null) => {
     await input.reloadRosterForHaveLink()
     notifyAssignmentAdded(resolveRef(), input.onAssignmentAdded)
+  }
+
+  const afterRemove = async (ref: string) => {
+    await input.reloadRosterForHaveLink()
+    notifyAssignmentRemoved(ref, input.onAssignmentRemoved)
   }
 
   const onAssignExistingMember = async (
@@ -185,6 +208,118 @@ export function buildHaveLinkRosterActions(
     return true
   }
 
+  const onAlsoScheduleResourceCategoryForNextOp = async (
+    categoryId: string,
+    position: string
+  ): Promise<boolean> => {
+    await input.scheduleResourceCategoryForNextOp(categoryId, position)
+    await afterMutation(() => {
+      const source = input
+        .getResourceCategoriesSnapshot()
+        .find((entry) => entry.id === categoryId)
+      if (!source) return null
+      const scheduledId = findResourceCategoryId(
+        position,
+        source.name,
+        'scheduled_assign',
+        input.getResourceCategoriesSnapshot()
+      )
+      return scheduledId
+        ? resolveResourceCategoryHaveRef(position, scheduledId, input.getRosterSnapshot())
+        : null
+    })
+    return true
+  }
+
+  const onRemoveMemberFromCurrentOp = async (
+    memberId: string,
+    position: string
+  ): Promise<boolean> => {
+    const ref = resolveMemberHaveRef(memberId, position, input.getRosterSnapshot())
+    await input.unassignMemberFromPosition(memberId, position)
+    await afterRemove(ref)
+    return true
+  }
+
+  const onRemoveMemberFromNextOp = async (
+    memberId: string,
+    position: string
+  ): Promise<boolean> => {
+    const ref = resolveMemberHaveRef(memberId, position, input.getRosterSnapshot())
+    await input.removeScheduledAssignFromPosition(memberId, position)
+    await afterRemove(ref)
+    return true
+  }
+
+  const onRemoveMemberFromScheduledUnassign = async (
+    memberId: string,
+    position: string
+  ): Promise<boolean> => {
+    const ref = resolveMemberHaveRef(memberId, position, input.getRosterSnapshot())
+    await input.removeScheduledUnassignFromPosition(memberId, position)
+    await afterRemove(ref)
+    return true
+  }
+
+  const onRemoveAssetFromCurrentOp = async (
+    assetKey: string,
+    position: string
+  ): Promise<boolean> => {
+    const ref = resolvePositionAssetHaveRef(
+      assetKey,
+      position,
+      input.getRosterSnapshot(),
+      input.assetsByKey
+    )
+    await input.unassignAssetFromPosition(assetKey, position)
+    await afterRemove(ref)
+    return true
+  }
+
+  const onRemoveAssetFromNextOp = async (
+    assetKey: string,
+    position: string
+  ): Promise<boolean> => {
+    const ref = resolvePositionAssetHaveRef(
+      assetKey,
+      position,
+      input.getRosterSnapshot(),
+      input.assetsByKey
+    )
+    await input.removeScheduledAssignAssetFromPosition(assetKey, position)
+    await afterRemove(ref)
+    return true
+  }
+
+  const onRemoveAssetFromScheduledUnassign = async (
+    assetKey: string,
+    position: string
+  ): Promise<boolean> => {
+    const ref = resolvePositionAssetHaveRef(
+      assetKey,
+      position,
+      input.getRosterSnapshot(),
+      input.assetsByKey
+    )
+    await input.removeScheduledUnassignAssetFromPosition(assetKey, position)
+    await afterRemove(ref)
+    return true
+  }
+
+  const onRemoveResourceCategory = async (
+    categoryId: string,
+    position: string
+  ): Promise<boolean> => {
+    const ref = resolveResourceCategoryHaveRef(
+      categoryId,
+      position,
+      input.getRosterSnapshot()
+    )
+    await input.deleteResourceCategoryById(categoryId)
+    await afterRemove(ref)
+    return true
+  }
+
   return {
     canManageRoster: input.canManageRoster,
     isSupabaseEnabled: input.isSupabaseEnabled,
@@ -204,6 +339,14 @@ export function buildHaveLinkRosterActions(
     onCreateResourceCategory,
     onAlsoScheduleMemberForNextOp,
     onAlsoScheduleAssetForNextOp,
+    onAlsoScheduleResourceCategoryForNextOp,
+    onRemoveMemberFromCurrentOp,
+    onRemoveMemberFromNextOp,
+    onRemoveMemberFromScheduledUnassign,
+    onRemoveAssetFromCurrentOp,
+    onRemoveAssetFromNextOp,
+    onRemoveAssetFromScheduledUnassign,
+    onRemoveResourceCategory,
   }
 }
 

@@ -7,6 +7,7 @@ import {
   AssetPointOfContactSelect,
   PositionAssetRow,
 } from '@/features/roster/PositionRosterAssetSections'
+import { PositionRosterItemActions } from '@/features/roster/PositionRosterItemActions'
 import { CompetencyFunctionSelect } from '@/features/roster/CompetencyFunctionSelect'
 import { AssetOrgChartPlacementSelect } from '@/features/resources/AssetOrgChartPlacementSelect'
 import type { WorkspacePositionCatalog } from '@/features/roster/workspace-positions'
@@ -26,6 +27,8 @@ type RosterAssetResourceListItemProps = {
   isBusy: boolean
   removeLabel: string
   onRemove?: () => void
+  showAlsoScheduleForNextOp?: boolean
+  onAlsoScheduleForNextOp?: () => void
   onUpdateAssetPointOfContact?: (assetKey: string, memberId: string | null) => void
   competencyOptions?: string[]
   canEditCompetencyFunction?: boolean
@@ -54,6 +57,8 @@ export function RosterAssetResourceListItem({
   isBusy,
   removeLabel,
   onRemove,
+  showAlsoScheduleForNextOp = false,
+  onAlsoScheduleForNextOp,
   onUpdateAssetPointOfContact,
   competencyOptions = [],
   canEditCompetencyFunction = false,
@@ -124,21 +129,16 @@ export function RosterAssetResourceListItem({
         </div>
       }
       headerActions={
-        canManage && onRemove ? (
-          <Button
-            type="button"
-            size="icon"
-            variant="ghost"
-            className="h-7 w-7 shrink-0 text-muted-foreground hover:text-destructive"
-            aria-label={removeLabel}
+        canManage && (onRemove || showAlsoScheduleForNextOp) ? (
+          <PositionRosterItemActions
             disabled={isBusy}
-            onClick={(event) => {
-              event.stopPropagation()
-              onRemove()
-            }}
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-          </Button>
+            showScheduleForNextOp={showAlsoScheduleForNextOp}
+            onScheduleForNextOp={onAlsoScheduleForNextOp}
+            showRemove={Boolean(onRemove)}
+            onRemove={onRemove}
+            removeLabel={removeLabel}
+            stopActionPropagation
+          />
         ) : null
       }
       footerAddon={

@@ -117,6 +117,7 @@ type PositionRosterCardProps = {
     lifecycle: import('@/lib/workspace-resource-category-types').ResourceCategoryLifecycle
   ) => void
   onDeleteResourceCategory?: (categoryId: string) => void
+  onScheduleResourceCategoryForNextOp?: (categoryId: string, position: string) => void
   onFillResourceCategoryMember?: (categoryId: string, memberId: string) => void
   onFillResourceCategoryAsset?: (categoryId: string, assetKey: string) => void
   onClearResourceCategoryFill?: (categoryId: string) => void
@@ -188,6 +189,7 @@ export function PositionRosterCard({
   onSaveCustomPosition,
   onCreateResourceCategory,
   onDeleteResourceCategory,
+  onScheduleResourceCategoryForNextOp,
   onFillResourceCategoryMember,
   onFillResourceCategoryAsset,
   onClearResourceCategoryFill,
@@ -250,6 +252,7 @@ export function PositionRosterCard({
     onSaveCustomPosition,
     onCreateResourceCategory,
     onDeleteResourceCategory,
+    onScheduleResourceCategoryForNextOp,
     onFillResourceCategoryMember,
     onFillResourceCategoryAsset,
     onClearResourceCategoryFill,

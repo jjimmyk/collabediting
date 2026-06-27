@@ -56,7 +56,8 @@ export type Ics215HaveRosterLinkDialogProps = {
   onConfirm: (selectedRefs: string[]) => void
   onUnlinkFromOtherCell?: (location: Ics215HaveLinkLocation, ref: string) => void
   createHaveLinkRosterActions?: (
-    onAssignmentAdded?: (ref: string) => void
+    onAssignmentAdded?: (ref: string) => void,
+    onAssignmentRemoved?: (ref: string) => void
   ) => HaveLinkRosterActions | undefined
   showPositionAssets?: boolean
 }
@@ -192,9 +193,18 @@ export function Ics215HaveRosterLinkDialog({
     [linkedRefLocations, linkedToThisCellRefs, selectedRefs, toggleRef]
   )
 
+  const handleAssignmentRemoved = useCallback(
+    (ref: string) => {
+      if (selectedRefs.has(ref)) {
+        toggleRef(ref)
+      }
+    },
+    [selectedRefs, toggleRef]
+  )
+
   const rosterActions = useMemo(
-    () => createHaveLinkRosterActions?.(handleAssignmentAdded),
-    [createHaveLinkRosterActions, handleAssignmentAdded]
+    () => createHaveLinkRosterActions?.(handleAssignmentAdded, handleAssignmentRemoved),
+    [createHaveLinkRosterActions, handleAssignmentAdded, handleAssignmentRemoved]
   )
 
   const handleTogglePositionRefs = (refs: string[], select: boolean) => {

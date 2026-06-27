@@ -93,7 +93,8 @@ export type Ics215WorkAssignmentsTableBaseProps = {
   onHaveFillComplete?: (filledCount: number) => void
   onPersistWorkAssignments?: (draft: Ics215WorkAssignmentsDraft) => void
   createHaveLinkRosterActions?: (
-    onAssignmentAdded?: (ref: string) => void
+    onAssignmentAdded?: (ref: string) => void,
+    onAssignmentRemoved?: (ref: string) => void
   ) => HaveLinkRosterActions | undefined
   showPositionAssets?: boolean
 }

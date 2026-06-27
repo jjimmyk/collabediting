@@ -59,7 +59,8 @@ type Ics215FormSectionsProps = {
   onHaveFillComplete?: (filledCount: number) => void
   onWorkAssignmentsLayoutModeChange?: (mode: Ics215WorkAssignmentsLayoutMode) => void
   createHaveLinkRosterActions?: (
-    onAssignmentAdded?: (ref: string) => void
+    onAssignmentAdded?: (ref: string) => void,
+    onAssignmentRemoved?: (ref: string) => void
   ) => HaveLinkRosterActions | undefined
   showPositionAssets?: boolean
   editingSections: Partial<Record<Ics215SectionId, boolean>>

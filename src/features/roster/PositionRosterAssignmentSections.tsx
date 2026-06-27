@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react'
-import { CalendarClock, Plus, Trash2, Truck } from 'lucide-react'
+import { CalendarClock, Plus, Truck } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import type { ResourceListItemData } from '@/features/resources/types'
@@ -36,10 +36,11 @@ import {
   PositionResourceCategoryRow,
 } from '@/features/roster/PositionResourceCategoryRow'
 import { cn } from '@/lib/utils'
-import { ScheduleForNextOpButton } from '@/features/roster/ScheduleForNextOpButton'
+import { PositionRosterItemActions } from '@/features/roster/PositionRosterItemActions'
 import {
   canAssetContinueToNextOp,
   canMemberContinueToNextOp,
+  canResourceCategoryContinueToNextOp,
 } from '@/lib/work-assignment-roster-eligibility'
 
 export type PositionAssignmentSectionsLayout = 'stacked' | 'timeline'
@@ -184,19 +185,14 @@ export function PositionMemberRow({
             ) : null}
           </div>
         </div>
-        {canManage ? (
-          <Button
-            type="button"
-            size="icon"
-            variant="ghost"
-            className="h-7 w-7 shrink-0 text-muted-foreground hover:text-destructive"
-            aria-label={removeLabel}
-            disabled={isBusy}
-            onClick={onRemove}
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-          </Button>
-        ) : null}
+        <PositionRosterItemActions
+          disabled={isBusy}
+          showScheduleForNextOp={showAlsoScheduleForNextOp}
+          onScheduleForNextOp={onAlsoScheduleForNextOp}
+          showRemove={canManage}
+          onRemove={onRemove}
+          removeLabel={removeLabel}
+        />
       </div>
       {onCompetencyFunctionChange ? (
         <CompetencyFunctionSelect
@@ -206,13 +202,6 @@ export function PositionMemberRow({
           compact
           isUpdating={isUpdatingCompetency}
           onChange={onCompetencyFunctionChange}
-        />
-      ) : null}
-      {showAlsoScheduleForNextOp && onAlsoScheduleForNextOp ? (
-        <ScheduleForNextOpButton
-          compact
-          disabled={isBusy}
-          onClick={onAlsoScheduleForNextOp}
         />
       ) : null}
     </div>
@@ -449,6 +438,7 @@ export type PositionRosterUnifiedAssignmentSectionsProps = {
   inlinePositionInvite?: PositionRosterInlineInviteProps
   onCreateResourceCategory?: (position: string, name: string, lifecycle: ResourceCategoryLifecycle) => void
   onDeleteResourceCategory?: (categoryId: string) => void
+  onScheduleResourceCategoryForNextOp?: (categoryId: string, position: string) => void
   onFillResourceCategoryMember?: (categoryId: string, memberId: string) => void
   onFillResourceCategoryAsset?: (categoryId: string, assetKey: string) => void
   onClearResourceCategoryFill?: (categoryId: string) => void
@@ -500,6 +490,7 @@ export function PositionRosterUnifiedAssignmentSections({
   onUpdateAssetPointOfContact,
   onCreateResourceCategory,
   onDeleteResourceCategory,
+  onScheduleResourceCategoryForNextOp,
   onFillResourceCategoryMember,
   onFillResourceCategoryAsset,
   onClearResourceCategoryFill,
@@ -579,6 +570,15 @@ export function PositionRosterUnifiedAssignmentSections({
         pocMembers={pocMembers}
         assetsEnabled={assetsEnabled}
         onDelete={() => onDeleteResourceCategory?.(category.id)}
+        showAlsoScheduleForNextOp={
+          lifecycle === 'active' &&
+          canManageRoster &&
+          canScheduleAssign &&
+          canResourceCategoryContinueToNextOp(category, entry)
+        }
+        onAlsoScheduleForNextOp={() =>
+          onScheduleResourceCategoryForNextOp?.(category.id, entry.position)
+        }
         onFillMember={(memberId) => onFillResourceCategoryMember?.(category.id, memberId)}
         onFillAsset={(assetKey) => onFillResourceCategoryAsset?.(category.id, assetKey)}
         onClearFill={() => onClearResourceCategoryFill?.(category.id)}
@@ -595,6 +595,8 @@ export function PositionRosterUnifiedAssignmentSections({
       canManageRow: boolean
       removeLabel: string
       onRemove: () => void
+      showAlsoScheduleForNextOp?: boolean
+      onAlsoScheduleForNextOp?: () => void
       scope: 'active' | 'scheduled_assign' | 'scheduled_unassign' | 'scheduled_org_chart' | 'org_chart'
     }
   ) => (
@@ -612,6 +614,8 @@ export function PositionRosterUnifiedAssignmentSections({
       isBusy={isBusy}
       removeLabel={config.removeLabel}
       onRemove={config.onRemove}
+      showAlsoScheduleForNextOp={config.showAlsoScheduleForNextOp}
+      onAlsoScheduleForNextOp={config.onAlsoScheduleForNextOp}
       onUpdateAssetPointOfContact={onUpdateAssetPointOfContact}
       competencyOptions={competencyOptions}
       canEditCompetencyFunction={canEditCompetencyFunction}
@@ -722,31 +726,23 @@ export function PositionRosterUnifiedAssignmentSections({
           />
         ))}
         {assetsEnabled
-          ? entry.assets.map((asset) => (
-              <div
-                key={`assign-now-asset-wrap-${entry.position}-${asset.assetKey}`}
-                className="space-y-1"
-              >
-                {renderAssetListItem(asset, {
-                  badgeLabel: 'Assigned',
-                  showPoc: true,
-                  canEditPoc: canManageRoster,
-                  canManageRow: canManageRoster && canAssignNow,
-                  removeLabel: `Remove ${asset.name} from ${entry.position}`,
-                  onRemove: () => onUnassignAsset(asset.assetKey, entry.position),
-                  scope: 'active',
-                })}
-                {canManageRoster &&
-                canScheduleAssign &&
-                canAssetContinueToNextOp(asset.assetKey, entry) ? (
-                  <ScheduleForNextOpButton
-                    compact
-                    disabled={isBusy}
-                    onClick={() => onScheduleAssignAsset(asset.assetKey, entry.position)}
-                  />
-                ) : null}
-              </div>
-            ))
+          ? entry.assets.map((asset) =>
+              renderAssetListItem(asset, {
+                badgeLabel: 'Assigned',
+                showPoc: true,
+                canEditPoc: canManageRoster,
+                canManageRow: canManageRoster && canAssignNow,
+                removeLabel: `Remove ${asset.name} from ${entry.position}`,
+                onRemove: () => onUnassignAsset(asset.assetKey, entry.position),
+                showAlsoScheduleForNextOp:
+                  canManageRoster &&
+                  canScheduleAssign &&
+                  canAssetContinueToNextOp(asset.assetKey, entry),
+                onAlsoScheduleForNextOp: () =>
+                  onScheduleAssignAsset(asset.assetKey, entry.position),
+                scope: 'active',
+              })
+            )
           : null}
         {renderResourceCategoryRows('active', 'Assigned now', canAssignNow, assignable, assignableAssets)}
       </PositionAssignmentLifecycleSection>

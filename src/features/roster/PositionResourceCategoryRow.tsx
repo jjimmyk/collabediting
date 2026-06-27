@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
-import { Plus, Trash2 } from 'lucide-react'
+import { Plus } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import type { ResourceListItemData } from '@/features/resources/types'
 import { PositionMemberAssignPicker } from '@/features/roster/PositionMemberAssignPicker'
 import { PositionAssetPickerPopover } from '@/features/roster/PositionRosterAssetSections'
+import { PositionRosterItemActions } from '@/features/roster/PositionRosterItemActions'
 import type { PositionResourceCategoryEntry } from '@/lib/workspace-resource-category-types'
 import type { ResourceCategoryLifecycle } from '@/lib/workspace-resource-category-types'
 import type { WorkspaceRosterMember } from '@/lib/workspace-types'
@@ -113,6 +114,8 @@ export function PositionResourceCategoryRow({
   onFillMember,
   onFillAsset,
   onClearFill,
+  showAlsoScheduleForNextOp = false,
+  onAlsoScheduleForNextOp,
 }: {
   category: PositionResourceCategoryEntry
   position: string
@@ -127,6 +130,8 @@ export function PositionResourceCategoryRow({
   onFillMember: (memberId: string) => void
   onFillAsset: (assetKey: string) => void
   onClearFill: () => void
+  showAlsoScheduleForNextOp?: boolean
+  onAlsoScheduleForNextOp?: () => void
 }) {
   const fillLabel =
     category.filledMemberEmail ??
@@ -148,19 +153,14 @@ export function PositionResourceCategoryRow({
           </div>
           <p className="mt-1 text-[11px] text-muted-foreground">{fillLabel}</p>
         </div>
-        {canManage ? (
-          <Button
-            type="button"
-            size="icon"
-            variant="ghost"
-            className="h-7 w-7 shrink-0 text-muted-foreground hover:text-destructive"
-            aria-label={`Remove resource category ${category.name}`}
-            disabled={isBusy}
-            onClick={onDelete}
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-          </Button>
-        ) : null}
+        <PositionRosterItemActions
+          disabled={isBusy}
+          showScheduleForNextOp={showAlsoScheduleForNextOp}
+          onScheduleForNextOp={onAlsoScheduleForNextOp}
+          showRemove={canManage}
+          onRemove={onDelete}
+          removeLabel={`Remove resource category ${category.name}`}
+        />
       </div>
       {canManage ? (
         <div className="flex flex-wrap gap-1.5">

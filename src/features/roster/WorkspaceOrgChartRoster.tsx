@@ -159,6 +159,7 @@ type WorkspaceOrgChartRosterProps = {
     lifecycle: import('@/lib/workspace-resource-category-types').ResourceCategoryLifecycle
   ) => void
   onDeleteResourceCategory?: (categoryId: string) => void
+  onScheduleResourceCategoryForNextOp?: (categoryId: string, position: string) => void
   onFillResourceCategoryMember?: (categoryId: string, memberId: string) => void
   onFillResourceCategoryAsset?: (categoryId: string, assetKey: string) => void
   onClearResourceCategoryFill?: (categoryId: string) => void
@@ -250,6 +251,7 @@ type OrgChartRenderProps = {
     lifecycle: import('@/lib/workspace-resource-category-types').ResourceCategoryLifecycle
   ) => void
   onDeleteResourceCategory?: (categoryId: string) => void
+  onScheduleResourceCategoryForNextOp?: (categoryId: string, position: string) => void
   onFillResourceCategoryMember?: (categoryId: string, memberId: string) => void
   onFillResourceCategoryAsset?: (categoryId: string, assetKey: string) => void
   onClearResourceCategoryFill?: (categoryId: string) => void
@@ -594,6 +596,7 @@ function PositionNode({
   onSaveCustomPosition,
   onCreateResourceCategory,
   onDeleteResourceCategory,
+  onScheduleResourceCategoryForNextOp,
   onFillResourceCategoryMember,
   onFillResourceCategoryAsset,
   onClearResourceCategoryFill,
@@ -792,6 +795,7 @@ function PositionNode({
             onSaveCustomPosition={onSaveCustomPosition}
             onCreateResourceCategory={onCreateResourceCategory}
             onDeleteResourceCategory={onDeleteResourceCategory}
+            onScheduleResourceCategoryForNextOp={onScheduleResourceCategoryForNextOp}
             onFillResourceCategoryMember={onFillResourceCategoryMember}
             onFillResourceCategoryAsset={onFillResourceCategoryAsset}
             onClearResourceCategoryFill={onClearResourceCategoryFill}
@@ -872,6 +876,7 @@ function PositionNode({
           onSaveCustomPosition={onSaveCustomPosition}
           onCreateResourceCategory={onCreateResourceCategory}
           onDeleteResourceCategory={onDeleteResourceCategory}
+          onScheduleResourceCategoryForNextOp={onScheduleResourceCategoryForNextOp}
           onFillResourceCategoryMember={onFillResourceCategoryMember}
           onFillResourceCategoryAsset={onFillResourceCategoryAsset}
           onClearResourceCategoryFill={onClearResourceCategoryFill}
@@ -1237,6 +1242,7 @@ export function WorkspaceOrgChartRoster({
   onSaveCustomPosition,
   onCreateResourceCategory,
   onDeleteResourceCategory,
+  onScheduleResourceCategoryForNextOp,
   onFillResourceCategoryMember,
   onFillResourceCategoryAsset,
   onClearResourceCategoryFill,
@@ -1361,6 +1367,7 @@ export function WorkspaceOrgChartRoster({
     onSaveCustomPosition,
     onCreateResourceCategory,
     onDeleteResourceCategory,
+    onScheduleResourceCategoryForNextOp,
     onFillResourceCategoryMember,
     onFillResourceCategoryAsset,
     onClearResourceCategoryFill,

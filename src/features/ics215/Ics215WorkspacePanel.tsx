@@ -89,7 +89,8 @@ type Ics215WorkspacePanelProps = {
   onHaveFillComplete?: (filledCount: number) => void
   onWorkAssignmentsLayoutModeChange?: (mode: Ics215WorkAssignmentsLayoutMode) => void
   createHaveLinkRosterActions?: (
-    onAssignmentAdded?: (ref: string) => void
+    onAssignmentAdded?: (ref: string) => void,
+    onAssignmentRemoved?: (ref: string) => void
   ) => HaveLinkRosterActions | undefined
   showPositionAssets?: boolean
   onAppendVersion: (

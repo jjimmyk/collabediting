@@ -56,6 +56,17 @@ export type HaveLinkRosterActions = {
   ) => Promise<boolean>
   onAlsoScheduleMemberForNextOp: (memberId: string, position: string) => Promise<boolean>
   onAlsoScheduleAssetForNextOp: (assetKey: string, position: string) => Promise<boolean>
+  onAlsoScheduleResourceCategoryForNextOp: (
+    categoryId: string,
+    position: string
+  ) => Promise<boolean>
+  onRemoveMemberFromCurrentOp: (memberId: string, position: string) => Promise<boolean>
+  onRemoveMemberFromNextOp: (memberId: string, position: string) => Promise<boolean>
+  onRemoveMemberFromScheduledUnassign: (memberId: string, position: string) => Promise<boolean>
+  onRemoveAssetFromCurrentOp: (assetKey: string, position: string) => Promise<boolean>
+  onRemoveAssetFromNextOp: (assetKey: string, position: string) => Promise<boolean>
+  onRemoveAssetFromScheduledUnassign: (assetKey: string, position: string) => Promise<boolean>
+  onRemoveResourceCategory: (categoryId: string, position: string) => Promise<boolean>
   onSearchOrgMembers?: (query: string, position?: string) => Promise<OrgMemberSearchResult[]>
 }
 

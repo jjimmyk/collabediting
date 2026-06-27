@@ -14,6 +14,10 @@ import {
   type HaveLinkPositionTreeNode,
 } from '@/features/ics215/build-have-link-position-tree'
 import { HaveLinkPositionOpColumn } from '@/features/ics215/HaveLinkPositionOpColumn'
+import {
+  canShowHaveLinkRemoveScheduledUnassign,
+  invokeHaveLinkRemoveScheduledUnassign,
+} from '@/features/ics215/have-link-roster-item-actions'
 import type { HaveLinkRosterActions } from '@/features/ics215/have-link-roster-actions'
 import { Ics215HaveRosterRefPickRow } from '@/features/ics215/Ics215HaveRosterRefPickRow'
 import type { Ics215HaveLinkLocation } from '@/features/ics215/ics215-have-asset-link'
@@ -199,7 +203,17 @@ export function Ics215HaveLinkPositionSection({
                 Scheduled unassign (next OP)
               </p>
               <div className="space-y-2">
-                {scheduledUnassignCategories.map((child) => (
+                {scheduledUnassignCategories.map((child) => {
+                  const showRemove =
+                    rosterActions &&
+                    canShowHaveLinkRemoveScheduledUnassign(
+                      child,
+                      rosterActions,
+                      node.memberSchedulePolicy
+                    )
+                  const isBusy = rosterActions?.isPositionBusy(node.position) ?? false
+
+                  return (
                   <Ics215HaveRosterRefPickRow
                     key={child.ref}
                     option={childToOption(child)}
@@ -215,8 +229,23 @@ export function Ics215HaveLinkPositionSection({
                             onUnlinkFromElsewhere(linkedRefLocations.get(child.ref)!, child.ref)
                         : undefined
                     }
+                    showRemove={showRemove}
+                    onRemove={
+                      rosterActions
+                        ? () =>
+                            invokeHaveLinkRemoveScheduledUnassign(
+                              child,
+                              node.position,
+                              positionEntry ?? null,
+                              rosterActions
+                            )
+                        : undefined
+                    }
+                    removeLabel={`Remove ${child.label}`}
+                    rosterActionsDisabled={isBusy}
                   />
-                ))}
+                  )
+                })}
               </div>
             </div>
           ) : null}

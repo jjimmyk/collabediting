@@ -1,12 +1,17 @@
 import { useMemo, useState } from 'react'
 import type { HaveLinkPositionChild } from '@/features/ics215/build-have-link-position-tree'
+import {
+  canShowHaveLinkRemoveFromOp,
+  canShowHaveLinkScheduleForNextOp,
+  invokeHaveLinkRemoveFromOp,
+  invokeHaveLinkScheduleForNextOp,
+} from '@/features/ics215/have-link-roster-item-actions'
 import type { HaveLinkOperationalPeriod } from '@/features/ics215/have-link-roster-actions'
 import type { HaveLinkRosterActions } from '@/features/ics215/have-link-roster-actions'
 import { mapHaveLinkOpToInviteMode } from '@/features/ics215/have-link-roster-actions'
 import { Ics215HaveRosterRefPickRow } from '@/features/ics215/Ics215HaveRosterRefPickRow'
 import type { Ics215HaveLinkLocation } from '@/features/ics215/ics215-have-asset-link'
 import { PositionAssignmentActionBar } from '@/features/roster/PositionRosterAssignmentSections'
-import { ScheduleForNextOpButton } from '@/features/roster/ScheduleForNextOpButton'
 import type { PositionMemberSchedulePolicy } from '@/lib/roster-member-schedule-policy'
 import {
   assignExistingMembersEmptyMessage,
@@ -14,13 +19,7 @@ import {
   scheduleAssignMembersEmptyMessage,
 } from '@/features/roster/position-roster-messages'
 import type { PositionRosterEntry } from '@/features/roster/workspace-position-roster'
-import { parseWorkAssignmentTarget } from '@/lib/work-assignment-target'
-import {
-  canAssetContinueToNextOp,
-  canMemberContinueToNextOp,
-} from '@/lib/work-assignment-roster-eligibility'
 import type { WorkAssignmentTargetOption } from '@/lib/work-assignment-target-options'
-import type { WorkspaceRosterMember } from '@/lib/workspace-types'
 
 export const ASSIGNED_TO_POSITION_GROUP = 'Assigned to Position'
 
@@ -36,39 +35,6 @@ function childToOption(
     disabledReason: child.disabledReason,
     targetType: child.targetType,
     rosterPresence: child.presence ?? undefined,
-  }
-}
-
-function canShowScheduleForNextOp(
-  child: HaveLinkPositionChild,
-  op: HaveLinkOperationalPeriod,
-  positionEntry: PositionRosterEntry | null,
-  roster: WorkspaceRosterMember[]
-): boolean {
-  if (op !== 'current' || !positionEntry || child.presence !== 'active' || child.disabled) {
-    return false
-  }
-  const parsed = parseWorkAssignmentTarget(child.ref)
-  if (parsed.type === 'member') {
-    const member = roster.find((entry) => entry.id === parsed.memberId)
-    return member ? canMemberContinueToNextOp(member, positionEntry) : false
-  }
-  if (parsed.type === 'position_asset' && parsed.assetKey) {
-    return canAssetContinueToNextOp(parsed.assetKey, positionEntry)
-  }
-  return false
-}
-
-function scheduleChildForNextOp(
-  child: HaveLinkPositionChild,
-  position: string,
-  rosterActions: HaveLinkRosterActions
-) {
-  const parsed = parseWorkAssignmentTarget(child.ref)
-  if (parsed.type === 'member' && parsed.memberId) {
-    void rosterActions.onAlsoScheduleMemberForNextOp(parsed.memberId, position)
-  } else if (parsed.type === 'position_asset' && parsed.assetKey) {
-    void rosterActions.onAlsoScheduleAssetForNextOp(parsed.assetKey, position)
   }
 }
 
@@ -210,32 +176,48 @@ export function HaveLinkPositionOpColumn({
             const showScheduleButton =
               canScheduleFromCurrentOp &&
               rosterActions &&
-              canShowScheduleForNextOp(child, op, positionEntry, roster)
+              canShowHaveLinkScheduleForNextOp(child, op, positionEntry, roster)
+            const showRemoveButton =
+              rosterActions &&
+              canShowHaveLinkRemoveFromOp(child, op, rosterActions, memberSchedulePolicy)
 
             return (
-              <div key={`${child.ref}-${child.presence ?? 'unknown'}`} className="space-y-1">
-                <Ics215HaveRosterRefPickRow
-                  option={childToOption(child)}
-                  checked={selectedRefs.has(child.ref)}
-                  disabled={child.disabled}
-                  linkSelectable={linkSelectable}
-                  linkedToThisCell={linkedToThisCellRefs.has(child.ref)}
-                  linkedElsewhere={linkedRefLocations.get(child.ref)}
-                  onToggle={() => onToggleRef(child.ref)}
-                  onUnlinkFromElsewhere={
-                    linkedRefLocations.get(child.ref) && onUnlinkFromElsewhere
-                      ? () => onUnlinkFromElsewhere(linkedRefLocations.get(child.ref)!, child.ref)
-                      : undefined
-                  }
-                />
-                {showScheduleButton ? (
-                  <ScheduleForNextOpButton
-                    compact
-                    disabled={isBusy}
-                    onClick={() => scheduleChildForNextOp(child, position, rosterActions!)}
-                  />
-                ) : null}
-              </div>
+              <Ics215HaveRosterRefPickRow
+                key={`${child.ref}-${child.presence ?? 'unknown'}`}
+                option={childToOption(child)}
+                checked={selectedRefs.has(child.ref)}
+                disabled={child.disabled}
+                linkSelectable={linkSelectable}
+                linkedToThisCell={linkedToThisCellRefs.has(child.ref)}
+                linkedElsewhere={linkedRefLocations.get(child.ref)}
+                onToggle={() => onToggleRef(child.ref)}
+                onUnlinkFromElsewhere={
+                  linkedRefLocations.get(child.ref) && onUnlinkFromElsewhere
+                    ? () => onUnlinkFromElsewhere(linkedRefLocations.get(child.ref)!, child.ref)
+                    : undefined
+                }
+                showScheduleForNextOp={showScheduleButton}
+                onScheduleForNextOp={
+                  rosterActions
+                    ? () => invokeHaveLinkScheduleForNextOp(child, position, rosterActions)
+                    : undefined
+                }
+                showRemove={showRemoveButton}
+                onRemove={
+                  rosterActions
+                    ? () =>
+                        invokeHaveLinkRemoveFromOp(
+                          child,
+                          op,
+                          position,
+                          positionEntry,
+                          rosterActions
+                        )
+                    : undefined
+                }
+                removeLabel={`Remove ${child.label}`}
+                rosterActionsDisabled={isBusy}
+              />
             )
           })}
         </div>

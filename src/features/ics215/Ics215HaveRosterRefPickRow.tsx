@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import type { Ics215HaveLinkLocation } from '@/features/ics215/ics215-have-asset-link'
 import { formatHaveLinkLocation } from '@/features/ics215/ics215-have-asset-link'
+import { PositionRosterItemActions } from '@/features/roster/PositionRosterItemActions'
 import type { WorkAssignmentTargetOption } from '@/lib/work-assignment-target-options'
 import { ROSTER_PRESENCE_LABELS, type RosterPresence } from '@/lib/work-assignment-roster-eligibility'
 import { cn } from '@/lib/utils'
@@ -26,6 +27,12 @@ type Ics215HaveRosterRefPickRowProps = {
   linkedElsewhere?: Ics215HaveLinkLocation
   onToggle: () => void
   onUnlinkFromElsewhere?: () => void
+  showScheduleForNextOp?: boolean
+  onScheduleForNextOp?: () => void
+  showRemove?: boolean
+  onRemove?: () => void
+  removeLabel?: string
+  rosterActionsDisabled?: boolean
 }
 
 export function Ics215HaveRosterRefPickRow({
@@ -37,6 +44,12 @@ export function Ics215HaveRosterRefPickRow({
   linkedElsewhere,
   onToggle,
   onUnlinkFromElsewhere,
+  showScheduleForNextOp = false,
+  onScheduleForNextOp,
+  showRemove = false,
+  onRemove,
+  removeLabel,
+  rosterActionsDisabled = false,
 }: Ics215HaveRosterRefPickRowProps) {
   const blockedByOtherCell = Boolean(linkedElsewhere) && !linkedToThisCell
   const typeLabel = TARGET_TYPE_LABELS[option.targetType] ?? option.targetType
@@ -85,6 +98,14 @@ export function Ics215HaveRosterRefPickRow({
           ) : null}
         </div>
         <div className="flex shrink-0 flex-col items-end gap-1">
+          <PositionRosterItemActions
+            disabled={rosterActionsDisabled}
+            showScheduleForNextOp={showScheduleForNextOp}
+            onScheduleForNextOp={onScheduleForNextOp}
+            showRemove={showRemove}
+            onRemove={onRemove}
+            removeLabel={removeLabel ?? `Remove ${option.label}`}
+          />
           {linkedToThisCell && checked ? (
             <Button
               type="button"

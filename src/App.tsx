@@ -15969,6 +15969,56 @@ function App() {
     }
     await reloadWorkspaceResourceCategories()
   }
+  const scheduleResourceCategoryForNextOp = async (categoryId: string, position: string) => {
+    const category = workspaceResourceCategories.find((entry) => entry.id === categoryId)
+    if (!category || category.lifecycle !== 'active') {
+      return
+    }
+
+    if (!isSupabaseEnabled || !activeWorkspaceSupabaseId) {
+      toast.error('This workspace is not synced to Supabase yet.')
+      return
+    }
+    const accessToken = await getAccessToken()
+    if (!accessToken) {
+      toast.error('Sign in again to manage resource categories.')
+      return
+    }
+
+    setRosterAssigningPosition(position)
+    const result = await createWorkspaceResourceCategory({
+      accessToken,
+      workspaceId: activeWorkspaceSupabaseId,
+      positionName: position,
+      name: category.name,
+      lifecycle: 'scheduled_assign',
+    })
+    setRosterAssigningPosition(null)
+    if (!result.ok) {
+      toast.error(result.message)
+      return
+    }
+
+    await reloadWorkspaceResourceCategories()
+    const scheduledCategory = workspaceResourceCategoriesRef.current.find(
+      (entry) =>
+        entry.positionName === position &&
+        entry.name.trim() === category.name.trim() &&
+        entry.lifecycle === 'scheduled_assign'
+    )
+    if (!scheduledCategory) {
+      toast.success(`Scheduled "${category.name}" for next OP.`)
+      return
+    }
+
+    if (category.filledMemberId) {
+      await fillResourceCategoryMember(scheduledCategory.id, category.filledMemberId)
+    } else if (category.filledAssetKey) {
+      await fillResourceCategoryAsset(scheduledCategory.id, category.filledAssetKey)
+    } else {
+      toast.success(`Scheduled "${category.name}" for next OP.`)
+    }
+  }
   const fillResourceCategoryMember = async (categoryId: string, memberId: string) => {
     if (!isSupabaseEnabled || !activeWorkspaceSupabaseId) return
     const accessToken = await getAccessToken()
@@ -16372,7 +16422,10 @@ function App() {
     reloadWorkspaceResourceCategories,
   ])
   const createHaveLinkRosterActions = useCallback(
-    (onAssignmentAdded?: (ref: string) => void) => {
+    (
+      onAssignmentAdded?: (ref: string) => void,
+      onAssignmentRemoved?: (ref: string) => void
+    ) => {
       if (!effectiveCanManageRoster) {
         return undefined
       }
@@ -16395,6 +16448,7 @@ function App() {
         getRosterSnapshot: () => activeWorkspaceRosterRef.current,
         getResourceCategoriesSnapshot: () => workspaceResourceCategoriesRef.current,
         onAssignmentAdded,
+        onAssignmentRemoved,
         assignExistingMemberToPosition,
         scheduleAssignMemberToPosition,
         assignOrgMemberToPositionRow,
@@ -16402,6 +16456,14 @@ function App() {
         assignAssetToPosition,
         scheduleAssignAssetToPosition,
         createResourceCategoryForPosition,
+        scheduleResourceCategoryForNextOp,
+        unassignMemberFromPosition,
+        removeScheduledAssignFromPosition,
+        removeScheduledUnassignFromPosition,
+        unassignAssetFromPosition,
+        removeScheduledAssignAssetFromPosition,
+        removeScheduledUnassignAssetFromPosition,
+        deleteResourceCategoryById,
         inlinePositionInvite: isSupabaseEnabled
           ? {
               isSupabaseEnabled,
@@ -16433,18 +16495,26 @@ function App() {
       assignExistingMemberToPosition,
       assignOrgMemberToPositionRow,
       createResourceCategoryForPosition,
+      deleteResourceCategoryById,
       effectiveCanManageRoster,
       isSupabaseEnabled,
       reloadRosterForHaveLink,
+      removeScheduledAssignAssetFromPosition,
+      removeScheduledAssignFromPosition,
+      removeScheduledUnassignAssetFromPosition,
+      removeScheduledUnassignFromPosition,
       rosterAssigningPosition,
       rosterPocMembers,
       scheduleAssignableAssetsByPosition,
       scheduleAssignableByPosition,
       scheduleAssignAssetToPosition,
       scheduleAssignMemberToPosition,
+      scheduleResourceCategoryForNextOp,
       searchOrgMembersForActiveWorkspace,
       showPositionAssets,
       submitInlinePositionInvite,
+      unassignAssetFromPosition,
+      unassignMemberFromPosition,
       workspaceAssetsByKey,
       workspaceResourceCategories,
     ]
@@ -30001,6 +30071,9 @@ function App() {
                       onDeleteResourceCategory={(categoryId) => {
                         void deleteResourceCategoryById(categoryId)
                       }}
+                      onScheduleResourceCategoryForNextOp={(categoryId, position) => {
+                        void scheduleResourceCategoryForNextOp(categoryId, position)
+                      }}
                       onFillResourceCategoryMember={(categoryId, memberId) => {
                         void fillResourceCategoryMember(categoryId, memberId)
                       }}
@@ -30146,6 +30219,9 @@ function App() {
                       }}
                       onDeleteResourceCategory={(categoryId) => {
                         void deleteResourceCategoryById(categoryId)
+                      }}
+                      onScheduleResourceCategoryForNextOp={(categoryId, position) => {
+                        void scheduleResourceCategoryForNextOp(categoryId, position)
                       }}
                       onFillResourceCategoryMember={(categoryId, memberId) => {
                         void fillResourceCategoryMember(categoryId, memberId)

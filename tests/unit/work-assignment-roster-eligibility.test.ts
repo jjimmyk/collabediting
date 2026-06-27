@@ -3,6 +3,7 @@ import type { PositionRosterEntry } from '@/features/roster/workspace-position-r
 import {
   canAssetContinueToNextOp,
   canMemberContinueToNextOp,
+  canResourceCategoryContinueToNextOp,
   classifyMemberAtPositionEligibility,
   classifyPositionAssigneeEligibility,
 } from '@/lib/work-assignment-roster-eligibility'
@@ -140,5 +141,55 @@ describe('work-assignment roster eligibility', () => {
       ],
     })
     expect(canAssetContinueToNextOp('helo-1', entry)).toBe(true)
+  })
+
+  it('allows continuing active resource categories when no scheduled assign sibling exists', () => {
+    const entry = makeEntry({
+      resourceCategories: [
+        {
+          id: 'cat-active',
+          name: 'Helo crew',
+          lifecycle: 'active',
+          filledMemberId: null,
+          filledAssetKey: null,
+          filledMemberEmail: null,
+          filledAssetName: null,
+          sortOrder: 0,
+        },
+      ],
+    })
+    expect(
+      canResourceCategoryContinueToNextOp(entry.resourceCategories[0]!, entry)
+    ).toBe(true)
+  })
+
+  it('blocks continuing resource categories already scheduled for next OP', () => {
+    const entry = makeEntry({
+      resourceCategories: [
+        {
+          id: 'cat-active',
+          name: 'Helo crew',
+          lifecycle: 'active',
+          filledMemberId: null,
+          filledAssetKey: null,
+          filledMemberEmail: null,
+          filledAssetName: null,
+          sortOrder: 0,
+        },
+        {
+          id: 'cat-next',
+          name: 'Helo crew',
+          lifecycle: 'scheduled_assign',
+          filledMemberId: null,
+          filledAssetKey: null,
+          filledMemberEmail: null,
+          filledAssetName: null,
+          sortOrder: 1,
+        },
+      ],
+    })
+    expect(
+      canResourceCategoryContinueToNextOp(entry.resourceCategories[0]!, entry)
+    ).toBe(false)
   })
 })

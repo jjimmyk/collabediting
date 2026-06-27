@@ -1,4 +1,5 @@
 import { CalendarClock } from 'lucide-react'
+import type { MouseEventHandler } from 'react'
 import { Button } from '@/components/ui/button'
 
 export function ScheduleForNextOpButton({
@@ -7,7 +8,7 @@ export function ScheduleForNextOpButton({
   compact = false,
 }: {
   disabled?: boolean
-  onClick: () => void
+  onClick: MouseEventHandler<HTMLButtonElement>
   compact?: boolean
 }) {
   return (

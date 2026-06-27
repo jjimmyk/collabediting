@@ -99,6 +99,23 @@ export function canAssetContinueToNextOp(assetKey: string, entry: PositionRoster
   )
 }
 
+export function canResourceCategoryContinueToNextOp(
+  category: PositionResourceCategoryEntry,
+  entry: PositionRosterEntry
+): boolean {
+  if (entry.opAdvanceLabel === 'retire_on_op_advance') {
+    return false
+  }
+  if (category.lifecycle !== 'active') {
+    return false
+  }
+  const normalizedName = category.name.trim()
+  return !entry.resourceCategories.some(
+    (other) =>
+      other.lifecycle === 'scheduled_assign' && other.name.trim() === normalizedName
+  )
+}
+
 export function classifyPositionAssigneeEligibility(entry: PositionRosterEntry): AssigneeEligibility {
   if (entry.opAdvanceLabel === 'retire_on_op_advance') {
     return {

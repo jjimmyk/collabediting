@@ -121,6 +121,7 @@ type WorkspacePositionRosterTableProps = {
     lifecycle: import('@/lib/workspace-resource-category-types').ResourceCategoryLifecycle
   ) => void
   onDeleteResourceCategory?: (categoryId: string) => void
+  onScheduleResourceCategoryForNextOp?: (categoryId: string, position: string) => void
   onFillResourceCategoryMember?: (categoryId: string, memberId: string) => void
   onFillResourceCategoryAsset?: (categoryId: string, assetKey: string) => void
   onClearResourceCategoryFill?: (categoryId: string) => void
@@ -277,6 +278,7 @@ export function WorkspacePositionRosterTable({
   onSaveCustomPosition,
   onCreateResourceCategory,
   onDeleteResourceCategory,
+  onScheduleResourceCategoryForNextOp,
   onFillResourceCategoryMember,
   onFillResourceCategoryAsset,
   onClearResourceCategoryFill,
@@ -676,6 +678,7 @@ export function WorkspacePositionRosterTable({
                   onSaveCustomPosition={onSaveCustomPosition}
                   onCreateResourceCategory={onCreateResourceCategory}
                   onDeleteResourceCategory={onDeleteResourceCategory}
+                  onScheduleResourceCategoryForNextOp={onScheduleResourceCategoryForNextOp}
                   onFillResourceCategoryMember={onFillResourceCategoryMember}
                   onFillResourceCategoryAsset={onFillResourceCategoryAsset}
                   onClearResourceCategoryFill={onClearResourceCategoryFill}
