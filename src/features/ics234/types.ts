@@ -11,10 +11,14 @@ export type Ics234StrategyRow = {
   tactics: Ics234TacticsRow[]
 }
 
+export type Ics234Ics202SourceKind = 'O' | 'O&M'
+
 export type Ics234ObjectiveRow = {
   id: number
   name: string
   strategies: Ics234StrategyRow[]
+  ics202SourceObjectiveId?: number | null
+  ics202SourceKind?: Ics234Ics202SourceKind | null
 }
 
 /** @deprecated Legacy flat row shape — migrated to objectives on load */

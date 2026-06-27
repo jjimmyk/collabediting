@@ -301,6 +301,7 @@ import { Ics202WorkspacePanel } from '@/features/ics202/Ics202WorkspacePanel'
 import type {
   Ics202FormSectionDrafts,
   Ics202FormState,
+  Ics202ObjectiveRow,
   Ics202SectionId,
   Ics202Version,
 } from '@/features/ics202/types'
@@ -366,6 +367,10 @@ import type {
   Ics234Version,
 } from '@/features/ics234/types'
 import {
+  formatIcs202SourceLabel,
+  syncIcs234ObjectivesFromIcs202,
+} from '@/features/ics234/sync-ics202-objectives'
+import {
   applyIcs234MatrixItemDraft,
   applyIcs234SectionDraft,
   cloneIcs234FormState,
@@ -376,6 +381,7 @@ import {
   extractIcs234SectionDraft,
   ics234AuthorColor,
   ics234MatrixItemRefsMatch,
+  isIcs234ObjectiveLinkedToIcs202,
   nextRowId,
 } from '@/features/ics234/utils'
 import { useIcs234WorkspaceForm } from '@/hooks/useIcs234WorkspaceForm'
@@ -8203,6 +8209,7 @@ function App() {
   ics234FormRef.current = ics234Form
   const ics234VersionsRef = useRef(ics234Versions)
   ics234VersionsRef.current = ics234Versions
+  const ics202ObjectivesSyncSignatureRef = useRef<string | null>(null)
   const [ics215Form, setIcs215Form] = useState<Ics215FormState | null>(null)
   const [ics215Versions, setIcs215Versions] = useState<Ics215Version[]>([])
   const [ics215EditingSections, setIcs215EditingSections] = useState<
@@ -23080,6 +23087,9 @@ function App() {
     if (latestVersion && latestVersion.signatures.length === 0) {
       handleIcs202SaveDraft(nextForm, latestVersion)
     }
+    if (section === 'objectives') {
+      applyIcs202ObjectivesToIcs234(nextForm.objectives, { showLockedToast: true })
+    }
     cancelIcs202SectionEdit(section)
   }
   const handleIcs202SaveDraft = (form: Ics202FormState, latestVersion: Ics202Version) => {
@@ -23534,8 +23544,72 @@ function App() {
       handleIcs234SaveDraft(nextForm, latestVersion)
     }
   }
+  const applyIcs202ObjectivesToIcs234 = (
+    ics202Objectives: Ics202ObjectiveRow[],
+    options?: { showLockedToast?: boolean }
+  ) => {
+    if (!canEditIcs201Form || !ics234Form) {
+      return
+    }
+    const latestIcs234Version = ics234Versions[ics234Versions.length - 1]
+    if (latestIcs234Version && latestIcs234Version.signatures.length > 0) {
+      if (options?.showLockedToast) {
+        toast.message('ICS-234 is signed — ICS-202 objective changes were not applied.')
+      }
+      return
+    }
+    const { objectives, changed } = syncIcs234ObjectivesFromIcs202(
+      ics202Objectives,
+      ics234Form.objectives
+    )
+    if (changed) {
+      persistIcs234Objectives(objectives)
+    }
+  }
+  useEffect(() => {
+    if (!isInIncidentWorkspace && !isInExerciseWorkspace) {
+      return
+    }
+    if (!ics202Form || !ics234Form || !canEditIcs201Form) {
+      return
+    }
+
+    const signature = `${ics234Form.id}:${ics202Form.id}:${ics202Form.objectives
+      .map((row) => `${row.id}|${row.kind}|${row.objective}`)
+      .join(';')}`
+    if (ics202ObjectivesSyncSignatureRef.current === signature) {
+      return
+    }
+    ics202ObjectivesSyncSignatureRef.current = signature
+
+    const latestIcs234Version = ics234Versions[ics234Versions.length - 1]
+    if (latestIcs234Version && latestIcs234Version.signatures.length > 0) {
+      return
+    }
+
+    const { objectives, changed } = syncIcs234ObjectivesFromIcs202(
+      ics202Form.objectives,
+      ics234Form.objectives
+    )
+    if (changed) {
+      persistIcs234Objectives(objectives)
+    }
+  }, [
+    canEditIcs201Form,
+    ics202Form,
+    ics234Form,
+    ics234Versions,
+    isInExerciseWorkspace,
+    isInIncidentWorkspace,
+  ])
   const startIcs234MatrixItemEdit = (ref: Ics234MatrixItemRef) => {
     if (!canEditIcs201Form || !ics234Form) return
+    if (ref.kind === 'objective') {
+      const objective = ics234Form.objectives.find((entry) => entry.id === ref.objectiveId)
+      if (objective && isIcs234ObjectiveLinkedToIcs202(objective)) {
+        return
+      }
+    }
     const draft = extractIcs234MatrixItemDraft(ics234Form.objectives, ref)
     if (!draft) return
     setIcs234EditingMatrixItem({ ref, draft })
@@ -23648,6 +23722,11 @@ function App() {
   }
   const deleteIcs234MatrixObjective = (objectiveId: number) => {
     if (!canEditIcs201Form || !ics234Form) return
+    const objective = ics234Form.objectives.find((entry) => entry.id === objectiveId)
+    if (objective && isIcs234ObjectiveLinkedToIcs202(objective)) {
+      toast.error('This objective is synced from ICS-202 and cannot be deleted here.')
+      return
+    }
     persistIcs234Objectives(ics234Form.objectives.filter((entry) => entry.id !== objectiveId))
     if (
       ics234EditingMatrixItem &&

@@ -5,6 +5,7 @@ import type {
   Ics234MatrixItemDraft,
   Ics234MatrixItemRef,
   Ics234MatrixRow,
+  Ics234Ics202SourceKind,
   Ics234ObjectiveRow,
   Ics234SectionId,
   Ics234StrategyRow,
@@ -57,7 +58,26 @@ export function cloneIcs234ObjectiveRows(rows: Ics234ObjectiveRow[]): Ics234Obje
   return rows.map((row) => ({
     ...row,
     strategies: cloneIcs234StrategyRows(row.strategies),
+    ics202SourceObjectiveId: row.ics202SourceObjectiveId ?? null,
+    ics202SourceKind: row.ics202SourceKind ?? null,
   }))
+}
+
+function normalizeIcs202SourceKind(kind: unknown): Ics234Ics202SourceKind | null {
+  if (kind === 'O' || kind === 'O&M') {
+    return kind
+  }
+  return null
+}
+
+function normalizeIcs202SourceObjectiveId(id: unknown): number | null {
+  return typeof id === 'number' && Number.isFinite(id) ? id : null
+}
+
+export function isIcs234ObjectiveLinkedToIcs202(objective: Ics234ObjectiveRow): boolean {
+  const sourceId = normalizeIcs202SourceObjectiveId(objective.ics202SourceObjectiveId)
+  const sourceKind = normalizeIcs202SourceKind(objective.ics202SourceKind)
+  return sourceId !== null && sourceKind !== null
 }
 
 export function cloneIcs234FormState(form: Ics234FormState): Ics234FormState {
@@ -85,11 +105,26 @@ function normalizeStrategyRows(rows: Ics234StrategyRow[] | undefined): Ics234Str
 export function normalizeIcs234ObjectiveRows(
   rows: Ics234ObjectiveRow[] | undefined
 ): Ics234ObjectiveRow[] {
-  return (rows ?? []).map((row, index) => ({
-    id: typeof row.id === 'number' ? row.id : index + 1,
-    name: legacyObjectiveName(row as Record<string, unknown>),
-    strategies: normalizeStrategyRows(row.strategies),
-  }))
+  return (rows ?? []).map((row, index) => {
+    const sourceId = normalizeIcs202SourceObjectiveId(row.ics202SourceObjectiveId)
+    const sourceKind = normalizeIcs202SourceKind(row.ics202SourceKind)
+    const linked = sourceId !== null && sourceKind !== null
+
+    return {
+      id: typeof row.id === 'number' ? row.id : index + 1,
+      name: legacyObjectiveName(row as Record<string, unknown>),
+      strategies: normalizeStrategyRows(row.strategies),
+      ...(linked
+        ? {
+            ics202SourceObjectiveId: sourceId,
+            ics202SourceKind: sourceKind as Ics234Ics202SourceKind,
+          }
+        : {
+            ics202SourceObjectiveId: null,
+            ics202SourceKind: null,
+          }),
+    }
+  })
 }
 
 function legacyMatrixRowsToObjectives(rows: Ics234MatrixRow[]): Ics234ObjectiveRow[] {
@@ -309,6 +344,9 @@ export function applyIcs234MatrixItemDraft(
     if (objective.id !== ref.objectiveId) return objective
 
     if (ref.kind === 'objective') {
+      if (isIcs234ObjectiveLinkedToIcs202(objective)) {
+        return objective
+      }
       return { ...objective, name: draft.name }
     }
 

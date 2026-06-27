@@ -15,8 +15,15 @@ import {
   ItemTitle,
 } from '@/components/ui/item'
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
+import {
   Ics202SectionEditActions,
 } from '@/features/ics202/Ics202SectionToolbar'
+import { formatIcs202SourceLabel } from '@/features/ics234/sync-ics202-objectives'
 import type {
   Ics234MatrixItemDraft,
   Ics234MatrixItemEditState,
@@ -25,7 +32,7 @@ import type {
   Ics234StrategyRow,
   Ics234TacticsRow,
 } from '@/features/ics234/types'
-import { ics234MatrixItemKey, ics234MatrixItemRefsMatch } from '@/features/ics234/utils'
+import { ics234MatrixItemKey, ics234MatrixItemRefsMatch, isIcs234ObjectiveLinkedToIcs202 } from '@/features/ics234/utils'
 import { cn } from '@/lib/utils'
 
 function strategyKey(objectiveId: number, strategyId: number) {
@@ -398,9 +405,14 @@ export function Ics234WorkAnalysisMatrix({
         objectives.map((objective, objectiveIndex) => {
           const ref: Ics234MatrixItemRef = { kind: 'objective', objectiveId: objective.id }
           const isOpen = expandedObjectiveId === objective.id
-          const editing = isEditingRef(ref)
+          const isLinkedToIcs202 = isIcs234ObjectiveLinkedToIcs202(objective)
+          const editing = isEditingRef(ref) && !isLinkedToIcs202
           const name = draftName(ref, objective.name)
           const placeholder = `Objective ${objectiveIndex + 1}`
+          const ics202SourceLabel =
+            isLinkedToIcs202 && objective.ics202SourceKind
+              ? formatIcs202SourceLabel(objective.ics202SourceKind)
+              : null
 
           return (
             <Item
@@ -434,8 +446,23 @@ export function Ics234WorkAnalysisMatrix({
                   </ItemContent>
                   <ItemActions>
                     <Badge variant="outline">Objective</Badge>
-                    {renderEditPencil(ref, 'objective')}
-                    {canMutate && !editing ? (
+                    {ics202SourceLabel ? (
+                      <TooltipProvider delayDuration={150}>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Badge variant="secondary" className="max-w-[12rem] truncate text-xs">
+                              From ICS-202 · {ics202SourceLabel}
+                            </Badge>
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="max-w-xs text-xs">
+                            Autopopulated from ICS-202 Incident Objectives. The objective name is
+                            read-only here.
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    ) : null}
+                    {!isLinkedToIcs202 ? renderEditPencil(ref, 'objective') : null}
+                    {canMutate && !editing && !isLinkedToIcs202 ? (
                       <Button
                         type="button"
                         variant="ghost"
