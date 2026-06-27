@@ -125,6 +125,10 @@ type WorkspacePositionRosterTableProps = {
   onFillResourceCategoryMember?: (categoryId: string, memberId: string) => void
   onFillResourceCategoryAsset?: (categoryId: string, assetKey: string) => void
   onClearResourceCategoryFill?: (categoryId: string) => void
+  haveLinkIndexByRef?: PositionRosterUnifiedAssignmentSectionsProps['haveLinkIndexByRef']
+  activeHaveCell?: PositionRosterUnifiedAssignmentSectionsProps['activeHaveCell']
+  highlightedHaveRef?: PositionRosterUnifiedAssignmentSectionsProps['highlightedHaveRef']
+  assignmentSectionsLayout?: import('@/features/roster/PositionRosterAssignmentSections').PositionAssignmentSectionsLayout
 } & Partial<PositionRosterAssetHandlers>
 
 function AssignedMembersList({
@@ -282,6 +286,10 @@ export function WorkspacePositionRosterTable({
   onFillResourceCategoryMember,
   onFillResourceCategoryAsset,
   onClearResourceCategoryFill,
+  haveLinkIndexByRef,
+  activeHaveCell = null,
+  highlightedHaveRef = null,
+  assignmentSectionsLayout = 'stacked',
 }: WorkspacePositionRosterTableProps) {
   const tableColumnCount =
     3 +
@@ -682,6 +690,9 @@ export function WorkspacePositionRosterTable({
                   onFillResourceCategoryMember={onFillResourceCategoryMember}
                   onFillResourceCategoryAsset={onFillResourceCategoryAsset}
                   onClearResourceCategoryFill={onClearResourceCategoryFill}
+                  haveLinkIndexByRef={haveLinkIndexByRef}
+                  activeHaveCell={activeHaveCell}
+                  highlightedHaveRef={highlightedHaveRef}
                   canRemoveFromRoster={canRemovePositionFromRoster?.(managedEntry) ?? false}
                   removalBlockedReason={positionRemovalBlockedReason?.(managedEntry) ?? null}
                   isRemovingFromRoster={isDeletingCustomPosition === managedEntry.position}

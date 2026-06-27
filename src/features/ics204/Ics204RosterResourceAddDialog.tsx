@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -52,11 +52,13 @@ export function Ics204RosterResourceAddDialog({
 
   const [selectedRefs, toggleRef, setRefs] = useHaveLinkSelection([], [])
 
+  const wasOpenRef = useRef(open)
   useEffect(() => {
-    if (!open) {
+    if (wasOpenRef.current && !open) {
       setFilterQuery('')
       setRefs([])
     }
+    wasOpenRef.current = open
   }, [open, setRefs])
 
   const filteredRosterOptions = filterHaveLinkTargetOptions(rosterOptions, filterQuery)

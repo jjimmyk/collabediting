@@ -33,6 +33,7 @@ import {
   normalizeIcs215WorkAssignmentsLayoutMode,
 } from '@/features/ics215/utils'
 import type { HaveLinkRosterActions } from '@/features/ics215/have-link-roster-actions'
+import type { HaveLinkRosterPanelRenderer } from '@/features/roster/WorkspaceRosterPanel'
 import type { PositionRosterEntry } from '@/features/roster/workspace-position-roster'
 import type { WorkAssignmentTargetOption } from '@/lib/work-assignment-target-options'
 import type { WorkspaceRosterMember } from '@/lib/workspace-types'
@@ -62,6 +63,7 @@ type Ics215FormSectionsProps = {
     onAssignmentAdded?: (ref: string) => void,
     onAssignmentRemoved?: (ref: string) => void
   ) => HaveLinkRosterActions | undefined
+  renderHaveLinkRosterPanel?: HaveLinkRosterPanelRenderer
   showPositionAssets?: boolean
   editingSections: Partial<Record<Ics215SectionId, boolean>>
   drafts: Ics215FormSectionDrafts
@@ -113,6 +115,7 @@ export function Ics215FormSections({
   onHaveFillComplete,
   onWorkAssignmentsLayoutModeChange,
   createHaveLinkRosterActions,
+  renderHaveLinkRosterPanel,
   showPositionAssets = true,
 }: Ics215FormSectionsProps) {
   const [workAssignmentsMaximized, setWorkAssignmentsMaximized] = useState(false)
@@ -265,6 +268,7 @@ export function Ics215FormSections({
       onPersistWorkAssignments={onPersistWorkAssignmentsDraft}
       onHaveFillComplete={onHaveFillComplete}
       createHaveLinkRosterActions={createHaveLinkRosterActions}
+      renderHaveLinkRosterPanel={renderHaveLinkRosterPanel}
       showPositionAssets={showPositionAssets}
     />
   )

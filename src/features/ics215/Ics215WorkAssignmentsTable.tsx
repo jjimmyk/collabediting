@@ -7,12 +7,15 @@ import type { PositionRosterEntry } from '@/features/roster/workspace-position-r
 import type { WorkspaceRosterMember } from '@/lib/workspace-types'
 import { normalizeIcs215WorkAssignmentsLayoutMode } from '@/features/ics215/utils'
 
+import type { HaveLinkRosterPanelRenderer } from '@/features/roster/WorkspaceRosterPanel'
+
 type Ics215WorkAssignmentsTableProps = Ics215WorkAssignmentsTableBaseProps & {
   workAssignmentTargetOptions: WorkAssignmentTargetOption[]
   roster?: WorkspaceRosterMember[]
   positionRosterEntries?: PositionRosterEntry[]
   competencyOptions?: string[]
   layoutMode?: Ics215WorkAssignmentsLayoutMode
+  renderHaveLinkRosterPanel?: HaveLinkRosterPanelRenderer
 }
 
 export function Ics215WorkAssignmentsTable({

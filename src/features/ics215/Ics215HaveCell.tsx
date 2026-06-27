@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Sparkles } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
@@ -151,7 +151,7 @@ export function useHaveLinkSelection(
     setSelectedKeys(new Set(initialSelectedKeys))
   }, [initialSelectedKeys.join('|')])
 
-  const toggleKey = (key: string) => {
+  const toggleKey = useCallback((key: string) => {
     setSelectedKeys((previous) => {
       const next = new Set(previous)
       if (next.has(key)) {
@@ -161,11 +161,11 @@ export function useHaveLinkSelection(
       }
       return next
     })
-  }
+  }, [])
 
-  const setKeys = (keys: string[]) => {
+  const setKeys = useCallback((keys: string[]) => {
     setSelectedKeys(new Set(keys))
-  }
+  }, [])
 
   return [selectedKeys, toggleKey, setKeys]
 }

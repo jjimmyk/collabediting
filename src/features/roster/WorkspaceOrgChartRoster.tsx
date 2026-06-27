@@ -13,7 +13,7 @@ import { PositionRosterCard } from '@/features/roster/PositionRosterCard'
 import {
   type PositionRosterAssetHandlers,
 } from '@/features/roster/PositionRosterAssetSections'
-import type { PositionRosterUnifiedAssignmentSectionsProps } from '@/features/roster/PositionRosterAssignmentSections'
+import type { PositionRosterUnifiedAssignmentSectionsProps, PositionAssignmentSectionsLayout } from '@/features/roster/PositionRosterAssignmentSections'
 import { OrgChartCollapsibleAssetCard } from '@/features/roster/OrgChartCollapsibleAssetCard'
 import { OrgChartNodeDetailDialog } from '@/features/roster/OrgChartNodeDetailDialog'
 import { RosterAssetResourceListItem } from '@/features/roster/RosterAssetResourceListItem'
@@ -172,6 +172,10 @@ type WorkspaceOrgChartRosterProps = {
     scheduled: boolean
   ) => void
   exportMode?: boolean
+  haveLinkIndexByRef?: PositionRosterUnifiedAssignmentSectionsProps['haveLinkIndexByRef']
+  activeHaveCell?: PositionRosterUnifiedAssignmentSectionsProps['activeHaveCell']
+  highlightedHaveRef?: PositionRosterUnifiedAssignmentSectionsProps['highlightedHaveRef']
+  assignmentSectionsLayout?: PositionAssignmentSectionsLayout
   isProjected?: boolean
   rosterTimeHorizon?: OrgChartExportScope
   managementEntriesByPosition?: Record<string, PositionRosterEntry>
@@ -281,6 +285,9 @@ type OrgChartRenderProps = {
     value: string | null,
     scheduled: boolean
   ) => void
+  haveLinkIndexByRef?: PositionRosterUnifiedAssignmentSectionsProps['haveLinkIndexByRef']
+  activeHaveCell?: PositionRosterUnifiedAssignmentSectionsProps['activeHaveCell']
+  highlightedHaveRef?: PositionRosterUnifiedAssignmentSectionsProps['highlightedHaveRef']
 }
 
 function isSubordinateRowChild(node: OrgChartNode): boolean {
@@ -609,6 +616,9 @@ function PositionNode({
   memberScheduleCompetencyByKey,
   onAssetCompetencyFunctionChange,
   onSingleResourceCompetencyFunctionChange,
+  haveLinkIndexByRef,
+  activeHaveCell = null,
+  highlightedHaveRef = null,
   isProjected = false,
   rosterTimeHorizon = 'current_op',
   managementEntriesByPosition,
@@ -699,6 +709,9 @@ function PositionNode({
     memberScheduleCompetencyByKey,
     onAssetCompetencyFunctionChange,
     onSingleResourceCompetencyFunctionChange,
+    haveLinkIndexByRef,
+    activeHaveCell,
+    highlightedHaveRef,
   }
 
   const canRemove =
@@ -799,6 +812,9 @@ function PositionNode({
             onFillResourceCategoryMember={onFillResourceCategoryMember}
             onFillResourceCategoryAsset={onFillResourceCategoryAsset}
             onClearResourceCategoryFill={onClearResourceCategoryFill}
+            haveLinkIndexByRef={haveLinkIndexByRef}
+            activeHaveCell={activeHaveCell}
+            highlightedHaveRef={highlightedHaveRef}
           />
         </OrgChartCardAnchor>
       ) : (
@@ -880,6 +896,9 @@ function PositionNode({
           onFillResourceCategoryMember={onFillResourceCategoryMember}
           onFillResourceCategoryAsset={onFillResourceCategoryAsset}
           onClearResourceCategoryFill={onClearResourceCategoryFill}
+          haveLinkIndexByRef={haveLinkIndexByRef}
+          activeHaveCell={activeHaveCell}
+          highlightedHaveRef={highlightedHaveRef}
         />
       )}
       {!suppressChildren ? (
@@ -1254,6 +1273,9 @@ export function WorkspaceOrgChartRoster({
   isProjected = false,
   rosterTimeHorizon = 'current_op',
   managementEntriesByPosition,
+  haveLinkIndexByRef,
+  activeHaveCell = null,
+  highlightedHaveRef = null,
 }: WorkspaceOrgChartRosterProps) {
   const [selectedAssetKey, setSelectedAssetKey] = useState<string | null>(null)
   const [selectedSingleResourceMemberId, setSelectedSingleResourceMemberId] = useState<string | null>(
@@ -1381,6 +1403,9 @@ export function WorkspaceOrgChartRoster({
     memberScheduleCompetencyByKey,
     onAssetCompetencyFunctionChange,
     onSingleResourceCompetencyFunctionChange,
+    haveLinkIndexByRef,
+    activeHaveCell,
+    highlightedHaveRef,
   }
 
   const wideRenderProps: OrgChartWideRenderProps = {

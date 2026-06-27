@@ -29,6 +29,7 @@ import type { Ics204AssignedUnitOption } from '@/features/ics204/ics204-assigned
 import type { Ics215Ics204WorkSyncTooltipState } from '@/features/ics204/sync-ics215-work-assignments'
 import type { ResourceListItemData } from '@/features/resources/types'
 import type { HaveLinkRosterActions } from '@/features/ics215/have-link-roster-actions'
+import type { HaveLinkRosterPanelRenderer } from '@/features/roster/WorkspaceRosterPanel'
 import type { PositionRosterEntry } from '@/features/roster/workspace-position-roster'
 import type { WorkAssignmentTargetOption } from '@/lib/work-assignment-target-options'
 import type { WorkspaceRosterMember } from '@/lib/workspace-types'
@@ -92,6 +93,7 @@ type Ics215WorkspacePanelProps = {
     onAssignmentAdded?: (ref: string) => void,
     onAssignmentRemoved?: (ref: string) => void
   ) => HaveLinkRosterActions | undefined
+  renderHaveLinkRosterPanel?: HaveLinkRosterPanelRenderer
   showPositionAssets?: boolean
   onAppendVersion: (
     form: Ics215FormState,
@@ -138,6 +140,7 @@ export function Ics215WorkspacePanel({
   onHaveFillComplete,
   onWorkAssignmentsLayoutModeChange,
   createHaveLinkRosterActions,
+  renderHaveLinkRosterPanel,
   showPositionAssets = true,
   onAppendVersion,
   onSignReview,
@@ -530,6 +533,7 @@ export function Ics215WorkspacePanel({
             onHaveFillComplete={onHaveFillComplete}
             onWorkAssignmentsLayoutModeChange={onWorkAssignmentsLayoutModeChange}
             createHaveLinkRosterActions={createHaveLinkRosterActions}
+            renderHaveLinkRosterPanel={renderHaveLinkRosterPanel}
             showPositionAssets={showPositionAssets}
           />
         </div>

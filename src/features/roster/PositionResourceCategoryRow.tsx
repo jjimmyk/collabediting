@@ -10,6 +10,9 @@ import { PositionRosterItemActions } from '@/features/roster/PositionRosterItemA
 import type { PositionResourceCategoryEntry } from '@/lib/workspace-resource-category-types'
 import type { ResourceCategoryLifecycle } from '@/lib/workspace-resource-category-types'
 import type { WorkspaceRosterMember } from '@/lib/workspace-types'
+import type { Ics215HaveLinkLocation } from '@/features/ics215/ics215-have-asset-link'
+import { RosterHaveLinkIndicator } from '@/features/roster/RosterHaveLinkIndicator'
+import { cn } from '@/lib/utils'
 
 export function PositionResourceCategoryCreateButton({
   disabled,
@@ -116,6 +119,10 @@ export function PositionResourceCategoryRow({
   onClearFill,
   showAlsoScheduleForNextOp = false,
   onAlsoScheduleForNextOp,
+  haveLinkLocation,
+  activeHaveCell = null,
+  highlightedHaveRef = null,
+  categoryHaveRef,
 }: {
   category: PositionResourceCategoryEntry
   position: string
@@ -132,6 +139,10 @@ export function PositionResourceCategoryRow({
   onClearFill: () => void
   showAlsoScheduleForNextOp?: boolean
   onAlsoScheduleForNextOp?: () => void
+  haveLinkLocation?: Ics215HaveLinkLocation | null
+  activeHaveCell?: { rowId: number; columnId: string } | null
+  highlightedHaveRef?: string | null
+  categoryHaveRef?: string
 }) {
   const fillLabel =
     category.filledMemberEmail ??
@@ -139,7 +150,14 @@ export function PositionResourceCategoryRow({
     'Unfilled — assign a person or asset'
 
   return (
-    <div className="space-y-1.5 rounded-md border px-2 py-1.5">
+    <div
+      className={cn(
+        'space-y-1.5 rounded-md border px-2 py-1.5',
+        categoryHaveRef &&
+          highlightedHaveRef === categoryHaveRef &&
+          'ring-2 ring-primary/40 ring-offset-1'
+      )}
+    >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
           <p className="truncate text-xs font-medium">{category.name}</p>
@@ -150,6 +168,11 @@ export function PositionResourceCategoryRow({
             <Badge variant="outline" className="h-4 px-1.5 text-[9px]">
               {lifecycleLabel}
             </Badge>
+            <RosterHaveLinkIndicator
+              location={haveLinkLocation}
+              activeHaveCell={activeHaveCell}
+              compact
+            />
           </div>
           <p className="mt-1 text-[11px] text-muted-foreground">{fillLabel}</p>
         </div>

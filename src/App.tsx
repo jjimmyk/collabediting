@@ -387,6 +387,7 @@ import {
   createEmptyIcs215Form,
   createLocalIcs215DocumentId,
   extractIcs215SectionDraft,
+  extractIcs215WorkAssignmentsDraft,
   getIcs215FormForExport,
   ics215AuthorColor,
 } from '@/features/ics215/utils'
@@ -608,6 +609,9 @@ import { RosterAddMemberToolbar } from '@/features/roster/RosterAddMemberToolbar
 import { RosterDisplayFiltersMenu } from '@/features/roster/RosterDisplayFiltersMenu'
 import { RosterZoomControls } from '@/features/roster/RosterZoomControls'
 import { RosterZoomContainer } from '@/features/roster/RosterZoomContainer'
+import { useWorkspaceHaveLinkIndex } from '@/features/ics215/useWorkspaceHaveLinkIndex'
+import { createHaveLinkRosterPanelRenderer } from '@/features/roster/create-have-link-roster-panel-renderer'
+import type { HaveLinkRosterPanelRenderer } from '@/features/roster/WorkspaceRosterPanel'
 import {
   DEFAULT_ROSTER_DISPLAY_FILTERS,
   resolveEffectiveRosterTimeHorizon,
@@ -2151,30 +2155,56 @@ const createAnalyticsClusterFeatureReduction = () => ({
   ],
 })
 
+const isArcGisAbortError = (error: unknown): boolean => {
+  if (!(error instanceof Error)) {
+    return false
+  }
+  return error.name === 'AbortError' || /abort/i.test(error.message)
+}
+
+const safeDestroyMapView = (view: MapView | null | undefined) => {
+  if (!view || view.destroyed) {
+    return
+  }
+  try {
+    view.destroy()
+  } catch (error) {
+    if (!isArcGisAbortError(error)) {
+      console.warn('MapView destroy failed', error)
+    }
+  }
+}
+
 const replaceAnalyticsFeatureLayerSource = async (
   layer: FeatureLayer,
   graphics: Graphic[]
 ) => {
-  if (layer.loaded) {
-    const layerWithEdits = layer as FeatureLayer & {
-      applyEdits?: (edits: {
-        addFeatures?: Graphic[]
-        deleteFeatures?: Graphic[]
-      }) => Promise<unknown>
+  try {
+    if (layer.loaded) {
+      const layerWithEdits = layer as FeatureLayer & {
+        applyEdits?: (edits: {
+          addFeatures?: Graphic[]
+          deleteFeatures?: Graphic[]
+        }) => Promise<unknown>
+      }
+      if (typeof layerWithEdits.applyEdits === 'function') {
+        const query = await layer.queryFeatures()
+        await layerWithEdits.applyEdits({
+          deleteFeatures: query.features,
+          addFeatures: graphics,
+        })
+      }
+      return
     }
-    if (typeof layerWithEdits.applyEdits === 'function') {
-      const query = await layer.queryFeatures()
-      await layerWithEdits.applyEdits({
-        deleteFeatures: query.features,
-        addFeatures: graphics,
-      })
-    }
-    return
-  }
 
-  layer.source.removeAll()
-  if (graphics.length > 0) {
-    layer.source.addMany(graphics)
+    layer.source.removeAll()
+    if (graphics.length > 0) {
+      layer.source.addMany(graphics)
+    }
+  } catch (error) {
+    if (!isArcGisAbortError(error)) {
+      throw error
+    }
   }
 }
 
@@ -3070,12 +3100,19 @@ const resolveMapClickTarget = (results: ViewHitTestResult['results']): MapClickT
 
 const positionMapZoomControls = (view: MapView) => {
   void view.when().then(() => {
+    if (view.destroyed) {
+      return
+    }
     if (view.ui.find('zoom')) {
       view.ui.move('zoom', 'bottom-right')
       return
     }
 
     view.ui.add(new Zoom({ view }), 'bottom-right')
+  }).catch((error) => {
+    if (!isArcGisAbortError(error)) {
+      console.warn('MapView zoom controls setup failed', error)
+    }
   })
 }
 
@@ -3089,8 +3126,14 @@ const scheduleHubMapViewLayoutRefresh = (
   }
 ) => {
   void view.when().then(() => {
+    if (view.destroyed) {
+      return
+    }
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
+        if (view.destroyed) {
+          return
+        }
         const resizableView = view as MapView & { resize?: () => void }
         if (typeof resizableView.resize === 'function') {
           resizableView.resize()
@@ -3099,6 +3142,10 @@ const scheduleHubMapViewLayoutRefresh = (
         window.dispatchEvent(new Event('resize'))
       })
     })
+  }).catch((error) => {
+    if (!isArcGisAbortError(error)) {
+      console.warn('MapView layout refresh failed', error)
+    }
   })
 }
 
@@ -9590,6 +9637,12 @@ function App() {
         },
       })
       mapViewRef.current = view
+      void view.when().catch(() => {
+        /* ignore basemap/layer load aborted during teardown */
+      })
+      void view.map?.basemap?.load().catch(() => {
+        /* ignore basemap load aborted during teardown */
+      })
       positionMapZoomControls(view)
       scheduleHubMapViewLayoutRefreshWithRetries(
         view,
@@ -9657,7 +9710,7 @@ function App() {
       ics201SketchViewModelRef.current = null
     }
 
-    mapViewRef.current?.destroy()
+    safeDestroyMapView(mapViewRef.current)
     mapViewRef.current = null
     mapGraphicsLayerRef.current = null
     drawLocationLayerRef.current = null
@@ -9681,7 +9734,7 @@ function App() {
         }
         ics201SketchViewModelRef.current = null
       }
-      mapViewRef.current?.destroy()
+      safeDestroyMapView(mapViewRef.current)
       mapViewRef.current = null
       mapGraphicsRef.current = new globalThis.Map()
       mapGraphicsLayerRef.current = null
@@ -16519,6 +16572,23 @@ function App() {
       workspaceResourceCategories,
     ]
   )
+  const ics215HaveLinkWorkDraft = useMemo(() => {
+    if (!displayIcs215Form) {
+      return {
+        workAssignments: [] as Ics215WorkAssignmentsDraft['workAssignments'],
+        resourceColumns: [] as Ics215WorkAssignmentsDraft['resourceColumns'],
+      }
+    }
+    if (ics215EditingSections['work-assignments'] && ics215SectionDrafts['work-assignments']) {
+      return ics215SectionDrafts['work-assignments']
+    }
+    return extractIcs215WorkAssignmentsDraft(displayIcs215Form)
+  }, [displayIcs215Form, ics215EditingSections, ics215SectionDrafts])
+  const workspaceHaveLinkIndex = useWorkspaceHaveLinkIndex({
+    workAssignments: ics215HaveLinkWorkDraft.workAssignments,
+    resourceColumns: ics215HaveLinkWorkDraft.resourceColumns,
+    workAssignmentTargetOptions,
+  })
   const updateAssetPointOfContact = async (assetKey: string, memberId: string | null) => {
     if (!isSupabaseEnabled || !activeWorkspaceSupabaseId) {
       toast.error('This workspace is not synced to Supabase yet.')
@@ -17096,6 +17166,334 @@ function App() {
       ),
     }))
   }
+
+  const renderHaveLinkRosterPanel = useMemo((): HaveLinkRosterPanelRenderer | undefined => {
+    if (!isInIncidentWorkspace && !isInExerciseWorkspace) {
+      return undefined
+    }
+    return createHaveLinkRosterPanelRenderer(
+      {
+        orgChartLayout: displayRosterProjection.orgChartLayout,
+        entriesByPosition: displayPositionRosterEntriesByPosition,
+        assetsByKey: displayRosterProjection.assetsByKey,
+        rosterById: displayRosterProjection.rosterById,
+        visiblePositions: visibleRosterPositions,
+        displayFilters: rosterDisplayFilters,
+        isProjected: displayRosterProjection.isProjected,
+        rosterTimeHorizon: effectiveRosterTimeHorizon,
+        managementEntriesByPosition: displayRosterProjection.isProjected
+          ? positionRosterEntriesByPosition
+          : undefined,
+        assignableByPosition,
+        scheduleAssignableByPosition,
+        scheduleUnassignableByPosition,
+        canManageRoster: effectiveCanManageRoster,
+        glassItemBorderClasses,
+        isUpdatingPermission: rosterPermissionUpdatingPosition,
+        isAssigningPosition: rosterAssigningPosition,
+        workspaceLabel: activeWorkspaceRosterLabel,
+        layoutMode: 'compact',
+        showOpAdvanceLabels: showPositionOpAdvanceLabels,
+        positionMetaByName: workspacePositionCatalog.positionMetaByName,
+        isUpdatingOpAdvanceLabel: updatingOpAdvanceLabelPosition,
+        onToggleEditIcs201: (position, enabled) => {
+          void toggleWorkspacePositionEditIcs201(position, enabled)
+        },
+        showAllowWorkAssignment: showAllowWorkAssignment,
+        onToggleAllowWorkAssignment: (position, enabled) => {
+          void toggleWorkspacePositionAllowWorkAssignment(position, enabled)
+        },
+        onAssignExistingMember: (memberId, position) => {
+          void assignExistingMemberToPosition(memberId, position)
+        },
+        onSearchOrgMembers:
+          isSupabaseEnabled && activeWorkspaceSupabaseId
+            ? searchOrgMembersForActiveWorkspace
+            : undefined,
+        onAssignOrgMember: (userId, position) => {
+          void assignOrgMemberToPositionRow(userId, position)
+        },
+        workspaceRosterMembers: activeWorkspaceRoster,
+        onScheduleAssignMember: (memberId, position) => {
+          void scheduleAssignMemberToPosition(memberId, position)
+        },
+        onScheduleUnassignMember: (memberId, position) => {
+          void scheduleUnassignMemberFromPosition(memberId, position)
+        },
+        onRemoveScheduledAssign: (memberId, position) => {
+          void removeScheduledAssignFromPosition(memberId, position)
+        },
+        onRemoveScheduledUnassign: (memberId, position) => {
+          void removeScheduledUnassignFromPosition(memberId, position)
+        },
+        onInviteToPosition: openInviteToPosition,
+        inlinePositionInvite: {
+          isSupabaseEnabled,
+          isSubmitting: isInvitingRosterMember,
+          onSubmit: submitInlinePositionInvite,
+        },
+        onUnassignMember: (memberId, position) => {
+          void unassignMemberFromPosition(memberId, position)
+        },
+        onOpAdvanceLabelChange: (position, label) => {
+          void handleOpAdvanceLabelChange(position, label)
+        },
+        showCheckInStatus: showMemberCheckInStatus,
+        canEditCheckInStatus: canEditMemberCheckInStatus,
+        updatingCheckInMemberId: updatingCheckInMemberId,
+        onCheckInStatusChange: (memberId, status) => {
+          void updateMemberCheckInStatus(memberId, status)
+        },
+        competencyOptions: rosterCompetencyControls.organizationCompetencyOptions,
+        canEditCompetencyFunction: rosterCompetencyControls.canEditCompetencyFunction,
+        updatingCompetencyKey: rosterCompetencyControls.updatingCompetencyKey,
+        onMemberCompetencyFunctionChange:
+          rosterCompetencyControls.onMemberCompetencyFunctionChange,
+        memberScheduleCompetencyByKey: memberScheduleCompetencyByKey,
+        onSingleResourceCompetencyFunctionChange:
+          rosterCompetencyControls.onSingleResourceCompetencyFunctionChange,
+        onAssetCompetencyFunctionChange: rosterCompetencyControls.onAssetCompetencyFunctionChange,
+        showPositionAssets: showPositionAssets,
+        assignableAssetsByPosition,
+        scheduleAssignableAssetsByPosition,
+        scheduleUnassignableAssetsByPosition,
+        pocMembers: rosterPocMembers,
+        onAssignAsset: (assetKey, position, pointOfContactMemberId) => {
+          void assignAssetToPosition(assetKey, position, pointOfContactMemberId)
+        },
+        onUnassignAsset: (assetKey, position) => {
+          void unassignAssetFromPosition(assetKey, position)
+        },
+        onScheduleAssignAsset: (assetKey, position) => {
+          void scheduleAssignAssetToPosition(assetKey, position)
+        },
+        onScheduleUnassignAsset: (assetKey, position) => {
+          void scheduleUnassignAssetFromPosition(assetKey, position)
+        },
+        onRemoveScheduledAssignAsset: (assetKey, position) => {
+          void removeScheduledAssignAssetFromPosition(assetKey, position)
+        },
+        onRemoveScheduledUnassignAsset: (assetKey, position) => {
+          void removeScheduledUnassignAssetFromPosition(assetKey, position)
+        },
+        onUpdateAssetPointOfContact: (assetKey, memberId) => {
+          void updateAssetPointOfContact(assetKey, memberId)
+        },
+        onRemovePositionFromRoster: (position) => {
+          void handleRemovePositionFromRoster(position)
+        },
+        removingPositionFromRoster: deletingCustomPosition,
+        canRemovePositionFromRoster: canRemovePositionFromRoster,
+        positionRemovalBlockedReason: positionRemovalBlockedReason,
+        onPositionTypeChange: (position, positionType, customTypeLabel) => {
+          void handleUpdatePositionType(position, positionType, customTypeLabel)
+        },
+        positionCatalog: workspacePositionCatalog,
+        isUpdatingPositionIdentity: updatingCustomPositionName,
+        onSaveCustomPosition: (input) => {
+          void handleSaveCustomPosition(input)
+        },
+        onCreateResourceCategory: (position, name, lifecycle) => {
+          void createResourceCategoryForPosition(position, name, lifecycle)
+        },
+        onDeleteResourceCategory: (categoryId) => {
+          void deleteResourceCategoryById(categoryId)
+        },
+        onScheduleResourceCategoryForNextOp: (categoryId, position) => {
+          void scheduleResourceCategoryForNextOp(categoryId, position)
+        },
+        onFillResourceCategoryMember: (categoryId, memberId) => {
+          void fillResourceCategoryMember(categoryId, memberId)
+        },
+        onFillResourceCategoryAsset: (categoryId, assetKey) => {
+          void fillResourceCategoryAsset(categoryId, assetKey)
+        },
+        onClearResourceCategoryFill: (categoryId) => {
+          void clearResourceCategoryFillById(categoryId)
+        },
+        haveLinkIndexByRef: workspaceHaveLinkIndex,
+      },
+      {
+        entries: displayPositionRosterEntries,
+        displayFilters: rosterDisplayFilters,
+        positionCatalog: workspacePositionCatalog,
+        assignableByPosition,
+        scheduleAssignableByPosition,
+        scheduleUnassignableByPosition,
+        canManageRoster: effectiveCanManageRoster,
+        glassItemBorderClasses,
+        isUpdatingPermission: rosterPermissionUpdatingPosition,
+        isAssigningPosition: rosterAssigningPosition,
+        showOpAdvanceLabels: showPositionOpAdvanceLabels,
+        positionMetaByName: workspacePositionCatalog.positionMetaByName,
+        isUpdatingOpAdvanceLabel: updatingOpAdvanceLabelPosition,
+        onToggleEditIcs201: (position, enabled) => {
+          void toggleWorkspacePositionEditIcs201(position, enabled)
+        },
+        showAllowWorkAssignment: showAllowWorkAssignment,
+        onToggleAllowWorkAssignment: (position, enabled) => {
+          void toggleWorkspacePositionAllowWorkAssignment(position, enabled)
+        },
+        onAssignExistingMember: (memberId, position) => {
+          void assignExistingMemberToPosition(memberId, position)
+        },
+        onSearchOrgMembers:
+          isSupabaseEnabled && activeWorkspaceSupabaseId
+            ? searchOrgMembersForActiveWorkspace
+            : undefined,
+        onAssignOrgMember: (userId, position) => {
+          void assignOrgMemberToPositionRow(userId, position)
+        },
+        workspaceRosterMembers: activeWorkspaceRoster,
+        onScheduleAssignMember: (memberId, position) => {
+          void scheduleAssignMemberToPosition(memberId, position)
+        },
+        onScheduleUnassignMember: (memberId, position) => {
+          void scheduleUnassignMemberFromPosition(memberId, position)
+        },
+        onRemoveScheduledAssign: (memberId, position) => {
+          void removeScheduledAssignFromPosition(memberId, position)
+        },
+        onRemoveScheduledUnassign: (memberId, position) => {
+          void removeScheduledUnassignFromPosition(memberId, position)
+        },
+        onInviteToPosition: openInviteToPosition,
+        onUnassignMember: (memberId, position) => {
+          void unassignMemberFromPosition(memberId, position)
+        },
+        competencyOptions: rosterCompetencyControls.organizationCompetencyOptions,
+        canEditCompetencyFunction: rosterCompetencyControls.canEditCompetencyFunction,
+        updatingCompetencyKey: rosterCompetencyControls.updatingCompetencyKey,
+        memberScheduleCompetencyByKey: memberScheduleCompetencyByKey,
+        onMemberCompetencyFunctionChange:
+          rosterCompetencyControls.onMemberCompetencyFunctionChange,
+        onAssetCompetencyFunctionChange: rosterCompetencyControls.onAssetCompetencyFunctionChange,
+        showPositionAssets: showPositionAssets,
+        assignableAssetsByPosition,
+        scheduleAssignableAssetsByPosition,
+        scheduleUnassignableAssetsByPosition,
+        pocMembers: rosterPocMembers,
+        assetsByKey: workspaceAssetsByKey,
+        onAssignAsset: (assetKey, position, pointOfContactMemberId) => {
+          void assignAssetToPosition(assetKey, position, pointOfContactMemberId)
+        },
+        onUnassignAsset: (assetKey, position) => {
+          void unassignAssetFromPosition(assetKey, position)
+        },
+        onScheduleAssignAsset: (assetKey, position) => {
+          void scheduleAssignAssetToPosition(assetKey, position)
+        },
+        onScheduleUnassignAsset: (assetKey, position) => {
+          void scheduleUnassignAssetFromPosition(assetKey, position)
+        },
+        onRemoveScheduledAssignAsset: (assetKey, position) => {
+          void removeScheduledAssignAssetFromPosition(assetKey, position)
+        },
+        onRemoveScheduledUnassignAsset: (assetKey, position) => {
+          void removeScheduledUnassignAssetFromPosition(assetKey, position)
+        },
+        onUpdateAssetPointOfContact: (assetKey, memberId) => {
+          void updateAssetPointOfContact(assetKey, memberId)
+        },
+        onCreateResourceCategory: (position, name, lifecycle) => {
+          void createResourceCategoryForPosition(position, name, lifecycle)
+        },
+        onDeleteResourceCategory: (categoryId) => {
+          void deleteResourceCategoryById(categoryId)
+        },
+        onScheduleResourceCategoryForNextOp: (categoryId, position) => {
+          void scheduleResourceCategoryForNextOp(categoryId, position)
+        },
+        onFillResourceCategoryMember: (categoryId, memberId) => {
+          void fillResourceCategoryMember(categoryId, memberId)
+        },
+        onFillResourceCategoryAsset: (categoryId, assetKey) => {
+          void fillResourceCategoryAsset(categoryId, assetKey)
+        },
+        onClearResourceCategoryFill: (categoryId) => {
+          void clearResourceCategoryFillById(categoryId)
+        },
+        onPositionTypeChange: (position, positionType, customTypeLabel) => {
+          void handleUpdatePositionType(position, positionType, customTypeLabel)
+        },
+        isUpdatingPositionIdentity: updatingCustomPositionName,
+        onSaveCustomPosition: (input) => {
+          void handleSaveCustomPosition(input)
+        },
+        haveLinkIndexByRef: workspaceHaveLinkIndex,
+      }
+    )
+  }, [
+    activeWorkspaceRoster,
+    activeWorkspaceRosterLabel,
+    activeWorkspaceSupabaseId,
+    assignableAssetsByPosition,
+    assignableByPosition,
+    assignAssetToPosition,
+    assignExistingMemberToPosition,
+    assignOrgMemberToPositionRow,
+    canEditMemberCheckInStatus,
+    canRemovePositionFromRoster,
+    clearResourceCategoryFillById,
+    createResourceCategoryForPosition,
+    deleteResourceCategoryById,
+    deletingCustomPosition,
+    displayPositionRosterEntries,
+    displayPositionRosterEntriesByPosition,
+    displayRosterProjection,
+    effectiveCanManageRoster,
+    effectiveRosterTimeHorizon,
+    fillResourceCategoryAsset,
+    fillResourceCategoryMember,
+    glassItemBorderClasses,
+    handleOpAdvanceLabelChange,
+    handleRemovePositionFromRoster,
+    handleSaveCustomPosition,
+    handleUpdatePositionType,
+    isInExerciseWorkspace,
+    isInIncidentWorkspace,
+    isInvitingRosterMember,
+    isSupabaseEnabled,
+    memberScheduleCompetencyByKey,
+    openInviteToPosition,
+    positionRemovalBlockedReason,
+    positionRosterEntriesByPosition,
+    removeScheduledAssignAssetFromPosition,
+    removeScheduledAssignFromPosition,
+    removeScheduledUnassignAssetFromPosition,
+    removeScheduledUnassignFromPosition,
+    rosterCompetencyControls,
+    rosterDisplayFilters,
+    rosterPermissionUpdatingPosition,
+    rosterAssigningPosition,
+    rosterPocMembers,
+    scheduleAssignableAssetsByPosition,
+    scheduleAssignableByPosition,
+    scheduleAssignAssetToPosition,
+    scheduleAssignMemberToPosition,
+    scheduleResourceCategoryForNextOp,
+    scheduleUnassignableByPosition,
+    scheduleUnassignAssetFromPosition,
+    scheduleUnassignMemberFromPosition,
+    searchOrgMembersForActiveWorkspace,
+    showAllowWorkAssignment,
+    showMemberCheckInStatus,
+    showPositionAssets,
+    showPositionOpAdvanceLabels,
+    submitInlinePositionInvite,
+    toggleWorkspacePositionAllowWorkAssignment,
+    toggleWorkspacePositionEditIcs201,
+    unassignAssetFromPosition,
+    unassignMemberFromPosition,
+    updateAssetPointOfContact,
+    updateMemberCheckInStatus,
+    updatingCheckInMemberId,
+    updatingCustomPositionName,
+    updatingOpAdvanceLabelPosition,
+    visibleRosterPositions,
+    workspaceHaveLinkIndex,
+    workspacePositionCatalog,
+  ])
 
   const activeNavigationDestination = useMemo(() => {
     if (isInExerciseWorkspace) return 'exercise-workspace' as const
@@ -30095,6 +30493,7 @@ function App() {
                           scheduled
                         )
                       }}
+                      haveLinkIndexByRef={workspaceHaveLinkIndex}
                     />
                         </div>
                       ) : (
@@ -30232,6 +30631,7 @@ function App() {
                       onClearResourceCategoryFill={(categoryId) => {
                         void clearResourceCategoryFillById(categoryId)
                       }}
+                      haveLinkIndexByRef={workspaceHaveLinkIndex}
                     />
                       )}
                       </RosterZoomContainer>
@@ -34677,6 +35077,7 @@ function App() {
                     onHaveFillComplete={handleHaveFillComplete}
                     onWorkAssignmentsLayoutModeChange={handleIcs215WorkAssignmentsLayoutModeChange}
                     createHaveLinkRosterActions={createHaveLinkRosterActions}
+                    renderHaveLinkRosterPanel={renderHaveLinkRosterPanel}
                     showPositionAssets={showPositionAssets}
                     onAppendVersion={handleIcs215AppendVersion}
                     onSignReview={handleIcs215SignReview}

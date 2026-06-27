@@ -95,6 +95,9 @@ type PositionRosterDetailPanelProps = {
   onFillResourceCategoryAsset?: (categoryId: string, assetKey: string) => void
   onClearResourceCategoryFill?: (categoryId: string) => void
   assignmentSectionsLayout?: PositionAssignmentSectionsLayout
+  haveLinkIndexByRef?: PositionRosterUnifiedAssignmentSectionsProps['haveLinkIndexByRef']
+  activeHaveCell?: PositionRosterUnifiedAssignmentSectionsProps['activeHaveCell']
+  highlightedHaveRef?: PositionRosterUnifiedAssignmentSectionsProps['highlightedHaveRef']
 } & Partial<PositionRosterAssetHandlers>
 
 export function PositionRosterDetailPanel({
@@ -164,6 +167,9 @@ export function PositionRosterDetailPanel({
   onFillResourceCategoryAsset,
   onClearResourceCategoryFill,
   assignmentSectionsLayout = 'stacked',
+  haveLinkIndexByRef,
+  activeHaveCell = null,
+  highlightedHaveRef = null,
 }: PositionRosterDetailPanelProps) {
   const assetsHandlersReady = Boolean(
     onAssignAsset &&
@@ -296,6 +302,9 @@ export function PositionRosterDetailPanel({
         onFillResourceCategoryAsset={onFillResourceCategoryAsset}
         onClearResourceCategoryFill={onClearResourceCategoryFill}
         assignmentSectionsLayout={assignmentSectionsLayout}
+        haveLinkIndexByRef={haveLinkIndexByRef}
+        activeHaveCell={activeHaveCell}
+        highlightedHaveRef={highlightedHaveRef}
       />
 
       {canManageRoster && onRemoveFromRoster ? (

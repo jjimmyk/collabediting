@@ -123,6 +123,9 @@ type PositionRosterCardProps = {
   onClearResourceCategoryFill?: (categoryId: string) => void
   rosterTimeHorizon?: OrgChartExportScope
   managementEntry?: PositionRosterEntry
+  haveLinkIndexByRef?: import('@/features/roster/PositionRosterAssignmentSections').PositionRosterUnifiedAssignmentSectionsProps['haveLinkIndexByRef']
+  activeHaveCell?: import('@/features/roster/PositionRosterAssignmentSections').PositionRosterUnifiedAssignmentSectionsProps['activeHaveCell']
+  highlightedHaveRef?: import('@/features/roster/PositionRosterAssignmentSections').PositionRosterUnifiedAssignmentSectionsProps['highlightedHaveRef']
 } & Partial<PositionRosterAssetHandlers>
 
 export function PositionRosterCard({
@@ -195,6 +198,9 @@ export function PositionRosterCard({
   onClearResourceCategoryFill,
   rosterTimeHorizon = 'current_op',
   managementEntry,
+  haveLinkIndexByRef,
+  activeHaveCell = null,
+  highlightedHaveRef = null,
 }: PositionRosterCardProps) {
   const [orgModalOpen, setOrgModalOpen] = useState(false)
   const isOrg = variant === 'org'
@@ -256,6 +262,9 @@ export function PositionRosterCard({
     onFillResourceCategoryMember,
     onFillResourceCategoryAsset,
     onClearResourceCategoryFill,
+    haveLinkIndexByRef,
+    activeHaveCell,
+    highlightedHaveRef,
   }
 
   if (isOrg) {

@@ -42,6 +42,14 @@ import {
   canMemberContinueToNextOp,
   canResourceCategoryContinueToNextOp,
 } from '@/lib/work-assignment-roster-eligibility'
+import type { Ics215HaveLinkLocation } from '@/features/ics215/ics215-have-asset-link'
+import { RosterHaveLinkIndicator } from '@/features/roster/RosterHaveLinkIndicator'
+import {
+  lookupHaveLinkLocation,
+  resolveMemberHaveRef,
+  resolvePositionAssetHaveRef,
+  resolveResourceCategoryHaveRef,
+} from '@/features/roster/resolve-roster-have-ref'
 
 export type PositionAssignmentSectionsLayout = 'stacked' | 'timeline'
 
@@ -142,6 +150,10 @@ export function PositionMemberRow({
   onCompetencyFunctionChange,
   showAlsoScheduleForNextOp = false,
   onAlsoScheduleForNextOp,
+  haveLinkLocation,
+  activeHaveCell = null,
+  highlightedHaveRef = null,
+  memberHaveRef,
 }: {
   member: WorkspaceRosterMember
   badgeLabel: string
@@ -160,9 +172,20 @@ export function PositionMemberRow({
   onCompetencyFunctionChange?: (value: string | null) => void
   showAlsoScheduleForNextOp?: boolean
   onAlsoScheduleForNextOp?: () => void
+  haveLinkLocation?: Ics215HaveLinkLocation | null
+  activeHaveCell?: { rowId: number; columnId: string } | null
+  highlightedHaveRef?: string | null
+  memberHaveRef?: string
 }) {
+  const isHighlighted = Boolean(memberHaveRef && highlightedHaveRef === memberHaveRef)
+
   return (
-    <div className="space-y-1.5 rounded-md border px-2 py-1.5">
+    <div
+      className={cn(
+        'space-y-1.5 rounded-md border px-2 py-1.5',
+        isHighlighted && 'ring-2 ring-primary/40 ring-offset-1'
+      )}
+    >
       <div className="flex items-center justify-between gap-2">
         <div className="min-w-0 flex-1">
           <p className="truncate text-xs font-medium">{member.email}</p>
@@ -173,6 +196,11 @@ export function PositionMemberRow({
             <Badge variant="outline" className="h-4 px-1.5 text-[9px]">
               {badgeLabel}
             </Badge>
+            <RosterHaveLinkIndicator
+              location={haveLinkLocation}
+              activeHaveCell={activeHaveCell}
+              compact
+            />
             {showCheckInStatus && onCheckInStatusChange ? (
               <RosterMemberCheckInStatusSelect
                 memberId={member.id}
@@ -443,6 +471,9 @@ export type PositionRosterUnifiedAssignmentSectionsProps = {
   onFillResourceCategoryAsset?: (categoryId: string, assetKey: string) => void
   onClearResourceCategoryFill?: (categoryId: string) => void
   assignmentSectionsLayout?: PositionAssignmentSectionsLayout
+  haveLinkIndexByRef?: Map<string, Ics215HaveLinkLocation>
+  activeHaveCell?: { rowId: number; columnId: string } | null
+  highlightedHaveRef?: string | null
 } & PositionRosterAssetHandlers
 
 export function PositionRosterUnifiedAssignmentSections({
@@ -495,6 +526,9 @@ export function PositionRosterUnifiedAssignmentSections({
   onFillResourceCategoryAsset,
   onClearResourceCategoryFill,
   assignmentSectionsLayout = 'stacked',
+  haveLinkIndexByRef,
+  activeHaveCell = null,
+  highlightedHaveRef = null,
 }: PositionRosterUnifiedAssignmentSectionsProps) {
   const [expandedAssetKey, setExpandedAssetKey] = useState<string | null>(null)
   const [expandedInviteMode, setExpandedInviteMode] = useState<RosterInviteAssignmentMode | null>(
@@ -550,6 +584,46 @@ export function PositionRosterUnifiedAssignmentSections({
     (assetsEnabled && entry.scheduledUnassignAssets.length > 0) ||
     filterResourceCategoriesByLifecycle(entry.resourceCategories, 'scheduled_unassign').length > 0
 
+  const rosterMembers = workspaceRosterMembers ?? []
+
+  const memberHaveLinkProps = (
+    memberId: string,
+    competencyFunction?: string | null
+  ) => {
+    const ref = resolveMemberHaveRef(memberId, entry.position, rosterMembers, competencyFunction)
+    return {
+      memberHaveRef: ref,
+      haveLinkLocation: lookupHaveLinkLocation(haveLinkIndexByRef, ref),
+      activeHaveCell,
+      highlightedHaveRef,
+    }
+  }
+
+  const assetHaveLinkProps = (assetKey: string) => {
+    const ref = resolvePositionAssetHaveRef(
+      assetKey,
+      entry.position,
+      rosterMembers,
+      assetsByKey ?? {}
+    )
+    return {
+      assetHaveRef: ref,
+      haveLinkLocation: lookupHaveLinkLocation(haveLinkIndexByRef, ref),
+      activeHaveCell,
+      highlightedHaveRef,
+    }
+  }
+
+  const categoryHaveLinkProps = (categoryId: string) => {
+    const ref = resolveResourceCategoryHaveRef(categoryId)
+    return {
+      categoryHaveRef: ref,
+      haveLinkLocation: lookupHaveLinkLocation(haveLinkIndexByRef, ref),
+      activeHaveCell,
+      highlightedHaveRef,
+    }
+  }
+
   const renderResourceCategoryRows = (
     lifecycle: ResourceCategoryLifecycle,
     lifecycleLabel: string,
@@ -557,7 +631,9 @@ export function PositionRosterUnifiedAssignmentSections({
     assignableMembersForFill: WorkspaceRosterMember[],
     assignableAssetsForFill: ResourceListItemData[]
   ) =>
-    filterResourceCategoriesByLifecycle(entry.resourceCategories, lifecycle).map((category) => (
+    filterResourceCategoriesByLifecycle(entry.resourceCategories, lifecycle).map((category) => {
+      const haveLinkProps = categoryHaveLinkProps(category.id)
+      return (
       <PositionResourceCategoryRow
         key={`resource-category-${lifecycle}-${entry.position}-${category.id}`}
         category={category}
@@ -582,8 +658,10 @@ export function PositionRosterUnifiedAssignmentSections({
         onFillMember={(memberId) => onFillResourceCategoryMember?.(category.id, memberId)}
         onFillAsset={(assetKey) => onFillResourceCategoryAsset?.(category.id, assetKey)}
         onClearFill={() => onClearResourceCategoryFill?.(category.id)}
+        {...haveLinkProps}
       />
-    ))
+      )
+    })
 
   const renderAssetListItem = (
     asset: (typeof entry.assets)[number],
@@ -599,7 +677,9 @@ export function PositionRosterUnifiedAssignmentSections({
       onAlsoScheduleForNextOp?: () => void
       scope: 'active' | 'scheduled_assign' | 'scheduled_unassign' | 'scheduled_org_chart' | 'org_chart'
     }
-  ) => (
+  ) => {
+    const haveLinkProps = assetHaveLinkProps(asset.assetKey)
+    return (
     <RosterAssetResourceListItem
       key={`${config.badgeLabel}-asset-${entry.position}-${asset.assetKey}`}
       asset={asset}
@@ -638,8 +718,10 @@ export function PositionRosterUnifiedAssignmentSections({
       }
       open={expandedAssetKey === asset.assetKey}
       onOpenChange={(open) => setExpandedAssetKey(open ? asset.assetKey : null)}
+      {...haveLinkProps}
     />
-  )
+    )
+  }
 
   return (
     <PositionAssignmentSectionsLayout
@@ -707,6 +789,10 @@ export function PositionRosterUnifiedAssignmentSections({
             }
             onAlsoScheduleForNextOp={() => onScheduleAssignMember(member.id, entry.position)}
             competencyFunction={member.competencyByPosition?.[entry.position] ?? null}
+            {...memberHaveLinkProps(
+              member.id,
+              member.competencyByPosition?.[entry.position] ?? null
+            )}
             isUpdatingCompetency={
               updatingCompetencyKey === competencyKey('member', member.id, 'active')
             }
@@ -801,6 +887,12 @@ export function PositionRosterUnifiedAssignmentSections({
                 `${member.id}::${entry.position}::assign_on_op_advance`
               ] ?? null
             }
+            {...memberHaveLinkProps(
+              member.id,
+              memberScheduleCompetencyByKey[
+                `${member.id}::${entry.position}::assign_on_op_advance`
+              ] ?? null
+            )}
             isUpdatingCompetency={
               updatingCompetencyKey === competencyKey('member', member.id, 'scheduled_assign')
             }
@@ -858,6 +950,7 @@ export function PositionRosterUnifiedAssignmentSections({
             removeLabel={`Remove ${member.email} from next OP org chart schedule`}
             onRemove={() => onRemoveScheduledAssign(member.id, entry.position)}
             competencyFunction={member.pendingCompetencyFunction ?? null}
+            {...memberHaveLinkProps(member.id, member.pendingCompetencyFunction ?? null)}
             isUpdatingCompetency={
               updatingCompetencyKey === competencyKey('member', member.id, 'scheduled_org_chart')
             }
@@ -945,6 +1038,12 @@ export function PositionRosterUnifiedAssignmentSections({
                 `${member.id}::${entry.position}::unassign_on_op_advance`
               ] ?? null
             }
+            {...memberHaveLinkProps(
+              member.id,
+              memberScheduleCompetencyByKey[
+                `${member.id}::${entry.position}::unassign_on_op_advance`
+              ] ?? null
+            )}
             isUpdatingCompetency={
               updatingCompetencyKey === competencyKey('member', member.id, 'scheduled_unassign')
             }

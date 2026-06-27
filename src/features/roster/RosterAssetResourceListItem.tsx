@@ -13,6 +13,9 @@ import { AssetOrgChartPlacementSelect } from '@/features/resources/AssetOrgChart
 import type { WorkspacePositionCatalog } from '@/features/roster/workspace-positions'
 import type { PositionAssetRosterEntry } from '@/lib/workspace-position-asset-types'
 import type { WorkspaceRosterMember } from '@/lib/workspace-types'
+import type { Ics215HaveLinkLocation } from '@/features/ics215/ics215-have-asset-link'
+import { RosterHaveLinkIndicator } from '@/features/roster/RosterHaveLinkIndicator'
+import { cn } from '@/lib/utils'
 
 type RosterAssetResourceListItemProps = {
   asset: PositionAssetRosterEntry
@@ -72,7 +75,17 @@ export function RosterAssetResourceListItem({
   positionCatalog,
   isSavingOrgChartPlacement = false,
   onOrgChartPlacementChange,
-}: RosterAssetResourceListItemProps) {
+  haveLinkLocation,
+  activeHaveCell,
+  highlightedHaveRef,
+  assetHaveRef,
+}: RosterAssetResourceListItemProps & {
+  haveLinkLocation?: Ics215HaveLinkLocation | null
+  activeHaveCell?: { rowId: number; columnId: string } | null
+  highlightedHaveRef?: string | null
+  assetHaveRef?: string
+}) {
+  const isHighlighted = Boolean(assetHaveRef && highlightedHaveRef === assetHaveRef)
   if (!resource) {
     if (!onUpdateAssetPointOfContact) {
       return null
@@ -98,6 +111,7 @@ export function RosterAssetResourceListItem({
   }
 
   return (
+    <div className={cn(isHighlighted && 'rounded-md ring-2 ring-primary/40 ring-offset-1')}>
     <ResourceListItemCard
       resource={resource}
       variant={variant}
@@ -121,6 +135,11 @@ export function RosterAssetResourceListItem({
               {secondaryBadgeLabel}
             </Badge>
           ) : null}
+          <RosterHaveLinkIndicator
+            location={haveLinkLocation}
+            activeHaveCell={activeHaveCell}
+            compact
+          />
           {showPoc && !asset.pointOfContactMemberId && !asset.pointOfContactEmail ? (
             <Badge variant="destructive" className="h-4 px-1.5 text-[9px]">
               POC required
@@ -180,5 +199,6 @@ export function RosterAssetResourceListItem({
         </>
       }
     />
+    </div>
   )
 }

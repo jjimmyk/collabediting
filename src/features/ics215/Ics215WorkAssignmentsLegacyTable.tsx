@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Ics202ReadOnlyField } from '@/features/ics202/Ics202SectionToolbar'
 import { WorkAssignmentTargetPicker } from '@/features/work-assignments/WorkAssignmentTargetPicker'
-import { Ics215HaveRosterLinkDialog } from '@/features/ics215/Ics215HaveAssetLinkDialog'
+import { Ics215HaveLinkPage } from '@/features/ics215/Ics215HaveLinkPage'
 import { Ics215HaveCell } from '@/features/ics215/Ics215HaveCell'
 import { isHaveLinkedToRoster } from '@/features/ics215/ics215-have-asset-link'
 import { useIcs215HaveRosterLink } from '@/features/ics215/useIcs215HaveAssetLink'
@@ -22,12 +22,14 @@ import { normalizeWorkAssignmentTargetValue } from '@/lib/work-assignment-target
 import { validateWorkAssignmentAssigneeSelection } from '@/lib/work-assignment-target-options'
 import { toast } from 'sonner'
 import type { WorkspaceRosterMember } from '@/lib/workspace-types'
+import type { HaveLinkRosterPanelRenderer } from '@/features/roster/WorkspaceRosterPanel'
 import { cn } from '@/lib/utils'
 
 type Ics215WorkAssignmentsLegacyTableProps = Ics215WorkAssignmentsTableBaseProps & {
   workAssignmentTargetOptions: WorkAssignmentTargetOption[]
   roster?: WorkspaceRosterMember[]
   competencyOptions?: string[]
+  renderHaveLinkRosterPanel?: HaveLinkRosterPanelRenderer
 }
 
 const RHN_ROWS = [
@@ -153,6 +155,7 @@ export function Ics215WorkAssignmentsLegacyTable({
   createHaveLinkRosterActions,
   showPositionAssets = true,
   tableLayout = 'default',
+  renderHaveLinkRosterPanel,
 }: Ics215WorkAssignmentsLegacyTableProps) {
   const {
     hideAssigneeColumn,
@@ -584,13 +587,18 @@ export function Ics215WorkAssignmentsLegacyTable({
       ) : null}
     </div>
 
-    <Ics215HaveRosterLinkDialog
+    <Ics215HaveLinkPage
       open={haveLink.dialogOpen}
       onOpenChange={(open) => {
         if (!open) haveLink.closeHaveLinkDialog()
       }}
       columnLabel={haveLink.dialogState?.columnLabel ?? ''}
       workAssignmentContext={haveLink.dialogState?.workAssignmentContext}
+      activeHaveCell={
+        haveLink.dialogState
+          ? { rowId: haveLink.dialogState.rowId, columnId: haveLink.dialogState.columnId }
+          : null
+      }
       workspaceAssets={workspaceAssets}
       haveLinkTargetOptions={haveLink.haveLinkTargetOptions}
       positionRosterEntries={positionRosterEntries}
@@ -606,6 +614,7 @@ export function Ics215WorkAssignmentsLegacyTable({
       onUnlinkFromOtherCell={haveLink.unlinkRefFromOtherCell}
       createHaveLinkRosterActions={createHaveLinkRosterActions}
       showPositionAssets={showPositionAssets}
+      renderRosterPanel={renderHaveLinkRosterPanel}
     />
     </>
   )
