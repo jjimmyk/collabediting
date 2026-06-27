@@ -38623,6 +38623,7 @@ function App() {
         incidentOptions={assetRequestIncidentOptions}
         organizationAssets={hubAssets}
         orgAssetIdsByKey={orgAssetIdsByKey}
+        glassItemBorderClasses={glassItemBorderClasses}
         onSubmit={handleCreateAssetRequest}
       />
       <AddWorkspaceAssetDialog
