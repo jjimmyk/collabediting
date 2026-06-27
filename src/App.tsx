@@ -176,13 +176,15 @@ import {
   getIcs233AssignmentRecipientEmails,
   getIcs233AssignmentValue,
   getIcs233AssigneeStatusSelectOptions,
-  ICS233_ASSIGNEE_STATUS_OPTIONS,
   isCurrentUserAssignedToIcs233Action,
   normalizeIcs233Row,
   parseIcs233AssignmentValue,
   type Ics233ActionStatus,
+  type Ics233AssignmentContext,
   type Ics233TaskRow,
 } from '@/lib/ics233-workflow'
+import { Ics233ActionDetailDialog } from '@/features/ics233/Ics233ActionDetailDialog'
+import { Ics233ActionsPanel } from '@/features/ics233/Ics233ActionsPanel'
 import {
   formatIcs233NotificationTimestamp,
   persistIcs233ActionNotifications,
@@ -25359,9 +25361,28 @@ function App() {
     setExpandedIcs204FormId(created[0].form.id)
     setActiveTab('form-ICS-204')
   }
+  const ics233AssignmentContext = useMemo<Ics233AssignmentContext>(
+    () => ({
+      roster: activeWorkspaceRoster,
+      assetsByKey: workspaceAssetsByKey,
+      positionEntries: positionRosterEntries,
+    }),
+    [activeWorkspaceRoster, workspaceAssetsByKey, positionRosterEntries]
+  )
   const ics233AssignmentOptions = useMemo(
-    () => buildIcs233AssignmentOptions(activeWorkspaceRoster, workspacePositionCatalog.allPositionNames),
-    [activeWorkspaceRoster, workspacePositionCatalog.allPositionNames]
+    () =>
+      buildIcs233AssignmentOptions({
+        roster: activeWorkspaceRoster,
+        rosterPositionOptions: workspacePositionCatalog.allPositionNames,
+        workspaceAssets: workspaceAssignedAssetsWithPending,
+        positionEntries: positionRosterEntries,
+      }),
+    [
+      activeWorkspaceRoster,
+      workspacePositionCatalog.allPositionNames,
+      workspaceAssignedAssetsWithPending,
+      positionRosterEntries,
+    ]
   )
   const updateIcs233Row = <K extends keyof Omit<Ics233TaskRow, 'id'>>(
     rowId: number,
@@ -25380,18 +25401,17 @@ function App() {
       )
     )
   }
-  const notifyIcs233Assignees = (
-    row: Pick<
-      Ics233TaskRow,
-      'id' | 'task' | 'assigneeType' | 'assigneeUserEmail' | 'assigneePosition'
-    >
-  ) => {
+  const notifyIcs233Assignees = (row: Ics233TaskRow) => {
     if (row.assigneeType === 'unassigned') {
       return
     }
 
     const taskLabel = row.task.trim() || `Action #${row.id}`
-    const recipients = getIcs233AssignmentRecipientEmails(row, activeWorkspaceRoster)
+    const recipients = getIcs233AssignmentRecipientEmails(
+      row,
+      activeWorkspaceRoster,
+      ics233AssignmentContext
+    )
     if (recipients.length === 0) {
       return
     }
@@ -25414,10 +25434,11 @@ function App() {
     payloads.forEach((payload) => deliverIcs233Notification(payload))
   }
   const assignIcs233Action = (rowId: number, assignmentValue: string) => {
-    const parsed = parseIcs233AssignmentValue(assignmentValue)
+    const parsed = parseIcs233AssignmentValue(assignmentValue, ics233AssignmentContext)
     const assigneeLabel = formatIcs233AssigneeLabel(
       { ...parsed, assigneeLabel: parsed.assigneeLabel },
-      activeWorkspaceRoster
+      activeWorkspaceRoster,
+      ics233AssignmentContext
     )
     const existingRow = ics233Rows.find((row) => row.id === rowId)
     const taskLabel = existingRow?.task.trim() || `Action #${rowId}`
@@ -25436,13 +25457,12 @@ function App() {
       )
     )
 
-    if (parsed.assigneeType !== 'unassigned') {
+    if (parsed.assigneeType !== 'unassigned' && existingRow) {
       notifyIcs233Assignees({
-        id: rowId,
+        ...existingRow,
+        ...parsed,
+        assigneeLabel,
         task: taskLabel,
-        assigneeType: parsed.assigneeType,
-        assigneeUserEmail: parsed.assigneeUserEmail,
-        assigneePosition: parsed.assigneePosition,
       })
     }
   }
@@ -25460,10 +25480,11 @@ function App() {
     )
   }
   const updateIcs233ComposeDraftAssignment = (assignmentValue: string) => {
-    const parsed = parseIcs233AssignmentValue(assignmentValue)
+    const parsed = parseIcs233AssignmentValue(assignmentValue, ics233AssignmentContext)
     const assigneeLabel = formatIcs233AssigneeLabel(
       { ...parsed, assigneeLabel: parsed.assigneeLabel },
-      activeWorkspaceRoster
+      activeWorkspaceRoster,
+      ics233AssignmentContext
     )
     setIcs233ComposeDraft((previous) =>
       previous
@@ -25491,7 +25512,6 @@ function App() {
     const row: Ics233TaskRow = {
       ...ics233ComposeDraft,
       assignedByEmail: profileEmail ?? null,
-      status: 'Not Started',
     }
     setIcs233Rows((previous) => [...previous, row])
     notifyIcs233Assignees(row)
@@ -25505,20 +25525,20 @@ function App() {
     setIsIcs233RowModalEditing(false)
   }
   const updateIcs233ActionStatus = (rowId: number, status: Ics233ActionStatus) => {
-    if (
-      !ICS233_ASSIGNEE_STATUS_OPTIONS.includes(
-        status as (typeof ICS233_ASSIGNEE_STATUS_OPTIONS)[number]
-      )
-    ) {
-      return
-    }
-
     const existingRow = ics233Rows.find((row) => row.id === rowId)
     if (
       !existingRow ||
-      !isCurrentUserAssignedToIcs233Action(existingRow, profileEmail, activeWorkspaceRoster)
+      !isCurrentUserAssignedToIcs233Action(
+        existingRow,
+        profileEmail,
+        activeWorkspaceRoster,
+        ics233AssignmentContext
+      )
     ) {
       toast.error('Only the assigned user can update this action status.')
+      return
+    }
+    if (!getIcs233AssigneeStatusSelectOptions(existingRow.status).includes(status)) {
       return
     }
     if (existingRow.status === status) {
@@ -25531,7 +25551,11 @@ function App() {
     )
 
     if (existingRow.assignedByEmail) {
-      const assigneeLabel = formatIcs233AssigneeLabel(existingRow, activeWorkspaceRoster)
+      const assigneeLabel = formatIcs233AssigneeLabel(
+        existingRow,
+        activeWorkspaceRoster,
+        ics233AssignmentContext
+      )
       const statusPayload = {
         recipientEmail: existingRow.assignedByEmail,
         title: `ICS-233 action marked ${status}`,
@@ -25585,7 +25609,7 @@ function App() {
     setIcs233TaskDraftEdit(null)
   }
   const filteredIcs233Rows = displayIcs233Rows.filter((row) => {
-    const assigneeLabel = formatIcs233AssigneeLabel(row, activeWorkspaceRoster)
+    const assigneeLabel = formatIcs233AssigneeLabel(row, activeWorkspaceRoster, ics233AssignmentContext)
     const matchesTask = row.task.toLowerCase().includes(ics233Filters.task.trim().toLowerCase())
     const matchesAssignee =
       ics233Filters.assignee === 'all' ||
@@ -25624,8 +25648,6 @@ function App() {
   })
   const selectedIcs233Row =
     selectedIcs233RowId === null ? null : ics233Rows.find((row) => row.id === selectedIcs233RowId) ?? null
-  const ics233ModalRow = ics233ComposeDraft ?? selectedIcs233Row
-  const isIcs233ComposeMode = ics233ComposeDraft !== null
   const selectedPratusResource =
     selectedPratusResourceId === null
       ? null
@@ -36944,687 +36966,39 @@ function App() {
                       isMapVisible && 'border-0 bg-transparent shadow-none'
                     )}
                   >
-                    {ics233ViewMode === 'table' ? (
-                      <div className="px-3 py-2.5">
-                        <div className="overflow-x-auto">
-                          <table className="w-full min-w-[1540px] border-collapse text-xs">
-                            <colgroup>
-                              <col className="w-[30rem]" />
-                              <col className="w-[16rem]" />
-                              <col className="w-[18rem]" />
-                              <col className="w-[10rem]" />
-                              <col className="w-[13rem]" />
-                              <col className="w-[13rem]" />
-                              <col className="w-[12rem]" />
-                              <col className="w-[10rem]" />
-                            </colgroup>
-                            <thead>
-                              <tr className="border-b text-left text-muted-foreground">
-                                <th className="px-2 py-2 font-semibold">Task</th>
-                                <th className="px-2 py-2 font-semibold">Assignee</th>
-                                <th className="px-2 py-2 font-semibold">Point of Contact</th>
-                                <th className="px-2 py-2 font-semibold">POC Briefed</th>
-                                <th className="px-2 py-2 font-semibold">Start</th>
-                                <th className="px-2 py-2 font-semibold">Deadline</th>
-                                <th className="px-2 py-2 font-semibold">Status</th>
-                                <th className="px-2 py-2 font-semibold" />
-                              </tr>
-                              <tr className="border-b bg-muted/20">
-                                <th className="px-2 py-2">
-                                  <input
-                                    value={ics233Filters.task}
-                                    onChange={(event) =>
-                                      setIcs233Filters((previous) => ({
-                                        ...previous,
-                                        task: event.target.value,
-                                      }))
-                                    }
-                                    placeholder="Filter task..."
-                                    className="h-8 w-full rounded-md border bg-transparent px-2 text-xs outline-none"
-                                  />
-                                </th>
-                                <th className="px-2 py-2">
-                                  <select
-                                    value={ics233Filters.assignee}
-                                    onChange={(event) =>
-                                      setIcs233Filters((previous) => ({
-                                        ...previous,
-                                        assignee: event.target.value,
-                                      }))
-                                    }
-                                    className="h-8 w-full rounded-md border bg-transparent px-2 text-xs outline-none"
-                                  >
-                                    <option value="all">All</option>
-                                    {ics233AssignmentOptions.map((option) => (
-                                      <option key={option.value} value={option.value}>
-                                        {option.label}
-                                      </option>
-                                    ))}
-                                  </select>
-                                </th>
-                                <th className="px-2 py-2">
-                                  <select
-                                    value={ics233Filters.pointOfContact}
-                                    onChange={(event) =>
-                                      setIcs233Filters((previous) => ({
-                                        ...previous,
-                                        pointOfContact: event.target.value,
-                                      }))
-                                    }
-                                    className="h-8 w-full rounded-md border bg-transparent px-2 text-xs outline-none"
-                                  >
-                                    <option value="all">All</option>
-                                    {ics233PointOfContactOptions.map((option) => (
-                                      <option key={option} value={option}>
-                                        {option}
-                                      </option>
-                                    ))}
-                                  </select>
-                                </th>
-                                <th className="px-2 py-2">
-                                  <select
-                                    value={ics233Filters.pocBriefed}
-                                    onChange={(event) =>
-                                      setIcs233Filters((previous) => ({
-                                        ...previous,
-                                        pocBriefed: event.target.value,
-                                      }))
-                                    }
-                                    className="h-8 w-full rounded-md border bg-transparent px-2 text-xs outline-none"
-                                  >
-                                    <option value="all">All</option>
-                                    <option value="Yes">Yes</option>
-                                    <option value="No">No</option>
-                                  </select>
-                                </th>
-                                <th className="px-2 py-2">
-                                  <div className="space-y-1">
-                                    <select
-                                      value={ics233Filters.startMode}
-                                      onChange={(event) =>
-                                        setIcs233Filters((previous) => ({
-                                          ...previous,
-                                          startMode: event.target.value,
-                                        }))
-                                      }
-                                      className="h-8 w-full rounded-md border bg-transparent px-2 text-xs outline-none"
-                                    >
-                                      <option value="all">All</option>
-                                      <option value="before">Before</option>
-                                      <option value="after">After</option>
-                                    </select>
-                                    <input
-                                      type="datetime-local"
-                                      value={ics233Filters.start}
-                                      onChange={(event) =>
-                                        setIcs233Filters((previous) => ({
-                                          ...previous,
-                                          start: event.target.value,
-                                        }))
-                                      }
-                                      className="h-8 w-full rounded-md border bg-transparent px-2 text-xs outline-none"
-                                    />
-                                  </div>
-                                </th>
-                                <th className="px-2 py-2">
-                                  <div className="space-y-1">
-                                    <select
-                                      value={ics233Filters.deadlineMode}
-                                      onChange={(event) =>
-                                        setIcs233Filters((previous) => ({
-                                          ...previous,
-                                          deadlineMode: event.target.value,
-                                        }))
-                                      }
-                                      className="h-8 w-full rounded-md border bg-transparent px-2 text-xs outline-none"
-                                    >
-                                      <option value="all">All</option>
-                                      <option value="before">Before</option>
-                                      <option value="after">After</option>
-                                    </select>
-                                    <input
-                                      type="datetime-local"
-                                      value={ics233Filters.deadline}
-                                      onChange={(event) =>
-                                        setIcs233Filters((previous) => ({
-                                          ...previous,
-                                          deadline: event.target.value,
-                                        }))
-                                      }
-                                      className="h-8 w-full rounded-md border bg-transparent px-2 text-xs outline-none"
-                                    />
-                                  </div>
-                                </th>
-                                <th className="px-2 py-2">
-                                  <select
-                                    value={ics233Filters.status}
-                                    onChange={(event) =>
-                                      setIcs233Filters((previous) => ({
-                                        ...previous,
-                                        status: event.target.value,
-                                      }))
-                                    }
-                                    className="h-8 w-full rounded-md border bg-transparent px-2 text-xs outline-none"
-                                  >
-                                    <option value="all">All</option>
-                                    <option value="Not Started">Not Started</option>
-                                    <option value="In Progress">In Progress</option>
-                                    <option value="Complete">Complete</option>
-                                    <option value="Incomplete">Incomplete</option>
-                                  </select>
-                                </th>
-                                <th className="px-2 py-2" />
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {filteredIcs233Rows.length === 0 && (
-                                <tr>
-                                  <td colSpan={8} className="px-2 py-4 text-center text-xs text-muted-foreground">
-                                    {ics233Rows.length === 0
-                                      ? 'No actions yet. Click + Add Action to create one.'
-                                      : 'No rows match the current filters.'}
-                                  </td>
-                                </tr>
-                              )}
-                              {filteredIcs233Rows.map((row) => {
-                                const rowAssigneeLabel = formatIcs233AssigneeLabel(
-                                  row,
-                                  activeWorkspaceRoster
-                                )
-                                const isAssignedToCurrentUser = isCurrentUserAssignedToIcs233Action(
-                                  row,
-                                  profileEmail,
-                                  activeWorkspaceRoster
-                                )
-                                return (
-                                <tr
-                                  key={row.id}
-                                  className="cursor-pointer border-b align-top last:border-b-0 hover:bg-muted/35"
-                                  onClick={() => {
-                                    setSelectedIcs233RowId(row.id)
-                                    setIsIcs233RowModalEditing(false)
-                                  }}
-                                >
-                                  <td className="px-2 py-2">
-                                    {activeIcs233CellEdit?.rowId === row.id &&
-                                    activeIcs233CellEdit.field === 'task' ? (
-                                      <div
-                                        className="flex items-center justify-end gap-1"
-                                        onClick={(event) => event.stopPropagation()}
-                                      >
-                                        <input
-                                          value={ics233TaskDraftEdit?.rowId === row.id ? ics233TaskDraftEdit.value : row.task}
-                                          onChange={(event) =>
-                                            setIcs233TaskDraftEdit({ rowId: row.id, value: event.target.value })
-                                          }
-                                          onKeyDown={(event) => {
-                                            if (event.key === 'Enter') {
-                                              updateIcs233Row(
-                                                row.id,
-                                                'task',
-                                                ics233TaskDraftEdit?.rowId === row.id
-                                                  ? ics233TaskDraftEdit.value
-                                                  : row.task
-                                              )
-                                              setActiveIcs233CellEdit(null)
-                                              setIcs233TaskDraftEdit(null)
-                                            }
-                                            if (event.key === 'Escape') {
-                                              setActiveIcs233CellEdit(null)
-                                              setIcs233TaskDraftEdit(null)
-                                            }
-                                          }}
-                                          className="h-8 min-w-0 flex-1 rounded-md border bg-transparent px-2 text-xs outline-none"
-                                          autoFocus
-                                        />
-                                        <Button
-                                          type="button"
-                                          size="icon"
-                                          variant="ghost"
-                                          aria-label="Save task edit"
-                                          className="h-8 w-8"
-                                          onClick={() => {
-                                            updateIcs233Row(
-                                              row.id,
-                                              'task',
-                                              ics233TaskDraftEdit?.rowId === row.id
-                                                ? ics233TaskDraftEdit.value
-                                                : row.task
-                                            )
-                                            setActiveIcs233CellEdit(null)
-                                            setIcs233TaskDraftEdit(null)
-                                          }}
-                                        >
-                                          <Check className="h-4 w-4" />
-                                        </Button>
-                                        <Button
-                                          type="button"
-                                          size="icon"
-                                          variant="ghost"
-                                          aria-label="Cancel task edit"
-                                          className="h-8 w-8"
-                                          onClick={() => {
-                                            setActiveIcs233CellEdit(null)
-                                            setIcs233TaskDraftEdit(null)
-                                          }}
-                                        >
-                                          <X className="h-4 w-4" />
-                                        </Button>
-                                      </div>
-                                    ) : (
-                                      <button
-                                        type="button"
-                                        className="w-full pt-1 text-left text-xs"
-                                        onClick={(event) => {
-                                          event.stopPropagation()
-                                          setActiveIcs233CellEdit({ rowId: row.id, field: 'task' })
-                                          setIcs233TaskDraftEdit({ rowId: row.id, value: row.task })
-                                        }}
-                                      >
-                                        {row.task}
-                                      </button>
-                                    )}
-                                  </td>
-                                  <td className="px-2 py-2">
-                                    {activeIcs233CellEdit?.rowId === row.id &&
-                                    activeIcs233CellEdit.field === 'assignment' ? (
-                                      <select
-                                        value={getIcs233AssignmentValue(row)}
-                                        onChange={(event) => {
-                                          assignIcs233Action(row.id, event.target.value)
-                                          setActiveIcs233CellEdit(null)
-                                        }}
-                                        onBlur={() => setActiveIcs233CellEdit(null)}
-                                        onClick={(event) => event.stopPropagation()}
-                                        className="h-8 w-full rounded-md border bg-transparent px-2 text-xs outline-none"
-                                        autoFocus
-                                      >
-                                        {(['Assignment', 'Roster Members', 'Roster Positions'] as const).map(
-                                          (group) => (
-                                            <optgroup key={group} label={group}>
-                                              {ics233AssignmentOptions
-                                                .filter((option) => option.group === group)
-                                                .map((option) => (
-                                                  <option key={option.value} value={option.value}>
-                                                    {option.label}
-                                                  </option>
-                                                ))}
-                                            </optgroup>
-                                          )
-                                        )}
-                                      </select>
-                                    ) : (
-                                      <button
-                                        type="button"
-                                        className="w-full pt-1 text-left text-xs"
-                                        onClick={(event) => {
-                                          event.stopPropagation()
-                                          setActiveIcs233CellEdit({ rowId: row.id, field: 'assignment' })
-                                        }}
-                                      >
-                                        {rowAssigneeLabel}
-                                      </button>
-                                    )}
-                                  </td>
-                                  <td className="px-2 py-2">
-                                    {activeIcs233CellEdit?.rowId === row.id &&
-                                    activeIcs233CellEdit.field === 'pointOfContact' ? (
-                                      <select
-                                        value={row.pointOfContact}
-                                        onChange={(event) => {
-                                          updateIcs233Row(row.id, 'pointOfContact', event.target.value)
-                                          setActiveIcs233CellEdit(null)
-                                        }}
-                                        onBlur={() => setActiveIcs233CellEdit(null)}
-                                        onClick={(event) => event.stopPropagation()}
-                                        className="h-8 w-full rounded-md border bg-transparent px-2 text-xs outline-none"
-                                        autoFocus
-                                      >
-                                        {ics233PointOfContactOptions.map((option) => (
-                                          <option key={option} value={option}>
-                                            {option}
-                                          </option>
-                                        ))}
-                                      </select>
-                                    ) : (
-                                      <button
-                                        type="button"
-                                        className="w-full pt-1 text-left text-xs"
-                                        onClick={(event) => {
-                                          event.stopPropagation()
-                                          setActiveIcs233CellEdit({ rowId: row.id, field: 'pointOfContact' })
-                                        }}
-                                      >
-                                        {row.pointOfContact}
-                                      </button>
-                                    )}
-                                  </td>
-                                  <td className="px-2 py-2">
-                                    {activeIcs233CellEdit?.rowId === row.id &&
-                                    activeIcs233CellEdit.field === 'pocBriefed' ? (
-                                      <select
-                                        value={row.pocBriefed}
-                                        onChange={(event) => {
-                                          updateIcs233Row(row.id, 'pocBriefed', event.target.value as 'Yes' | 'No')
-                                          setActiveIcs233CellEdit(null)
-                                        }}
-                                        onBlur={() => setActiveIcs233CellEdit(null)}
-                                        onClick={(event) => event.stopPropagation()}
-                                        className="h-8 w-full rounded-md border bg-transparent px-2 text-xs outline-none"
-                                        autoFocus
-                                      >
-                                        <option value="Yes">Yes</option>
-                                        <option value="No">No</option>
-                                      </select>
-                                    ) : (
-                                      <button
-                                        type="button"
-                                        className="w-full pt-1 text-left text-xs"
-                                        onClick={(event) => {
-                                          event.stopPropagation()
-                                          setActiveIcs233CellEdit({ rowId: row.id, field: 'pocBriefed' })
-                                        }}
-                                      >
-                                        {row.pocBriefed}
-                                      </button>
-                                    )}
-                                  </td>
-                                  <td className="px-2 py-2">
-                                    {activeIcs233CellEdit?.rowId === row.id &&
-                                    activeIcs233CellEdit.field === 'start' ? (
-                                      <input
-                                        type="datetime-local"
-                                        value={row.start}
-                                        onChange={(event) => updateIcs233Row(row.id, 'start', event.target.value)}
-                                        onBlur={() => setActiveIcs233CellEdit(null)}
-                                        onClick={(event) => event.stopPropagation()}
-                                        className="h-8 w-full rounded-md border bg-transparent px-2 text-xs outline-none"
-                                        autoFocus
-                                      />
-                                    ) : (
-                                      <button
-                                        type="button"
-                                        className="w-full pt-1 text-left text-xs"
-                                        onClick={(event) => {
-                                          event.stopPropagation()
-                                          setActiveIcs233CellEdit({ rowId: row.id, field: 'start' })
-                                        }}
-                                      >
-                                        {row.start.replace('T', ' ')}
-                                      </button>
-                                    )}
-                                  </td>
-                                  <td className="px-2 py-2">
-                                    {activeIcs233CellEdit?.rowId === row.id &&
-                                    activeIcs233CellEdit.field === 'deadline' ? (
-                                      <input
-                                        type="datetime-local"
-                                        value={row.deadline}
-                                        onChange={(event) => updateIcs233Row(row.id, 'deadline', event.target.value)}
-                                        onBlur={() => setActiveIcs233CellEdit(null)}
-                                        onClick={(event) => event.stopPropagation()}
-                                        className="h-8 w-full rounded-md border bg-transparent px-2 text-xs outline-none"
-                                        autoFocus
-                                      />
-                                    ) : (
-                                      <button
-                                        type="button"
-                                        className="w-full pt-1 text-left text-xs"
-                                        onClick={(event) => {
-                                          event.stopPropagation()
-                                          setActiveIcs233CellEdit({ rowId: row.id, field: 'deadline' })
-                                        }}
-                                      >
-                                        {row.deadline.replace('T', ' ')}
-                                      </button>
-                                    )}
-                                  </td>
-                                  <td className="px-2 py-2">
-                                    {activeIcs233CellEdit?.rowId === row.id &&
-                                    activeIcs233CellEdit.field === 'status' ? (
-                                      <select
-                                        value={row.status}
-                                        onChange={(event) => {
-                                          const nextStatus = event.target.value as Ics233ActionStatus
-                                          if (isAssignedToCurrentUser) {
-                                            updateIcs233ActionStatus(row.id, nextStatus)
-                                          } else {
-                                            updateIcs233Row(row.id, 'status', nextStatus)
-                                          }
-                                          setActiveIcs233CellEdit(null)
-                                        }}
-                                        onBlur={() => setActiveIcs233CellEdit(null)}
-                                        onClick={(event) => event.stopPropagation()}
-                                        className="h-8 w-full rounded-md border bg-transparent px-2 text-xs outline-none"
-                                        autoFocus
-                                      >
-                                        {isAssignedToCurrentUser ? (
-                                          getIcs233AssigneeStatusSelectOptions(row.status).map((option) => (
-                                            <option key={option} value={option}>
-                                              {option}
-                                            </option>
-                                          ))
-                                        ) : (
-                                          <>
-                                            <option value="Not Started">Not Started</option>
-                                            <option value="In Progress">In Progress</option>
-                                            <option value="Complete">Complete</option>
-                                            <option value="Incomplete">Incomplete</option>
-                                          </>
-                                        )}
-                                      </select>
-                                    ) : (
-                                      <button
-                                        type="button"
-                                        className="w-full pt-1 text-left text-xs"
-                                        onClick={(event) => {
-                                          event.stopPropagation()
-                                          setActiveIcs233CellEdit({ rowId: row.id, field: 'status' })
-                                        }}
-                                      >
-                                        {row.status}
-                                      </button>
-                                    )}
-                                  </td>
-                                  <td className="px-2 py-2">
-                                    <div className="flex items-center justify-end gap-1">
-                                      <Button
-                                        type="button"
-                                        size="icon"
-                                        variant="ghost"
-                                        aria-label="Delete ICS-233 row"
-                                        className="h-8 w-8 text-destructive hover:text-destructive"
-                                        onClick={(event) => {
-                                          event.stopPropagation()
-                                          deleteIcs233Row(row.id)
-                                        }}
-                                      >
-                                        <Trash2 className="h-4 w-4" />
-                                      </Button>
-                                    </div>
-                                  </td>
-                                </tr>
-                              )
-                            })}
-                            </tbody>
-                          </table>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="space-y-2 border-t px-3 py-2.5">
-                        {filteredIcs233Rows.map((row) => {
-                          const isOpen = expandedIcs233RowId === row.id
-                          const rowAssigneeLabel = formatIcs233AssigneeLabel(
-                            row,
-                            activeWorkspaceRoster
-                          )
-                          const isAssignedToCurrentUser = isCurrentUserAssignedToIcs233Action(
-                            row,
-                            profileEmail,
-                            activeWorkspaceRoster
-                          )
-                          return (
-                            <Item
-                              key={row.id}
-                              variant="outline"
-                              className={cn('flex-col items-stretch p-0', glassItemBorderClasses)}
-                            >
-                              <Collapsible
-                                open={isOpen}
-                                onOpenChange={(open) => setExpandedIcs233RowId(open ? row.id : null)}
-                              >
-                                <div
-                                  className="flex cursor-pointer items-center gap-2 px-3 py-2.5"
-                                  onClick={() => setExpandedIcs233RowId(isOpen ? null : row.id)}
-                                >
-                                  <ItemContent>
-                                    <ItemTitle>{row.task || `Task #${row.id}`}</ItemTitle>
-                                    <ItemDescription>
-                                      {rowAssigneeLabel} • {row.status}
-                                    </ItemDescription>
-                                  </ItemContent>
-                                  <ItemActions className="gap-1">
-                                    <Button
-                                      type="button"
-                                      size="icon"
-                                      variant="ghost"
-                                      aria-label="Delete ICS-233 row"
-                                      className="h-8 w-8 text-destructive hover:text-destructive"
-                                      onClick={(event) => {
-                                        event.stopPropagation()
-                                        deleteIcs233Row(row.id)
-                                      }}
-                                    >
-                                      <Trash2 className="h-4 w-4" />
-                                    </Button>
-                                    <CollapsibleTrigger asChild>
-                                      <Button
-                                        type="button"
-                                        variant="ghost"
-                                        size="icon"
-                                        aria-label="Toggle ICS-233 row details"
-                                        onClick={(event) => event.stopPropagation()}
-                                      >
-                                        <ChevronDown
-                                          className={cn('h-4 w-4 transition-transform', isOpen && 'rotate-180')}
-                                        />
-                                      </Button>
-                                    </CollapsibleTrigger>
-                                  </ItemActions>
-                                </div>
-                                <CollapsibleContent>
-                                  <div className="grid grid-cols-1 gap-2 border-t px-3 py-2.5 md:grid-cols-2">
-                                    <input
-                                      value={row.task}
-                                      onChange={(event) => updateIcs233Row(row.id, 'task', event.target.value)}
-                                      placeholder="Task"
-                                      className="h-8 w-full rounded-md border bg-transparent px-2 text-xs outline-none"
-                                    />
-                                    <select
-                                      value={getIcs233AssignmentValue(row)}
-                                      onChange={(event) =>
-                                        assignIcs233Action(row.id, event.target.value)
-                                      }
-                                      className="h-8 w-full rounded-md border bg-transparent px-2 text-xs outline-none"
-                                    >
-                                      {(['Assignment', 'Roster Members', 'Roster Positions'] as const).map(
-                                        (group) => (
-                                          <optgroup key={group} label={group}>
-                                            {ics233AssignmentOptions
-                                              .filter((option) => option.group === group)
-                                              .map((option) => (
-                                                <option key={option.value} value={option.value}>
-                                                  {option.label}
-                                                </option>
-                                              ))}
-                                          </optgroup>
-                                        )
-                                      )}
-                                    </select>
-                                    <select
-                                      value={row.pointOfContact}
-                                      onChange={(event) =>
-                                        updateIcs233Row(row.id, 'pointOfContact', event.target.value)
-                                      }
-                                      className="h-8 w-full rounded-md border bg-transparent px-2 text-xs outline-none"
-                                    >
-                                      {ics233PointOfContactOptions.map((option) => (
-                                        <option key={option} value={option}>
-                                          {option}
-                                        </option>
-                                      ))}
-                                    </select>
-                                    <select
-                                      value={row.pocBriefed}
-                                      onChange={(event) =>
-                                        updateIcs233Row(row.id, 'pocBriefed', event.target.value as 'Yes' | 'No')
-                                      }
-                                      className="h-8 w-full rounded-md border bg-transparent px-2 text-xs outline-none"
-                                    >
-                                      <option value="Yes">Yes</option>
-                                      <option value="No">No</option>
-                                    </select>
-                                    <input
-                                      type="datetime-local"
-                                      value={row.start}
-                                      onChange={(event) => updateIcs233Row(row.id, 'start', event.target.value)}
-                                      className="h-8 w-full rounded-md border bg-transparent px-2 text-xs outline-none"
-                                    />
-                                    <input
-                                      type="datetime-local"
-                                      value={row.deadline}
-                                      onChange={(event) => updateIcs233Row(row.id, 'deadline', event.target.value)}
-                                      className="h-8 w-full rounded-md border bg-transparent px-2 text-xs outline-none"
-                                    />
-                                    <select
-                                      value={row.status}
-                                      onChange={(event) => {
-                                        const nextStatus = event.target.value as Ics233ActionStatus
-                                        if (isAssignedToCurrentUser) {
-                                          updateIcs233ActionStatus(row.id, nextStatus)
-                                        } else {
-                                          updateIcs233Row(row.id, 'status', nextStatus)
-                                        }
-                                      }}
-                                      className="h-8 w-full rounded-md border bg-transparent px-2 text-xs outline-none"
-                                    >
-                                      {isAssignedToCurrentUser ? (
-                                        getIcs233AssigneeStatusSelectOptions(row.status).map((option) => (
-                                          <option key={option} value={option}>
-                                            {option}
-                                          </option>
-                                        ))
-                                      ) : (
-                                        <>
-                                          <option value="Not Started">Not Started</option>
-                                          <option value="In Progress">In Progress</option>
-                                          <option value="Complete">Complete</option>
-                                          <option value="Incomplete">Incomplete</option>
-                                        </>
-                                      )}
-                                    </select>
-                                  </div>
-                                </CollapsibleContent>
-                              </Collapsible>
-                            </Item>
-                          )
-                        })}
-                        {filteredIcs233Rows.length === 0 && (
-                          <Item variant="outline" className={glassItemBorderClasses}>
-                            <ItemContent>
-                              <ItemTitle>
-                                {displayIcs233Rows.length === 0 ? 'No actions yet' : 'No matching tasks'}
-                              </ItemTitle>
-                              <ItemDescription>
-                                {displayIcs233Rows.length === 0
-                                  ? 'Click + Add Action to create an open action for this workspace.'
-                                  : 'Adjust the table filters to broaden results.'}
-                              </ItemDescription>
-                            </ItemContent>
-                          </Item>
-                        )}
-                      </div>
-                    )}
+                    <Ics233ActionsPanel
+                      viewMode={ics233ViewMode}
+                      rows={ics233Rows}
+                      filteredRows={filteredIcs233Rows}
+                      totalRowCount={displayIcs233Rows.length}
+                      composeDraft={ics233ComposeDraft}
+                      filters={ics233Filters}
+                      assignmentOptions={ics233AssignmentOptions}
+                      pointOfContactOptions={ics233PointOfContactOptions}
+                      roster={activeWorkspaceRoster}
+                      assignmentContext={ics233AssignmentContext}
+                      profileEmail={profileEmail}
+                      glassItemBorderClasses={glassItemBorderClasses}
+                      activeCellEdit={activeIcs233CellEdit}
+                      taskDraftEdit={ics233TaskDraftEdit}
+                      expandedRowId={expandedIcs233RowId}
+                      onFiltersChange={setIcs233Filters}
+                      onSelectRow={(rowId) => {
+                        setSelectedIcs233RowId(rowId)
+                        setIsIcs233RowModalEditing(false)
+                      }}
+                      onUpdateRow={updateIcs233Row}
+                      onAssignRow={assignIcs233Action}
+                      onUpdateStatus={updateIcs233ActionStatus}
+                      onDeleteRow={deleteIcs233Row}
+                      onSetActiveCellEdit={setActiveIcs233CellEdit}
+                      onSetTaskDraftEdit={setIcs233TaskDraftEdit}
+                      onSetExpandedRowId={setExpandedIcs233RowId}
+                      onUpdateComposeField={updateIcs233ComposeDraft}
+                      onUpdateComposeAssignment={updateIcs233ComposeDraftAssignment}
+                      onCommitCompose={commitIcs233NewAction}
+                      onCancelCompose={cancelIcs233NewAction}
+                    />
                   </Item>
                   </OperationalPeriodHistoricalFormShell>
                 )}
@@ -38076,256 +37450,26 @@ function App() {
         </aside>
       )}
       </div>
-      <Dialog
-        open={ics233ModalRow !== null}
+      <Ics233ActionDetailDialog
+        row={selectedIcs233Row}
+        isEditing={isIcs233RowModalEditing}
+        assignmentOptions={ics233AssignmentOptions}
+        pointOfContactOptions={ics233PointOfContactOptions}
+        roster={activeWorkspaceRoster}
+        assignmentContext={ics233AssignmentContext}
+        profileEmail={profileEmail}
         onOpenChange={(open) => {
           if (!open) {
             setSelectedIcs233RowId(null)
             setIsIcs233RowModalEditing(false)
-            setIcs233ComposeDraft(null)
           }
         }}
-      >
-        <DialogContent className="!w-[68vw] !max-w-[68vw] sm:!max-w-[68vw]">
-          {ics233ModalRow && (
-            <div className="flex flex-col gap-3">
-              {(() => {
-                const modalRow = ics233ModalRow
-                const selectedRowAssigneeLabel = formatIcs233AssigneeLabel(
-                  modalRow,
-                  activeWorkspaceRoster
-                )
-                const isSelectedRowAssignedToCurrentUser = isCurrentUserAssignedToIcs233Action(
-                  modalRow,
-                  profileEmail,
-                  activeWorkspaceRoster
-                )
-                const isEditingFields = isIcs233ComposeMode || isIcs233RowModalEditing
-                return (
-                  <>
-                    <div className="flex items-center justify-between">
-                      <p className="text-sm font-semibold">
-                        {isIcs233ComposeMode ? 'New ICS-233 Action' : 'ICS-233 Task Detail'}
-                      </p>
-                      {!isIcs233ComposeMode && (
-                        <div className="flex items-center gap-2">
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            onClick={() => setIsIcs233RowModalEditing((previous) => !previous)}
-                          >
-                            {isIcs233RowModalEditing ? 'Done' : 'Edit'}
-                          </Button>
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            className="text-destructive hover:text-destructive"
-                            onClick={() => deleteIcs233Row(modalRow.id)}
-                          >
-                            Delete
-                          </Button>
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-3 text-xs">
-                      <div className="col-span-2 space-y-1">
-                        <p className="font-semibold">Task</p>
-                        {isEditingFields ? (
-                          <input
-                            value={modalRow.task}
-                            onChange={(event) =>
-                              isIcs233ComposeMode
-                                ? updateIcs233ComposeDraft('task', event.target.value)
-                                : updateIcs233Row(modalRow.id, 'task', event.target.value)
-                            }
-                            className="h-9 w-full rounded-md border bg-transparent px-2 text-xs outline-none"
-                            autoFocus={isIcs233ComposeMode}
-                          />
-                        ) : (
-                          <p className="rounded-md border px-2 py-2">{modalRow.task}</p>
-                        )}
-                      </div>
-                      <div className="space-y-1">
-                        <p className="font-semibold">Assignee</p>
-                        {isEditingFields ? (
-                          <select
-                            value={getIcs233AssignmentValue(modalRow)}
-                            onChange={(event) =>
-                              isIcs233ComposeMode
-                                ? updateIcs233ComposeDraftAssignment(event.target.value)
-                                : assignIcs233Action(modalRow.id, event.target.value)
-                            }
-                            className="h-9 w-full rounded-md border bg-transparent px-2 text-xs outline-none"
-                          >
-                            {(['Assignment', 'Roster Members', 'Roster Positions'] as const).map(
-                              (group) => (
-                                <optgroup key={group} label={group}>
-                                  {ics233AssignmentOptions
-                                    .filter((option) => option.group === group)
-                                    .map((option) => (
-                                      <option key={option.value} value={option.value}>
-                                        {option.label}
-                                      </option>
-                                    ))}
-                                </optgroup>
-                              )
-                            )}
-                          </select>
-                        ) : (
-                          <p className="rounded-md border px-2 py-2">{selectedRowAssigneeLabel}</p>
-                        )}
-                      </div>
-                      <div className="space-y-1">
-                        <p className="font-semibold">Point of Contact</p>
-                        {isEditingFields ? (
-                          <select
-                            value={modalRow.pointOfContact}
-                            onChange={(event) =>
-                              isIcs233ComposeMode
-                                ? updateIcs233ComposeDraft('pointOfContact', event.target.value)
-                                : updateIcs233Row(modalRow.id, 'pointOfContact', event.target.value)
-                            }
-                            className="h-9 w-full rounded-md border bg-transparent px-2 text-xs outline-none"
-                          >
-                            {ics233PointOfContactOptions.map((option) => (
-                              <option key={option} value={option}>
-                                {option}
-                              </option>
-                            ))}
-                          </select>
-                        ) : (
-                          <p className="rounded-md border px-2 py-2">{modalRow.pointOfContact}</p>
-                        )}
-                      </div>
-                      <div className="space-y-1">
-                        <p className="font-semibold">POC Briefed</p>
-                        {isEditingFields ? (
-                          <select
-                            value={modalRow.pocBriefed}
-                            onChange={(event) =>
-                              isIcs233ComposeMode
-                                ? updateIcs233ComposeDraft(
-                                    'pocBriefed',
-                                    event.target.value as 'Yes' | 'No'
-                                  )
-                                : updateIcs233Row(
-                                    modalRow.id,
-                                    'pocBriefed',
-                                    event.target.value as 'Yes' | 'No'
-                                  )
-                            }
-                            className="h-9 w-full rounded-md border bg-transparent px-2 text-xs outline-none"
-                          >
-                            <option value="Yes">Yes</option>
-                            <option value="No">No</option>
-                          </select>
-                        ) : (
-                          <p className="rounded-md border px-2 py-2">{modalRow.pocBriefed}</p>
-                        )}
-                      </div>
-                      <div className="space-y-1">
-                        <p className="font-semibold">Start</p>
-                        {isEditingFields ? (
-                          <input
-                            type="datetime-local"
-                            value={modalRow.start}
-                            onChange={(event) =>
-                              isIcs233ComposeMode
-                                ? updateIcs233ComposeDraft('start', event.target.value)
-                                : updateIcs233Row(modalRow.id, 'start', event.target.value)
-                            }
-                            className="h-9 w-full rounded-md border bg-transparent px-2 text-xs outline-none"
-                          />
-                        ) : (
-                          <p className="rounded-md border px-2 py-2">
-                            {modalRow.start.replace('T', ' ')}
-                          </p>
-                        )}
-                      </div>
-                      <div className="space-y-1">
-                        <p className="font-semibold">Deadline</p>
-                        {isEditingFields ? (
-                          <input
-                            type="datetime-local"
-                            value={modalRow.deadline}
-                            onChange={(event) =>
-                              isIcs233ComposeMode
-                                ? updateIcs233ComposeDraft('deadline', event.target.value)
-                                : updateIcs233Row(modalRow.id, 'deadline', event.target.value)
-                            }
-                            className="h-9 w-full rounded-md border bg-transparent px-2 text-xs outline-none"
-                          />
-                        ) : (
-                          <p className="rounded-md border px-2 py-2">
-                            {modalRow.deadline.replace('T', ' ')}
-                          </p>
-                        )}
-                      </div>
-                      {!isIcs233ComposeMode && (
-                        <div className="space-y-1">
-                          <p className="font-semibold">Status</p>
-                          {isIcs233RowModalEditing || isSelectedRowAssignedToCurrentUser ? (
-                            <select
-                              value={modalRow.status}
-                              onChange={(event) => {
-                                const nextStatus = event.target.value as Ics233ActionStatus
-                                if (isSelectedRowAssignedToCurrentUser) {
-                                  updateIcs233ActionStatus(modalRow.id, nextStatus)
-                                } else {
-                                  updateIcs233Row(modalRow.id, 'status', nextStatus)
-                                }
-                              }}
-                              className="h-9 w-full rounded-md border bg-transparent px-2 text-xs outline-none"
-                            >
-                              {isSelectedRowAssignedToCurrentUser ? (
-                                getIcs233AssigneeStatusSelectOptions(modalRow.status).map(
-                                  (option) => (
-                                    <option key={option} value={option}>
-                                      {option}
-                                    </option>
-                                  )
-                                )
-                              ) : (
-                                <>
-                                  <option value="Not Started">Not Started</option>
-                                  <option value="In Progress">In Progress</option>
-                                  <option value="Complete">Complete</option>
-                                  <option value="Incomplete">Incomplete</option>
-                                </>
-                              )}
-                            </select>
-                          ) : (
-                            <p className="rounded-md border px-2 py-2">{modalRow.status}</p>
-                          )}
-                        </div>
-                      )}
-                    </div>
-
-                    {isIcs233ComposeMode && (
-                      <div className="flex items-center justify-start gap-2 pt-1">
-                        <Button type="button" size="sm" onClick={commitIcs233NewAction}>
-                          Assign
-                        </Button>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          onClick={cancelIcs233NewAction}
-                        >
-                          Cancel
-                        </Button>
-                      </div>
-                    )}
-                  </>
-                )
-              })()}
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
+        onToggleEditing={() => setIsIcs233RowModalEditing((previous) => !previous)}
+        onDelete={deleteIcs233Row}
+        onUpdateField={updateIcs233Row}
+        onAssign={assignIcs233Action}
+        onUpdateStatus={updateIcs233ActionStatus}
+      />
       <Dialog
         open={ics204ResourcePickerFormId !== null}
         onOpenChange={(open) => {
