@@ -88,6 +88,7 @@ export function Ics215HaveLinkPositionSection({
   const summaryParts = [
     node.summary.currentOp > 0 ? `${node.summary.currentOp} current OP` : null,
     node.summary.nextOp > 0 ? `${node.summary.nextOp} next OP` : null,
+    node.summary.linkableNextOp > 0 ? `${node.summary.linkableNextOp} linkable for Have` : null,
     node.summary.categories > 0 ? `${node.summary.categories} categories` : null,
   ].filter(Boolean)
 
@@ -204,6 +205,7 @@ export function Ics215HaveLinkPositionSection({
                     option={childToOption(child)}
                     checked={selectedRefs.has(child.ref)}
                     disabled={child.disabled}
+                    linkSelectable={child.linkableForHave}
                     linkedToThisCell={linkedToThisCellRefs.has(child.ref)}
                     linkedElsewhere={linkedRefLocations.get(child.ref)}
                     onToggle={() => onToggleRef(child.ref)}
@@ -257,6 +259,7 @@ export function Ics215HaveLinkFlatRefSection({
             option={childToOption(child)}
             checked={selectedRefs.has(child.ref)}
             disabled={child.disabled}
+            linkSelectable={child.linkableForHave}
             linkedToThisCell={linkedToThisCellRefs.has(child.ref)}
             linkedElsewhere={linkedRefLocations.get(child.ref)}
             onToggle={() => onToggleRef(child.ref)}

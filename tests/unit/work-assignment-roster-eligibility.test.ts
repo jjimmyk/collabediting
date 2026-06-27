@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import type { PositionRosterEntry } from '@/features/roster/workspace-position-roster'
 import {
+  canAssetContinueToNextOp,
+  canMemberContinueToNextOp,
   classifyMemberAtPositionEligibility,
   classifyPositionAssigneeEligibility,
 } from '@/lib/work-assignment-roster-eligibility'
@@ -85,5 +87,58 @@ describe('work-assignment roster eligibility', () => {
       },
     })
     expect(options.some((option) => option.label.includes('(scheduled next OP)'))).toBe(true)
+  })
+
+  it('allows continuing active members to next OP when not already scheduled', () => {
+    const member: WorkspaceRosterMember = {
+      id: 'member-1',
+      email: 'alpha@example.gov',
+      icsPosition: 'Division Alpha',
+      icsPositions: ['Division Alpha'],
+      assignmentKind: 'ics_position',
+      orgChartReportsTo: null,
+      status: 'active',
+      checkInStatus: 'not_arrived',
+      addedAt: 'now',
+      userId: 'user-1',
+    }
+    const entry = makeEntry({ members: [member] })
+    expect(canMemberContinueToNextOp(member, entry)).toBe(true)
+  })
+
+  it('blocks continuing when member is already scheduled for next OP assign', () => {
+    const member: WorkspaceRosterMember = {
+      id: 'member-1',
+      email: 'alpha@example.gov',
+      icsPosition: 'Division Alpha',
+      icsPositions: ['Division Alpha'],
+      assignmentKind: 'ics_position',
+      orgChartReportsTo: null,
+      status: 'active',
+      checkInStatus: 'not_arrived',
+      addedAt: 'now',
+      userId: 'user-1',
+    }
+    const entry = makeEntry({
+      members: [member],
+      scheduledAssignees: [member],
+    })
+    expect(canMemberContinueToNextOp(member, entry)).toBe(false)
+  })
+
+  it('allows continuing active assets to next OP when not already scheduled', () => {
+    const entry = makeEntry({
+      assets: [
+        {
+          assetKey: 'helo-1',
+          name: 'MH-65',
+          type: 'Helicopter',
+          pointOfContactMemberId: null,
+          pointOfContactEmail: null,
+          competencyFunction: null,
+        },
+      ],
+    })
+    expect(canAssetContinueToNextOp('helo-1', entry)).toBe(true)
   })
 })

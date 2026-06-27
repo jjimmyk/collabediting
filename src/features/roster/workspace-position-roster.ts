@@ -283,6 +283,19 @@ export function rosterMembersScheduleUnassignableFromPosition(
   )
 }
 
+export function rosterMembersContinuableToNextOp(
+  entry: PositionRosterEntry
+): WorkspaceRosterMember[] {
+  return entry.members.filter(
+    (member) =>
+      member.status !== 'removed' &&
+      member.icsPositions.includes(entry.position) &&
+      !entry.scheduledUnassignees.some((scheduled) => scheduled.id === member.id) &&
+      !entry.scheduledAssignees.some((scheduled) => scheduled.id === member.id) &&
+      !entry.scheduledOrgChartMembers.some((scheduled) => scheduled.id === member.id)
+  )
+}
+
 export function permissionsFromRows(
   rows: Array<{ ics_position: string; permission: string }>,
   catalog: WorkspacePositionCatalog = emptyWorkspacePositionCatalog()

@@ -49,6 +49,56 @@ export function isAssetScheduledToUnassign(
   return entry.scheduledUnassignAssets.some((asset) => asset.assetKey === assetKey)
 }
 
+export function isMemberActiveAtPosition(
+  member: WorkspaceRosterMember,
+  position: string
+): boolean {
+  return member.icsPositions.includes(position)
+}
+
+export function isMemberScheduledForNextOpAssign(
+  memberId: string,
+  entry: PositionRosterEntry
+): boolean {
+  return (
+    entry.scheduledAssignees.some((member) => member.id === memberId) ||
+    entry.scheduledOrgChartMembers.some((member) => member.id === memberId)
+  )
+}
+
+export function isAssetActiveAtPosition(assetKey: string, entry: PositionRosterEntry): boolean {
+  return entry.assets.some((asset) => asset.assetKey === assetKey)
+}
+
+export function isAssetScheduledForNextOpAssign(
+  assetKey: string,
+  entry: PositionRosterEntry
+): boolean {
+  return (
+    entry.scheduledAssignAssets.some((asset) => asset.assetKey === assetKey) ||
+    entry.scheduledOrgChartAssets.some((asset) => asset.assetKey === assetKey)
+  )
+}
+
+export function canMemberContinueToNextOp(
+  member: WorkspaceRosterMember,
+  entry: PositionRosterEntry
+): boolean {
+  return (
+    isMemberActiveAtPosition(member, entry.position) &&
+    !isMemberScheduledToUnassign(member.id, entry) &&
+    !isMemberScheduledForNextOpAssign(member.id, entry)
+  )
+}
+
+export function canAssetContinueToNextOp(assetKey: string, entry: PositionRosterEntry): boolean {
+  return (
+    isAssetActiveAtPosition(assetKey, entry) &&
+    !isAssetScheduledToUnassign(assetKey, entry) &&
+    !isAssetScheduledForNextOpAssign(assetKey, entry)
+  )
+}
+
 export function classifyPositionAssigneeEligibility(entry: PositionRosterEntry): AssigneeEligibility {
   if (entry.opAdvanceLabel === 'retire_on_op_advance') {
     return {

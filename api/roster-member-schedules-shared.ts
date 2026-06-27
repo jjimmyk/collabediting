@@ -115,10 +115,7 @@ export async function replacePositionMemberSchedules(
   }
 
   for (const memberId of assignMemberIds) {
-    const positions = context.positionsByMemberId.get(memberId) ?? []
-    if (positions.includes(positionName)) {
-      throw new Error('Member is already assigned to this position.')
-    }
+    assertMemberExists(context, memberId)
   }
 
   for (const memberId of unassignMemberIds) {

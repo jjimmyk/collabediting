@@ -36,6 +36,11 @@ import {
   PositionResourceCategoryRow,
 } from '@/features/roster/PositionResourceCategoryRow'
 import { cn } from '@/lib/utils'
+import { ScheduleForNextOpButton } from '@/features/roster/ScheduleForNextOpButton'
+import {
+  canAssetContinueToNextOp,
+  canMemberContinueToNextOp,
+} from '@/lib/work-assignment-roster-eligibility'
 
 export type PositionAssignmentSectionsLayout = 'stacked' | 'timeline'
 
@@ -134,6 +139,8 @@ export function PositionMemberRow({
   competencyOptions = [],
   isUpdatingCompetency = false,
   onCompetencyFunctionChange,
+  showAlsoScheduleForNextOp = false,
+  onAlsoScheduleForNextOp,
 }: {
   member: WorkspaceRosterMember
   badgeLabel: string
@@ -150,6 +157,8 @@ export function PositionMemberRow({
   competencyOptions?: string[]
   isUpdatingCompetency?: boolean
   onCompetencyFunctionChange?: (value: string | null) => void
+  showAlsoScheduleForNextOp?: boolean
+  onAlsoScheduleForNextOp?: () => void
 }) {
   return (
     <div className="space-y-1.5 rounded-md border px-2 py-1.5">
@@ -197,6 +206,13 @@ export function PositionMemberRow({
           compact
           isUpdating={isUpdatingCompetency}
           onChange={onCompetencyFunctionChange}
+        />
+      ) : null}
+      {showAlsoScheduleForNextOp && onAlsoScheduleForNextOp ? (
+        <ScheduleForNextOpButton
+          compact
+          disabled={isBusy}
+          onClick={onAlsoScheduleForNextOp}
         />
       ) : null}
     </div>
@@ -680,6 +696,12 @@ export function PositionRosterUnifiedAssignmentSections({
             isBusy={isBusy}
             removeLabel={`Remove ${member.email} from ${entry.position}`}
             onRemove={() => onUnassignMember(member.id, entry.position)}
+            showAlsoScheduleForNextOp={
+              canManageRoster &&
+              canScheduleAssign &&
+              canMemberContinueToNextOp(member, entry)
+            }
+            onAlsoScheduleForNextOp={() => onScheduleAssignMember(member.id, entry.position)}
             competencyFunction={member.competencyByPosition?.[entry.position] ?? null}
             isUpdatingCompetency={
               updatingCompetencyKey === competencyKey('member', member.id, 'active')
@@ -700,17 +722,31 @@ export function PositionRosterUnifiedAssignmentSections({
           />
         ))}
         {assetsEnabled
-          ? entry.assets.map((asset) =>
-              renderAssetListItem(asset, {
-                badgeLabel: 'Assigned',
-                showPoc: true,
-                canEditPoc: canManageRoster,
-                canManageRow: canManageRoster && canAssignNow,
-                removeLabel: `Remove ${asset.name} from ${entry.position}`,
-                onRemove: () => onUnassignAsset(asset.assetKey, entry.position),
-                scope: 'active',
-              })
-            )
+          ? entry.assets.map((asset) => (
+              <div
+                key={`assign-now-asset-wrap-${entry.position}-${asset.assetKey}`}
+                className="space-y-1"
+              >
+                {renderAssetListItem(asset, {
+                  badgeLabel: 'Assigned',
+                  showPoc: true,
+                  canEditPoc: canManageRoster,
+                  canManageRow: canManageRoster && canAssignNow,
+                  removeLabel: `Remove ${asset.name} from ${entry.position}`,
+                  onRemove: () => onUnassignAsset(asset.assetKey, entry.position),
+                  scope: 'active',
+                })}
+                {canManageRoster &&
+                canScheduleAssign &&
+                canAssetContinueToNextOp(asset.assetKey, entry) ? (
+                  <ScheduleForNextOpButton
+                    compact
+                    disabled={isBusy}
+                    onClick={() => onScheduleAssignAsset(asset.assetKey, entry.position)}
+                  />
+                ) : null}
+              </div>
+            ))
           : null}
         {renderResourceCategoryRows('active', 'Assigned now', canAssignNow, assignable, assignableAssets)}
       </PositionAssignmentLifecycleSection>

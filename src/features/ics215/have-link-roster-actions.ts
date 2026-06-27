@@ -54,6 +54,8 @@ export type HaveLinkRosterActions = {
     name: string,
     op: HaveLinkOperationalPeriod
   ) => Promise<boolean>
+  onAlsoScheduleMemberForNextOp: (memberId: string, position: string) => Promise<boolean>
+  onAlsoScheduleAssetForNextOp: (assetKey: string, position: string) => Promise<boolean>
   onSearchOrgMembers?: (query: string, position?: string) => Promise<OrgMemberSearchResult[]>
 }
 

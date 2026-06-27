@@ -3,7 +3,7 @@ import {
   buildHaveLinkPositionTree,
   filterHaveLinkPositionTree,
   getAssignedToPositionChildren,
-  getAssignedToPositionSelectableRefs,
+  getHaveLinkSelectableRefs,
   partitionAssignedToPositionChildren,
   partitionPositionChildrenByOp,
 } from '@/features/ics215/build-have-link-position-tree'
@@ -107,8 +107,9 @@ describe('build-have-link-position-tree', () => {
     const node = tree.positions[0]!
     expect(node.summary.currentOp).toBe(2)
     expect(node.summary.nextOp).toBe(1)
+    expect(node.summary.linkableNextOp).toBe(1)
     expect(node.summary.categories).toBe(1)
-    expect(node.selectableRefs).toHaveLength(4)
+    expect(node.selectableRefs).toHaveLength(1)
     expect(node.selectableRefs).not.toContain(node.positionRef)
   })
 
@@ -127,20 +128,24 @@ describe('build-have-link-position-tree', () => {
     expect(assigned[2]?.presence).toBe('scheduled_next_op')
   })
 
-  it('excludes resource categories from assigned selectable refs', () => {
+  it('only next-OP scheduled people and assets are linkable for Have', () => {
     const tree = buildHaveLinkPositionTree({
       positionEntries: [activePosition],
       roster: [member, scheduledMember],
     })
     const node = tree.positions[0]!
-    const assignedRefs = getAssignedToPositionSelectableRefs(node)
+    const linkableRefs = getHaveLinkSelectableRefs(node)
     const categoryRefs = node.children
       .filter((child) => child.section === 'resource_categories')
       .map((child) => child.ref)
     for (const categoryRef of categoryRefs) {
-      expect(assignedRefs).not.toContain(categoryRef)
+      expect(linkableRefs).not.toContain(categoryRef)
     }
-    expect(assignedRefs.length).toBe(3)
+    expect(linkableRefs).toHaveLength(1)
+    expect(node.children.find((child) => child.presence === 'active')?.linkableForHave).toBe(false)
+    expect(
+      node.children.find((child) => child.presence === 'scheduled_next_op')?.linkableForHave
+    ).toBe(true)
   })
 
   it('partitions assigned children into current and next OP columns', () => {
@@ -167,6 +172,23 @@ describe('build-have-link-position-tree', () => {
     expect(partitioned.nextOp.some((child) => child.section === 'resource_categories')).toBe(false)
     expect(node.memberSchedulePolicy).toBeDefined()
     expect(node.showPositionAssets).toBe(true)
+  })
+
+  it('shows dual facets when an active member is also scheduled for next OP', () => {
+    const dualMemberPosition: PositionRosterEntry = {
+      ...activePosition,
+      scheduledAssignees: [member],
+    }
+    const tree = buildHaveLinkPositionTree({
+      positionEntries: [dualMemberPosition],
+      roster: [member],
+    })
+    const node = tree.positions[0]!
+    const memberChildren = node.children.filter((child) => child.section === 'people')
+    expect(memberChildren).toHaveLength(2)
+    expect(memberChildren.every((child) => child.ref === memberChildren[0]?.ref)).toBe(true)
+    expect(memberChildren.filter((child) => child.linkableForHave)).toHaveLength(1)
+    expect(node.selectableRefs).toHaveLength(1)
   })
 
   it('filters tree by query and keeps matching positions', () => {

@@ -4,12 +4,14 @@ import type { PositionResourceCategoryEntry } from '@/lib/workspace-resource-cat
 import type { ResourceCategoryLifecycle } from '@/lib/workspace-resource-category-types'
 import type { PositionMemberSchedulePolicy } from '@/lib/roster-member-schedule-policy'
 import {
-  classifyMemberAtPositionEligibility,
   classifyPositionAssigneeEligibility,
   classifyPositionAssetEligibility,
   classifyResourceCategoryAssigneeEligibility,
   classifySingleResourceMemberEligibility,
   formatAssigneeOptionLabel,
+  isAssetScheduledForNextOpAssign,
+  isMemberScheduledForNextOpAssign,
+  isMemberScheduledToUnassign,
   type AssigneeEligibility,
   type RosterPresence,
 } from '@/lib/work-assignment-roster-eligibility'
@@ -31,6 +33,7 @@ export type HaveLinkPositionChild = {
   disabled: boolean
   disabledReason?: string
   resourceCategoryLifecycle?: ResourceCategoryLifecycle
+  linkableForHave: boolean
 }
 
 export type HaveLinkPositionTreeNode = {
@@ -43,7 +46,7 @@ export type HaveLinkPositionTreeNode = {
   positionDisabledReason?: string
   memberSchedulePolicy: PositionMemberSchedulePolicy
   showPositionAssets: boolean
-  summary: { currentOp: number; nextOp: number; categories: number }
+  summary: { currentOp: number; nextOp: number; linkableNextOp: number; categories: number }
   children: HaveLinkPositionChild[]
   selectableRefs: string[]
 }
@@ -77,10 +80,32 @@ export function getAssignedToPositionChildren(
     .sort(compareAssignedToPositionChildren)
 }
 
+export function getHaveLinkSelectableRefs(node: HaveLinkPositionTreeNode): string[] {
+  return [...new Set(
+    node.children
+      .filter((child) => child.linkableForHave && !child.disabled)
+      .map((child) => child.ref)
+  )]
+}
+
+/** @deprecated Use getHaveLinkSelectableRefs */
 export function getAssignedToPositionSelectableRefs(node: HaveLinkPositionTreeNode): string[] {
-  return getAssignedToPositionChildren(node)
-    .filter((child) => !child.disabled)
-    .map((child) => child.ref)
+  return getHaveLinkSelectableRefs(node)
+}
+
+export function collectNextOpHaveLinkRefsFromTree(tree: HaveLinkPositionTree): Set<string> {
+  const refs = new Set<string>()
+  for (const node of tree.positions) {
+    for (const ref of getHaveLinkSelectableRefs(node)) {
+      refs.add(ref)
+    }
+  }
+  for (const child of [...tree.singleResources, ...tree.orgChartAssets]) {
+    if (child.linkableForHave && !child.disabled) {
+      refs.add(child.ref)
+    }
+  }
+  return refs
 }
 
 export function partitionAssignedToPositionChildren(node: HaveLinkPositionTreeNode): {
@@ -119,6 +144,7 @@ export function partitionPositionChildrenByOp(node: HaveLinkPositionTreeNode): {
 function summarizeAssignedChildren(children: HaveLinkPositionChild[]): {
   currentOp: number
   nextOp: number
+  linkableNextOp: number
   categories: number
 } {
   const assigned = children.filter(
@@ -127,6 +153,7 @@ function summarizeAssignedChildren(children: HaveLinkPositionChild[]): {
   return {
     currentOp: assigned.filter((child) => child.presence === 'active').length,
     nextOp: assigned.filter((child) => child.presence === 'scheduled_next_op').length,
+    linkableNextOp: children.filter((child) => child.linkableForHave && !child.disabled).length,
     categories: children.filter((child) => child.section === 'resource_categories').length,
   }
 }
@@ -150,47 +177,104 @@ function childFromEligibility(
   targetType: WorkAssignmentTargetType,
   section: HaveLinkPositionChildSection,
   eligibility: AssigneeEligibility,
-  extras?: { unfilled?: boolean }
+  options?: { unfilled?: boolean; linkableForHave?: boolean }
 ): HaveLinkPositionChild | null {
   if (!eligibility.eligible) return null
   return {
     ref,
     label: formatAssigneeOptionLabel(baseLabel, eligibility.presence, {
       disabledReason: eligibility.disabled ? eligibility.disabledReason : undefined,
-      unfilled: extras?.unfilled,
+      unfilled: options?.unfilled,
     }),
     targetType,
     presence: eligibility.presence,
     section,
     disabled: eligibility.disabled,
     disabledReason: eligibility.disabledReason,
+    linkableForHave: options?.linkableForHave ?? false,
   }
 }
 
-function dedupeMembers(members: WorkspaceRosterMember[]): WorkspaceRosterMember[] {
-  const seen = new Set<string>()
-  const result: WorkspaceRosterMember[] = []
-  for (const member of members) {
-    if (seen.has(member.id)) continue
-    seen.add(member.id)
-    result.push(member)
+function memberEligibilityForFacet(
+  member: WorkspaceRosterMember,
+  entry: PositionRosterEntry,
+  presence: RosterPresence
+): AssigneeEligibility {
+  if (entry.opAdvanceLabel === 'retire_on_op_advance') {
+    return { eligible: false, disabled: true, presence: null, disabledReason: 'retiring next OP' }
   }
-  return result
+
+  const isActive = member.icsPositions.includes(entry.position)
+  const isScheduledAssign = isMemberScheduledForNextOpAssign(member.id, entry)
+
+  if (presence === 'active') {
+    if (!isActive) {
+      return { eligible: false, disabled: true, presence: null }
+    }
+    if (isMemberScheduledToUnassign(member.id, entry)) {
+      return {
+        eligible: true,
+        disabled: true,
+        presence: 'active',
+        disabledReason: 'retiring next OP',
+      }
+    }
+    return { eligible: true, disabled: false, presence: 'active' }
+  }
+
+  if (!isScheduledAssign) {
+    return { eligible: false, disabled: true, presence: null }
+  }
+  return { eligible: true, disabled: false, presence: 'scheduled_next_op' }
 }
 
 function buildPeopleChildren(
   entry: PositionRosterEntry,
   roster: WorkspaceRosterMember[]
 ): HaveLinkPositionChild[] {
-  const members = dedupeMembers([
-    ...entry.members,
+  const children: HaveLinkPositionChild[] = []
+  const emittedNext = new Set<string>()
+
+  for (const member of entry.members) {
+    const target = buildWorkAssignmentTarget({
+      type: 'member',
+      memberId: member.id,
+      position: entry.position,
+      competencyFunction: member.competencyByPosition?.[entry.position] ?? null,
+      roster,
+    })
+    const activeEligibility = memberEligibilityForFacet(member, entry, 'active')
+    const activeChild = childFromEligibility(
+      target.value,
+      target.label,
+      'member',
+      'people',
+      activeEligibility,
+      { linkableForHave: false }
+    )
+    if (activeChild) children.push(activeChild)
+
+    if (isMemberScheduledForNextOpAssign(member.id, entry)) {
+      emittedNext.add(member.id)
+      const nextEligibility = memberEligibilityForFacet(member, entry, 'scheduled_next_op')
+      const nextChild = childFromEligibility(
+        target.value,
+        target.label,
+        'member',
+        'people',
+        nextEligibility,
+        { linkableForHave: true }
+      )
+      if (nextChild) children.push(nextChild)
+    }
+  }
+
+  for (const member of [
     ...entry.scheduledAssignees,
     ...entry.scheduledOrgChartMembers,
-  ])
-  const children: HaveLinkPositionChild[] = []
-
-  for (const member of members) {
-    const eligibility = classifyMemberAtPositionEligibility(member, entry)
+  ]) {
+    if (emittedNext.has(member.id)) continue
+    const nextEligibility = memberEligibilityForFacet(member, entry, 'scheduled_next_op')
     const target = buildWorkAssignmentTarget({
       type: 'member',
       memberId: member.id,
@@ -203,7 +287,8 @@ function buildPeopleChildren(
       target.label,
       'member',
       'people',
-      eligibility
+      nextEligibility,
+      { linkableForHave: true }
     )
     if (child) children.push(child)
   }
@@ -216,68 +301,18 @@ function buildAssetChildren(
   roster: WorkspaceRosterMember[],
   assetsByKey: Record<string, ResourceListItemData>
 ): HaveLinkPositionChild[] {
-  const assetRows: Array<{ assetKey: string; name: string; presence: RosterPresence; entry: PositionAssetRosterEntry }> = []
-  const seen = new Set<string>()
-
-  const pushAsset = (
-    asset: PositionAssetRosterEntry,
-    presence: RosterPresence
-  ) => {
-    if (seen.has(asset.assetKey)) return
-    seen.add(asset.assetKey)
-    assetRows.push({
-      assetKey: asset.assetKey,
-      name: asset.name,
-      presence,
-      entry: asset,
-    })
-  }
-
-  for (const asset of entry.assets) pushAsset(asset, 'active')
-  for (const asset of entry.scheduledAssignAssets) pushAsset(asset, 'scheduled_next_op')
-  for (const asset of entry.scheduledOrgChartAssets) pushAsset(asset, 'scheduled_next_op')
-
-  for (const asset of Object.values(assetsByKey)) {
-    if (asset.orgChartReportsTo?.trim() !== entry.position) continue
-    if (seen.has(asset.assetKey)) continue
-    seen.add(asset.assetKey)
-    pushAsset(
-      {
-        assetKey: asset.assetKey,
-        name: asset.name,
-        type: asset.type,
-        pointOfContactMemberId: asset.pointOfContactMemberId,
-        pointOfContactEmail: asset.pointOfContact,
-        competencyFunction: asset.competencyFunction,
-      },
-      'active'
-    )
-  }
-
-  for (const asset of Object.values(assetsByKey)) {
-    const pending = asset.pendingOrgChartReportsTo?.trim()
-    if (!pending || pending !== entry.position || asset.orgChartReportsTo?.trim()) continue
-    if (seen.has(asset.assetKey)) continue
-    seen.add(asset.assetKey)
-    pushAsset(
-      {
-        assetKey: asset.assetKey,
-        name: asset.name,
-        type: asset.type,
-        pointOfContactMemberId: asset.pointOfContactMemberId,
-        pointOfContactEmail: asset.pointOfContact,
-        competencyFunction: asset.competencyFunction,
-      },
-      'scheduled_next_op'
-    )
-  }
-
   const children: HaveLinkPositionChild[] = []
-  for (const row of assetRows) {
-    const eligibility = classifyPositionAssetEligibility(row.entry, entry, row.presence)
+  const emittedNext = new Set<string>()
+
+  const emitAssetChild = (
+    asset: PositionAssetRosterEntry,
+    presence: RosterPresence,
+    linkableForHave: boolean
+  ) => {
+    const eligibility = classifyPositionAssetEligibility(asset, entry, presence)
     const target = buildWorkAssignmentTarget({
       type: 'position_asset',
-      assetKey: row.assetKey,
+      assetKey: asset.assetKey,
       position: entry.position,
       roster,
       assetsByKey,
@@ -287,9 +322,66 @@ function buildAssetChildren(
       target.label,
       'position_asset',
       'assets',
-      eligibility
+      eligibility,
+      { linkableForHave }
     )
     if (child) children.push(child)
+  }
+
+  for (const asset of entry.assets) {
+    emitAssetChild(asset, 'active', false)
+    if (isAssetScheduledForNextOpAssign(asset.assetKey, entry)) {
+      emittedNext.add(asset.assetKey)
+      emitAssetChild(asset, 'scheduled_next_op', true)
+    }
+  }
+
+  for (const asset of [...entry.scheduledAssignAssets, ...entry.scheduledOrgChartAssets]) {
+    if (emittedNext.has(asset.assetKey)) continue
+    emitAssetChild(asset, 'scheduled_next_op', true)
+  }
+
+  const seenOrgChart = new Set<string>([
+    ...entry.assets.map((asset) => asset.assetKey),
+    ...entry.scheduledAssignAssets.map((asset) => asset.assetKey),
+    ...entry.scheduledOrgChartAssets.map((asset) => asset.assetKey),
+  ])
+
+  for (const asset of Object.values(assetsByKey)) {
+    if (asset.orgChartReportsTo?.trim() !== entry.position) continue
+    if (seenOrgChart.has(asset.assetKey)) continue
+    seenOrgChart.add(asset.assetKey)
+    emitAssetChild(
+      {
+        assetKey: asset.assetKey,
+        name: asset.name,
+        type: asset.type,
+        pointOfContactMemberId: asset.pointOfContactMemberId,
+        pointOfContactEmail: asset.pointOfContact,
+        competencyFunction: asset.competencyFunction,
+      },
+      'active',
+      false
+    )
+  }
+
+  for (const asset of Object.values(assetsByKey)) {
+    const pending = asset.pendingOrgChartReportsTo?.trim()
+    if (!pending || pending !== entry.position || asset.orgChartReportsTo?.trim()) continue
+    if (seenOrgChart.has(asset.assetKey)) continue
+    seenOrgChart.add(asset.assetKey)
+    emitAssetChild(
+      {
+        assetKey: asset.assetKey,
+        name: asset.name,
+        type: asset.type,
+        pointOfContactMemberId: asset.pointOfContactMemberId,
+        pointOfContactEmail: asset.pointOfContact,
+        competencyFunction: asset.competencyFunction,
+      },
+      'scheduled_next_op',
+      true
+    )
   }
 
   return children
@@ -321,7 +413,10 @@ function buildCategoryChildren(
       'resource_category',
       'resource_categories',
       eligibility,
-      { unfilled }
+      {
+        unfilled,
+        linkableForHave: category.lifecycle === 'scheduled_assign',
+      }
     )
     if (child) {
       children.push({ ...child, resourceCategoryLifecycle: category.lifecycle })
@@ -358,7 +453,11 @@ function buildPositionNode(
   const categories = buildCategoryChildren(entry, roster, resourceCategoriesById)
   const children = [...people, ...assets, ...categories]
 
-  const selectableRefs = children.filter((child) => !child.disabled).map((child) => child.ref)
+  const selectableRefs = [
+    ...new Set(
+      children.filter((child) => child.linkableForHave && !child.disabled).map((child) => child.ref)
+    ),
+  ]
   const positionRef =
     !positionEligibility.disabled && positionEligibility.presence
       ? positionTarget.value
@@ -399,7 +498,8 @@ function buildSingleResourceChildren(
       target.label,
       'single_resource',
       'people',
-      eligibility
+      eligibility,
+      { linkableForHave: eligibility.presence === 'scheduled_next_op' }
     )
     if (child) children.push(child)
   }
@@ -432,7 +532,8 @@ function buildStandaloneOrgChartAssetChildren(
       target.label,
       'org_chart_asset',
       'assets',
-      { eligible: true, disabled: false, presence }
+      { eligible: true, disabled: false, presence },
+      { linkableForHave: presence === 'scheduled_next_op' }
     )
     if (child) children.push(child)
   }
@@ -495,7 +596,13 @@ export function filterHaveLinkPositionTree(
       )
       if (!positionMatches && children.length === 0) return null
       const nextChildren = positionMatches ? node.children : children
-      const selectableRefs = nextChildren.filter((child) => !child.disabled).map((child) => child.ref)
+      const selectableRefs = [
+        ...new Set(
+          nextChildren
+            .filter((child) => child.linkableForHave && !child.disabled)
+            .map((child) => child.ref)
+        ),
+      ]
       return {
         ...node,
         children: nextChildren,

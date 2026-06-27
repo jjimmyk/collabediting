@@ -311,8 +311,9 @@ export function Ics215HaveRosterLinkDialog({
           <DialogDescription>
             {workAssignmentContext
               ? `Work assignment: ${workAssignmentContext}`
-              : 'Expand a position to link assignees or add people, assets, and categories for current or next OP.'}
+              : 'Expand a position to link items scheduled for next OP, or add assignees for next OP.'}
             {rankingEngine ? ` Asset suggestions ranked via ${rankingEngine}.` : ''}
+            {' Only next-OP scheduled roster items can be linked. Use "Also schedule for next OP" on current assignees to link them.'}
             {' Each item can only be linked to one Have cell.'}
           </DialogDescription>
         </DialogHeader>
@@ -373,7 +374,7 @@ export function Ics215HaveRosterLinkDialog({
               {staleEntries.length > 0 ? (
                 <div className="space-y-2">
                   <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                    Previously linked (no longer on roster)
+                    Previously linked (no longer eligible)
                   </p>
                   {staleEntries.map((entry) => (
                     <div

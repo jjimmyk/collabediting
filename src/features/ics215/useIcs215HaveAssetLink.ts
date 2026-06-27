@@ -18,6 +18,10 @@ import {
   type Ics215HaveLinkLocation,
 } from '@/features/ics215/ics215-have-asset-link'
 import {
+  buildHaveLinkPositionTree,
+  collectNextOpHaveLinkRefsFromTree,
+} from '@/features/ics215/build-have-link-position-tree'
+import {
   EMPTY_RESOURCE_VALUE,
   patchResourceValueInDraft,
 } from '@/features/ics215/ics215-work-assignments-table-shared'
@@ -29,6 +33,7 @@ import {
   mergeLegacyHaveLinkTargetOptions,
   type WorkAssignmentTargetOption,
 } from '@/lib/work-assignment-target-options'
+import type { PositionRosterEntry } from '@/features/roster/workspace-position-roster'
 import type { WorkspaceRosterMember } from '@/lib/workspace-types'
 import { toast } from 'sonner'
 
@@ -46,7 +51,9 @@ type UseIcs215HaveRosterLinkOptions = {
   workspaceAssets: ResourceListItemData[]
   workAssignmentTargetOptions?: WorkAssignmentTargetOption[]
   roster?: WorkspaceRosterMember[]
+  positionRosterEntries?: PositionRosterEntry[]
   assetsByKey?: Record<string, ResourceListItemData>
+  showPositionAssets?: boolean
   workspaceId?: string | null
   isSupabaseEnabled?: boolean
   getAccessToken?: () => Promise<string | null>
@@ -60,7 +67,9 @@ export function useIcs215HaveRosterLink({
   workspaceAssets,
   workAssignmentTargetOptions = [],
   roster = [],
+  positionRosterEntries = [],
   assetsByKey = {},
+  showPositionAssets = true,
   workspaceId,
   isSupabaseEnabled = false,
   getAccessToken,
@@ -81,6 +90,16 @@ export function useIcs215HaveRosterLink({
     () => buildHaveLinkTargetOptions(workAssignmentTargetOptions),
     [workAssignmentTargetOptions]
   )
+
+  const nextOpEligibleRefs = useMemo(() => {
+    const tree = buildHaveLinkPositionTree({
+      positionEntries: positionRosterEntries,
+      roster,
+      assetsByKey,
+      showPositionAssets,
+    })
+    return collectNextOpHaveLinkRefsFromTree(tree)
+  }, [assetsByKey, positionRosterEntries, roster, showPositionAssets])
 
   const applyAndPersistDraft = useCallback(
     (nextDraft: Ics215WorkAssignmentsDraft, persistMessage?: string) => {
@@ -213,7 +232,29 @@ export function useIcs215HaveRosterLink({
         return
       }
 
-      const nextValue = applyHaveRosterLink(current, selectedRefs, baseHaveLinkTargetOptions)
+      const eligibleSelectedRefs = selectedRefs.filter((ref) => nextOpEligibleRefs.has(ref))
+      const strippedCount = selectedRefs.length - eligibleSelectedRefs.length
+      if (strippedCount > 0) {
+        toast.info(
+          strippedCount === 1
+            ? 'Removed 1 link that is not scheduled for next OP.'
+            : `Removed ${strippedCount} links that are not scheduled for next OP.`
+        )
+      }
+
+      if (eligibleSelectedRefs.length === 0) {
+        const nextDraft = patchResourceValueInDraft(
+          currentDraft,
+          dialogState.rowId,
+          dialogState.columnId,
+          clearHaveRosterLink(current)
+        )
+        applyAndPersistDraft(nextDraft, 'Have link cleared')
+        closeHaveLinkDialog()
+        return
+      }
+
+      const nextValue = applyHaveRosterLink(current, eligibleSelectedRefs, baseHaveLinkTargetOptions)
       const nextDraft = patchResourceValueInDraft(
         currentDraft,
         dialogState.rowId,
@@ -230,6 +271,7 @@ export function useIcs215HaveRosterLink({
       resolveAssigneeLabel,
       currentDraft,
       baseHaveLinkTargetOptions,
+      nextOpEligibleRefs,
       closeHaveLinkDialog,
       applyAndPersistDraft,
     ]
@@ -267,7 +309,11 @@ export function useIcs215HaveRosterLink({
     [workAssignments, currentDraft, onApplyWorkAssignmentsDraft]
   )
 
-  const { staleRefs } = partitionHaveLinkRefs(haveLinkTargetOptions, linkedRefs)
+  const { staleRefs } = partitionHaveLinkRefs(
+    haveLinkTargetOptions,
+    linkedRefs,
+    nextOpEligibleRefs
+  )
 
   const suggestedRefs = useMemo(
     () =>

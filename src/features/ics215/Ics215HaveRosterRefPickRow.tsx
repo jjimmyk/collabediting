@@ -21,6 +21,7 @@ type Ics215HaveRosterRefPickRowProps = {
   option: WorkAssignmentTargetOption
   checked: boolean
   disabled?: boolean
+  linkSelectable?: boolean
   linkedToThisCell?: boolean
   linkedElsewhere?: Ics215HaveLinkLocation
   onToggle: () => void
@@ -31,6 +32,7 @@ export function Ics215HaveRosterRefPickRow({
   option,
   checked,
   disabled = false,
+  linkSelectable = true,
   linkedToThisCell = false,
   linkedElsewhere,
   onToggle,
@@ -38,24 +40,27 @@ export function Ics215HaveRosterRefPickRow({
 }: Ics215HaveRosterRefPickRowProps) {
   const blockedByOtherCell = Boolean(linkedElsewhere) && !linkedToThisCell
   const typeLabel = TARGET_TYPE_LABELS[option.targetType] ?? option.targetType
+  const showCheckbox = linkSelectable
 
   return (
     <div
       className={cn(
         'rounded-md border px-3 py-2',
-        checked && 'border-primary/40 bg-primary/5',
-        blockedByOtherCell && 'opacity-80',
-        disabled && !blockedByOtherCell && 'opacity-70'
+        checked && showCheckbox && 'border-primary/40 bg-primary/5',
+        blockedByOtherCell && showCheckbox && 'opacity-80',
+        disabled && !blockedByOtherCell && showCheckbox && 'opacity-70'
       )}
     >
       <div className="flex items-start gap-2">
-        <Checkbox
-          checked={checked}
-          disabled={disabled || blockedByOtherCell}
-          onCheckedChange={onToggle}
-          className="mt-0.5"
-          aria-label={`Select ${option.label}`}
-        />
+        {showCheckbox ? (
+          <Checkbox
+            checked={checked}
+            disabled={disabled || blockedByOtherCell}
+            onCheckedChange={onToggle}
+            className="mt-0.5"
+            aria-label={`Select ${option.label}`}
+          />
+        ) : null}
         <div className="min-w-0 flex-1 space-y-0.5">
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-sm font-medium">{option.label}</span>

@@ -119,6 +119,26 @@ export function assetsScheduleUnassignableFromPosition(
     .sort((a, b) => a.name.localeCompare(b.name))
 }
 
+export function assetsContinuableToNextOp(entry: {
+  position: string
+  assets: Array<{ assetKey: string }>
+  scheduledUnassignAssets: Array<{ assetKey: string }>
+  scheduledAssignAssets: Array<{ assetKey: string }>
+  scheduledOrgChartAssets: Array<{ assetKey: string }>
+}): string[] {
+  const scheduledAssign = new Set([
+    ...entry.scheduledAssignAssets.map((asset) => asset.assetKey),
+    ...entry.scheduledOrgChartAssets.map((asset) => asset.assetKey),
+  ])
+  const scheduledUnassign = new Set(
+    entry.scheduledUnassignAssets.map((asset) => asset.assetKey)
+  )
+
+  return entry.assets
+    .map((asset) => asset.assetKey)
+    .filter((assetKey) => !scheduledAssign.has(assetKey) && !scheduledUnassign.has(assetKey))
+}
+
 export function formatPositionAssetAssignmentCount(assetCount: number): string {
   if (assetCount === 0) return 'No assets'
   if (assetCount === 1) return '1 asset'

@@ -158,6 +158,33 @@ export function buildHaveLinkRosterActions(
     return true
   }
 
+  const onAlsoScheduleMemberForNextOp = async (
+    memberId: string,
+    position: string
+  ): Promise<boolean> => {
+    await input.scheduleAssignMemberToPosition(memberId, position)
+    await afterMutation(() =>
+      resolveMemberHaveRef(memberId, position, input.getRosterSnapshot())
+    )
+    return true
+  }
+
+  const onAlsoScheduleAssetForNextOp = async (
+    assetKey: string,
+    position: string
+  ): Promise<boolean> => {
+    await input.scheduleAssignAssetToPosition(assetKey, position)
+    await afterMutation(() =>
+      resolvePositionAssetHaveRef(
+        assetKey,
+        position,
+        input.getRosterSnapshot(),
+        input.assetsByKey
+      )
+    )
+    return true
+  }
+
   return {
     canManageRoster: input.canManageRoster,
     isSupabaseEnabled: input.isSupabaseEnabled,
@@ -175,6 +202,8 @@ export function buildHaveLinkRosterActions(
     onAssignOrgMember,
     onAssignAsset,
     onCreateResourceCategory,
+    onAlsoScheduleMemberForNextOp,
+    onAlsoScheduleAssetForNextOp,
   }
 }
 

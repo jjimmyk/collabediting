@@ -301,12 +301,6 @@ export async function replacePositionAssetSchedules(
 
   const activeOnPosition = context.assetsByPosition.get(positionName) ?? new Set<string>()
 
-  for (const assetKey of assignAssetKeys) {
-    if (activeOnPosition.has(assetKey)) {
-      throw new Error('Asset is already assigned to this position.')
-    }
-  }
-
   for (const assetKey of unassignAssetKeys) {
     if (!activeOnPosition.has(assetKey)) {
       throw new Error('Asset is not currently assigned to this position.')

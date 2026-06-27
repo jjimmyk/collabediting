@@ -252,13 +252,18 @@ export function normalizeIcs215ResourceValue(raw: unknown): Ics215ResourceValue 
 
 export function partitionHaveLinkRefs(
   eligibleOptions: WorkAssignmentTargetOption[],
-  linkedRefs: string[]
+  linkedRefs: string[],
+  nextOpEligibleRefs?: Set<string>
 ): {
   available: WorkAssignmentTargetOption[]
   staleRefs: string[]
 } {
   const optionByValue = new Map(eligibleOptions.map((option) => [option.value, option]))
-  const staleRefs = linkedRefs.filter((ref) => !optionByValue.has(ref))
+  const staleRefs = linkedRefs.filter((ref) => {
+    if (!optionByValue.has(ref)) return true
+    if (nextOpEligibleRefs && !nextOpEligibleRefs.has(ref)) return true
+    return false
+  })
   return {
     available: eligibleOptions,
     staleRefs,
