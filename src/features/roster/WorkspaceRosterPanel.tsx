@@ -1,5 +1,6 @@
 import { Network, Table2 } from 'lucide-react'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
+import { RosterZoomControls } from '@/features/roster/RosterZoomControls'
 import { RosterZoomContainer } from '@/features/roster/RosterZoomContainer'
 import { WorkspaceOrgChartRoster } from '@/features/roster/WorkspaceOrgChartRoster'
 import { WorkspacePositionRosterTable } from '@/features/roster/WorkspacePositionRosterTable'
@@ -13,6 +14,8 @@ export type WorkspaceRosterPanelProps = {
   onZoomChange: (zoom: number) => void
   recenterToken?: number
   showViewToggle?: boolean
+  showZoomControls?: boolean
+  wrapOrgChartLiveRoot?: boolean
   className?: string
   zoomContainerClassName?: string
   orgChartProps: ComponentProps<typeof WorkspaceOrgChartRoster>
@@ -26,15 +29,23 @@ export function WorkspaceRosterPanel({
   onZoomChange,
   recenterToken,
   showViewToggle = true,
+  showZoomControls = false,
+  wrapOrgChartLiveRoot = false,
   className,
   zoomContainerClassName,
   orgChartProps,
   tableProps,
 }: WorkspaceRosterPanelProps) {
+  const orgChart = <WorkspaceOrgChartRoster {...orgChartProps} zoom={zoom} />
+
   return (
     <div className={cn('flex min-h-0 flex-1 flex-col gap-2', className)}>
-      {showViewToggle ? (
-        <div className="flex shrink-0 justify-end">
+      {showViewToggle || showZoomControls ? (
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+          {showZoomControls ? (
+            <RosterZoomControls zoom={zoom} onZoomChange={onZoomChange} />
+          ) : null}
+          {showViewToggle ? (
           <ToggleGroup
             type="single"
             value={viewMode}
@@ -56,6 +67,7 @@ export function WorkspaceRosterPanel({
               Org Chart
             </ToggleGroupItem>
           </ToggleGroup>
+          ) : null}
         </div>
       ) : null}
       <RosterZoomContainer
@@ -66,7 +78,13 @@ export function WorkspaceRosterPanel({
         className={cn('min-h-0 flex-1', zoomContainerClassName)}
       >
         {viewMode === 'org-chart' ? (
-          <WorkspaceOrgChartRoster {...orgChartProps} zoom={zoom} />
+          wrapOrgChartLiveRoot ? (
+            <div data-roster-org-chart-live-root="" className="inline-block">
+              {orgChart}
+            </div>
+          ) : (
+            orgChart
+          )
         ) : (
           <WorkspacePositionRosterTable {...tableProps} />
         )}
@@ -75,6 +93,8 @@ export function WorkspaceRosterPanel({
   )
 }
 
+export type HaveLinkRosterPresentation = 'inline' | 'full'
+
 export type HaveLinkRosterPanelRenderer = (context: {
   viewMode: 'table' | 'org-chart'
   onViewModeChange: (mode: 'table' | 'org-chart') => void
@@ -82,4 +102,5 @@ export type HaveLinkRosterPanelRenderer = (context: {
   onZoomChange: (zoom: number) => void
   activeHaveCell: { rowId: number; columnId: string } | null
   highlightedHaveRef: string | null
+  presentation: HaveLinkRosterPresentation
 }) => React.ReactNode

@@ -17192,7 +17192,7 @@ function App() {
         isUpdatingPermission: rosterPermissionUpdatingPosition,
         isAssigningPosition: rosterAssigningPosition,
         workspaceLabel: activeWorkspaceRosterLabel,
-        layoutMode: 'compact',
+        layoutMode: rosterPanelLayoutMode,
         showOpAdvanceLabels: showPositionOpAdvanceLabels,
         positionMetaByName: workspacePositionCatalog.positionMetaByName,
         isUpdatingOpAdvanceLabel: updatingOpAdvanceLabelPosition,
@@ -17279,6 +17279,25 @@ function App() {
         onUpdateAssetPointOfContact: (assetKey, memberId) => {
           void updateAssetPointOfContact(assetKey, memberId)
         },
+        onFocusAsset: (asset) => {
+          const mapKey = getAssetMapKey(asset.assetKey)
+          setSelectedPanelItemId(mapKey)
+          void focusMapItem(mapKey, asset.mapLocation, 30000)
+        },
+        onRemoveAssetFromOrgChart: (assetKey) => {
+          void handleRemoveAssetFromOrgChart(assetKey)
+        },
+        onRemoveSingleResourceFromOrgChart: (memberId) => {
+          void handleRemoveSingleResourceFromOrgChart(memberId)
+        },
+        isSavingAssetOrgChartPlacement: isSavingAssetOrgChartPlacement,
+        onAssetOrgChartPlacementChange: (assetKey, reportsTo) => {
+          void handleAssetOrgChartPlacementChange(assetKey, reportsTo)
+        },
+        isUpdatingSingleResourcePlacement: isUpdatingSingleResourcePlacement,
+        onSingleResourceOrgChartPlacementChange: (memberId, reportsTo, scheduled) => {
+          void handleSingleResourceOrgChartPlacementChange(memberId, reportsTo, scheduled)
+        },
         onRemovePositionFromRoster: (position) => {
           void handleRemovePositionFromRoster(position)
         },
@@ -17324,6 +17343,7 @@ function App() {
         glassItemBorderClasses,
         isUpdatingPermission: rosterPermissionUpdatingPosition,
         isAssigningPosition: rosterAssigningPosition,
+        isDeletingCustomPosition: deletingCustomPosition,
         showOpAdvanceLabels: showPositionOpAdvanceLabels,
         positionMetaByName: workspacePositionCatalog.positionMetaByName,
         isUpdatingOpAdvanceLabel: updatingOpAdvanceLabelPosition,
@@ -17361,6 +17381,14 @@ function App() {
         onUnassignMember: (memberId, position) => {
           void unassignMemberFromPosition(memberId, position)
         },
+        onRemovePositionFromRoster: (position) => {
+          void handleRemovePositionFromRoster(position)
+        },
+        canRemovePositionFromRoster: canRemovePositionFromRoster,
+        positionRemovalBlockedReason: positionRemovalBlockedReason,
+        onDeleteCustomPosition: (position) => {
+          void handleDeleteCustomPosition(position)
+        },
         competencyOptions: rosterCompetencyControls.organizationCompetencyOptions,
         canEditCompetencyFunction: rosterCompetencyControls.canEditCompetencyFunction,
         updatingCompetencyKey: rosterCompetencyControls.updatingCompetencyKey,
@@ -17394,6 +17422,11 @@ function App() {
         },
         onUpdateAssetPointOfContact: (assetKey, memberId) => {
           void updateAssetPointOfContact(assetKey, memberId)
+        },
+        onFocusAsset: (asset) => {
+          const mapKey = getAssetMapKey(asset.assetKey)
+          setSelectedPanelItemId(mapKey)
+          void focusMapItem(mapKey, asset.mapLocation, 30000)
         },
         onCreateResourceCategory: (position, name, lifecycle) => {
           void createResourceCategoryForPosition(position, name, lifecycle)
@@ -17445,15 +17478,23 @@ function App() {
     effectiveRosterTimeHorizon,
     fillResourceCategoryAsset,
     fillResourceCategoryMember,
+    focusMapItem,
     glassItemBorderClasses,
+    handleAssetOrgChartPlacementChange,
+    handleDeleteCustomPosition,
     handleOpAdvanceLabelChange,
+    handleRemoveAssetFromOrgChart,
     handleRemovePositionFromRoster,
+    handleRemoveSingleResourceFromOrgChart,
     handleSaveCustomPosition,
+    handleSingleResourceOrgChartPlacementChange,
     handleUpdatePositionType,
     isInExerciseWorkspace,
     isInIncidentWorkspace,
     isInvitingRosterMember,
+    isSavingAssetOrgChartPlacement,
     isSupabaseEnabled,
+    isUpdatingSingleResourcePlacement,
     memberScheduleCompetencyByKey,
     openInviteToPosition,
     positionRemovalBlockedReason,
@@ -17464,6 +17505,7 @@ function App() {
     removeScheduledUnassignFromPosition,
     rosterCompetencyControls,
     rosterDisplayFilters,
+    rosterPanelLayoutMode,
     rosterPermissionUpdatingPosition,
     rosterAssigningPosition,
     rosterPocMembers,

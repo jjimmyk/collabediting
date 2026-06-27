@@ -9,6 +9,8 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Switch } from '@/components/ui/switch'
 import {
   buildHaveLinkPositionTree,
   filterHaveLinkPositionTree,
@@ -22,7 +24,6 @@ import {
   Ics215HaveRosterRefPickRow,
   isRosterHaveLinkOption,
 } from '@/features/ics215/Ics215HaveRosterRefPickRow'
-import { HaveLinkInlineRosterSection } from '@/features/ics215/HaveLinkInlineRosterSection'
 import type { Ics215HaveLinkLocation } from '@/features/ics215/ics215-have-asset-link'
 import {
   assetKeyToHaveRef,
@@ -96,7 +97,8 @@ export function Ics215HaveLinkPage({
   const [filterQuery, setFilterQuery] = useState('')
   const [expandedPositions, setExpandedPositions] = useState<Set<string>>(new Set())
   const [highlightedHaveRef, setHighlightedHaveRef] = useState<string | null>(null)
-  const [rosterViewMode, setRosterViewMode] = useState<'table' | 'org-chart'>('org-chart')
+  const [viewFullRoster, setViewFullRoster] = useState(false)
+  const [rosterViewMode, setRosterViewMode] = useState<'table' | 'org-chart'>('table')
   const [rosterZoom, setRosterZoom] = useState(1)
 
   const linkedToThisCellRefs = useMemo(() => new Set(initialSelectedRefs), [initialSelectedRefs])
@@ -149,6 +151,7 @@ export function Ics215HaveLinkPage({
       setFilterQuery('')
       setExpandedPositions(new Set())
       setHighlightedHaveRef(null)
+      setViewFullRoster(false)
       return
     }
     setRefs(startingSelection)
@@ -361,24 +364,203 @@ export function Ics215HaveLinkPage({
     filteredSuggestedAssets.length > 0 ||
     filteredOtherAssets.length > 0
 
-  const showEmbeddedRoster = Boolean(renderRosterPanel)
+  const showFullRosterPane = viewFullRoster && Boolean(renderRosterPanel)
+
+  const rosterPanel = showFullRosterPane
+    ? renderRosterPanel?.({
+        presentation: 'full',
+        viewMode: rosterViewMode,
+        onViewModeChange: setRosterViewMode,
+        zoom: rosterZoom,
+        onZoomChange: setRosterZoom,
+        activeHaveCell: activeHaveCell ?? null,
+        highlightedHaveRef,
+      })
+    : null
+
+  const linkPickerContent = (
+    <>
+      {isLoading ? (
+        <p className="text-sm text-muted-foreground">Finding likely asset matches…</p>
+      ) : haveLinkTargetOptions.length === 0 && workspaceAssets.length === 0 ? (
+        <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
+          No roster or asset items are available for this workspace.
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {linkedToThisCellRosterOptions.length > 0 ? (
+            <div className="space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Linked roster items
+              </p>
+              <div className="space-y-2">
+                {linkedToThisCellRosterOptions.map((option) => renderRosterOption(option))}
+              </div>
+            </div>
+          ) : null}
+
+          {linkedToThisCellAssetEntries.length > 0 ? (
+            <div className="space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Linked assets
+              </p>
+              <div className="space-y-2">
+                {linkedToThisCellAssetEntries.map((entry) => renderAssetPickCard(entry))}
+              </div>
+            </div>
+          ) : null}
+
+          {staleEntries.length > 0 ? (
+            <div className="space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Previously linked (no longer eligible)
+              </p>
+              {staleEntries.map((entry) => (
+                <div
+                  key={entry.ref}
+                  className="rounded-md border border-dashed px-3 py-2 text-xs text-muted-foreground"
+                >
+                  {entry.label}
+                </div>
+              ))}
+            </div>
+          ) : null}
+
+          {hasPositionTree ? (
+            <div className="space-y-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Positions on roster
+              </p>
+              <div className="space-y-2">
+                {positionTree.positions.map((node) => (
+                  <Ics215HaveLinkPositionSection
+                    key={node.position}
+                    node={node}
+                    positionEntry={positionEntriesByPosition[node.position] ?? null}
+                    expanded={expandedPositions.has(node.position)}
+                    onExpandedChange={(nextExpanded) => {
+                      setExpandedPositions((previous) => {
+                        const next = new Set(previous)
+                        if (nextExpanded) next.add(node.position)
+                        else next.delete(node.position)
+                        return next
+                      })
+                    }}
+                    selectedRefs={selectedRefs}
+                    linkedToThisCellRefs={linkedToThisCellRefs}
+                    linkedRefLocations={linkedRefLocations}
+                    onToggleRef={handleToggleRef}
+                    onTogglePositionRefs={handleTogglePositionRefs}
+                    onUnlinkFromElsewhere={onUnlinkFromOtherCell}
+                    rosterActions={rosterActions}
+                  />
+                ))}
+              </div>
+              <Ics215HaveLinkFlatRefSection
+                title="Single resources"
+                description="Org-chart single resources not tied to a position row."
+                selectedRefs={selectedRefs}
+                linkedToThisCellRefs={linkedToThisCellRefs}
+                linkedRefLocations={linkedRefLocations}
+                onToggleRef={handleToggleRef}
+                onUnlinkFromElsewhere={onUnlinkFromOtherCell}
+              >
+                {positionTree.singleResources.filter(
+                  (child) => !linkedToThisCellRefs.has(child.ref)
+                )}
+              </Ics215HaveLinkFlatRefSection>
+              <Ics215HaveLinkFlatRefSection
+                title="Org chart assets"
+                description="Assets on the org chart not already listed under a position."
+                selectedRefs={selectedRefs}
+                linkedToThisCellRefs={linkedToThisCellRefs}
+                linkedRefLocations={linkedRefLocations}
+                onToggleRef={handleToggleRef}
+                onUnlinkFromElsewhere={onUnlinkFromOtherCell}
+              >
+                {positionTree.orgChartAssets.filter(
+                  (child) => !linkedToThisCellRefs.has(child.ref)
+                )}
+              </Ics215HaveLinkFlatRefSection>
+            </div>
+          ) : null}
+
+          {filteredSuggestedAssets.length > 0 ? (
+            <div className="space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Suggested asset matches
+              </p>
+              <div className="space-y-2">
+                {filteredSuggestedAssets.map((entry) => renderAssetPickCard(entry))}
+              </div>
+            </div>
+          ) : null}
+
+          {filteredOtherAssets.length > 0 ? (
+            <div className="space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Other assets assigned to this incident
+              </p>
+              <p className="text-[11px] text-muted-foreground">
+                Not on the org-chart roster; available because the asset is assigned to this
+                incident.
+              </p>
+              <div className="space-y-2">
+                {filteredOtherAssets.map((entry) => renderAssetPickCard(entry))}
+              </div>
+            </div>
+          ) : null}
+
+          {!hasPositionTree && !hasAssetItems && staleEntries.length === 0 ? (
+            <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
+              No matching roster items for this filter.
+            </div>
+          ) : null}
+        </div>
+      )}
+    </>
+  )
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex h-[min(85vh,48rem)] max-h-[min(85vh,48rem)] !w-[64rem] !max-w-[min(64rem,calc(100%-2rem))] flex-col gap-0 overflow-hidden p-0 sm:!max-w-[min(64rem,calc(100%-2rem))]">
-        <DialogHeader className="shrink-0 space-y-2 border-b px-6 py-4">
-          <DialogTitle>Link roster resources to Have — {columnLabel.trim() || 'Resource'}</DialogTitle>
-          <DialogDescription>
-            {workAssignmentContext
-              ? `Work assignment: ${workAssignmentContext}`
-              : 'Expand a position to link items scheduled for next OP, or add assignees for next OP.'}
-            {rankingEngine ? ` Asset suggestions ranked via ${rankingEngine}.` : ''}
-            {' Only next-OP scheduled roster items can be linked. Use "Also schedule for next OP" on current assignees to link them.'}
-            {' Each item can only be linked to one Have cell.'}
-          </DialogDescription>
+      <DialogContent
+        overlayClassName="bg-black/40"
+        className="fixed inset-0 top-0 left-0 flex h-dvh max-h-dvh w-full max-w-none translate-x-0 translate-y-0 flex-col gap-0 overflow-hidden rounded-none border-0 p-0 sm:max-w-none"
+      >
+        <DialogHeader className="shrink-0 space-y-2 border-b px-4 py-3 sm:px-6 sm:py-4">
+          <div className="flex flex-wrap items-start justify-between gap-3 pr-8">
+            <div className="min-w-0 space-y-2">
+              <DialogTitle>
+                Link roster resources to Have — {columnLabel.trim() || 'Resource'}
+              </DialogTitle>
+              <DialogDescription>
+                {workAssignmentContext
+                  ? `Work assignment: ${workAssignmentContext}`
+                  : 'Expand a position to link items scheduled for next OP, or add assignees for next OP.'}
+                {rankingEngine ? ` Asset suggestions ranked via ${rankingEngine}.` : ''}
+                {' Only next-OP scheduled roster items can be linked. Use "Also schedule for next OP" on current assignees to link them.'}
+                {' Each item can only be linked to one Have cell.'}
+              </DialogDescription>
+            </div>
+            {renderRosterPanel ? (
+              <div className="flex shrink-0 items-center gap-2 rounded-md border px-3 py-2">
+                <Switch
+                  id="ics215-have-link-view-full-roster"
+                  checked={viewFullRoster}
+                  onCheckedChange={setViewFullRoster}
+                />
+                <Label
+                  htmlFor="ics215-have-link-view-full-roster"
+                  className="cursor-pointer text-xs font-medium"
+                >
+                  View full roster
+                </Label>
+              </div>
+            ) : null}
+          </div>
         </DialogHeader>
 
-        <div className="shrink-0 space-y-2 px-6 py-3">
+        <div className="shrink-0 space-y-2 border-b px-4 py-3 sm:px-6">
           <Input
             value={filterQuery}
             onChange={(event) => setFilterQuery(event.target.value)}
@@ -400,164 +582,31 @@ export function Ics215HaveLinkPage({
           ) : null}
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-4">
-          {isLoading ? (
-            <p className="text-sm text-muted-foreground">Finding likely asset matches…</p>
-          ) : haveLinkTargetOptions.length === 0 && workspaceAssets.length === 0 ? (
-            <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
-              No roster or asset items are available for this workspace.
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {linkedToThisCellRosterOptions.length > 0 ? (
-                <div className="space-y-2">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                    Linked roster items
-                  </p>
-                  <div className="space-y-2">
-                    {linkedToThisCellRosterOptions.map((option) => renderRosterOption(option))}
-                  </div>
-                </div>
-              ) : null}
-
-              {linkedToThisCellAssetEntries.length > 0 ? (
-                <div className="space-y-2">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                    Linked assets
-                  </p>
-                  <div className="space-y-2">
-                    {linkedToThisCellAssetEntries.map((entry) => renderAssetPickCard(entry))}
-                  </div>
-                </div>
-              ) : null}
-
-              {staleEntries.length > 0 ? (
-                <div className="space-y-2">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                    Previously linked (no longer eligible)
-                  </p>
-                  {staleEntries.map((entry) => (
-                    <div
-                      key={entry.ref}
-                      className="rounded-md border border-dashed px-3 py-2 text-xs text-muted-foreground"
-                    >
-                      {entry.label}
-                    </div>
-                  ))}
-                </div>
-              ) : null}
-
-              {hasPositionTree || showEmbeddedRoster ? (
-                <div className="space-y-3">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                    Positions on roster
-                  </p>
-                  {hasPositionTree ? (
-                    <>
-                      <div className="space-y-2">
-                        {positionTree.positions.map((node) => (
-                          <Ics215HaveLinkPositionSection
-                            key={node.position}
-                            node={node}
-                            positionEntry={positionEntriesByPosition[node.position] ?? null}
-                            expanded={expandedPositions.has(node.position)}
-                            onExpandedChange={(nextExpanded) => {
-                              setExpandedPositions((previous) => {
-                                const next = new Set(previous)
-                                if (nextExpanded) next.add(node.position)
-                                else next.delete(node.position)
-                                return next
-                              })
-                            }}
-                            selectedRefs={selectedRefs}
-                            linkedToThisCellRefs={linkedToThisCellRefs}
-                            linkedRefLocations={linkedRefLocations}
-                            onToggleRef={handleToggleRef}
-                            onTogglePositionRefs={handleTogglePositionRefs}
-                            onUnlinkFromElsewhere={onUnlinkFromOtherCell}
-                            rosterActions={rosterActions}
-                          />
-                        ))}
-                      </div>
-                      <Ics215HaveLinkFlatRefSection
-                        title="Single resources"
-                        description="Org-chart single resources not tied to a position row."
-                        selectedRefs={selectedRefs}
-                        linkedToThisCellRefs={linkedToThisCellRefs}
-                        linkedRefLocations={linkedRefLocations}
-                        onToggleRef={handleToggleRef}
-                        onUnlinkFromElsewhere={onUnlinkFromOtherCell}
-                      >
-                        {positionTree.singleResources.filter(
-                          (child) => !linkedToThisCellRefs.has(child.ref)
-                        )}
-                      </Ics215HaveLinkFlatRefSection>
-                      <Ics215HaveLinkFlatRefSection
-                        title="Org chart assets"
-                        description="Assets on the org chart not already listed under a position."
-                        selectedRefs={selectedRefs}
-                        linkedToThisCellRefs={linkedToThisCellRefs}
-                        linkedRefLocations={linkedRefLocations}
-                        onToggleRef={handleToggleRef}
-                        onUnlinkFromElsewhere={onUnlinkFromOtherCell}
-                      >
-                        {positionTree.orgChartAssets.filter(
-                          (child) => !linkedToThisCellRefs.has(child.ref)
-                        )}
-                      </Ics215HaveLinkFlatRefSection>
-                    </>
-                  ) : null}
-                  {showEmbeddedRoster ? (
-                    <HaveLinkInlineRosterSection>
-                      {renderRosterPanel?.({
-                        viewMode: rosterViewMode,
-                        onViewModeChange: setRosterViewMode,
-                        zoom: rosterZoom,
-                        onZoomChange: setRosterZoom,
-                        activeHaveCell: activeHaveCell ?? null,
-                        highlightedHaveRef,
-                      })}
-                    </HaveLinkInlineRosterSection>
-                  ) : null}
-                </div>
-              ) : null}
-
-              {filteredSuggestedAssets.length > 0 ? (
-                <div className="space-y-2">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                    Suggested asset matches
-                  </p>
-                  <div className="space-y-2">
-                    {filteredSuggestedAssets.map((entry) => renderAssetPickCard(entry))}
-                  </div>
-                </div>
-              ) : null}
-
-              {filteredOtherAssets.length > 0 ? (
-                <div className="space-y-2">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                    Other assets assigned to this incident
-                  </p>
-                  <p className="text-[11px] text-muted-foreground">
-                    Not on the org-chart roster; available because the asset is assigned to this
-                    incident.
-                  </p>
-                  <div className="space-y-2">
-                    {filteredOtherAssets.map((entry) => renderAssetPickCard(entry))}
-                  </div>
-                </div>
-              ) : null}
-
-              {!hasPositionTree && !showEmbeddedRoster && !hasAssetItems && staleEntries.length === 0 ? (
-                <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
-                  No matching roster items for this filter.
-                </div>
-              ) : null}
-            </div>
+        <div
+          className={cn(
+            'flex min-h-0 flex-1 overflow-hidden',
+            showFullRosterPane ? 'flex-col lg:flex-row' : 'flex-col'
           )}
+        >
+          <div
+            className={cn(
+              'min-h-0 overflow-y-auto px-4 py-4 sm:px-6',
+              showFullRosterPane
+                ? 'border-b lg:w-[min(28rem,36%)] lg:shrink-0 lg:border-r lg:border-b-0'
+                : 'flex-1'
+            )}
+          >
+            {linkPickerContent}
+          </div>
+
+          {showFullRosterPane ? (
+            <div className="flex min-h-0 min-h-[40vh] flex-1 flex-col overflow-hidden bg-muted/5 p-3 sm:p-4 lg:min-h-0">
+              {rosterPanel}
+            </div>
+          ) : null}
         </div>
 
-        <DialogFooter className="shrink-0 flex-col gap-2 border-t bg-background px-6 pt-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:flex-row sm:items-center sm:justify-between">
+        <DialogFooter className="shrink-0 flex-col gap-2 border-t bg-background px-4 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:flex-row sm:items-center sm:justify-between sm:px-6 sm:pb-[max(1.5rem,env(safe-area-inset-bottom))]">
           <p className="text-xs text-muted-foreground">
             {clearingAllLinks
               ? 'Have will be cleared and roster links removed.'
