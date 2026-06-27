@@ -23,6 +23,7 @@ import { validateWorkAssignmentAssigneeSelection } from '@/lib/work-assignment-t
 import { toast } from 'sonner'
 import type { WorkspaceRosterMember } from '@/lib/workspace-types'
 import type { HaveLinkRosterPanelRenderer } from '@/features/roster/WorkspaceRosterPanel'
+import type { HaveLinkRosterWorkspaceControls } from '@/features/roster/WorkspaceRosterToolbar'
 import { cn } from '@/lib/utils'
 
 type Ics215WorkAssignmentsLegacyTableProps = Ics215WorkAssignmentsTableBaseProps & {
@@ -30,6 +31,7 @@ type Ics215WorkAssignmentsLegacyTableProps = Ics215WorkAssignmentsTableBaseProps
   roster?: WorkspaceRosterMember[]
   competencyOptions?: string[]
   renderHaveLinkRosterPanel?: HaveLinkRosterPanelRenderer
+  haveLinkRosterWorkspaceControls?: HaveLinkRosterWorkspaceControls
 }
 
 const RHN_ROWS = [
@@ -156,6 +158,7 @@ export function Ics215WorkAssignmentsLegacyTable({
   showPositionAssets = true,
   tableLayout = 'default',
   renderHaveLinkRosterPanel,
+  haveLinkRosterWorkspaceControls,
 }: Ics215WorkAssignmentsLegacyTableProps) {
   const {
     hideAssigneeColumn,
@@ -615,6 +618,7 @@ export function Ics215WorkAssignmentsLegacyTable({
       createHaveLinkRosterActions={createHaveLinkRosterActions}
       showPositionAssets={showPositionAssets}
       renderRosterPanel={renderHaveLinkRosterPanel}
+      rosterWorkspaceControls={haveLinkRosterWorkspaceControls}
     />
     </>
   )

@@ -22,6 +22,13 @@ import GraphicsLayer from '@arcgis/core/layers/GraphicsLayer'
 import MapView from '@arcgis/core/views/MapView'
 import SketchViewModel from '@arcgis/core/widgets/Sketch/SketchViewModel'
 import {
+  isArcGisAbortError,
+  safeDestroyMapView,
+  voidArcGisLoad,
+  voidArcGisMapLoads,
+  voidArcGisWhen,
+} from '@/lib/arcgis-load-abort'
+import {
   PDFBool,
   PDFDocument,
   PDFName,
@@ -605,9 +612,7 @@ import { WorkspacePositionRosterTable } from '@/features/roster/WorkspacePositio
 import { WorkspaceOrgChartRoster } from '@/features/roster/WorkspaceOrgChartRoster'
 import { OrgChartIcs207ExportDialog } from '@/features/ics207/OrgChartIcs207ExportDialog'
 import type { ExportOrgChartIcs207BaseInput, Ics207OrgChartVisualSnapshot } from '@/features/ics207/export-org-chart-ics207'
-import { RosterAddMemberToolbar } from '@/features/roster/RosterAddMemberToolbar'
-import { RosterDisplayFiltersMenu } from '@/features/roster/RosterDisplayFiltersMenu'
-import { RosterZoomControls } from '@/features/roster/RosterZoomControls'
+import { WorkspaceRosterToolbar } from '@/features/roster/WorkspaceRosterToolbar'
 import { RosterZoomContainer } from '@/features/roster/RosterZoomContainer'
 import { useWorkspaceHaveLinkIndex } from '@/features/ics215/useWorkspaceHaveLinkIndex'
 import { createHaveLinkRosterPanelRenderer } from '@/features/roster/create-have-link-roster-panel-renderer'
@@ -2154,26 +2159,6 @@ const createAnalyticsClusterFeatureReduction = () => ({
     },
   ],
 })
-
-const isArcGisAbortError = (error: unknown): boolean => {
-  if (!(error instanceof Error)) {
-    return false
-  }
-  return error.name === 'AbortError' || /abort/i.test(error.message)
-}
-
-const safeDestroyMapView = (view: MapView | null | undefined) => {
-  if (!view || view.destroyed) {
-    return
-  }
-  try {
-    view.destroy()
-  } catch (error) {
-    if (!isArcGisAbortError(error)) {
-      console.warn('MapView destroy failed', error)
-    }
-  }
-}
 
 const replaceAnalyticsFeatureLayerSource = async (
   layer: FeatureLayer,
@@ -9637,12 +9622,8 @@ function App() {
         },
       })
       mapViewRef.current = view
-      void view.when().catch(() => {
-        /* ignore basemap/layer load aborted during teardown */
-      })
-      void view.map?.basemap?.load().catch(() => {
-        /* ignore basemap load aborted during teardown */
-      })
+      voidArcGisWhen(view)
+      voidArcGisMapLoads(map)
       positionMapZoomControls(view)
       scheduleHubMapViewLayoutRefreshWithRetries(
         view,
@@ -9674,6 +9655,10 @@ function App() {
               target.mapKey
             )
           }
+        }).catch((error) => {
+          if (!isArcGisAbortError(error)) {
+            console.warn('Map hitTest failed', error)
+          }
         })
       })
     }
@@ -9693,6 +9678,8 @@ function App() {
     return () => {
       cancelled = true
       cancelAnimationFrame(layoutRafId)
+      safeDestroyMapView(mapViewRef.current)
+      mapViewRef.current = null
     }
   }, [isCreateIncidentOpen, isCreateExerciseOpen, isMapVisible])
 
@@ -17535,6 +17522,45 @@ function App() {
     visibleRosterPositions,
     workspaceHaveLinkIndex,
     workspacePositionCatalog,
+  ])
+
+  const haveLinkRosterWorkspaceControls = useMemo(() => {
+    if (!isInIncidentWorkspace && !isInExerciseWorkspace) {
+      return undefined
+    }
+    return {
+      displayFilters: rosterDisplayFilters,
+      onDisplayFiltersChange: setRosterDisplayFilters,
+      operationalPeriodsEnabled,
+      viewMode: rosterViewMode,
+      onViewModeChange: setRosterViewMode,
+      zoom: rosterZoomLevel,
+      onZoomChange: handleRosterZoomChange,
+      recenterToken: rosterRecenterToken,
+      canManageRoster: effectiveCanManageRoster,
+      onAddMember: openAddRosterMemberDialog,
+      onAddPosition: () => setIsAddWorkspacePositionOpen(true),
+      onAddAssetToOrgChart: () => setIsAddAssetToOrgChartOpen(true),
+      showWorkingRosterToggle:
+        isViewingHistoricalOperationalPeriod && operationalPeriodsEnabled,
+      rosterAlwaysShowWorking,
+      onRosterAlwaysShowWorkingChange: setRosterAlwaysShowWorking,
+      disabled: isViewingHistoricalRoster,
+    }
+  }, [
+    effectiveCanManageRoster,
+    handleRosterZoomChange,
+    isInExerciseWorkspace,
+    isInIncidentWorkspace,
+    isViewingHistoricalOperationalPeriod,
+    isViewingHistoricalRoster,
+    openAddRosterMemberDialog,
+    operationalPeriodsEnabled,
+    rosterAlwaysShowWorking,
+    rosterDisplayFilters,
+    rosterRecenterToken,
+    rosterViewMode,
+    rosterZoomLevel,
   ])
 
   const activeNavigationDestination = useMemo(() => {
@@ -27262,68 +27288,30 @@ function App() {
                   </Badge>
                 ) : null}
                 {activeTab === 'roster' && (isInIncidentWorkspace || isInExerciseWorkspace) && (
-                  <div className="flex flex-wrap items-center justify-end gap-2">
-                    {isViewingHistoricalOperationalPeriod && operationalPeriodsEnabled ? (
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant={rosterAlwaysShowWorking ? 'default' : 'outline'}
-                        onClick={() => setRosterAlwaysShowWorking((current) => !current)}
-                      >
-                        {rosterAlwaysShowWorking ? 'Showing working roster' : 'Show working roster'}
-                      </Button>
-                    ) : null}
-                    <RosterDisplayFiltersMenu
-                      filters={rosterDisplayFilters}
-                      onChange={setRosterDisplayFilters}
-                      operationalPeriodsEnabled={operationalPeriodsEnabled}
-                    />
-                    <RosterZoomControls zoom={rosterZoomLevel} onZoomChange={handleRosterZoomChange} />
-                    <ToggleGroup
-                      type="single"
-                      value={rosterViewMode}
-                      onValueChange={(value) => {
-                        if (value === 'table' || value === 'org-chart') {
-                          setRosterViewMode(value)
-                        }
-                      }}
-                      variant="outline"
-                      size="sm"
-                      aria-label="Roster view"
-                    >
-                      <ToggleGroupItem value="table" className="gap-1.5 px-2.5 text-xs">
-                        <Table2 className="h-3.5 w-3.5" />
-                        Table
-                      </ToggleGroupItem>
-                      <ToggleGroupItem value="org-chart" className="gap-1.5 px-2.5 text-xs">
-                        <Network className="h-3.5 w-3.5" />
-                        Org Chart
-                      </ToggleGroupItem>
-                    </ToggleGroup>
-                    {rosterViewMode === 'org-chart' ? (
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        className="gap-1.5"
-                        disabled={
-                          isRosterLoading ||
-                          isCustomPositionsLoading ||
-                          isViewingHistoricalRoster
-                        }
-                        onClick={openIcs207ExportDialog}
-                      >
-                        <DownloadIcon className="h-3.5 w-3.5" />
-                        Export ICS-207
-                      </Button>
-                    ) : null}
-                    <RosterAddMemberToolbar
-                      canManageRoster={effectiveCanManageRoster}
-                      onAddMember={openAddRosterMemberDialog}
-                      onAddPosition={() => setIsAddWorkspacePositionOpen(true)}
-                      onAddAssetToOrgChart={() => setIsAddAssetToOrgChartOpen(true)}
-                    />
-                  </div>
+                  <WorkspaceRosterToolbar
+                    displayFilters={rosterDisplayFilters}
+                    onDisplayFiltersChange={setRosterDisplayFilters}
+                    operationalPeriodsEnabled={operationalPeriodsEnabled}
+                    viewMode={rosterViewMode}
+                    onViewModeChange={setRosterViewMode}
+                    zoom={rosterZoomLevel}
+                    onZoomChange={handleRosterZoomChange}
+                    canManageRoster={effectiveCanManageRoster}
+                    onAddMember={openAddRosterMemberDialog}
+                    onAddPosition={() => setIsAddWorkspacePositionOpen(true)}
+                    onAddAssetToOrgChart={() => setIsAddAssetToOrgChartOpen(true)}
+                    showWorkingRosterToggle={
+                      isViewingHistoricalOperationalPeriod && operationalPeriodsEnabled
+                    }
+                    rosterAlwaysShowWorking={rosterAlwaysShowWorking}
+                    onRosterAlwaysShowWorkingChange={setRosterAlwaysShowWorking}
+                    showExportIcs207
+                    exportIcs207Disabled={
+                      isRosterLoading || isCustomPositionsLoading || isViewingHistoricalRoster
+                    }
+                    onExportIcs207={openIcs207ExportDialog}
+                    disabled={isViewingHistoricalRoster}
+                  />
                 )}
                 {activeTab === 'resources' && !isInWorkspaceContext && (
                   <div className="flex flex-wrap items-center justify-end gap-2">
@@ -35120,6 +35108,7 @@ function App() {
                     onWorkAssignmentsLayoutModeChange={handleIcs215WorkAssignmentsLayoutModeChange}
                     createHaveLinkRosterActions={createHaveLinkRosterActions}
                     renderHaveLinkRosterPanel={renderHaveLinkRosterPanel}
+                    haveLinkRosterWorkspaceControls={haveLinkRosterWorkspaceControls}
                     showPositionAssets={showPositionAssets}
                     onAppendVersion={handleIcs215AppendVersion}
                     onSignReview={handleIcs215SignReview}

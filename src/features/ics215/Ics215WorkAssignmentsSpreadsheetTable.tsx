@@ -25,6 +25,7 @@ import { validateWorkAssignmentAssigneeSelection } from '@/lib/work-assignment-t
 import { toast } from 'sonner'
 import type { WorkspaceRosterMember } from '@/lib/workspace-types'
 import type { HaveLinkRosterPanelRenderer } from '@/features/roster/WorkspaceRosterPanel'
+import type { HaveLinkRosterWorkspaceControls } from '@/features/roster/WorkspaceRosterToolbar'
 import { cn } from '@/lib/utils'
 
 type Ics215WorkAssignmentsSpreadsheetTableProps = Ics215WorkAssignmentsTableBaseProps & {
@@ -32,6 +33,7 @@ type Ics215WorkAssignmentsSpreadsheetTableProps = Ics215WorkAssignmentsTableBase
   roster?: WorkspaceRosterMember[]
   competencyOptions?: string[]
   renderHaveLinkRosterPanel?: HaveLinkRosterPanelRenderer
+  haveLinkRosterWorkspaceControls?: HaveLinkRosterWorkspaceControls
 }
 
 function ResourceValueCell({
@@ -136,6 +138,7 @@ export function Ics215WorkAssignmentsSpreadsheetTable({
   showPositionAssets = true,
   tableLayout = 'default',
   renderHaveLinkRosterPanel,
+  haveLinkRosterWorkspaceControls,
 }: Ics215WorkAssignmentsSpreadsheetTableProps) {
   const {
     hideAssigneeColumn,
@@ -546,6 +549,7 @@ export function Ics215WorkAssignmentsSpreadsheetTable({
         createHaveLinkRosterActions={createHaveLinkRosterActions}
         showPositionAssets={showPositionAssets}
         renderRosterPanel={renderHaveLinkRosterPanel}
+        rosterWorkspaceControls={haveLinkRosterWorkspaceControls}
       />
     </>
   )

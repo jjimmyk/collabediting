@@ -16,17 +16,20 @@ export function createHaveLinkRosterPanelRenderer(
     const isFull = ctx.presentation === 'full'
 
     return (
-      <div className={cn('flex min-h-0 flex-col gap-2', isFull && 'flex-1')}>
+      <div className={cn('flex min-h-0 flex-col gap-2', isFull && 'min-h-[35vh] flex-1')}>
         {isFull && orgChartProps.isProjected ? <RosterTimeHorizonBanner /> : null}
         <WorkspaceRosterPanel
           viewMode={ctx.viewMode}
           onViewModeChange={ctx.onViewModeChange}
           zoom={ctx.zoom}
           onZoomChange={ctx.onZoomChange}
-          showZoomControls={isFull}
+          recenterToken={ctx.recenterToken}
+          showViewToggle={false}
           wrapOrgChartLiveRoot={isFull}
           className={isFull ? 'min-h-0 flex-1' : undefined}
-          zoomContainerClassName={isFull ? 'min-h-0 flex-1' : 'max-h-[26rem] min-h-0'}
+          zoomContainerClassName={
+            isFull ? 'min-h-[32vh] flex-1 rounded-md border' : 'max-h-[26rem] min-h-0'
+          }
           orgChartProps={{
             ...orgChartProps,
             zoom: ctx.zoom,
