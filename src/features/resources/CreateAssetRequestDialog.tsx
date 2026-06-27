@@ -8,15 +8,18 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { AssetRequestHeaderForm } from '@/features/resources/AssetRequestHeaderForm'
+import { AssetRequestLineItemForm } from '@/features/resources/AssetRequestLineItemForm'
+import type { ResourceRequestIncidentOption } from '@/features/resources/AssetRequestHeaderForm'
+import type { ResourceListItemData } from '@/features/resources/types'
 import {
-  ResourceRequestFieldsForm,
-  type ResourceRequestIncidentOption,
-} from '@/features/resources/ResourceRequestFieldsForm'
-import {
+  createEmptyAssetRequestLineItem,
   createEmptyResourceRequestInput,
   validateCreateResourceRequestInput,
+  type AssetRequestLineItem,
   type CreateResourceRequestInput,
 } from '@/lib/ics-213rr-resource-request'
+import { Plus } from 'lucide-react'
 
 type CreateAssetRequestDialogProps = {
   open: boolean
@@ -24,6 +27,8 @@ type CreateAssetRequestDialogProps = {
   isSubmitting: boolean
   defaultRequestedByName?: string
   incidentOptions?: ResourceRequestIncidentOption[]
+  organizationAssets?: ResourceListItemData[]
+  orgAssetIdsByKey?: Record<string, string>
   onSubmit: (input: CreateResourceRequestInput) => Promise<boolean>
 }
 
@@ -33,6 +38,8 @@ export function CreateAssetRequestDialog({
   isSubmitting,
   defaultRequestedByName = '',
   incidentOptions = [],
+  organizationAssets = [],
+  orgAssetIdsByKey = {},
   onSubmit,
 }: CreateAssetRequestDialogProps) {
   const [formValue, setFormValue] = useState<CreateResourceRequestInput>(
@@ -46,6 +53,27 @@ export function CreateAssetRequestDialog({
       setValidationError(null)
     }
   }, [defaultRequestedByName, open])
+
+  const updateLineItem = (index: number, next: AssetRequestLineItem) => {
+    setFormValue((previous) => ({
+      ...previous,
+      items: previous.items.map((item, itemIndex) => (itemIndex === index ? next : item)),
+    }))
+  }
+
+  const addLineItem = () => {
+    setFormValue((previous) => ({
+      ...previous,
+      items: [...previous.items, createEmptyAssetRequestLineItem()],
+    }))
+  }
+
+  const removeLineItem = (index: number) => {
+    setFormValue((previous) => ({
+      ...previous,
+      items: previous.items.filter((_, itemIndex) => itemIndex !== index),
+    }))
+  }
 
   const handleSubmit = async () => {
     const error = validateCreateResourceRequestInput(formValue)
@@ -63,20 +91,43 @@ export function CreateAssetRequestDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="!flex !max-h-[90vh] !w-[42rem] !max-w-[42rem] flex-col overflow-hidden sm:!max-w-[42rem]">
+      <DialogContent className="!flex !max-h-[90vh] !w-[48rem] !max-w-[48rem] flex-col overflow-hidden sm:!max-w-[48rem]">
         <DialogHeader>
           <DialogTitle>Create asset request</DialogTitle>
           <DialogDescription>
-            Submit an ICS 213RR-CG resource request. Core order details are required; approval fields
-            can be completed later.
+            Add one or more requested items to an ICS 213RR-CG resource request. Core header and
+            line-item details are required.
           </DialogDescription>
         </DialogHeader>
-        <div className="min-h-0 flex-1 overflow-y-auto pr-1">
-          <ResourceRequestFieldsForm
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
+          <AssetRequestHeaderForm
             value={formValue}
             onChange={setFormValue}
             incidentOptions={incidentOptions}
           />
+          <div className="space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Requested items
+              </p>
+              <Button type="button" size="sm" variant="outline" className="h-8 gap-1" onClick={addLineItem}>
+                <Plus className="h-3.5 w-3.5" />
+                Add requested item
+              </Button>
+            </div>
+            {formValue.items.map((item, index) => (
+              <AssetRequestLineItemForm
+                key={item.id}
+                index={index}
+                value={item}
+                onChange={(next) => updateLineItem(index, next)}
+                onRemove={() => removeLineItem(index)}
+                canRemove={formValue.items.length > 1}
+                organizationAssets={organizationAssets}
+                orgAssetIdsByKey={orgAssetIdsByKey}
+              />
+            ))}
+          </div>
         </div>
         {validationError ? (
           <p className="text-xs text-destructive">{validationError}</p>

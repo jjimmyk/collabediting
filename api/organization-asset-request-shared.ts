@@ -51,11 +51,28 @@ export function parseResourceRequestPayload(body: Record<string, unknown>): Reso
   if (typeof item.id !== 'number') return null
   if (!Array.isArray(item.mapLocation) || item.mapLocation.length < 2) return null
   if (!item.incidentName?.trim()) return null
+  if (!item.requestedByName?.trim()) return null
+
+  const items = Array.isArray((item as { items?: unknown }).items)
+    ? ((item as { items: unknown[] }).items as Array<Record<string, unknown>>)
+    : null
+
+  if (items && items.length > 0) {
+    for (const lineItem of items) {
+      if (!String(lineItem.kind ?? '').trim()) return null
+      if (!String(lineItem.type ?? '').trim()) return null
+      if (!String(lineItem.detailedItemDescription ?? '').trim()) return null
+      if (!String(lineItem.requestedReportingLocation ?? '').trim()) return null
+      const quantity = Number(lineItem.quantity)
+      if (!Number.isFinite(quantity) || quantity < 1) return null
+    }
+    return item
+  }
+
   if (!item.orderKind?.trim()) return null
   if (!item.orderType?.trim()) return null
   if (!item.orderDetailedDescription?.trim()) return null
   if (!item.orderRequestedReportingLocation?.trim()) return null
-  if (!item.requestedByName?.trim()) return null
 
   return item
 }

@@ -205,6 +205,7 @@ export function useWorkspaceAssetAssignments({
 
   return {
     hubAssets,
+    organizationAssets,
     assignmentRows,
     assignmentsByAssetKey,
     isLoading,

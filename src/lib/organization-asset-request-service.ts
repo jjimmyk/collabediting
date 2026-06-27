@@ -2,6 +2,7 @@ import {
   buildResourceRequestFromInput,
   generateResourceRequestNumber,
   nextResourceRequestId,
+  normalizeResourceRequestItem,
   type CreateResourceRequestInput,
   type ResourceRequestItem,
   validateCreateResourceRequestInput,
@@ -20,7 +21,9 @@ function readLocalOrganizationAssetRequests(
     const raw = window.localStorage.getItem(`${LOCAL_ORG_ASSET_REQUESTS_PREFIX}${organizationId}`)
     if (!raw) return []
     const parsed = JSON.parse(raw) as unknown
-    return Array.isArray(parsed) ? (parsed as ResourceRequestItem[]) : []
+    return Array.isArray(parsed)
+      ? (parsed as ResourceRequestItem[]).map((item) => normalizeResourceRequestItem(item))
+      : []
   } catch {
     return []
   }
@@ -42,7 +45,7 @@ function mapApiRequest(raw: Record<string, unknown>): ResourceRequestItem | null
   if (!payload || typeof payload !== 'object') return null
   const item = payload as ResourceRequestItem
   if (typeof item.id !== 'number' || !Array.isArray(item.mapLocation)) return null
-  return item
+  return normalizeResourceRequestItem(item)
 }
 
 export async function fetchOrganizationAssetRequests(params: {

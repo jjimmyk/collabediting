@@ -1,5 +1,29 @@
 export type Ics213rrOrderPriority = 'U' | 'R'
 
+export type AssetRequestTransferRef = {
+  assetKey: string
+  organizationAssetId: string
+  name: string
+  type: string
+}
+
+export type AssetRequestLineItem = {
+  id: string
+  quantity: number
+  kind: string
+  type: string
+  priority: string
+  detailedItemDescription: string
+  requestedReportingLocation: string
+  dateTime: string
+  orderNumber: string
+  estimatedTimeOfArrival: string
+  costPerUnit: number | null
+  totalCost: number | null
+  suggestedSourcesOfSupplyAndSubstitutes: string
+  assetsToTransfer: AssetRequestTransferRef[]
+}
+
 export type ResourceRequestItem = {
   id: number
   mapLocation: [number, number]
@@ -7,6 +31,7 @@ export type ResourceRequestItem = {
   incidentName: string
   dateTimeInitiated: string
   requestNumber: string
+  items: AssetRequestLineItem[]
   orderQuantity: number
   orderKind: string
   orderType: string
@@ -63,6 +88,338 @@ const checkboxLabel = (checked: boolean) => (checked ? '[X]' : '[ ]')
 export const getIcs213rrPriorityLabel = (priority: Ics213rrOrderPriority) =>
   priority === 'U' ? 'Urgent (U)' : 'Routine (R)'
 
+export const getLineItemPriorityLabel = (priority: string) => {
+  if (priority === 'U') return 'Urgent (U)'
+  if (priority === 'R') return 'Routine (R)'
+  return priority.trim() || '—'
+}
+
+export const isStandardLineItemPriority = (priority: string): priority is Ics213rrOrderPriority =>
+  priority === 'U' || priority === 'R'
+
+export function createAssetRequestLineItemId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID()
+  }
+  return `line-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
+}
+
+export function createEmptyAssetRequestLineItem(): AssetRequestLineItem {
+  return {
+    id: createAssetRequestLineItemId(),
+    quantity: 1,
+    kind: '',
+    type: '',
+    priority: 'R',
+    detailedItemDescription: '',
+    requestedReportingLocation: '',
+    dateTime: '',
+    orderNumber: '',
+    estimatedTimeOfArrival: '',
+    costPerUnit: null,
+    totalCost: null,
+    suggestedSourcesOfSupplyAndSubstitutes: '',
+    assetsToTransfer: [],
+  }
+}
+
+export function computeLineItemTotalCost(
+  quantity: number,
+  costPerUnit: number | null
+): number | null {
+  if (costPerUnit == null || !Number.isFinite(costPerUnit)) return null
+  if (!Number.isFinite(quantity) || quantity < 1) return null
+  return Math.round(quantity * costPerUnit * 100) / 100
+}
+
+export function formatLegacyOrderCostLsc(
+  costPerUnit: number | null,
+  totalCost: number | null
+): string {
+  const parts: string[] = []
+  if (costPerUnit != null && Number.isFinite(costPerUnit)) {
+    parts.push(`$${costPerUnit.toLocaleString()} per unit`)
+  }
+  if (totalCost != null && Number.isFinite(totalCost)) {
+    parts.push(`$${totalCost.toLocaleString()} total`)
+  }
+  return parts.join('; ')
+}
+
+function lineItemFromLegacyFields(source: Partial<ResourceRequestItem>): AssetRequestLineItem {
+  const priority =
+    typeof source.orderPriority === 'string'
+      ? source.orderPriority
+      : source.orderPriority === 'U'
+        ? 'U'
+        : 'R'
+
+  return {
+    id: createAssetRequestLineItemId(),
+    quantity:
+      typeof source.orderQuantity === 'number' && Number.isFinite(source.orderQuantity)
+        ? source.orderQuantity
+        : 1,
+    kind: source.orderKind ?? '',
+    type: source.orderType ?? '',
+    priority,
+    detailedItemDescription: source.orderDetailedDescription ?? '',
+    requestedReportingLocation: source.orderRequestedReportingLocation ?? '',
+    dateTime: source.orderLocationDateTime ?? '',
+    orderNumber: source.orderNumberLsc ?? '',
+    estimatedTimeOfArrival: source.orderEtaLsc ?? '',
+    costPerUnit: null,
+    totalCost: null,
+    suggestedSourcesOfSupplyAndSubstitutes: source.suggestedSourcesAndSubstitutes ?? '',
+    assetsToTransfer: [],
+  }
+}
+
+function normalizeAssetRequestLineItem(raw: Partial<AssetRequestLineItem>): AssetRequestLineItem {
+  const quantity =
+    typeof raw.quantity === 'number' && Number.isFinite(raw.quantity)
+      ? Math.max(1, Math.round(raw.quantity))
+      : 1
+  const costPerUnit =
+    typeof raw.costPerUnit === 'number' && Number.isFinite(raw.costPerUnit)
+      ? raw.costPerUnit
+      : null
+  const totalCost =
+    typeof raw.totalCost === 'number' && Number.isFinite(raw.totalCost)
+      ? raw.totalCost
+      : null
+
+  return {
+    id: typeof raw.id === 'string' && raw.id.trim() ? raw.id : createAssetRequestLineItemId(),
+    quantity,
+    kind: String(raw.kind ?? '').trim(),
+    type: String(raw.type ?? '').trim(),
+    priority: String(raw.priority ?? 'R').trim() || 'R',
+    detailedItemDescription: String(raw.detailedItemDescription ?? '').trim(),
+    requestedReportingLocation: String(raw.requestedReportingLocation ?? '').trim(),
+    dateTime: String(raw.dateTime ?? '').trim(),
+    orderNumber: String(raw.orderNumber ?? '').trim(),
+    estimatedTimeOfArrival: String(raw.estimatedTimeOfArrival ?? '').trim(),
+    costPerUnit,
+    totalCost,
+    suggestedSourcesOfSupplyAndSubstitutes: String(
+      raw.suggestedSourcesOfSupplyAndSubstitutes ?? ''
+    ).trim(),
+    assetsToTransfer: Array.isArray(raw.assetsToTransfer)
+      ? raw.assetsToTransfer
+          .filter(
+            (ref): ref is AssetRequestTransferRef =>
+              ref != null &&
+              typeof ref === 'object' &&
+              typeof (ref as AssetRequestTransferRef).assetKey === 'string' &&
+              (ref as AssetRequestTransferRef).assetKey.trim().length > 0
+          )
+          .map((ref) => ({
+            assetKey: ref.assetKey.trim(),
+            organizationAssetId: String(ref.organizationAssetId ?? '').trim(),
+            name: String(ref.name ?? '').trim(),
+            type: String(ref.type ?? '').trim(),
+          }))
+      : [],
+  }
+}
+
+export function syncLegacyOrderFieldsFromLineItems(
+  items: AssetRequestLineItem[]
+): Pick<
+  ResourceRequestItem,
+  | 'orderQuantity'
+  | 'orderKind'
+  | 'orderType'
+  | 'orderPriority'
+  | 'orderDetailedDescription'
+  | 'orderRequestedReportingLocation'
+  | 'orderLocationDateTime'
+  | 'orderNumberLsc'
+  | 'orderEtaLsc'
+  | 'orderCostLsc'
+  | 'suggestedSourcesAndSubstitutes'
+> {
+  const first = items[0]
+  if (!first) {
+    return {
+      orderQuantity: 1,
+      orderKind: '',
+      orderType: '',
+      orderPriority: 'R',
+      orderDetailedDescription: '',
+      orderRequestedReportingLocation: '',
+      orderLocationDateTime: '',
+      orderNumberLsc: '',
+      orderEtaLsc: '',
+      orderCostLsc: '',
+      suggestedSourcesAndSubstitutes: '',
+    }
+  }
+
+  return {
+    orderQuantity: first.quantity,
+    orderKind: first.kind,
+    orderType: first.type,
+    orderPriority: isStandardLineItemPriority(first.priority) ? first.priority : 'R',
+    orderDetailedDescription: first.detailedItemDescription,
+    orderRequestedReportingLocation: first.requestedReportingLocation,
+    orderLocationDateTime: first.dateTime,
+    orderNumberLsc: first.orderNumber,
+    orderEtaLsc: first.estimatedTimeOfArrival,
+    orderCostLsc: formatLegacyOrderCostLsc(first.costPerUnit, first.totalCost),
+    suggestedSourcesAndSubstitutes: first.suggestedSourcesOfSupplyAndSubstitutes,
+  }
+}
+
+export function normalizeResourceRequestItem(raw: Partial<ResourceRequestItem>): ResourceRequestItem {
+  const items =
+    Array.isArray(raw.items) && raw.items.length > 0
+      ? raw.items.map((item) => normalizeAssetRequestLineItem(item))
+      : [lineItemFromLegacyFields(raw)]
+
+  const legacy = syncLegacyOrderFieldsFromLineItems(items)
+  const mapLocation = Array.isArray(raw.mapLocation) ? raw.mapLocation : [0, 0]
+
+  return {
+    id: typeof raw.id === 'number' ? raw.id : 0,
+    mapLocation: [
+      typeof mapLocation[0] === 'number' ? mapLocation[0] : 0,
+      typeof mapLocation[1] === 'number' ? mapLocation[1] : 0,
+    ],
+    status:
+      raw.status === 'Approved' ||
+      raw.status === 'Filled' ||
+      raw.status === 'Denied' ||
+      raw.status === 'Pending'
+        ? raw.status
+        : 'Pending',
+    incidentName: String(raw.incidentName ?? '').trim(),
+    dateTimeInitiated: String(raw.dateTimeInitiated ?? '').trim(),
+    requestNumber: String(raw.requestNumber ?? '').trim(),
+    items,
+    ...legacy,
+    requestedByName: String(raw.requestedByName ?? '').trim(),
+    requestedByPosition: String(raw.requestedByPosition ?? '').trim(),
+    requestedByDateTime: String(raw.requestedByDateTime ?? '').trim(),
+    sectionChiefApprovalName: String(raw.sectionChiefApprovalName ?? '').trim(),
+    sectionChiefApprovalPosition: String(raw.sectionChiefApprovalPosition ?? '').trim(),
+    sectionChiefApprovalSignature: String(raw.sectionChiefApprovalSignature ?? '').trim(),
+    sectionChiefApprovalDateTime: String(raw.sectionChiefApprovalDateTime ?? '').trim(),
+    reslTacticalResources: Boolean(raw.reslTacticalResources),
+    reslResourceAvailable: Boolean(raw.reslResourceAvailable),
+    reslResourceNotAvailable: Boolean(raw.reslResourceNotAvailable),
+    reslReviewName: String(raw.reslReviewName ?? '').trim(),
+    reslReviewSignature: String(raw.reslReviewSignature ?? '').trim(),
+    reslReviewDateTime: String(raw.reslReviewDateTime ?? '').trim(),
+    requisitionPurchaseOrderNumber: String(raw.requisitionPurchaseOrderNumber ?? '').trim(),
+    supplierNamePhoneFaxEmail: String(raw.supplierNamePhoneFaxEmail ?? '').trim(),
+    notes: String(raw.notes ?? '').trim(),
+    logisticsApprovalName: String(raw.logisticsApprovalName ?? '').trim(),
+    logisticsApprovalPosition: String(raw.logisticsApprovalPosition ?? '').trim(),
+    logisticsApprovalSignature: String(raw.logisticsApprovalSignature ?? '').trim(),
+    logisticsApprovalDateTime: String(raw.logisticsApprovalDateTime ?? '').trim(),
+    orderPlacedBySpul: Boolean(raw.orderPlacedBySpul),
+    orderPlacedByProc: Boolean(raw.orderPlacedByProc),
+    orderPlacedByOther: Boolean(raw.orderPlacedByOther),
+    orderPlacedByOtherText: String(raw.orderPlacedByOtherText ?? '').trim(),
+    orderPlacedSignature: String(raw.orderPlacedSignature ?? '').trim(),
+    orderPlacedDateTime: String(raw.orderPlacedDateTime ?? '').trim(),
+    financeReplyComments: String(raw.financeReplyComments ?? '').trim(),
+    financeApprovalName: String(raw.financeApprovalName ?? '').trim(),
+    financeApprovalPosition: String(raw.financeApprovalPosition ?? '').trim(),
+    financeApprovalSignature: String(raw.financeApprovalSignature ?? '').trim(),
+    financeApprovalDateTime: String(raw.financeApprovalDateTime ?? '').trim(),
+  }
+}
+
+export function getResourceRequestLineItems(request: ResourceRequestItem): AssetRequestLineItem[] {
+  if (Array.isArray(request.items) && request.items.length > 0) {
+    return request.items
+  }
+  return [lineItemFromLegacyFields(request)]
+}
+
+export function getResourceRequestItemCount(request: ResourceRequestItem): number {
+  return getResourceRequestLineItems(request).length
+}
+
+export function getResourceRequestTotalQuantity(request: ResourceRequestItem): number {
+  return getResourceRequestLineItems(request).reduce((sum, item) => sum + item.quantity, 0)
+}
+
+export function getResourceRequestKindTypeSummary(request: ResourceRequestItem): string {
+  const items = getResourceRequestLineItems(request)
+  if (items.length === 0) return '—'
+  const first = items[0]
+  if (items.length === 1) {
+    return `${first.kind || '—'} · ${first.type || '—'}`
+  }
+  const allSame = items.every((item) => item.kind === first.kind && item.type === first.type)
+  if (allSame) {
+    return `${first.kind || '—'} · ${first.type || '—'}`
+  }
+  return `${items.length} items (mixed)`
+}
+
+export function getResourceRequestPrioritySummary(request: ResourceRequestItem): string {
+  const items = getResourceRequestLineItems(request)
+  if (items.some((item) => item.priority === 'U')) {
+    return getLineItemPriorityLabel('U')
+  }
+  if (items.every((item) => item.priority === 'R')) {
+    return getLineItemPriorityLabel('R')
+  }
+  return 'Mixed'
+}
+
+export function getResourceRequestPrimaryDescription(request: ResourceRequestItem): string {
+  const items = getResourceRequestLineItems(request)
+  if (items.length === 1) {
+    return items[0].detailedItemDescription || items[0].type || request.orderDetailedDescription
+  }
+  if (items.length > 1) {
+    return `${items.length} requested items`
+  }
+  return request.orderDetailedDescription || request.orderType || 'Asset request'
+}
+
+export function toDatetimeLocalInputValue(stored: string): string {
+  const trimmed = stored.trim()
+  if (!trimmed) return ''
+
+  const isoMatch = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/)
+  if (isoMatch) {
+    return `${isoMatch[1]}-${isoMatch[2]}-${isoMatch[3]}T${isoMatch[4]}:${isoMatch[5]}`
+  }
+
+  const legacyMatch = trimmed.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2})/)
+  if (legacyMatch) {
+    const month = legacyMatch[1].padStart(2, '0')
+    const day = legacyMatch[2].padStart(2, '0')
+    const year = legacyMatch[3]
+    const hour = legacyMatch[4].padStart(2, '0')
+    const minute = legacyMatch[5]
+    return `${year}-${month}-${day}T${hour}:${minute}`
+  }
+
+  const parsed = new Date(trimmed)
+  if (!Number.isNaN(parsed.getTime())) {
+    const pad = (value: number) => String(value).padStart(2, '0')
+    return `${parsed.getFullYear()}-${pad(parsed.getMonth() + 1)}-${pad(parsed.getDate())}T${pad(parsed.getHours())}:${pad(parsed.getMinutes())}`
+  }
+
+  return ''
+}
+
+export function fromDatetimeLocalInputValue(value: string): string {
+  const trimmed = value.trim()
+  if (!trimmed) return ''
+  const parsed = new Date(trimmed)
+  if (Number.isNaN(parsed.getTime())) return trimmed
+  return formatResourceRequestDateTime(parsed)
+}
+
 export const getResourceRequestDocFilename = (request: ResourceRequestItem, extension: 'docx' | 'pdf') => {
   const safeIncident =
     request.incidentName.trim().replace(/[^a-zA-Z0-9-_]+/g, '_') || 'Incident'
@@ -80,15 +437,16 @@ export const getResourceRequestItemFieldValue = (item: ResourceRequestItem, fiel
     case 'requestNumber':
       return item.requestNumber
     case 'orderQuantity':
-      return String(item.orderQuantity)
+      return String(getResourceRequestTotalQuantity(item))
     case 'orderKind':
-      return item.orderKind
     case 'orderType':
-      return item.orderType
+      return getResourceRequestKindTypeSummary(item)
     case 'orderPriority':
-      return getIcs213rrPriorityLabel(item.orderPriority)
+      return getResourceRequestPrioritySummary(item)
     case 'orderDetailedDescription':
-      return item.orderDetailedDescription
+      return getResourceRequestPrimaryDescription(item)
+    case 'itemCount':
+      return String(getResourceRequestItemCount(item))
     case 'orderRequestedReportingLocation':
       return item.orderRequestedReportingLocation
     case 'orderLocationDateTime':
@@ -158,22 +516,29 @@ export const getResourceRequestItemFieldValue = (item: ResourceRequestItem, fiel
   }
 }
 
-export const getResourceRequestSearchValues = (item: ResourceRequestItem) =>
-  [
+export const getResourceRequestSearchValues = (item: ResourceRequestItem) => {
+  const lineItems = getResourceRequestLineItems(item)
+  const lineItemValues = lineItems.flatMap((lineItem) => [
+    String(lineItem.quantity),
+    lineItem.kind,
+    lineItem.type,
+    getLineItemPriorityLabel(lineItem.priority),
+    lineItem.detailedItemDescription,
+    lineItem.requestedReportingLocation,
+    lineItem.dateTime,
+    lineItem.orderNumber,
+    lineItem.estimatedTimeOfArrival,
+    lineItem.costPerUnit != null ? String(lineItem.costPerUnit) : '',
+    lineItem.totalCost != null ? String(lineItem.totalCost) : '',
+    lineItem.suggestedSourcesOfSupplyAndSubstitutes,
+    ...lineItem.assetsToTransfer.flatMap((ref) => [ref.name, ref.type, ref.assetKey]),
+  ])
+
+  return [
     item.incidentName,
     item.dateTimeInitiated,
     item.requestNumber,
-    String(item.orderQuantity),
-    item.orderKind,
-    item.orderType,
-    getIcs213rrPriorityLabel(item.orderPriority),
-    item.orderDetailedDescription,
-    item.orderRequestedReportingLocation,
-    item.orderLocationDateTime,
-    item.orderNumberLsc,
-    item.orderEtaLsc,
-    item.orderCostLsc,
-    item.suggestedSourcesAndSubstitutes,
+    ...lineItemValues,
     item.requestedByName,
     item.requestedByPosition,
     item.requestedByDateTime,
@@ -201,6 +566,7 @@ export const getResourceRequestSearchValues = (item: ResourceRequestItem) =>
     item.financeApprovalDateTime,
     item.status,
   ].join(' ')
+}
 
 export function buildIcs213rrDocxBlocks(request: ResourceRequestItem): DocxBlock[] {
   const blocks: DocxBlock[] = []
@@ -227,19 +593,50 @@ export function buildIcs213rrDocxBlocks(request: ResourceRequestItem): DocxBlock
   pushParagraph(request.requestNumber)
 
   pushHeading('4. Order')
-  pushParagraph(`Quantity: ${request.orderQuantity}`)
-  pushParagraph(`Kind: ${request.orderKind}`)
-  pushParagraph(`Type: ${request.orderType}`)
-  pushParagraph(`Priority: ${getIcs213rrPriorityLabel(request.orderPriority)}`)
-  pushParagraph(`Detailed Item Description: ${request.orderDetailedDescription}`)
-  pushParagraph(`Requested Reporting Location: ${request.orderRequestedReportingLocation}`)
-  pushParagraph(`Location Date/Time: ${request.orderLocationDateTime}`)
-  pushParagraph(`Order # (LSC): ${request.orderNumberLsc}`)
-  pushParagraph(`ETA (LSC): ${request.orderEtaLsc}`)
-  pushParagraph(`Cost (LSC): ${request.orderCostLsc}`)
+  const lineItems = getResourceRequestLineItems(request)
+  lineItems.forEach((lineItem, index) => {
+    if (lineItems.length > 1) {
+      pushHeading(`4.${index + 1} Line Item ${index + 1}`)
+    }
+    pushParagraph(`Quantity: ${lineItem.quantity}`)
+    pushParagraph(`Kind: ${lineItem.kind}`)
+    pushParagraph(`Type: ${lineItem.type}`)
+    pushParagraph(`Priority: ${getLineItemPriorityLabel(lineItem.priority)}`)
+    pushParagraph(`Detailed Item Description: ${lineItem.detailedItemDescription}`)
+    pushParagraph(`Requested Reporting Location: ${lineItem.requestedReportingLocation}`)
+    pushParagraph(`Location Date/Time: ${lineItem.dateTime}`)
+    pushParagraph(`Order # (LSC): ${lineItem.orderNumber}`)
+    pushParagraph(`ETA (LSC): ${lineItem.estimatedTimeOfArrival}`)
+    pushParagraph(
+      `Cost (LSC): ${formatLegacyOrderCostLsc(lineItem.costPerUnit, lineItem.totalCost)}`
+    )
+    if (lineItem.assetsToTransfer.length > 0) {
+      pushParagraph(
+        `Asset(s) to Transfer: ${lineItem.assetsToTransfer.map((ref) => `${ref.name} (${ref.type})`).join(', ')}`
+      )
+    }
+    if (lineItem.suggestedSourcesOfSupplyAndSubstitutes.trim()) {
+      pushParagraph(
+        `Suggested Source(s) of Supply and Suitable Substitutes: ${lineItem.suggestedSourcesOfSupplyAndSubstitutes}`
+      )
+    }
+  })
 
-  pushHeading('5. Suggested Source(s) of Supply and Suitable Substitutes')
-  pushParagraph(request.suggestedSourcesAndSubstitutes)
+  if (lineItems.length === 1 && lineItems[0].suggestedSourcesOfSupplyAndSubstitutes.trim()) {
+    pushHeading('5. Suggested Source(s) of Supply and Suitable Substitutes')
+    pushParagraph(lineItems[0].suggestedSourcesOfSupplyAndSubstitutes)
+  } else if (lineItems.length > 1) {
+    pushHeading('5. Suggested Source(s) of Supply and Suitable Substitutes')
+    lineItems.forEach((lineItem, index) => {
+      if (!lineItem.suggestedSourcesOfSupplyAndSubstitutes.trim()) return
+      pushParagraph(
+        `Line ${index + 1}: ${lineItem.suggestedSourcesOfSupplyAndSubstitutes}`
+      )
+    })
+  } else {
+    pushHeading('5. Suggested Source(s) of Supply and Suitable Substitutes')
+    pushParagraph(request.suggestedSourcesAndSubstitutes)
+  }
 
   pushHeading('6. Requested By')
   pushParagraph(`Name: ${request.requestedByName}`)
@@ -352,21 +749,43 @@ export function buildIcs213rrPrintHtml(request: ResourceRequestItem) {
   <table>${fieldRow('Resource Request Number', request.requestNumber)}</table>
 
   <h2>4. Order</h2>
-  <table>
-    ${fieldRow('a. Quantity', String(request.orderQuantity))}
-    ${fieldRow('b. Kind', request.orderKind)}
-    ${fieldRow('c. Type', request.orderType)}
-    ${fieldRow('d. Priority', getIcs213rrPriorityLabel(request.orderPriority))}
-    ${fieldRow('e. Detailed Item Description', request.orderDetailedDescription)}
-    ${fieldRow('f. Requested Reporting Location', request.orderRequestedReportingLocation)}
-    ${fieldRow('Location Date/Time', request.orderLocationDateTime)}
-    ${fieldRow('g. Order # (LSC)', request.orderNumberLsc)}
-    ${fieldRow('h. ETA (LSC)', request.orderEtaLsc)}
-    ${fieldRow('i. Cost (LSC)', request.orderCostLsc)}
-  </table>
+  ${getResourceRequestLineItems(request)
+    .map((lineItem, index, items) => {
+      const title =
+        items.length > 1
+          ? `<h3 style="font-size:12px;margin:12px 0 6px;color:#1F4E79;">Line Item ${index + 1}</h3>`
+          : ''
+      return `${title}<table>
+    ${fieldRow('a. Quantity', String(lineItem.quantity))}
+    ${fieldRow('b. Kind', lineItem.kind)}
+    ${fieldRow('c. Type', lineItem.type)}
+    ${fieldRow('d. Priority', getLineItemPriorityLabel(lineItem.priority))}
+    ${fieldRow('e. Detailed Item Description', lineItem.detailedItemDescription)}
+    ${fieldRow('f. Requested Reporting Location', lineItem.requestedReportingLocation)}
+    ${fieldRow('Location Date/Time', lineItem.dateTime)}
+    ${fieldRow('g. Order # (LSC)', lineItem.orderNumber)}
+    ${fieldRow('h. ETA (LSC)', lineItem.estimatedTimeOfArrival)}
+    ${fieldRow('i. Cost (LSC)', formatLegacyOrderCostLsc(lineItem.costPerUnit, lineItem.totalCost))}
+    ${fieldRow(
+      'Asset(s) to Transfer',
+      lineItem.assetsToTransfer.map((ref) => `${ref.name} (${ref.type})`).join(', ')
+    )}
+  </table>`
+    })
+    .join('')}
 
   <h2>5. Suggested Source(s) of Supply and Suitable Substitutes</h2>
-  <table>${fieldRow('Suggested Sources / Substitutes', request.suggestedSourcesAndSubstitutes)}</table>
+  <table>${fieldRow(
+    'Suggested Sources / Substitutes',
+    getResourceRequestLineItems(request)
+      .map((lineItem, index, items) =>
+        items.length > 1
+          ? `Line ${index + 1}: ${lineItem.suggestedSourcesOfSupplyAndSubstitutes}`
+          : lineItem.suggestedSourcesOfSupplyAndSubstitutes
+      )
+      .filter(Boolean)
+      .join(' · ')
+  )}</table>
 
   <h2>6. Requested By</h2>
   <table>
@@ -452,6 +871,7 @@ export const DEFAULT_ICS213RR_RESOURCE_REQUESTS: ResourceRequestItem[] = [
     incidentName: 'Cherry Point Refinery Fire — Process Unit Response',
     dateTimeInitiated: '05/09/2026 07:30',
     requestNumber: 'RR-2026-0142',
+    items: [],
     orderQuantity: 2,
     orderKind: 'Teams',
     orderType: 'Industrial Firefighting Support',
@@ -504,6 +924,7 @@ export const DEFAULT_ICS213RR_RESOURCE_REQUESTS: ResourceRequestItem[] = [
     incidentName: 'BP Mad Dog Process Area Gas Release',
     dateTimeInitiated: '05/09/2026 05:45',
     requestNumber: 'RR-2026-0143',
+    items: [],
     orderQuantity: 1,
     orderKind: 'Teams',
     orderType: 'Process Safety Response',
@@ -556,6 +977,7 @@ export const DEFAULT_ICS213RR_RESOURCE_REQUESTS: ResourceRequestItem[] = [
     incidentName: 'BP NaKika Production Curtailment Watch',
     dateTimeInitiated: '05/09/2026 06:30',
     requestNumber: 'RR-2026-0144',
+    items: [],
     orderQuantity: 1,
     orderKind: 'Vessel',
     orderType: 'Marine Logistics Support',
@@ -608,6 +1030,7 @@ export const DEFAULT_ICS213RR_RESOURCE_REQUESTS: ResourceRequestItem[] = [
     incidentName: 'Cherry Point Refinery Fire — Process Unit Response',
     dateTimeInitiated: '05/09/2026 08:00',
     requestNumber: 'RR-2026-0145',
+    items: [],
     orderQuantity: 1,
     orderKind: 'Vehicle',
     orderType: 'Mobile Command Post',
@@ -653,7 +1076,7 @@ export const DEFAULT_ICS213RR_RESOURCE_REQUESTS: ResourceRequestItem[] = [
     financeApprovalSignature: 'M. Patel',
     financeApprovalDateTime: '05/09/2026 09:30 CST',
   },
-]
+].map((item) => normalizeResourceRequestItem(item as unknown as Partial<ResourceRequestItem>))
 
 export type CreateResourceRequestInput = Omit<ResourceRequestItem, 'id'>
 
@@ -700,6 +1123,7 @@ export function createEmptyResourceRequestInput(
     incidentName: defaults.incidentName ?? '',
     dateTimeInitiated: now,
     requestNumber: '',
+    items: [createEmptyAssetRequestLineItem()],
     orderQuantity: 1,
     orderKind: '',
     orderType: '',
@@ -745,55 +1169,82 @@ export function createEmptyResourceRequestInput(
   }
 }
 
+export function validateAssetRequestLineItem(
+  item: AssetRequestLineItem,
+  index: number
+): string | null {
+  const label = `Item ${index + 1}`
+  if (!item.kind.trim()) {
+    return `${label}: Kind is required.`
+  }
+  if (!item.type.trim()) {
+    return `${label}: Type is required.`
+  }
+  if (!item.detailedItemDescription.trim()) {
+    return `${label}: Detailed description is required.`
+  }
+  if (!item.requestedReportingLocation.trim()) {
+    return `${label}: Reporting location is required.`
+  }
+  if (!Number.isFinite(item.quantity) || item.quantity < 1) {
+    return `${label}: Quantity must be at least 1.`
+  }
+  return null
+}
+
 export function validateCreateResourceRequestInput(
   input: CreateResourceRequestInput
 ): string | null {
   if (!input.incidentName.trim()) {
     return 'Incident name is required.'
   }
-  if (!input.orderKind.trim()) {
-    return 'Order kind is required.'
-  }
-  if (!input.orderType.trim()) {
-    return 'Order type is required.'
-  }
-  if (!input.orderDetailedDescription.trim()) {
-    return 'Detailed description is required.'
-  }
-  if (!input.orderRequestedReportingLocation.trim()) {
-    return 'Reporting location is required.'
-  }
   if (!input.requestedByName.trim()) {
     return 'Requested by name is required.'
   }
-  if (!Number.isFinite(input.orderQuantity) || input.orderQuantity < 1) {
-    return 'Quantity must be at least 1.'
+  const items = Array.isArray(input.items) ? input.items : []
+  if (items.length === 0) {
+    return 'Add at least one requested item.'
+  }
+  for (let index = 0; index < items.length; index += 1) {
+    const lineError = validateAssetRequestLineItem(items[index], index)
+    if (lineError) return lineError
   }
   return null
+}
+
+function normalizeCreateLineItems(items: AssetRequestLineItem[]): AssetRequestLineItem[] {
+  return items.map((item) => {
+    const normalized = normalizeAssetRequestLineItem(item)
+    const totalCost =
+      normalized.totalCost ??
+      computeLineItemTotalCost(normalized.quantity, normalized.costPerUnit)
+    return {
+      ...normalized,
+      totalCost,
+    }
+  })
 }
 
 export function buildResourceRequestFromInput(
   input: CreateResourceRequestInput,
   params: { id: number; requestNumber: string }
 ): ResourceRequestItem {
-  return {
+  const items = normalizeCreateLineItems(
+    Array.isArray(input.items) && input.items.length > 0
+      ? input.items
+      : [createEmptyAssetRequestLineItem()]
+  )
+  const legacy = syncLegacyOrderFieldsFromLineItems(items)
+
+  return normalizeResourceRequestItem({
     id: params.id,
     mapLocation: input.mapLocation ?? [0, 0],
     status: input.status ?? 'Pending',
     incidentName: input.incidentName.trim(),
     dateTimeInitiated: input.dateTimeInitiated.trim() || formatResourceRequestDateTime(),
     requestNumber: params.requestNumber,
-    orderQuantity: input.orderQuantity,
-    orderKind: input.orderKind.trim(),
-    orderType: input.orderType.trim(),
-    orderPriority: input.orderPriority,
-    orderDetailedDescription: input.orderDetailedDescription.trim(),
-    orderRequestedReportingLocation: input.orderRequestedReportingLocation.trim(),
-    orderLocationDateTime: input.orderLocationDateTime.trim(),
-    orderNumberLsc: input.orderNumberLsc.trim(),
-    orderEtaLsc: input.orderEtaLsc.trim(),
-    orderCostLsc: input.orderCostLsc.trim(),
-    suggestedSourcesAndSubstitutes: input.suggestedSourcesAndSubstitutes.trim(),
+    items,
+    ...legacy,
     requestedByName: input.requestedByName.trim(),
     requestedByPosition: input.requestedByPosition.trim(),
     requestedByDateTime: input.requestedByDateTime.trim() || formatResourceRequestDateTime(),
@@ -825,5 +1276,5 @@ export function buildResourceRequestFromInput(
     financeApprovalPosition: input.financeApprovalPosition.trim(),
     financeApprovalSignature: input.financeApprovalSignature.trim(),
     financeApprovalDateTime: input.financeApprovalDateTime.trim(),
-  }
+  })
 }

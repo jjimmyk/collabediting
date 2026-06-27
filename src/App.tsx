@@ -160,8 +160,13 @@ import {
   DEFAULT_ICS213RR_RESOURCE_REQUESTS,
   getIcs213rrPriorityLabel,
   getResourceRequestDocFilename,
+  getResourceRequestItemCount,
   getResourceRequestItemFieldValue,
+  getResourceRequestKindTypeSummary,
+  getResourceRequestPrimaryDescription,
+  getResourceRequestPrioritySummary,
   getResourceRequestSearchValues,
+  getResourceRequestTotalQuantity,
   printResourceRequestPdf,
   type CreateResourceRequestInput,
   type ResourceRequestItem,
@@ -609,6 +614,7 @@ import { AssetsTabToolbar } from '@/features/resources/AssetsTabToolbar'
 import { AddWorkspaceAssetDialog } from '@/features/resources/AddWorkspaceAssetDialog'
 import { CreateOrganizationAssetDialog } from '@/features/resources/CreateOrganizationAssetDialog'
 import { CreateAssetRequestDialog } from '@/features/resources/CreateAssetRequestDialog'
+import { AssetRequestDetailPanel } from '@/features/resources/AssetRequestDetailPanel'
 import { AssetWorkspaceAssignmentSelect } from '@/features/resources/AssetWorkspaceAssignmentSelect'
 import {
   SINGLE_RESOURCE_POSITION_LABEL,
@@ -8682,6 +8688,7 @@ function App() {
   const [updatingAssetCheckInKey, setUpdatingAssetCheckInKey] = useState<string | null>(null)
   const {
     hubAssets,
+    organizationAssets,
     isLoading: isAssetAssignmentsLoading,
     assignAsset,
     unassignAsset,
@@ -8740,6 +8747,10 @@ function App() {
     [assetPendingOrgChartByKey, workspaceAssignedAssets]
   )
   const unassignedHubAssets = useMemo(() => getUnassignedHubAssets(hubAssets), [hubAssets])
+  const orgAssetIdsByKey = useMemo(
+    () => Object.fromEntries(organizationAssets.map((asset) => [asset.assetKey, asset.id])),
+    [organizationAssets]
+  )
   const handleAssignAssetToCurrentWorkspace = useCallback(
     (assetKey: string) => {
       if (!activeWorkspaceSupabaseId) return
@@ -28771,6 +28782,7 @@ function App() {
                           <tr className="border-b bg-muted/30 text-left text-muted-foreground">
                             <th className="px-2 py-2 font-semibold">Request #</th>
                             <th className="px-2 py-2 font-semibold">Incident</th>
+                            <th className="px-2 py-2 font-semibold">Items</th>
                             <th className="px-2 py-2 font-semibold">Kind / Type</th>
                             <th className="px-2 py-2 font-semibold">Qty</th>
                             <th className="px-2 py-2 font-semibold">Priority</th>
@@ -28794,12 +28806,13 @@ function App() {
                               >
                                 <td className="px-2 py-2">{request.requestNumber}</td>
                                 <td className="max-w-[12rem] px-2 py-2">{request.incidentName}</td>
+                                <td className="px-2 py-2">{getResourceRequestItemCount(request)}</td>
                                 <td className="max-w-[12rem] px-2 py-2">
-                                  {request.orderKind} · {request.orderType}
+                                  {getResourceRequestKindTypeSummary(request)}
                                 </td>
-                                <td className="px-2 py-2">{request.orderQuantity}</td>
+                                <td className="px-2 py-2">{getResourceRequestTotalQuantity(request)}</td>
                                 <td className="px-2 py-2">
-                                  {getIcs213rrPriorityLabel(request.orderPriority)}
+                                  {getResourceRequestPrioritySummary(request)}
                                 </td>
                                 <td className="px-2 py-2">{request.status}</td>
                                 <td className="max-w-[10rem] px-2 py-2">{request.requestedByName}</td>
@@ -28884,9 +28897,11 @@ function App() {
                             onClick={() => toggleExpandedItem(key)}
                           >
                             <ItemContent>
-                              <ItemTitle>{request.orderDetailedDescription || request.orderType}</ItemTitle>
+                              <ItemTitle>{getResourceRequestPrimaryDescription(request)}</ItemTitle>
                               <ItemDescription>
-                                {request.requestNumber} · {request.incidentName}
+                                {request.requestNumber} · {request.incidentName} ·{' '}
+                                {getResourceRequestItemCount(request)} item
+                                {getResourceRequestItemCount(request) === 1 ? '' : 's'}
                               </ItemDescription>
                             </ItemContent>
                             <ItemActions>
@@ -28895,11 +28910,13 @@ function App() {
                                 className={cn(
                                   'text-[10px] font-semibold uppercase',
                                   getIncidentSeverityBadgeClasses(
-                                    request.orderPriority === 'U' ? 'High' : 'Medium'
+                                    getResourceRequestPrioritySummary(request).includes('Urgent')
+                                      ? 'High'
+                                      : 'Medium'
                                   )
                                 )}
                               >
-                                {getIcs213rrPriorityLabel(request.orderPriority)}
+                                {getResourceRequestPrioritySummary(request)}
                               </Badge>
                               <Badge variant="secondary">{request.status}</Badge>
                               <Button
@@ -28999,47 +29016,7 @@ function App() {
                                   Export PDF
                                 </Button>
                               </div>
-                              <div className="grid grid-cols-2 gap-2">
-                                <p>
-                                  <span className="font-medium">1. Incident Name:</span>{' '}
-                                  {request.incidentName}
-                                </p>
-                                <p>
-                                  <span className="font-medium">2. Date/Time:</span>{' '}
-                                  {request.dateTimeInitiated}
-                                </p>
-                                <p>
-                                  <span className="font-medium">3. Request Number:</span>{' '}
-                                  {request.requestNumber}
-                                </p>
-                                <p>
-                                  <span className="font-medium">4. Order Qty/Kind/Type:</span>{' '}
-                                  {request.orderQuantity} {request.orderKind} · {request.orderType}
-                                </p>
-                                <p className="col-span-2">
-                                  <span className="font-medium">4e. Description:</span>{' '}
-                                  {request.orderDetailedDescription}
-                                </p>
-                                <p className="col-span-2">
-                                  <span className="font-medium">4f. Reporting Location:</span>{' '}
-                                  {request.orderRequestedReportingLocation}
-                                </p>
-                                <p>
-                                  <span className="font-medium">6. Requested By:</span>{' '}
-                                  {request.requestedByName} · {request.requestedByPosition}
-                                </p>
-                                <p>
-                                  <span className="font-medium">6. Date/Time:</span>{' '}
-                                  {request.requestedByDateTime}
-                                </p>
-                                <p className="col-span-2">
-                                  <span className="font-medium">5. Suggested Sources:</span>{' '}
-                                  {request.suggestedSourcesAndSubstitutes}
-                                </p>
-                                <p className="col-span-2">
-                                  <span className="font-medium">12. Notes:</span> {request.notes}
-                                </p>
-                              </div>
+                              <AssetRequestDetailPanel request={request} />
                             </div>
                           </CollapsibleContent>
                         </Collapsible>
@@ -38644,6 +38621,8 @@ function App() {
         isSubmitting={isCreatingAssetRequest || isLoadingOrganizationAssetRequests}
         defaultRequestedByName={defaultAssetRequestRequestedByName}
         incidentOptions={assetRequestIncidentOptions}
+        organizationAssets={hubAssets}
+        orgAssetIdsByKey={orgAssetIdsByKey}
         onSubmit={handleCreateAssetRequest}
       />
       <AddWorkspaceAssetDialog

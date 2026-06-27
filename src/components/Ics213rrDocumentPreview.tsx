@@ -1,7 +1,10 @@
 import type { ReactNode } from 'react'
+import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import {
-  getIcs213rrPriorityLabel,
+  formatLegacyOrderCostLsc,
+  getLineItemPriorityLabel,
+  getResourceRequestLineItems,
   type ResourceRequestItem,
 } from '@/lib/ics-213rr-resource-request'
 
@@ -47,6 +50,7 @@ function CheckboxLine({ checked, label }: { checked: boolean; label: string }) {
 }
 
 export function Ics213rrDocumentPreview({ request }: { request: ResourceRequestItem }) {
+  const lineItems = getResourceRequestLineItems(request)
   const orderPlacedBy = [
     request.orderPlacedBySpul ? 'SPUL' : null,
     request.orderPlacedByProc ? 'PROC' : null,
@@ -80,27 +84,63 @@ export function Ics213rrDocumentPreview({ request }: { request: ResourceRequestI
         <PreviewField label="Resource Request Number" value={request.requestNumber} />
       </PreviewSection>
 
-      <PreviewSection title="4. Order">
-        <PreviewField label="a. Quantity" value={String(request.orderQuantity)} />
-        <PreviewField label="b. Kind" value={request.orderKind} />
-        <PreviewField label="c. Type" value={request.orderType} />
-        <PreviewField
-          label="d. Priority"
-          value={getIcs213rrPriorityLabel(request.orderPriority)}
-        />
-        <PreviewField label="e. Detailed Item Description" value={request.orderDetailedDescription} />
-        <PreviewField
-          label="f. Requested Reporting Location"
-          value={request.orderRequestedReportingLocation}
-        />
-        <PreviewField label="Location Date/Time" value={request.orderLocationDateTime} />
-        <PreviewField label="g. Order # (LSC)" value={request.orderNumberLsc} />
-        <PreviewField label="h. ETA (LSC)" value={request.orderEtaLsc} />
-        <PreviewField label="i. Cost (LSC)" value={request.orderCostLsc} />
-      </PreviewSection>
+      {lineItems.map((lineItem, index) => (
+        <PreviewSection
+          key={lineItem.id}
+          title={lineItems.length > 1 ? `4.${index + 1} Order — Line Item ${index + 1}` : '4. Order'}
+        >
+          <PreviewField label="a. Quantity" value={String(lineItem.quantity)} />
+          <PreviewField label="b. Kind" value={lineItem.kind} />
+          <PreviewField label="c. Type" value={lineItem.type} />
+          <PreviewField label="d. Priority" value={getLineItemPriorityLabel(lineItem.priority)} />
+          <PreviewField label="e. Detailed Item Description" value={lineItem.detailedItemDescription} />
+          <PreviewField
+            label="f. Requested Reporting Location"
+            value={lineItem.requestedReportingLocation}
+          />
+          <PreviewField label="Location Date/Time" value={lineItem.dateTime} />
+          <PreviewField label="g. Order # (LSC)" value={lineItem.orderNumber} />
+          <PreviewField label="h. ETA (LSC)" value={lineItem.estimatedTimeOfArrival} />
+          <PreviewField
+            label="i. Cost (LSC)"
+            value={formatLegacyOrderCostLsc(lineItem.costPerUnit, lineItem.totalCost)}
+          />
+          {lineItem.assetsToTransfer.length > 0 ? (
+            <div className="border-b border-border/60 py-2">
+              <span className="text-xs font-semibold text-muted-foreground">Asset(s) to Transfer</span>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {lineItem.assetsToTransfer.map((ref) => (
+                  <Badge key={ref.assetKey} variant="outline" className="text-[11px]">
+                    {ref.name} · {ref.type}
+                  </Badge>
+                ))}
+              </div>
+            </div>
+          ) : null}
+          {lineItems.length === 1 ? null : (
+            <PreviewField
+              label="Suggested Sources / Substitutes"
+              value={lineItem.suggestedSourcesOfSupplyAndSubstitutes}
+            />
+          )}
+        </PreviewSection>
+      ))}
 
       <PreviewSection title="5. Suggested Source(s) of Supply and Suitable Substitutes">
-        <PreviewField label="Suggested Sources / Substitutes" value={request.suggestedSourcesAndSubstitutes} />
+        <PreviewField
+          label="Suggested Sources / Substitutes"
+          value={
+            lineItems.length === 1
+              ? lineItems[0].suggestedSourcesOfSupplyAndSubstitutes
+              : lineItems
+                  .map(
+                    (lineItem, index) =>
+                      `Line ${index + 1}: ${lineItem.suggestedSourcesOfSupplyAndSubstitutes}`
+                  )
+                  .filter((entry) => !entry.endsWith(': '))
+                  .join(' · ')
+          }
+        />
       </PreviewSection>
 
       <PreviewSection title="6. Requested By">
