@@ -20,6 +20,8 @@ import type {
 } from '@/features/roster/PositionRosterAssignmentSections'
 import type { ResourceListItemData } from '@/features/resources/types'
 import type { WorkspacePositionMeta, WorkspacePositionCatalog } from '@/features/roster/workspace-positions'
+import type { HaveLinkPickMode } from '@/features/ics215/have-link-pick-mode'
+import { HaveLinkPositionDetailPick } from '@/features/ics215/HaveLinkDetailPickSection'
 import { PositionIdentitySection } from '@/features/roster/PositionIdentitySection'
 
 type PositionRosterDetailPanelProps = {
@@ -98,6 +100,7 @@ type PositionRosterDetailPanelProps = {
   haveLinkIndexByRef?: PositionRosterUnifiedAssignmentSectionsProps['haveLinkIndexByRef']
   activeHaveCell?: PositionRosterUnifiedAssignmentSectionsProps['activeHaveCell']
   highlightedHaveRef?: PositionRosterUnifiedAssignmentSectionsProps['highlightedHaveRef']
+  haveLinkPickMode?: HaveLinkPickMode
 } & Partial<PositionRosterAssetHandlers>
 
 export function PositionRosterDetailPanel({
@@ -170,6 +173,7 @@ export function PositionRosterDetailPanel({
   haveLinkIndexByRef,
   activeHaveCell = null,
   highlightedHaveRef = null,
+  haveLinkPickMode,
 }: PositionRosterDetailPanelProps) {
   const assetsHandlersReady = Boolean(
     onAssignAsset &&
@@ -183,6 +187,9 @@ export function PositionRosterDetailPanel({
 
   return (
     <div className="space-y-3">
+      {haveLinkPickMode ? (
+        <HaveLinkPositionDetailPick pickMode={haveLinkPickMode} entry={entry} />
+      ) : null}
       <div className="space-y-1.5">
         {hidePositionTitle ? null : (
           <>

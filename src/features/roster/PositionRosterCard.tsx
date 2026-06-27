@@ -126,6 +126,7 @@ type PositionRosterCardProps = {
   haveLinkIndexByRef?: import('@/features/roster/PositionRosterAssignmentSections').PositionRosterUnifiedAssignmentSectionsProps['haveLinkIndexByRef']
   activeHaveCell?: import('@/features/roster/PositionRosterAssignmentSections').PositionRosterUnifiedAssignmentSectionsProps['activeHaveCell']
   highlightedHaveRef?: import('@/features/roster/PositionRosterAssignmentSections').PositionRosterUnifiedAssignmentSectionsProps['highlightedHaveRef']
+  haveLinkPickMode?: import('@/features/ics215/have-link-pick-mode').HaveLinkPickMode
 } & Partial<PositionRosterAssetHandlers>
 
 export function PositionRosterCard({
@@ -201,6 +202,7 @@ export function PositionRosterCard({
   haveLinkIndexByRef,
   activeHaveCell = null,
   highlightedHaveRef = null,
+  haveLinkPickMode,
 }: PositionRosterCardProps) {
   const [orgModalOpen, setOrgModalOpen] = useState(false)
   const isOrg = variant === 'org'
@@ -265,6 +267,7 @@ export function PositionRosterCard({
     haveLinkIndexByRef,
     activeHaveCell,
     highlightedHaveRef,
+    haveLinkPickMode,
   }
 
   if (isOrg) {

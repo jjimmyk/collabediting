@@ -128,6 +128,7 @@ type WorkspacePositionRosterTableProps = {
   haveLinkIndexByRef?: PositionRosterUnifiedAssignmentSectionsProps['haveLinkIndexByRef']
   activeHaveCell?: PositionRosterUnifiedAssignmentSectionsProps['activeHaveCell']
   highlightedHaveRef?: PositionRosterUnifiedAssignmentSectionsProps['highlightedHaveRef']
+  haveLinkPickMode?: import('@/features/ics215/have-link-pick-mode').HaveLinkPickMode
   assignmentSectionsLayout?: import('@/features/roster/PositionRosterAssignmentSections').PositionAssignmentSectionsLayout
 } & Partial<PositionRosterAssetHandlers>
 
@@ -289,6 +290,7 @@ export function WorkspacePositionRosterTable({
   haveLinkIndexByRef,
   activeHaveCell = null,
   highlightedHaveRef = null,
+  haveLinkPickMode,
   assignmentSectionsLayout = 'stacked',
 }: WorkspacePositionRosterTableProps) {
   const tableColumnCount =
@@ -693,6 +695,7 @@ export function WorkspacePositionRosterTable({
                   haveLinkIndexByRef={haveLinkIndexByRef}
                   activeHaveCell={activeHaveCell}
                   highlightedHaveRef={highlightedHaveRef}
+                  haveLinkPickMode={haveLinkPickMode}
                   canRemoveFromRoster={canRemovePositionFromRoster?.(managedEntry) ?? false}
                   removalBlockedReason={positionRemovalBlockedReason?.(managedEntry) ?? null}
                   isRemovingFromRoster={isDeletingCustomPosition === managedEntry.position}

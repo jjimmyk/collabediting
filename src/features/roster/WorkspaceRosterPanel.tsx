@@ -66,4 +66,5 @@ export type HaveLinkRosterPanelRenderer = (context: {
   activeHaveCell: { rowId: number; columnId: string } | null
   highlightedHaveRef: string | null
   presentation: HaveLinkRosterPresentation
+  haveLinkPickMode?: import('@/features/ics215/have-link-pick-mode').HaveLinkPickMode
 }) => React.ReactNode

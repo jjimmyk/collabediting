@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildHaveLinkPositionTree,
+  buildHaveLinkPositionNodeForEntry,
   filterHaveLinkPositionTree,
   getAssignedToPositionChildren,
   getHaveLinkSelectableRefs,
@@ -199,5 +200,15 @@ describe('build-have-link-position-tree', () => {
     const filtered = filterHaveLinkPositionTree(tree, 'Division Alpha')
     expect(filtered.positions).toHaveLength(1)
     expect(filtered.positions[0]?.position).toBe('Division Alpha')
+  })
+
+  it('buildHaveLinkPositionNodeForEntry returns a single-position slice', () => {
+    const node = buildHaveLinkPositionNodeForEntry({
+      entry: activePosition,
+      positionEntries: [activePosition],
+      roster: [member, scheduledMember],
+    })
+    expect(node?.position).toBe('Division Alpha')
+    expect(node?.children.some((child) => child.section === 'people')).toBe(true)
   })
 })

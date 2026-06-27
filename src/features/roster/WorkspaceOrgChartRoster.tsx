@@ -16,6 +16,13 @@ import {
 import type { PositionRosterUnifiedAssignmentSectionsProps, PositionAssignmentSectionsLayout } from '@/features/roster/PositionRosterAssignmentSections'
 import { OrgChartCollapsibleAssetCard } from '@/features/roster/OrgChartCollapsibleAssetCard'
 import { OrgChartNodeDetailDialog } from '@/features/roster/OrgChartNodeDetailDialog'
+import { HaveLinkSingleRefDetailPick } from '@/features/ics215/HaveLinkDetailPickSection'
+import type { HaveLinkPickMode } from '@/features/ics215/have-link-pick-mode'
+import {
+  lookupHaveLinkLocation,
+  resolveOrgChartAssetHaveRef,
+  resolveSingleResourceHaveRef,
+} from '@/features/roster/resolve-roster-have-ref'
 import { RosterAssetResourceListItem } from '@/features/roster/RosterAssetResourceListItem'
 import { SingleResourceDetailPanel } from '@/features/roster/SingleResourceDetailPanel'
 import {
@@ -175,6 +182,7 @@ type WorkspaceOrgChartRosterProps = {
   haveLinkIndexByRef?: PositionRosterUnifiedAssignmentSectionsProps['haveLinkIndexByRef']
   activeHaveCell?: PositionRosterUnifiedAssignmentSectionsProps['activeHaveCell']
   highlightedHaveRef?: PositionRosterUnifiedAssignmentSectionsProps['highlightedHaveRef']
+  haveLinkPickMode?: HaveLinkPickMode
   assignmentSectionsLayout?: PositionAssignmentSectionsLayout
   isProjected?: boolean
   rosterTimeHorizon?: OrgChartExportScope
@@ -288,6 +296,7 @@ type OrgChartRenderProps = {
   haveLinkIndexByRef?: PositionRosterUnifiedAssignmentSectionsProps['haveLinkIndexByRef']
   activeHaveCell?: PositionRosterUnifiedAssignmentSectionsProps['activeHaveCell']
   highlightedHaveRef?: PositionRosterUnifiedAssignmentSectionsProps['highlightedHaveRef']
+  haveLinkPickMode?: HaveLinkPickMode
 }
 
 function isSubordinateRowChild(node: OrgChartNode): boolean {
@@ -619,6 +628,7 @@ function PositionNode({
   haveLinkIndexByRef,
   activeHaveCell = null,
   highlightedHaveRef = null,
+  haveLinkPickMode,
   isProjected = false,
   rosterTimeHorizon = 'current_op',
   managementEntriesByPosition,
@@ -712,6 +722,7 @@ function PositionNode({
     haveLinkIndexByRef,
     activeHaveCell,
     highlightedHaveRef,
+    haveLinkPickMode,
   }
 
   const canRemove =
@@ -815,6 +826,7 @@ function PositionNode({
             haveLinkIndexByRef={haveLinkIndexByRef}
             activeHaveCell={activeHaveCell}
             highlightedHaveRef={highlightedHaveRef}
+            haveLinkPickMode={haveLinkPickMode}
           />
         </OrgChartCardAnchor>
       ) : (
@@ -899,6 +911,7 @@ function PositionNode({
           haveLinkIndexByRef={haveLinkIndexByRef}
           activeHaveCell={activeHaveCell}
           highlightedHaveRef={highlightedHaveRef}
+          haveLinkPickMode={haveLinkPickMode}
         />
       )}
       {!suppressChildren ? (
@@ -1276,6 +1289,7 @@ export function WorkspaceOrgChartRoster({
   haveLinkIndexByRef,
   activeHaveCell = null,
   highlightedHaveRef = null,
+  haveLinkPickMode,
 }: WorkspaceOrgChartRosterProps) {
   const [selectedAssetKey, setSelectedAssetKey] = useState<string | null>(null)
   const [selectedSingleResourceMemberId, setSelectedSingleResourceMemberId] = useState<string | null>(
@@ -1406,6 +1420,7 @@ export function WorkspaceOrgChartRoster({
     haveLinkIndexByRef,
     activeHaveCell,
     highlightedHaveRef,
+    haveLinkPickMode,
   }
 
   const wideRenderProps: OrgChartWideRenderProps = {
@@ -1511,11 +1526,27 @@ export function WorkspaceOrgChartRoster({
           if (!open) setSelectedAssetKey(null)
         }}
         title={selectedAsset?.name ?? 'Org chart asset'}
-        description="Org chart asset details"
+        description={
+          haveLinkPickMode
+            ? `Link items to Have — ${haveLinkPickMode.columnLabel}`
+            : 'Org chart asset details'
+        }
         contentClassName={ORG_CHART_ASSET_DETAIL_MODAL_CLASS}
       >
         {selectedAsset ? (
-          <RosterAssetResourceListItem
+          <>
+            {haveLinkPickMode ? (
+              <HaveLinkSingleRefDetailPick
+                pickMode={haveLinkPickMode}
+                ref={resolveOrgChartAssetHaveRef(
+                  selectedAsset.assetKey,
+                  haveLinkPickMode.roster,
+                  haveLinkPickMode.assetsByKey
+                )}
+                label={selectedAsset.name}
+              />
+            ) : null}
+            <RosterAssetResourceListItem
             asset={{
               assetKey: selectedAsset.assetKey,
               name: selectedAsset.name,
@@ -1582,7 +1613,23 @@ export function WorkspaceOrgChartRoster({
                   }
                 : undefined
             }
+            haveLinkLocation={lookupHaveLinkLocation(
+              haveLinkIndexByRef,
+              resolveOrgChartAssetHaveRef(
+                selectedAsset.assetKey,
+                workspaceRosterMembers,
+                assetsByKey
+              )
+            )}
+            activeHaveCell={activeHaveCell}
+            highlightedHaveRef={highlightedHaveRef}
+            assetHaveRef={resolveOrgChartAssetHaveRef(
+              selectedAsset.assetKey,
+              workspaceRosterMembers,
+              assetsByKey
+            )}
           />
+          </>
         ) : null}
       </OrgChartNodeDetailDialog>
 
@@ -1592,10 +1639,22 @@ export function WorkspaceOrgChartRoster({
           if (!open) setSelectedSingleResourceMemberId(null)
         }}
         title={selectedSingleResourceMember?.email ?? 'Single resource'}
-        description="Single resource assigned on the org chart"
+        description={
+          haveLinkPickMode
+            ? `Link items to Have — ${haveLinkPickMode.columnLabel}`
+            : 'Single resource assigned on the org chart'
+        }
       >
         {selectedSingleResourceMember ? (
-          <SingleResourceDetailPanel
+          <>
+            {haveLinkPickMode ? (
+              <HaveLinkSingleRefDetailPick
+                pickMode={haveLinkPickMode}
+                ref={resolveSingleResourceHaveRef(selectedSingleResourceMember)}
+                label={selectedSingleResourceMember.email}
+              />
+            ) : null}
+            <SingleResourceDetailPanel
             member={selectedSingleResourceMember}
             scheduled={Boolean(selectedSingleResourceMember.pendingOrgChartReportsTo)}
             canManage={canManageRoster}
@@ -1639,6 +1698,7 @@ export function WorkspaceOrgChartRoster({
                 : undefined
             }
           />
+          </>
         ) : null}
       </OrgChartNodeDetailDialog>
         </>

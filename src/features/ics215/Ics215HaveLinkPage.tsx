@@ -40,6 +40,7 @@ import type { WorkAssignmentTargetOption } from '@/lib/work-assignment-target-op
 import type { PositionRosterEntry } from '@/features/roster/workspace-position-roster'
 import type { WorkspaceRosterMember } from '@/lib/workspace-types'
 import type { HaveLinkRosterActions } from '@/features/ics215/have-link-roster-actions'
+import type { HaveLinkPickMode } from '@/features/ics215/have-link-pick-mode'
 import type { HaveLinkRosterPanelRenderer } from '@/features/roster/WorkspaceRosterPanel'
 import {
   WorkspaceRosterToolbar,
@@ -371,6 +372,45 @@ export function Ics215HaveLinkPage({
   const showFullRosterPane =
     viewFullRoster && Boolean(renderRosterPanel) && Boolean(rosterWorkspaceControls)
 
+  const haveLinkPickMode = useMemo((): HaveLinkPickMode | undefined => {
+    if (!open || !viewFullRoster || !activeHaveCell) return undefined
+    return {
+      columnLabel,
+      selectedRefs,
+      linkedToThisCellRefs,
+      linkedRefLocations,
+      activeHaveCell,
+      onToggleRef: handleToggleRef,
+      onTogglePositionRefs: handleTogglePositionRefs,
+      onUnlinkFromOtherCell: onUnlinkFromOtherCell,
+      highlightedHaveRef,
+      onHighlightRef: setHighlightedHaveRef,
+      optionByValue,
+      rosterActions,
+      positionRosterEntries,
+      roster,
+      assetsByKey,
+      showPositionAssets,
+    }
+  }, [
+    open,
+    viewFullRoster,
+    activeHaveCell,
+    columnLabel,
+    selectedRefs,
+    linkedToThisCellRefs,
+    linkedRefLocations,
+    handleToggleRef,
+    highlightedHaveRef,
+    optionByValue,
+    rosterActions,
+    positionRosterEntries,
+    roster,
+    assetsByKey,
+    showPositionAssets,
+    onUnlinkFromOtherCell,
+  ])
+
   const fullRosterBlock =
     showFullRosterPane && rosterWorkspaceControls && renderRosterPanel ? (
       <div className="space-y-3 rounded-md border bg-muted/5 p-3">
@@ -393,6 +433,7 @@ export function Ics215HaveLinkPage({
           recenterToken: rosterWorkspaceControls.recenterToken,
           activeHaveCell: activeHaveCell ?? null,
           highlightedHaveRef,
+          haveLinkPickMode,
         })}
       </div>
     ) : null

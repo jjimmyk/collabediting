@@ -26,21 +26,21 @@ export function createHaveLinkRosterPanelRenderer(
           recenterToken={ctx.recenterToken}
           wrapOrgChartLiveRoot={isFull}
           className={isFull ? 'min-h-0 flex-1' : undefined}
-          zoomContainerClassName={
-            isFull ? 'min-h-[32vh] flex-1 rounded-md border' : 'max-h-[26rem] min-h-0'
-          }
+          zoomContainerClassName={isFull ? 'min-h-[32vh] flex-1' : 'max-h-[26rem] min-h-0'}
           orgChartProps={{
             ...orgChartProps,
             zoom: ctx.zoom,
             haveLinkIndexByRef: orgChartProps.haveLinkIndexByRef,
             activeHaveCell: ctx.activeHaveCell,
             highlightedHaveRef: ctx.highlightedHaveRef,
+            haveLinkPickMode: ctx.haveLinkPickMode,
           }}
           tableProps={{
             ...tableProps,
             haveLinkIndexByRef: tableProps.haveLinkIndexByRef,
             activeHaveCell: ctx.activeHaveCell,
             highlightedHaveRef: ctx.highlightedHaveRef,
+            haveLinkPickMode: ctx.haveLinkPickMode,
           }}
         />
       </div>

@@ -53,6 +53,14 @@ export function resolveOrgChartAssetHaveRef(
   }).value
 }
 
+export function resolveSingleResourceHaveRef(member: WorkspaceRosterMember): string {
+  return buildWorkAssignmentTarget({
+    type: 'single_resource',
+    memberId: member.id,
+    roster: [member],
+  }).value
+}
+
 export function lookupHaveLinkLocation(
   index: Map<string, Ics215HaveLinkLocation> | undefined,
   ref: string

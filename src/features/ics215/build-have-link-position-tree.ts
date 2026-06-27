@@ -632,3 +632,17 @@ export function collectRefsFromPositionTree(tree: HaveLinkPositionTree): Set<str
   for (const child of tree.orgChartAssets) refs.add(child.ref)
   return refs
 }
+
+/** Single-position slice of the Have link position tree for detail modals. */
+export function buildHaveLinkPositionNodeForEntry(
+  args: BuildHaveLinkPositionTreeInput & {
+    entry: PositionRosterEntry
+  }
+): HaveLinkPositionTreeNode | null {
+  const { entry, ...treeArgs } = args
+  const tree = buildHaveLinkPositionTree({
+    ...treeArgs,
+    positionEntries: [entry],
+  })
+  return tree.positions[0] ?? null
+}
