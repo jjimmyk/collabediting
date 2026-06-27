@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ChevronDown, Pencil, Trash2 } from 'lucide-react'
+import { Check, ChevronDown, Pencil, Sparkles, Trash2, X } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -20,9 +20,6 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
-import {
-  Ics202SectionEditActions,
-} from '@/features/ics202/Ics202SectionToolbar'
 import { formatIcs202SourceLabel } from '@/features/ics234/sync-ics202-objectives'
 import type {
   Ics234MatrixItemDraft,
@@ -39,10 +36,6 @@ function strategyKey(objectiveId: number, strategyId: number) {
   return `${objectiveId}-${strategyId}`
 }
 
-function tacticKey(objectiveId: number, strategyId: number, tacticId: number) {
-  return `${objectiveId}-${strategyId}-${tacticId}`
-}
-
 function displayName(name: string, fallback: string) {
   const trimmed = name.trim()
   return trimmed || fallback
@@ -52,6 +45,7 @@ type InlineNameFieldProps = {
   name: string
   editing: boolean
   placeholder: string
+  readOnly?: boolean
   onChange: (name: string) => void
   className?: string
 }
@@ -60,10 +54,11 @@ function InlineNameField({
   name,
   editing,
   placeholder,
+  readOnly = false,
   onChange,
   className,
 }: InlineNameFieldProps) {
-  if (editing) {
+  if (editing && !readOnly) {
     return (
       <input
         value={name}
@@ -126,7 +121,6 @@ export function Ics234WorkAnalysisMatrix({
 }: Ics234WorkAnalysisMatrixProps) {
   const [expandedObjectiveId, setExpandedObjectiveId] = useState<number | null>(null)
   const [expandedStrategyKey, setExpandedStrategyKey] = useState<string | null>(null)
-  const [expandedTacticKey, setExpandedTacticKey] = useState<string | null>(null)
 
   const canMutate = canEdit && !formIsLocked
 
@@ -140,19 +134,59 @@ export function Ics234WorkAnalysisMatrix({
     return fallback
   }
 
-  const renderItemEditActions = (ref: Ics234MatrixItemRef) => (
-    <Ics202SectionEditActions
-      isEditing={isEditingRef(ref)}
-      isSaving={isSaving}
-      generateLabel="Generate"
-      onGenerate={() => onGenerateItem(ref)}
-      onCancel={onCancelItemEdit}
-      onSave={onSaveItem}
-    />
-  )
+  const renderItemEditControl = (
+    ref: Ics234MatrixItemRef,
+    itemLabel: string,
+    options?: { disabled?: boolean }
+  ) => {
+    if (!canMutate || options?.disabled) {
+      return null
+    }
 
-  const renderEditPencil = (ref: Ics234MatrixItemRef, itemLabel: string) =>
-    canMutate && !isEditingRef(ref) ? (
+    const editing = isEditingRef(ref)
+
+    if (editing) {
+      return (
+        <div
+          className="flex shrink-0 items-center gap-1"
+          onClick={(event) => event.stopPropagation()}
+        >
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-7 gap-1 px-2 text-xs"
+            onClick={() => onGenerateItem(ref)}
+          >
+            <Sparkles className="h-3.5 w-3.5" />
+            Generate
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            className="h-7 gap-1 px-2 text-xs"
+            disabled={isSaving}
+            onClick={onCancelItemEdit}
+          >
+            <X className="h-3.5 w-3.5" />
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            className="h-7 gap-1 bg-blue-600 px-2 text-xs text-white hover:bg-blue-700"
+            disabled={isSaving}
+            onClick={onSaveItem}
+          >
+            <Check className="h-3.5 w-3.5" />
+            Save
+          </Button>
+        </div>
+      )
+    }
+
+    return (
       <Button
         type="button"
         variant="ghost"
@@ -170,15 +204,13 @@ export function Ics234WorkAnalysisMatrix({
           } else {
             setExpandedObjectiveId(ref.objectiveId)
             setExpandedStrategyKey(strategyKey(ref.objectiveId, ref.strategyId))
-            setExpandedTacticKey(
-              tacticKey(ref.objectiveId, ref.strategyId, ref.tacticId)
-            )
           }
         }}
       >
         <Pencil className="h-4 w-4" />
       </Button>
-    ) : null
+    )
+  }
 
   const renderTactic = (
     objective: Ics234ObjectiveRow,
@@ -192,77 +224,45 @@ export function Ics234WorkAnalysisMatrix({
       strategyId: strategy.id,
       tacticId: tactic.id,
     }
-    const key = tacticKey(objective.id, strategy.id, tactic.id)
-    const isOpen = expandedTacticKey === key
     const editing = isEditingRef(ref)
     const name = draftName(ref, tactic.name)
     const placeholder = `Tactic ${tacticIndex + 1}`
 
     return (
-      <Collapsible
+      <div
         key={tactic.id}
-        open={isOpen}
-        onOpenChange={(open) => setExpandedTacticKey(open ? key : null)}
-        className="rounded-md border"
+        className="flex items-center gap-2 rounded-md border px-2 py-1.5"
       >
-        <div
-          className="flex cursor-pointer items-center justify-between gap-2 px-2 py-1.5"
-          onClick={() =>
-            setExpandedTacticKey((previous) => (previous === key ? null : key))
-          }
-        >
+        <div className="min-w-0 flex-1">
           <InlineNameField
             name={name}
             editing={editing}
             placeholder={placeholder}
             onChange={(next) => onPatchItemDraft({ kind: 'tactic', name: next })}
-            className="flex-1"
           />
-          <div className="flex shrink-0 items-center gap-1.5">
-            <Badge variant="outline" className="text-xs">
-              Tactic
-            </Badge>
-            {renderEditPencil(ref, 'tactic')}
-            {canMutate && !editing ? (
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                aria-label="Delete tactic"
-                className="h-8 w-8 text-destructive hover:text-destructive"
-                onClick={(event) => {
-                  event.stopPropagation()
-                  onDeleteTactic(objective.id, strategy.id, tactic.id)
-                  if (expandedTacticKey === key) {
-                    setExpandedTacticKey(null)
-                  }
-                }}
-              >
-                <Trash2 className="h-4 w-4" />
-              </Button>
-            ) : null}
-            <CollapsibleTrigger asChild>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8"
-                aria-label="Toggle tactic details"
-                onClick={(event) => event.stopPropagation()}
-              >
-                <ChevronDown
-                  className={cn('h-4 w-4 transition-transform', isOpen && 'rotate-180')}
-                />
-              </Button>
-            </CollapsibleTrigger>
-          </div>
         </div>
-        {editing ? (
-          <CollapsibleContent>
-            <div className="border-t px-2 py-1.5">{renderItemEditActions(ref)}</div>
-          </CollapsibleContent>
-        ) : null}
-      </Collapsible>
+        <div className="flex shrink-0 items-center gap-1.5">
+          <Badge variant="outline" className="text-xs">
+            Tactic
+          </Badge>
+          {renderItemEditControl(ref, 'tactic')}
+          {canMutate && !editing ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              aria-label="Delete tactic"
+              className="h-8 w-8 text-destructive hover:text-destructive"
+              onClick={(event) => {
+                event.stopPropagation()
+                onDeleteTactic(objective.id, strategy.id, tactic.id)
+              }}
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          ) : null}
+        </div>
+      </div>
     )
   }
 
@@ -289,24 +289,26 @@ export function Ics234WorkAnalysisMatrix({
         onOpenChange={(open) => setExpandedStrategyKey(open ? key : null)}
         className="rounded-md border"
       >
-        <div
-          className="flex cursor-pointer items-center justify-between gap-2 px-2 py-1.5"
-          onClick={() =>
-            setExpandedStrategyKey((previous) => (previous === key ? null : key))
-          }
-        >
-          <InlineNameField
-            name={name}
-            editing={editing}
-            placeholder={placeholder}
-            onChange={(next) => onPatchItemDraft({ kind: 'strategy', name: next })}
-            className="flex-1"
-          />
+        <div className="flex items-center gap-2 px-2 py-1.5">
+          <div
+            className="flex min-w-0 flex-1 cursor-pointer items-center gap-2"
+            onClick={() =>
+              setExpandedStrategyKey((previous) => (previous === key ? null : key))
+            }
+          >
+            <InlineNameField
+              name={name}
+              editing={editing}
+              placeholder={placeholder}
+              onChange={(next) => onPatchItemDraft({ kind: 'strategy', name: next })}
+              className="flex-1"
+            />
+          </div>
           <div className="flex shrink-0 items-center gap-1.5">
             <Badge variant="outline" className="text-xs">
               Strategy
             </Badge>
-            {renderEditPencil(ref, 'strategy')}
+            {renderItemEditControl(ref, 'strategy')}
             {canMutate && !editing ? (
               <Button
                 type="button"
@@ -377,7 +379,6 @@ export function Ics234WorkAnalysisMatrix({
                 )}
               </div>
             )}
-            {renderItemEditActions(ref)}
           </div>
         </CollapsibleContent>
       </Collapsible>
@@ -424,19 +425,20 @@ export function Ics234WorkAnalysisMatrix({
                 open={isOpen}
                 onOpenChange={(open) => setExpandedObjectiveId(open ? objective.id : null)}
               >
-                <div
-                  className="flex cursor-pointer items-center gap-2 px-3 py-2.5"
-                  onClick={() =>
-                    setExpandedObjectiveId((previous) =>
-                      previous === objective.id ? null : objective.id
-                    )
-                  }
-                >
-                  <ItemContent className="min-w-0 flex-1">
+                <div className="flex items-center gap-2 px-3 py-2.5">
+                  <ItemContent
+                    className="min-w-0 flex-1 cursor-pointer"
+                    onClick={() =>
+                      setExpandedObjectiveId((previous) =>
+                        previous === objective.id ? null : objective.id
+                      )
+                    }
+                  >
                     <ItemTitle className="line-clamp-none w-full font-medium">
                       <InlineNameField
                         name={name}
                         editing={editing}
+                        readOnly={isLinkedToIcs202}
                         placeholder={placeholder}
                         onChange={(next) =>
                           onPatchItemDraft({ kind: 'objective', name: next })
@@ -460,8 +462,12 @@ export function Ics234WorkAnalysisMatrix({
                           </TooltipContent>
                         </Tooltip>
                       </TooltipProvider>
-                    ) : null}
-                    {!isLinkedToIcs202 ? renderEditPencil(ref, 'objective') : null}
+                    ) : (
+                      <Badge variant="secondary" className="text-xs">
+                        Operational
+                      </Badge>
+                    )}
+                    {renderItemEditControl(ref, 'objective', { disabled: isLinkedToIcs202 })}
                     {canMutate && !editing && !isLinkedToIcs202 ? (
                       <Button
                         type="button"
@@ -536,7 +542,6 @@ export function Ics234WorkAnalysisMatrix({
                         </div>
                       )}
                     </div>
-                    {renderItemEditActions(ref)}
                   </div>
                 </CollapsibleContent>
               </Collapsible>
