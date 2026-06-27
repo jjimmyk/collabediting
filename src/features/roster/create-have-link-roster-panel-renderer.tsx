@@ -24,7 +24,6 @@ export function createHaveLinkRosterPanelRenderer(
           zoom={ctx.zoom}
           onZoomChange={ctx.onZoomChange}
           recenterToken={ctx.recenterToken}
-          showViewToggle={false}
           wrapOrgChartLiveRoot={isFull}
           className={isFull ? 'min-h-0 flex-1' : undefined}
           zoomContainerClassName={
