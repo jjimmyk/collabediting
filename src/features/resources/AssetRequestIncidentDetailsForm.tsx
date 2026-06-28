@@ -1,3 +1,4 @@
+import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import {
   Select,
@@ -7,7 +8,10 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Ics213rrFieldRow, Ics213rrNumberedBox } from '@/features/resources/ics-213rr-form-layout'
-import type { CreateResourceRequestInput } from '@/lib/ics-213rr-resource-request'
+import type {
+  AssetRequestWorkspaceContext,
+  CreateResourceRequestInput,
+} from '@/lib/ics-213rr-resource-request'
 
 export type ResourceRequestIncidentOption = {
   name: string
@@ -19,6 +23,7 @@ type AssetRequestIncidentDetailsFormProps = {
   onChange: (next: CreateResourceRequestInput) => void
   incidentOptions?: ResourceRequestIncidentOption[]
   previewRequestNumber: string
+  workspaceContext?: AssetRequestWorkspaceContext | null
   idPrefix?: string
 }
 
@@ -27,6 +32,7 @@ export function AssetRequestIncidentDetailsForm({
   onChange,
   incidentOptions = [],
   previewRequestNumber,
+  workspaceContext = null,
   idPrefix = 'asset-request-incident',
 }: AssetRequestIncidentDetailsFormProps) {
   const patch = (patchValue: Partial<CreateResourceRequestInput>) => {
@@ -41,11 +47,32 @@ export function AssetRequestIncidentDetailsForm({
     })
   }
 
+  const isWorkspaceLocked = workspaceContext != null
+
   return (
     <Ics213rrNumberedBox title="Incident details">
+      {isWorkspaceLocked ? (
+        <div className="mb-3 flex items-center gap-2">
+          <Badge variant="outline" className="text-[10px]">
+            {workspaceContext.workspaceKind === 'exercise'
+              ? 'Exercise workspace'
+              : 'Incident workspace'}
+          </Badge>
+          <p className="text-[11px] text-muted-foreground">
+            Linked to this workspace; incident name cannot be changed.
+          </p>
+        </div>
+      ) : null}
       <div className="grid gap-3 md:grid-cols-3">
         <Ics213rrFieldRow label="1. Incident name" htmlFor={`${idPrefix}-incident-name`}>
-          {incidentOptions.length > 0 ? (
+          {isWorkspaceLocked ? (
+            <Input
+              id={`${idPrefix}-incident-name`}
+              value={workspaceContext.workspaceName}
+              readOnly
+              className="h-9 bg-muted/40 text-xs"
+            />
+          ) : incidentOptions.length > 0 ? (
             <Select
               value={value.incidentName || undefined}
               onValueChange={(next) => applyIncidentSelection(next)}

@@ -167,7 +167,10 @@ import {
   getResourceRequestPrioritySummary,
   getResourceRequestSearchValues,
   getResourceRequestTotalQuantity,
+  getPendingTransferConfirmations,
   printResourceRequestPdf,
+  type AssetRequestWorkspaceContext,
+  type AssetTransferResolveAsset,
   type CreateResourceRequestInput,
   type ResourceRequestItem,
 } from '@/lib/ics-213rr-resource-request'
@@ -8747,6 +8750,10 @@ function App() {
     [assetPendingOrgChartByKey, workspaceAssignedAssets]
   )
   const unassignedHubAssets = useMemo(() => getUnassignedHubAssets(hubAssets), [hubAssets])
+  const assetRequestResolveAsset = useCallback<AssetTransferResolveAsset>(
+    (assetKey) => hubAssets.find((asset) => asset.assetKey === assetKey) ?? null,
+    [hubAssets]
+  )
   const orgAssetIdsByKey = useMemo(
     () => Object.fromEntries(organizationAssets.map((asset) => [asset.assetKey, asset.id])),
     [organizationAssets]
@@ -8850,13 +8857,78 @@ function App() {
         setOrganizationAssetRequests((previous) => [...previous, result.request])
         setResourcesPanelView('resource-requests')
         setOpenResourceRequestPreviewId(result.request.id)
-        toast.success(`Asset request ${result.request.requestNumber} created.`)
+        if (input.sourceWorkspaceId) {
+          toast.success(
+            `Asset request ${result.request.requestNumber} created. Review transfers and click Apply Transfers when ready.`
+          )
+        } else {
+          toast.success(`Asset request ${result.request.requestNumber} created.`)
+        }
         return true
       } finally {
         setIsCreatingAssetRequest(false)
       }
     },
     [activeOrganizationId, getAccessToken, organizationAssetRequests]
+  )
+  const handleApplyAssetRequestTransfers = useCallback(
+    async (request: ResourceRequestItem) => {
+      if (!request.sourceWorkspaceId) {
+        toast.error('This asset request is not linked to a workspace.')
+        return
+      }
+
+      const pending = getPendingTransferConfirmations(request, assetRequestResolveAsset)
+      if (pending.length === 0) {
+        toast.message('No pending asset transfers for this request.')
+        return
+      }
+
+      setIsApplyingAssetRequestTransfers(true)
+      setApplyingAssetRequestTransferId(request.id)
+      try {
+        const results = await Promise.allSettled(
+          pending.map((confirmation) =>
+            assignAsset(confirmation.assetKey, request.sourceWorkspaceId!)
+          )
+        )
+        const succeeded = results.filter((result) => result.status === 'fulfilled').length
+        const failed = results.length - succeeded
+        const appliedAt = new Date().toISOString()
+
+        setOrganizationAssetRequests((previous) =>
+          previous.map((entry) => {
+            if (entry.id !== request.id) return entry
+            return {
+              ...entry,
+              assetTransferConfirmations: entry.assetTransferConfirmations?.map((confirmation) =>
+                pending.some((pendingEntry) => pendingEntry.assetKey === confirmation.assetKey)
+                  ? { ...confirmation, appliedAt }
+                  : confirmation
+              ),
+            }
+          })
+        )
+
+        if (failed === 0) {
+          toast.success(
+            succeeded === 1
+              ? '1 asset transferred to workspace.'
+              : `${succeeded} assets transferred to workspace.`
+          )
+        } else {
+          toast.error(`${succeeded} transferred, ${failed} failed. Retry Apply Transfers for remaining assets.`)
+        }
+      } catch (error) {
+        toast.error(
+          error instanceof Error ? error.message : 'Could not apply asset transfers.'
+        )
+      } finally {
+        setIsApplyingAssetRequestTransfers(false)
+        setApplyingAssetRequestTransferId(null)
+      }
+    },
+    [assetRequestResolveAsset, assignAsset]
   )
   const handleUpdateOrganizationAsset = useCallback(
     async (resource: ResourceListItemData) => {
@@ -8952,6 +9024,10 @@ function App() {
   const [isAddWorkspaceAssetOpen, setIsAddWorkspaceAssetOpen] = useState(false)
   const [isCreatingOrganizationAsset, setIsCreatingOrganizationAsset] = useState(false)
   const [isCreatingAssetRequest, setIsCreatingAssetRequest] = useState(false)
+  const [isApplyingAssetRequestTransfers, setIsApplyingAssetRequestTransfers] = useState(false)
+  const [applyingAssetRequestTransferId, setApplyingAssetRequestTransferId] = useState<
+    number | null
+  >(null)
   const [isSavingAssetOrgChartPlacement, setIsSavingAssetOrgChartPlacement] = useState(false)
   const [isSavingCustomPosition, setIsSavingCustomPosition] = useState(false)
   const [updatingCustomPositionName, setUpdatingCustomPositionName] = useState<string | null>(null)
@@ -10903,7 +10979,22 @@ function App() {
       (field) => getResourceItemFieldValue(item, field)
     )
   })
-  const cardFilteredResourceRequests = resourceRequests.filter((item) => {
+  const scopedResourceRequests = useMemo(() => {
+    const inWorkspace =
+      activeIncidentWorkspaceId !== null || activeExerciseWorkspaceId !== null
+    if (inWorkspace && activeWorkspaceSupabaseId) {
+      return resourceRequests.filter(
+        (item) => item.sourceWorkspaceId === activeWorkspaceSupabaseId
+      )
+    }
+    return resourceRequests
+  }, [
+    activeExerciseWorkspaceId,
+    activeIncidentWorkspaceId,
+    activeWorkspaceSupabaseId,
+    resourceRequests,
+  ])
+  const cardFilteredResourceRequests = scopedResourceRequests.filter((item) => {
     if (activePanelSearchQuery) {
       const matchesSearch = getResourceRequestSearchValues(item)
         .toLowerCase()
@@ -12001,6 +12092,25 @@ function App() {
       : undefined
   const activeWorkspaceRosterLabel =
     activeIncidentWorkspace?.name ?? activeExerciseWorkspace?.name ?? 'Workspace'
+  const assetRequestWorkspaceContext = useMemo((): AssetRequestWorkspaceContext | null => {
+    if (!isInWorkspaceContext || !activeWorkspaceSupabaseId) return null
+    const mapLocation =
+      activeIncidentWorkspace?.location ?? activeExerciseWorkspace?.location ?? null
+    return {
+      workspaceId: activeWorkspaceSupabaseId,
+      workspaceKind: isInIncidentWorkspace ? 'incident' : 'exercise',
+      workspaceName: activeWorkspaceRosterLabel,
+      mapLocation,
+    }
+  }, [
+    activeExerciseWorkspace?.location,
+    activeIncidentWorkspace?.location,
+    activeWorkspaceRosterLabel,
+    activeWorkspaceSupabaseId,
+    isInExerciseWorkspace,
+    isInIncidentWorkspace,
+    isInWorkspaceContext,
+  ])
   useEffect(() => {
     setRosterZoomLevel(DEFAULT_ROSTER_ZOOM)
     setRosterRecenterToken((current) => current + 1)
@@ -27664,11 +27774,51 @@ function App() {
                 {activeTab === 'resources' && isInWorkspaceContext && (
                   <div className="flex flex-wrap items-center justify-end gap-2">
                     <AssetsTabToolbar
-                      panelView="resources"
+                      panelView={resourcesPanelView}
                       canManageAssets={effectiveCanManageRoster}
                       onAddAsset={() => setIsAddWorkspaceAssetOpen(true)}
-                      onCreateAssetRequest={() => undefined}
+                      onCreateAssetRequest={() => setIsCreateAssetRequestOpen(true)}
                     />
+                    {(resourcesPanelView === 'resources' ||
+                      resourcesPanelView === 'resource-requests') && (
+                      <div className="flex w-56 items-center gap-2 rounded-md border px-2 py-1.5">
+                        <Search className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                        <input
+                          value={resourcesSearchQuery}
+                          onChange={(event) => setResourcesSearchQuery(event.target.value)}
+                          placeholder={
+                            resourcesPanelView === 'resource-requests'
+                              ? 'Search asset requests'
+                              : 'Search assets'
+                          }
+                          aria-label={
+                            resourcesPanelView === 'resource-requests'
+                              ? 'Search asset requests'
+                              : 'Search assets'
+                          }
+                          className="w-full bg-transparent text-xs outline-none placeholder:text-muted-foreground"
+                        />
+                      </div>
+                    )}
+                    <ToggleGroup
+                      type="single"
+                      value={resourcesPanelView}
+                      onValueChange={(value) => {
+                        if (value === 'resources' || value === 'resource-requests') {
+                          setResourcesPanelView(value)
+                        }
+                      }}
+                      variant="outline"
+                      size="sm"
+                      aria-label="Assets panel view"
+                    >
+                      <ToggleGroupItem value="resources" className="px-2.5 text-xs">
+                        Assets
+                      </ToggleGroupItem>
+                      <ToggleGroupItem value="resource-requests" className="px-2.5 text-xs">
+                        Asset Requests
+                      </ToggleGroupItem>
+                    </ToggleGroup>
                   </div>
                 )}
                 {activeTab === 'aors' && (
@@ -28523,7 +28673,7 @@ function App() {
                   )
                 )}
 
-                {activeTab === 'resources' && isInWorkspaceContext && (
+                {activeTab === 'resources' && isInWorkspaceContext && resourcesPanelView === 'resources' && (
                   <WorkspaceAssignedAssetsPanel
                     assets={workspaceAssignedAssets}
                     unassignedAssets={unassignedHubAssets}
@@ -28755,12 +28905,16 @@ function App() {
                         <ItemTitle>
                           {normalizedResourcesSearchQuery
                             ? 'No matching asset requests'
-                            : 'No asset requests yet'}
+                            : isInWorkspaceContext
+                              ? 'No asset requests for this workspace'
+                              : 'No asset requests yet'}
                         </ItemTitle>
                         <ItemDescription>
                           {normalizedResourcesSearchQuery
                             ? 'Try a broader search term.'
-                            : 'Create an ICS 213RR asset request to track resource needs for an incident.'}
+                            : isInWorkspaceContext
+                              ? `Create an ICS 213RR asset request linked to ${activeWorkspaceRosterLabel}.`
+                              : 'Create an ICS 213RR asset request to track resource needs for an incident.'}
                         </ItemDescription>
                       </ItemContent>
                     </Item>
@@ -29016,7 +29170,17 @@ function App() {
                                   Export PDF
                                 </Button>
                               </div>
-                              <AssetRequestDetailPanel request={request} />
+                              <AssetRequestDetailPanel
+                                request={request}
+                                organizationAssets={hubAssets}
+                                workspaceOptions={assetWorkspaceOptions}
+                                resolveAsset={assetRequestResolveAsset}
+                                onApplyTransfers={handleApplyAssetRequestTransfers}
+                                isApplyingTransfers={
+                                  isApplyingAssetRequestTransfers &&
+                                  applyingAssetRequestTransferId === request.id
+                                }
+                              />
                             </div>
                           </CollapsibleContent>
                         </Collapsible>
@@ -38624,7 +38788,10 @@ function App() {
         existingRequests={organizationAssetRequests}
         organizationAssets={hubAssets}
         orgAssetIdsByKey={orgAssetIdsByKey}
+        workspaceOptions={assetWorkspaceOptions}
         glassItemBorderClasses={glassItemBorderClasses}
+        workspaceContext={assetRequestWorkspaceContext}
+        resolveAsset={assetRequestResolveAsset}
         onSubmit={handleCreateAssetRequest}
       />
       <AddWorkspaceAssetDialog

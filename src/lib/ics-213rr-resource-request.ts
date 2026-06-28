@@ -7,6 +7,27 @@ export type AssetRequestTransferRef = {
   type: string
 }
 
+export type AssetTransferConfirmation = {
+  assetKey: string
+  confirmed: boolean
+  previousWorkspaceId: string | null
+  targetWorkspaceId: string
+  appliedAt?: string | null
+}
+
+export type AssetRequestWorkspaceContext = {
+  workspaceId: string
+  workspaceKind: 'incident' | 'exercise'
+  workspaceName: string
+  mapLocation?: [number, number] | null
+}
+
+export type AssetTransferResolveAsset = (
+  assetKey: string
+) => { assignedWorkspaceId?: string | null } | null | undefined
+
+export type AssetTransferStatus = 'pending' | 'applied' | 'skipped' | 'already-assigned'
+
 export type AssetRequestLineItem = {
   id: string
   quantity: number
@@ -76,6 +97,10 @@ export type ResourceRequestItem = {
   financeApprovalPosition: string
   financeApprovalSignature: string
   financeApprovalDateTime: string
+  sourceWorkspaceId?: string
+  sourceWorkspaceKind?: 'incident' | 'exercise'
+  sourceWorkspaceName?: string
+  assetTransferConfirmations?: AssetTransferConfirmation[]
 }
 
 export type DocxBlock =
@@ -357,7 +382,46 @@ export function normalizeResourceRequestItem(raw: Partial<ResourceRequestItem>):
     financeApprovalPosition: String(raw.financeApprovalPosition ?? '').trim(),
     financeApprovalSignature: String(raw.financeApprovalSignature ?? '').trim(),
     financeApprovalDateTime: String(raw.financeApprovalDateTime ?? '').trim(),
+    sourceWorkspaceId:
+      typeof raw.sourceWorkspaceId === 'string' && raw.sourceWorkspaceId.trim()
+        ? raw.sourceWorkspaceId.trim()
+        : undefined,
+    sourceWorkspaceKind:
+      raw.sourceWorkspaceKind === 'incident' || raw.sourceWorkspaceKind === 'exercise'
+        ? raw.sourceWorkspaceKind
+        : undefined,
+    sourceWorkspaceName:
+      typeof raw.sourceWorkspaceName === 'string' && raw.sourceWorkspaceName.trim()
+        ? raw.sourceWorkspaceName.trim()
+        : undefined,
+    assetTransferConfirmations: normalizeAssetTransferConfirmations(raw.assetTransferConfirmations),
   }
+}
+
+function normalizeAssetTransferConfirmations(
+  raw: unknown
+): AssetTransferConfirmation[] | undefined {
+  if (!Array.isArray(raw) || raw.length === 0) return undefined
+  const confirmations = raw
+    .filter(
+      (entry): entry is Partial<AssetTransferConfirmation> =>
+        entry != null && typeof entry === 'object' && typeof (entry as AssetTransferConfirmation).assetKey === 'string'
+    )
+    .map((entry) => ({
+      assetKey: String(entry.assetKey).trim(),
+      confirmed: Boolean(entry.confirmed),
+      previousWorkspaceId:
+        typeof entry.previousWorkspaceId === 'string' && entry.previousWorkspaceId.trim()
+          ? entry.previousWorkspaceId.trim()
+          : null,
+      targetWorkspaceId: String(entry.targetWorkspaceId ?? '').trim(),
+      appliedAt:
+        typeof entry.appliedAt === 'string' && entry.appliedAt.trim()
+          ? entry.appliedAt.trim()
+          : null,
+    }))
+    .filter((entry) => entry.assetKey.length > 0 && entry.targetWorkspaceId.length > 0)
+  return confirmations.length > 0 ? confirmations : undefined
 }
 
 export function getResourceRequestLineItems(request: ResourceRequestItem): AssetRequestLineItem[] {
@@ -1111,6 +1175,9 @@ export type CreateResourceRequestDefaults = {
   requestedByName?: string
   incidentName?: string
   mapLocation?: [number, number]
+  sourceWorkspaceId?: string
+  sourceWorkspaceKind?: 'incident' | 'exercise'
+  sourceWorkspaceName?: string
 }
 
 export function formatResourceRequestDateTime(date = new Date()): string {
@@ -1195,6 +1262,10 @@ export function createEmptyResourceRequestInput(
     financeApprovalPosition: '',
     financeApprovalSignature: '',
     financeApprovalDateTime: '',
+    sourceWorkspaceId: defaults.sourceWorkspaceId,
+    sourceWorkspaceKind: defaults.sourceWorkspaceKind,
+    sourceWorkspaceName: defaults.sourceWorkspaceName,
+    assetTransferConfirmations: undefined,
   }
 }
 
@@ -1226,6 +1297,11 @@ export function validateCreateResourceRequestInput(
 ): string | null {
   if (!input.incidentName.trim()) {
     return 'Incident name is required.'
+  }
+  if (input.sourceWorkspaceId && input.sourceWorkspaceName) {
+    if (input.incidentName.trim() !== input.sourceWorkspaceName.trim()) {
+      return 'Incident name must match the linked workspace.'
+    }
   }
   if (!input.requestedByName.trim()) {
     return 'Requested by name is required.'
@@ -1307,5 +1383,85 @@ export function buildResourceRequestFromInput(
     financeApprovalPosition: input.financeApprovalPosition.trim(),
     financeApprovalSignature: input.financeApprovalSignature.trim(),
     financeApprovalDateTime: input.financeApprovalDateTime.trim(),
+    sourceWorkspaceId: input.sourceWorkspaceId,
+    sourceWorkspaceKind: input.sourceWorkspaceKind,
+    sourceWorkspaceName: input.sourceWorkspaceName,
+    assetTransferConfirmations: input.assetTransferConfirmations,
   })
+}
+
+export function collectUniqueTransferAssets(
+  items: AssetRequestLineItem[]
+): AssetRequestTransferRef[] {
+  const seen = new Set<string>()
+  const result: AssetRequestTransferRef[] = []
+  for (const item of items) {
+    for (const ref of item.assetsToTransfer) {
+      if (seen.has(ref.assetKey)) continue
+      seen.add(ref.assetKey)
+      result.push(ref)
+    }
+  }
+  return result
+}
+
+export function buildInitialTransferConfirmations(
+  items: AssetRequestLineItem[],
+  targetWorkspaceId: string,
+  resolveAsset: AssetTransferResolveAsset
+): AssetTransferConfirmation[] {
+  return collectUniqueTransferAssets(items).map((ref) => {
+    const asset = resolveAsset(ref.assetKey)
+    const previousWorkspaceId = asset?.assignedWorkspaceId ?? null
+    const alreadyThere = previousWorkspaceId === targetWorkspaceId
+    return {
+      assetKey: ref.assetKey,
+      confirmed: !alreadyThere,
+      previousWorkspaceId,
+      targetWorkspaceId,
+      appliedAt: null,
+    }
+  })
+}
+
+export function getTransferConfirmationStatus(
+  confirmation: AssetTransferConfirmation,
+  resolveAsset: AssetTransferResolveAsset
+): AssetTransferStatus {
+  if (!confirmation.confirmed) return 'skipped'
+  if (confirmation.appliedAt) return 'applied'
+  const asset = resolveAsset(confirmation.assetKey)
+  if (asset?.assignedWorkspaceId === confirmation.targetWorkspaceId) return 'applied'
+  if (confirmation.previousWorkspaceId === confirmation.targetWorkspaceId) {
+    return 'already-assigned'
+  }
+  return 'pending'
+}
+
+export function getPendingTransferConfirmations(
+  request: ResourceRequestItem,
+  resolveAsset: AssetTransferResolveAsset
+): AssetTransferConfirmation[] {
+  if (!request.sourceWorkspaceId) return []
+  const confirmations = request.assetTransferConfirmations ?? []
+  return confirmations.filter(
+    (confirmation) =>
+      confirmation.confirmed &&
+      getTransferConfirmationStatus(confirmation, resolveAsset) === 'pending'
+  )
+}
+
+export function countPendingTransferConfirmations(
+  request: ResourceRequestItem,
+  resolveAsset: AssetTransferResolveAsset
+): number {
+  return getPendingTransferConfirmations(request, resolveAsset).length
+}
+
+export function filterResourceRequestsForWorkspace(
+  requests: ResourceRequestItem[],
+  workspaceId: string | null | undefined
+): ResourceRequestItem[] {
+  if (!workspaceId) return []
+  return requests.filter((request) => request.sourceWorkspaceId === workspaceId)
 }

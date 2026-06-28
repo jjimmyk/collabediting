@@ -13,8 +13,6 @@ export function AssetsTabToolbar({
   onAddAsset,
   onCreateAssetRequest,
 }: AssetsTabToolbarProps) {
-  if (!canManageAssets) return null
-
   if (panelView === 'resource-requests') {
     return (
       <Button type="button" size="sm" variant="outline" onClick={onCreateAssetRequest}>
@@ -22,6 +20,8 @@ export function AssetsTabToolbar({
       </Button>
     )
   }
+
+  if (!canManageAssets) return null
 
   return (
     <Button type="button" size="sm" variant="outline" onClick={onAddAsset}>

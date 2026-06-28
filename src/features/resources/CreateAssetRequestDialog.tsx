@@ -21,11 +21,16 @@ import {
 import { AssetRequestPlansForm } from '@/features/resources/AssetRequestPlansForm'
 import { AssetRequestRequestedByForm } from '@/features/resources/AssetRequestRequestedByForm'
 import { AssetRequestSectionChiefApprovalForm } from '@/features/resources/AssetRequestSectionChiefApprovalForm'
-import type { ResourceListItemData } from '@/features/resources/types'
+import { AssetRequestTransferSection } from '@/features/resources/AssetRequestTransferSection'
+import type { AssetWorkspaceOption, ResourceListItemData } from '@/features/resources/types'
 import {
+  buildInitialTransferConfirmations,
   createEmptyResourceRequestInput,
   generateResourceRequestNumber,
   validateCreateResourceRequestInput,
+  type AssetRequestWorkspaceContext,
+  type AssetTransferConfirmation,
+  type AssetTransferResolveAsset,
   type CreateResourceRequestInput,
   type ResourceRequestItem,
 } from '@/lib/ics-213rr-resource-request'
@@ -39,7 +44,10 @@ type CreateAssetRequestDialogProps = {
   existingRequests?: ResourceRequestItem[]
   organizationAssets?: ResourceListItemData[]
   orgAssetIdsByKey?: Record<string, string>
+  workspaceOptions?: AssetWorkspaceOption[]
   glassItemBorderClasses?: string
+  workspaceContext?: AssetRequestWorkspaceContext | null
+  resolveAsset?: AssetTransferResolveAsset
   onSubmit: (input: CreateResourceRequestInput) => Promise<boolean>
 }
 
@@ -52,7 +60,10 @@ export function CreateAssetRequestDialog({
   existingRequests = [],
   organizationAssets = [],
   orgAssetIdsByKey = {},
+  workspaceOptions = [],
   glassItemBorderClasses = '',
+  workspaceContext = null,
+  resolveAsset,
   onSubmit,
 }: CreateAssetRequestDialogProps) {
   const [formValue, setFormValue] = useState<CreateResourceRequestInput>(
@@ -60,10 +71,20 @@ export function CreateAssetRequestDialog({
   )
   const [validationError, setValidationError] = useState<string | null>(null)
   const [requestedItemsView, setRequestedItemsView] = useState<AssetRequestItemsView>('list')
+  const [transferConfirmations, setTransferConfirmations] = useState<AssetTransferConfirmation[]>(
+    []
+  )
 
   const previewRequestNumber = useMemo(
     () => generateResourceRequestNumber(existingRequests),
     [existingRequests, open]
+  )
+
+  const assetResolver = useMemo<AssetTransferResolveAsset>(
+    () =>
+      resolveAsset ??
+      ((assetKey) => organizationAssets.find((asset) => asset.assetKey === assetKey) ?? null),
+    [organizationAssets, resolveAsset]
   )
 
   useEffect(() => {
@@ -71,18 +92,77 @@ export function CreateAssetRequestDialog({
       setFormValue(createEmptyResourceRequestInput({ requestedByName: defaultRequestedByName }))
       setValidationError(null)
       setRequestedItemsView('list')
+      setTransferConfirmations([])
+      return
     }
-  }, [defaultRequestedByName, open])
+
+    if (!workspaceContext) return
+
+    setFormValue(
+      createEmptyResourceRequestInput({
+        requestedByName: defaultRequestedByName,
+        incidentName: workspaceContext.workspaceName,
+        mapLocation: workspaceContext.mapLocation ?? undefined,
+        sourceWorkspaceId: workspaceContext.workspaceId,
+        sourceWorkspaceKind: workspaceContext.workspaceKind,
+        sourceWorkspaceName: workspaceContext.workspaceName,
+      })
+    )
+  }, [defaultRequestedByName, open, workspaceContext])
+
+  useEffect(() => {
+    if (!open || !workspaceContext) {
+      setTransferConfirmations([])
+      return
+    }
+
+    setTransferConfirmations((previous) => {
+      const next = buildInitialTransferConfirmations(
+        formValue.items,
+        workspaceContext.workspaceId,
+        assetResolver
+      )
+      return next.map((confirmation) => {
+        const existing = previous.find((entry) => entry.assetKey === confirmation.assetKey)
+        if (!existing) return confirmation
+        if (confirmation.previousWorkspaceId === confirmation.targetWorkspaceId) {
+          return confirmation
+        }
+        return { ...confirmation, confirmed: existing.confirmed }
+      })
+    })
+  }, [assetResolver, formValue.items, open, workspaceContext])
+
+  const handleTransferConfirmationChange = (assetKey: string, confirmed: boolean) => {
+    setTransferConfirmations((previous) =>
+      previous.map((entry) => (entry.assetKey === assetKey ? { ...entry, confirmed } : entry))
+    )
+  }
 
   const handleSubmit = async () => {
-    const error = validateCreateResourceRequestInput(formValue)
+    const payload: CreateResourceRequestInput = workspaceContext
+      ? {
+          ...formValue,
+          incidentName: workspaceContext.workspaceName,
+          sourceWorkspaceId: workspaceContext.workspaceId,
+          sourceWorkspaceKind: workspaceContext.workspaceKind,
+          sourceWorkspaceName: workspaceContext.workspaceName,
+          assetTransferConfirmations:
+            transferConfirmations.length > 0 ? transferConfirmations : undefined,
+        }
+      : {
+          ...formValue,
+          assetTransferConfirmations: undefined,
+        }
+
+    const error = validateCreateResourceRequestInput(payload)
     if (error) {
       setValidationError(error)
       return
     }
 
     setValidationError(null)
-    const ok = await onSubmit(formValue)
+    const ok = await onSubmit(payload)
     if (ok) {
       onOpenChange(false)
     }
@@ -106,6 +186,7 @@ export function CreateAssetRequestDialog({
               onChange={setFormValue}
               incidentOptions={incidentOptions}
               previewRequestNumber={previewRequestNumber}
+              workspaceContext={workspaceContext}
             />
             <AssetRequestLineItemsSection
               items={formValue.items}
@@ -121,6 +202,18 @@ export function CreateAssetRequestDialog({
             <AssetRequestPlansForm value={formValue} onChange={setFormValue} />
             <AssetRequestLogisticsForm value={formValue} onChange={setFormValue} />
             <AssetRequestFinanceForm value={formValue} onChange={setFormValue} />
+            {workspaceContext ? (
+              <AssetRequestTransferSection
+                mode="create"
+                lineItems={formValue.items}
+                workspaceContext={workspaceContext}
+                organizationAssets={organizationAssets}
+                workspaceOptions={workspaceOptions}
+                confirmations={transferConfirmations}
+                onConfirmationChange={handleTransferConfirmationChange}
+                resolveAsset={assetResolver}
+              />
+            ) : null}
           </div>
         </div>
 

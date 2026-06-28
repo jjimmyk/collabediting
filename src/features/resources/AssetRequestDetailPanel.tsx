@@ -1,9 +1,12 @@
 import { Badge } from '@/components/ui/badge'
+import { AssetRequestTransferSection } from '@/features/resources/AssetRequestTransferSection'
+import type { AssetWorkspaceOption, ResourceListItemData } from '@/features/resources/types'
 import {
   formatLegacyOrderCostLsc,
   getLineItemPriorityLabel,
   getResourceRequestLineItems,
   type AssetRequestLineItem,
+  type AssetTransferResolveAsset,
   type ResourceRequestItem,
 } from '@/lib/ics-213rr-resource-request'
 
@@ -57,8 +60,28 @@ function AssetRequestLineItemDetail({ item, index }: { item: AssetRequestLineIte
   )
 }
 
-export function AssetRequestDetailPanel({ request }: { request: ResourceRequestItem }) {
+type AssetRequestDetailPanelProps = {
+  request: ResourceRequestItem
+  organizationAssets?: ResourceListItemData[]
+  workspaceOptions?: AssetWorkspaceOption[]
+  resolveAsset?: AssetTransferResolveAsset
+  onApplyTransfers?: (request: ResourceRequestItem) => void
+  isApplyingTransfers?: boolean
+}
+
+export function AssetRequestDetailPanel({
+  request,
+  organizationAssets = [],
+  workspaceOptions = [],
+  resolveAsset,
+  onApplyTransfers,
+  isApplyingTransfers = false,
+}: AssetRequestDetailPanelProps) {
   const lineItems = getResourceRequestLineItems(request)
+
+  const assetResolver: AssetTransferResolveAsset =
+    resolveAsset ??
+    ((assetKey) => organizationAssets.find((asset) => asset.assetKey === assetKey) ?? null)
 
   return (
     <div className="space-y-3 text-sm">
@@ -80,6 +103,16 @@ export function AssetRequestDetailPanel({ request }: { request: ResourceRequestI
           <AssetRequestLineItemDetail key={item.id} item={item} index={index} />
         ))}
       </div>
+      <AssetRequestTransferSection
+        mode="view"
+        request={request}
+        organizationAssets={organizationAssets}
+        workspaceOptions={workspaceOptions}
+        confirmations={request.assetTransferConfirmations ?? []}
+        onApplyTransfers={() => onApplyTransfers?.(request)}
+        isApplying={isApplyingTransfers}
+        resolveAsset={assetResolver}
+      />
     </div>
   )
 }
