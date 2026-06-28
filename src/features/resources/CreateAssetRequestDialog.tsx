@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -8,17 +8,26 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { AssetRequestHeaderForm } from '@/features/resources/AssetRequestHeaderForm'
+import { AssetRequestFinanceForm } from '@/features/resources/AssetRequestFinanceForm'
+import {
+  AssetRequestIncidentDetailsForm,
+  type ResourceRequestIncidentOption,
+} from '@/features/resources/AssetRequestIncidentDetailsForm'
+import { AssetRequestLogisticsForm } from '@/features/resources/AssetRequestLogisticsForm'
 import {
   AssetRequestLineItemsSection,
   type AssetRequestItemsView,
 } from '@/features/resources/AssetRequestLineItemsSection'
-import type { ResourceRequestIncidentOption } from '@/features/resources/AssetRequestHeaderForm'
+import { AssetRequestPlansForm } from '@/features/resources/AssetRequestPlansForm'
+import { AssetRequestRequestedByForm } from '@/features/resources/AssetRequestRequestedByForm'
+import { AssetRequestSectionChiefApprovalForm } from '@/features/resources/AssetRequestSectionChiefApprovalForm'
 import type { ResourceListItemData } from '@/features/resources/types'
 import {
   createEmptyResourceRequestInput,
+  generateResourceRequestNumber,
   validateCreateResourceRequestInput,
   type CreateResourceRequestInput,
+  type ResourceRequestItem,
 } from '@/lib/ics-213rr-resource-request'
 
 type CreateAssetRequestDialogProps = {
@@ -27,6 +36,7 @@ type CreateAssetRequestDialogProps = {
   isSubmitting: boolean
   defaultRequestedByName?: string
   incidentOptions?: ResourceRequestIncidentOption[]
+  existingRequests?: ResourceRequestItem[]
   organizationAssets?: ResourceListItemData[]
   orgAssetIdsByKey?: Record<string, string>
   glassItemBorderClasses?: string
@@ -39,6 +49,7 @@ export function CreateAssetRequestDialog({
   isSubmitting,
   defaultRequestedByName = '',
   incidentOptions = [],
+  existingRequests = [],
   organizationAssets = [],
   orgAssetIdsByKey = {},
   glassItemBorderClasses = '',
@@ -49,6 +60,11 @@ export function CreateAssetRequestDialog({
   )
   const [validationError, setValidationError] = useState<string | null>(null)
   const [requestedItemsView, setRequestedItemsView] = useState<AssetRequestItemsView>('list')
+
+  const previewRequestNumber = useMemo(
+    () => generateResourceRequestNumber(existingRequests),
+    [existingRequests, open]
+  )
 
   useEffect(() => {
     if (!open) {
@@ -78,17 +94,18 @@ export function CreateAssetRequestDialog({
         <DialogHeader className="shrink-0 border-b px-6 py-4">
           <DialogTitle>Create asset request</DialogTitle>
           <DialogDescription>
-            Add one or more requested items to an ICS 213RR-CG resource request. Core header and
-            line-item details are required.
+            Complete an ICS 213RR-CG resource request with incident details, requested items, and
+            approval sections.
           </DialogDescription>
         </DialogHeader>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4">
-          <div className="grid gap-6 lg:grid-cols-[minmax(18rem,22rem)_1fr]">
-            <AssetRequestHeaderForm
+          <div className="space-y-6">
+            <AssetRequestIncidentDetailsForm
               value={formValue}
               onChange={setFormValue}
               incidentOptions={incidentOptions}
+              previewRequestNumber={previewRequestNumber}
             />
             <AssetRequestLineItemsSection
               items={formValue.items}
@@ -99,6 +116,11 @@ export function CreateAssetRequestDialog({
               orgAssetIdsByKey={orgAssetIdsByKey}
               glassItemBorderClasses={glassItemBorderClasses}
             />
+            <AssetRequestRequestedByForm value={formValue} onChange={setFormValue} />
+            <AssetRequestSectionChiefApprovalForm value={formValue} onChange={setFormValue} />
+            <AssetRequestPlansForm value={formValue} onChange={setFormValue} />
+            <AssetRequestLogisticsForm value={formValue} onChange={setFormValue} />
+            <AssetRequestFinanceForm value={formValue} onChange={setFormValue} />
           </div>
         </div>
 

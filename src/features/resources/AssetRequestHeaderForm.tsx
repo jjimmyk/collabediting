@@ -10,11 +10,9 @@ import {
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import type { CreateResourceRequestInput } from '@/lib/ics-213rr-resource-request'
+import type { ResourceRequestIncidentOption } from '@/features/resources/AssetRequestIncidentDetailsForm'
 
-export type ResourceRequestIncidentOption = {
-  name: string
-  location: [number, number]
-}
+export type { ResourceRequestIncidentOption } from '@/features/resources/AssetRequestIncidentDetailsForm'
 
 type AssetRequestHeaderFormProps = {
   value: CreateResourceRequestInput

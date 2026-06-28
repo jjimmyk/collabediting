@@ -50,6 +50,8 @@ export type ResourceRequestItem = {
   sectionChiefApprovalPosition: string
   sectionChiefApprovalSignature: string
   sectionChiefApprovalDateTime: string
+  reslTactical: boolean
+  reslPersonnel: boolean
   reslTacticalResources: boolean
   reslResourceAvailable: boolean
   reslResourceNotAvailable: boolean
@@ -272,6 +274,32 @@ export function syncLegacyOrderFieldsFromLineItems(
   }
 }
 
+function normalizeReslFields(raw: Partial<ResourceRequestItem>): {
+  reslTactical: boolean
+  reslPersonnel: boolean
+  reslTacticalResources: boolean
+  reslResourceAvailable: boolean
+  reslResourceNotAvailable: boolean
+} {
+  const legacyTacticalResources = Boolean(raw.reslTacticalResources)
+  const reslTactical =
+    typeof raw.reslTactical === 'boolean'
+      ? raw.reslTactical
+      : legacyTacticalResources
+  const reslPersonnel =
+    typeof raw.reslPersonnel === 'boolean'
+      ? raw.reslPersonnel
+      : legacyTacticalResources
+
+  return {
+    reslTactical,
+    reslPersonnel,
+    reslTacticalResources: reslTactical || reslPersonnel || legacyTacticalResources,
+    reslResourceAvailable: Boolean(raw.reslResourceAvailable),
+    reslResourceNotAvailable: Boolean(raw.reslResourceNotAvailable),
+  }
+}
+
 export function normalizeResourceRequestItem(raw: Partial<ResourceRequestItem>): ResourceRequestItem {
   const items =
     Array.isArray(raw.items) && raw.items.length > 0
@@ -280,6 +308,7 @@ export function normalizeResourceRequestItem(raw: Partial<ResourceRequestItem>):
 
   const legacy = syncLegacyOrderFieldsFromLineItems(items)
   const mapLocation = Array.isArray(raw.mapLocation) ? raw.mapLocation : [0, 0]
+  const resl = normalizeReslFields(raw)
 
   return {
     id: typeof raw.id === 'number' ? raw.id : 0,
@@ -306,9 +335,7 @@ export function normalizeResourceRequestItem(raw: Partial<ResourceRequestItem>):
     sectionChiefApprovalPosition: String(raw.sectionChiefApprovalPosition ?? '').trim(),
     sectionChiefApprovalSignature: String(raw.sectionChiefApprovalSignature ?? '').trim(),
     sectionChiefApprovalDateTime: String(raw.sectionChiefApprovalDateTime ?? '').trim(),
-    reslTacticalResources: Boolean(raw.reslTacticalResources),
-    reslResourceAvailable: Boolean(raw.reslResourceAvailable),
-    reslResourceNotAvailable: Boolean(raw.reslResourceNotAvailable),
+    ...resl,
     reslReviewName: String(raw.reslReviewName ?? '').trim(),
     reslReviewSignature: String(raw.reslReviewSignature ?? '').trim(),
     reslReviewDateTime: String(raw.reslReviewDateTime ?? '').trim(),
@@ -1142,6 +1169,8 @@ export function createEmptyResourceRequestInput(
     sectionChiefApprovalPosition: '',
     sectionChiefApprovalSignature: '',
     sectionChiefApprovalDateTime: '',
+    reslTactical: false,
+    reslPersonnel: false,
     reslTacticalResources: false,
     reslResourceAvailable: false,
     reslResourceNotAvailable: false,
@@ -1252,7 +1281,9 @@ export function buildResourceRequestFromInput(
     sectionChiefApprovalPosition: input.sectionChiefApprovalPosition.trim(),
     sectionChiefApprovalSignature: input.sectionChiefApprovalSignature.trim(),
     sectionChiefApprovalDateTime: input.sectionChiefApprovalDateTime.trim(),
-    reslTacticalResources: input.reslTacticalResources,
+    reslTactical: input.reslTactical,
+    reslPersonnel: input.reslPersonnel,
+    reslTacticalResources: input.reslTactical || input.reslPersonnel || input.reslTacticalResources,
     reslResourceAvailable: input.reslResourceAvailable,
     reslResourceNotAvailable: input.reslResourceNotAvailable,
     reslReviewName: input.reslReviewName.trim(),

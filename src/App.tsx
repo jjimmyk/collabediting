@@ -38621,6 +38621,7 @@ function App() {
         isSubmitting={isCreatingAssetRequest || isLoadingOrganizationAssetRequests}
         defaultRequestedByName={defaultAssetRequestRequestedByName}
         incidentOptions={assetRequestIncidentOptions}
+        existingRequests={organizationAssetRequests}
         organizationAssets={hubAssets}
         orgAssetIdsByKey={orgAssetIdsByKey}
         glassItemBorderClasses={glassItemBorderClasses}
