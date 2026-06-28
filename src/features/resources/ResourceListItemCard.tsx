@@ -23,6 +23,7 @@ import type { AssetWorkspaceOption, ResourceCostUnitType, ResourceListItemData }
 import { ASSET_STATUS_OPTIONS, type AssetStatus } from '@/features/resources/types'
 import { AssetWorkspaceAssignmentSelect } from '@/features/resources/AssetWorkspaceAssignmentSelect'
 import { UNASSIGNED_WORKSPACE_FIELD } from '@/features/resources/asset-workspace-assignment-display'
+import { ResourceListItemReadOnlyDetails } from '@/features/resources/ResourceListItemReadOnlyDetails'
 import { RosterMemberCheckInStatusSelect } from '@/features/roster/RosterMemberCheckInStatusSelect'
 import type { WorkspaceMemberCheckInStatus } from '@/lib/workspace-types'
 import {
@@ -408,6 +409,7 @@ export function ResourceListItemCard({
             )}
             onClick={(event) => event.stopPropagation()}
           >
+            {isEditing ? (
             <div className="grid grid-cols-2 gap-2">
               <div className="space-y-1">
                 <ResourceFieldLabel>Current Location:</ResourceFieldLabel>
@@ -638,6 +640,14 @@ export function ResourceListItemCard({
                 </div>
               </div>
             </div>
+            ) : (
+              <ResourceListItemReadOnlyDetails
+                resource={resource}
+                organizationManaged={organizationManaged}
+                showWorkspaceAssignment={!showAssignmentInline || !onAssignmentChange}
+                compact={isOrgChartVariant}
+              />
+            )}
           </div>
         </CollapsibleContent>
         {footerAddon}

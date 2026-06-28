@@ -35,6 +35,8 @@ type AssetRequestModalProps = {
   onOpenChange: (open: boolean) => void
   request: ResourceRequestItem | null
   mode?: AssetRequestModalMode
+  /** Applied when the dialog opens; internal view/edit toggling uses this as the starting mode. */
+  defaultMode?: AssetRequestModalMode
   canEdit?: boolean
   isSubmitting?: boolean
   incidentOptions?: ResourceRequestIncidentOption[]
@@ -65,6 +67,7 @@ export function AssetRequestModal({
   onOpenChange,
   request,
   mode: controlledMode,
+  defaultMode = 'view',
   canEdit = true,
   isSubmitting = false,
   incidentOptions = [],
@@ -115,8 +118,9 @@ export function AssetRequestModal({
 
     if (request) {
       setFormValue(resourceRequestToEditInput(request))
+      setInternalMode(defaultMode)
     }
-  }, [open, request])
+  }, [defaultMode, open, request])
 
   const transferConfirmations = useMemo(() => {
     if (!formValue || !effectiveWorkspaceContext) return []

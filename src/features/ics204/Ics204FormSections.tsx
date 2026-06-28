@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { ChevronDown, Trash2 } from 'lucide-react'
+import { ChevronDown, Map as MapIcon, Trash2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -7,8 +7,13 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible'
-import { Item, ItemActions, ItemContent } from '@/components/ui/item'
+import { Item, ItemActions, ItemContent, ItemDescription, ItemTitle } from '@/components/ui/item'
 import { Textarea } from '@/components/ui/textarea'
+import {
+  getIcs204ResourceAssignedRowKey,
+  Ics204ResourceAssignedRowDetails,
+} from '@/features/ics204/Ics204ResourceAssignedRowDetails'
+import { AssetStatusIndicator } from '@/features/resources/AssetStatusIndicator'
 import { ResourceListItemCard } from '@/features/resources/ResourceListItemCard'
 import {
   Ics204ReadOnlyField,
@@ -58,6 +63,8 @@ type Ics204FormSectionsProps = {
   drafts: Ics204FormSectionDrafts
   expandedWorkAssignmentKey: string | null
   onExpandedWorkAssignmentKeyChange: (key: string | null) => void
+  expandedResourceAssignedKey: string | null
+  onExpandedResourceAssignedKeyChange: (key: string | null) => void
   onStartSectionEdit: (section: Ics204SectionId) => void
   onCancelSectionEdit: (section: Ics204SectionId) => void
   onSaveSection: (section: Ics204SectionId) => void
@@ -104,6 +111,8 @@ export function Ics204FormSections({
   drafts,
   expandedWorkAssignmentKey,
   onExpandedWorkAssignmentKeyChange,
+  expandedResourceAssignedKey,
+  onExpandedResourceAssignedKeyChange,
   onStartSectionEdit,
   onCancelSectionEdit,
   onSaveSection,
@@ -429,6 +438,11 @@ export function Ics204FormSections({
 
   return (
     <div className="space-y-3">
+      {formIsLocked ? (
+        <p className="rounded-md border border-dashed px-3 py-2 text-xs text-muted-foreground">
+          Signed version — read-only. Create a new version to edit.
+        </p>
+      ) : null}
       {renderSectionShell(
         'assignment-info',
         <>
@@ -521,7 +535,7 @@ export function Ics204FormSections({
           <div className="min-w-0 w-full max-w-full overflow-x-auto overscroll-x-contain touch-pan-x [scrollbar-gutter:stable]">
             {resourcesAssigned.length === 0 ? (
               <p className="px-1 py-2 text-xs text-muted-foreground">No resources assigned.</p>
-            ) : (
+            ) : isSectionEditing(editingSections, 'resources-assigned') ? (
               <div
                 className="space-y-2"
                 style={{ minWidth: ICS204_RESOURCES_ASSIGNED_ROW_MIN_WIDTH }}
@@ -533,7 +547,6 @@ export function Ics204FormSections({
                   <span className="w-8" aria-hidden="true" />
                 </div>
                 {resourcesAssigned.map((row) => {
-                  const editingResources = isSectionEditing(editingSections, 'resources-assigned')
                   const resourceSnapshot = resolveIcs204ResourceSnapshot(row)
                   const linkedRequest = row.assetRequestNeedLink?.assetRequestStorageRecordId
                     ? assetRequestsByStorageId[
@@ -587,76 +600,161 @@ export function Ics204FormSections({
                         ) : null}
                       </div>
                       <div className="min-w-0">
-                        {editingResources ? (
-                          <Textarea
-                            value={row.reportingInfoNotes}
-                            onChange={(event) =>
-                              patchResourceRow(row.id, 'reportingInfoNotes', event.target.value)
-                            }
-                            className="min-h-8 w-full min-w-0 text-xs"
-                          />
-                        ) : (
-                          <Ics204ReadOnlyTextBlock compact value={row.reportingInfoNotes} />
-                        )}
+                        <Textarea
+                          value={row.reportingInfoNotes}
+                          onChange={(event) =>
+                            patchResourceRow(row.id, 'reportingInfoNotes', event.target.value)
+                          }
+                          className="min-h-8 w-full min-w-0 text-xs"
+                        />
                       </div>
                       <div className="flex flex-col items-center gap-1 text-center">
-                        {editingResources ? (
-                          <>
-                            <label className="inline-flex h-8 items-center justify-center gap-1 text-xs font-semibold">
-                              <input
-                                type="checkbox"
-                                checked={row.has204A}
-                                onChange={(event) =>
-                                  patchResourceRow(row.id, 'has204A', event.target.checked)
-                                }
-                                className="h-3.5 w-3.5"
-                              />
-                              X
-                            </label>
-                            {row.has204A && onOpenIcs204a ? (
-                              <Button
-                                type="button"
-                                variant="link"
-                                size="sm"
-                                className="h-auto px-0 py-0 text-[10px] font-semibold"
-                                onClick={() => onOpenIcs204a(row.id)}
-                              >
-                                Open 204A
-                              </Button>
-                            ) : null}
-                          </>
-                        ) : row.has204A && onOpenIcs204a ? (
+                        <label className="inline-flex h-8 items-center justify-center gap-1 text-xs font-semibold">
+                          <input
+                            type="checkbox"
+                            checked={row.has204A}
+                            onChange={(event) =>
+                              patchResourceRow(row.id, 'has204A', event.target.checked)
+                            }
+                            className="h-3.5 w-3.5"
+                          />
+                          X
+                        </label>
+                        {row.has204A && onOpenIcs204a ? (
                           <Button
                             type="button"
                             variant="link"
                             size="sm"
-                            className="h-8 px-1 text-xs font-semibold"
-                            aria-label={`Open ICS-204A for ${resourceSnapshot.name}`}
+                            className="h-auto px-0 py-0 text-[10px] font-semibold"
                             onClick={() => onOpenIcs204a(row.id)}
                           >
-                            X
-                          </Button>
-                        ) : (
-                          <span className="inline-flex h-8 items-center justify-center text-xs font-semibold">
-                            —
-                          </span>
-                        )}
-                      </div>
-                      <div className="w-8">
-                        {editingResources ? (
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            aria-label="Delete assigned resource row"
-                            className="h-8 w-8 text-destructive hover:text-destructive"
-                            onClick={() => deleteResourceRow(row.id)}
-                          >
-                            <Trash2 className="h-4 w-4" />
+                            Open 204A
                           </Button>
                         ) : null}
                       </div>
+                      <div className="w-8">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          aria-label="Delete assigned resource row"
+                          className="h-8 w-8 text-destructive hover:text-destructive"
+                          onClick={() => deleteResourceRow(row.id)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </div>
+                  )
+                })}
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {resourcesAssigned.map((row) => {
+                  const resourceSnapshot = resolveIcs204ResourceSnapshot(row)
+                  const rowKey = getIcs204ResourceAssignedRowKey(form.id, row.id)
+                  const isRowOpen = expandedResourceAssignedKey === rowKey
+                  const linkedRequest = row.assetRequestNeedLink?.assetRequestStorageRecordId
+                    ? assetRequestsByStorageId[
+                        row.assetRequestNeedLink.assetRequestStorageRecordId
+                      ]
+                    : undefined
+                  const pendingWorkspaceAssignment =
+                    resolveAsset &&
+                    isIcs204ResourcePendingWorkspaceAssignment(row, linkedRequest, resolveAsset)
+
+                  return (
+                    <Item
+                      key={row.id}
+                      variant="outline"
+                      className={cn(
+                        'min-w-0 flex-col items-stretch p-0',
+                        glassItemBorderClasses,
+                        pendingWorkspaceAssignment && 'border-amber-500/70'
+                      )}
+                    >
+                      <Collapsible
+                        open={isRowOpen}
+                        onOpenChange={(open) =>
+                          onExpandedResourceAssignedKeyChange(open ? rowKey : null)
+                        }
+                      >
+                        <div className="flex items-start gap-2 px-3 py-2.5">
+                          <ItemContent className="min-w-0">
+                            <div className="flex min-w-0 items-center gap-2">
+                              <AssetStatusIndicator
+                                status={resourceSnapshot.assetStatus}
+                                showLabel={false}
+                              />
+                              <ItemTitle className="truncate text-sm">{resourceSnapshot.name}</ItemTitle>
+                              {row.has204A ? (
+                                <Badge variant="secondary" className="shrink-0 text-[10px]">
+                                  204A
+                                </Badge>
+                              ) : null}
+                            </div>
+                            <ItemDescription className="line-clamp-2 text-[11px]">
+                              {row.reportingInfoNotes.trim() || 'No reporting info/notes'}
+                            </ItemDescription>
+                          </ItemContent>
+                          <ItemActions className="shrink-0">
+                            {onFocusResourceMap ? (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                aria-label={`Zoom map to ${resourceSnapshot.name}`}
+                                onClick={() =>
+                                  onFocusResourceMap(
+                                    resourceSnapshot.id,
+                                    resourceSnapshot.mapLocation
+                                  )
+                                }
+                              >
+                                <MapIcon className="h-4 w-4" />
+                              </Button>
+                            ) : null}
+                            {row.has204A && onOpenIcs204a ? (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="h-8 px-2 text-xs"
+                                onClick={() => onOpenIcs204a(row.id)}
+                              >
+                                204A
+                              </Button>
+                            ) : null}
+                            <CollapsibleTrigger asChild>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                aria-label={`Toggle details for ${resourceSnapshot.name}`}
+                              >
+                                <ChevronDown
+                                  className={cn(
+                                    'h-4 w-4 transition-transform',
+                                    isRowOpen && 'rotate-180'
+                                  )}
+                                />
+                              </Button>
+                            </CollapsibleTrigger>
+                          </ItemActions>
+                        </div>
+                        <CollapsibleContent>
+                          <Ics204ResourceAssignedRowDetails
+                            row={row}
+                            linkedRequest={linkedRequest}
+                            pendingWorkspaceAssignment={pendingWorkspaceAssignment}
+                            workspaceOptions={workspaceOptions}
+                            assetRequestsByStorageId={assetRequestsByStorageId}
+                            resolveAsset={resolveAsset}
+                            onOpenIcs204a={onOpenIcs204a}
+                          />
+                        </CollapsibleContent>
+                      </Collapsible>
+                    </Item>
                   )
                 })}
               </div>

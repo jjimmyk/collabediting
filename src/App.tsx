@@ -7441,6 +7441,8 @@ function App() {
   const [isPlanningPDialogOpen, setIsPlanningPDialogOpen] = useState(false)
   const [expandedIcs204FormId, setExpandedIcs204FormId] = useState<string | null>(null)
   const [expandedIcs204WorkAssignmentKey, setExpandedIcs204WorkAssignmentKey] = useState<string | null>(null)
+  const [expandedIcs204ResourceAssignedKey, setExpandedIcs204ResourceAssignedKey] =
+    useState<string | null>(null)
   const [pratusAiMessages, setPratusAiMessages] = useState<PratusAiMessage[]>([])
   const [pratusAiDraftMessage, setPratusAiDraftMessage] = useState('')
   const [isPratusAiSelectingContext, setIsPratusAiSelectingContext] = useState(false)
@@ -8625,7 +8627,10 @@ function App() {
   const [openResourceRequestPreviewId, setOpenResourceRequestPreviewId] = useState<number | null>(
     null
   )
-  const [openAssetRequestDetailId, setOpenAssetRequestDetailId] = useState<number | null>(null)
+  const [openAssetRequestDetail, setOpenAssetRequestDetail] = useState<{
+    requestId: number
+    defaultMode: 'view' | 'edit'
+  } | null>(null)
   const [incidentList, setIncidentList] = useState<IncidentListItem[]>([
     {
       id: 1,
@@ -11118,8 +11123,19 @@ function App() {
     [resourceRequests, openResourceRequestPreviewId]
   )
   const detailResourceRequest = useMemo(
-    () => organizationAssetRequests.find((request) => request.id === openAssetRequestDetailId) ?? null,
-    [organizationAssetRequests, openAssetRequestDetailId]
+    () =>
+      openAssetRequestDetail
+        ? organizationAssetRequests.find(
+            (request) => request.id === openAssetRequestDetail.requestId
+          ) ?? null
+        : null,
+    [openAssetRequestDetail, organizationAssetRequests]
+  )
+  const openAssetRequest = useCallback(
+    (requestId: number, defaultMode: 'view' | 'edit' = 'view') => {
+      setOpenAssetRequestDetail({ requestId, defaultMode })
+    },
+    []
   )
   const exportResourceRequestWord = (request: ResourceRequestItem) => {
     downloadDocx(
@@ -24331,7 +24347,7 @@ function App() {
       toast.error('Asset request not found.')
       return
     }
-    setOpenAssetRequestDetailId(request.id)
+    setOpenAssetRequestDetail({ requestId: request.id, defaultMode: 'view' })
   }
   const handleUpdateAssetRequest = async (
     input: CreateResourceRequestInput,
@@ -29280,14 +29296,35 @@ function App() {
                                 <td className="px-2 py-2">{request.orderEtaLsc || request.orderLocationDateTime}</td>
                                 <td className="px-2 py-2">
                                   <div className="flex items-center gap-1">
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      aria-label={`Preview ICS 213RR for ${request.requestNumber}`}
-                                      onClick={() => setOpenResourceRequestPreviewId(request.id)}
-                                    >
-                                      <Eye className="h-4 w-4" />
-                                    </Button>
+                                    {activeOrganizationId ? (
+                                      <>
+                                        <Button
+                                          variant="ghost"
+                                          size="icon"
+                                          aria-label={`Open ${request.requestNumber}`}
+                                          onClick={() => openAssetRequest(request.id, 'view')}
+                                        >
+                                          <Eye className="h-4 w-4" />
+                                        </Button>
+                                        <Button
+                                          variant="ghost"
+                                          size="icon"
+                                          aria-label={`Edit ${request.requestNumber}`}
+                                          onClick={() => openAssetRequest(request.id, 'edit')}
+                                        >
+                                          <Pencil className="h-4 w-4" />
+                                        </Button>
+                                      </>
+                                    ) : (
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        aria-label={`Preview ICS 213RR for ${request.requestNumber}`}
+                                        onClick={() => setOpenResourceRequestPreviewId(request.id)}
+                                      >
+                                        <Eye className="h-4 w-4" />
+                                      </Button>
+                                    )}
                                     <Button
                                       variant="ghost"
                                       size="icon"
@@ -29396,17 +29433,44 @@ function App() {
                                 {getResourceRequestPrioritySummary(request)}
                               </Badge>
                               <Badge variant="secondary">{request.status}</Badge>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                aria-label={`Preview ICS 213RR for ${request.requestNumber}`}
-                                onClick={(event) => {
-                                  event.stopPropagation()
-                                  setOpenResourceRequestPreviewId(request.id)
-                                }}
-                              >
-                                <Eye className="h-4 w-4" />
-                              </Button>
+                              {activeOrganizationId ? (
+                                <>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    aria-label={`Open ${request.requestNumber}`}
+                                    onClick={(event) => {
+                                      event.stopPropagation()
+                                      openAssetRequest(request.id, 'view')
+                                    }}
+                                  >
+                                    <Eye className="h-4 w-4" />
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    aria-label={`Edit ${request.requestNumber}`}
+                                    onClick={(event) => {
+                                      event.stopPropagation()
+                                      openAssetRequest(request.id, 'edit')
+                                    }}
+                                  >
+                                    <Pencil className="h-4 w-4" />
+                                  </Button>
+                                </>
+                              ) : (
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  aria-label={`Preview ICS 213RR for ${request.requestNumber}`}
+                                  onClick={(event) => {
+                                    event.stopPropagation()
+                                    setOpenResourceRequestPreviewId(request.id)
+                                  }}
+                                >
+                                  <Eye className="h-4 w-4" />
+                                </Button>
+                              )}
                               <Button
                                 variant="ghost"
                                 size="icon"
@@ -29465,14 +29529,29 @@ function App() {
                           <CollapsibleContent>
                             <div className="space-y-3 border-t px-3 py-3 text-sm">
                               <div className="flex flex-wrap gap-2">
+                                {activeOrganizationId ? (
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="default"
+                                    onClick={() => openAssetRequest(request.id, 'edit')}
+                                  >
+                                    <Pencil className="mr-1 h-3.5 w-3.5" />
+                                    Edit request
+                                  </Button>
+                                ) : null}
                                 <Button
                                   type="button"
                                   size="sm"
                                   variant="outline"
-                                  onClick={() => setOpenResourceRequestPreviewId(request.id)}
+                                  onClick={() =>
+                                    activeOrganizationId
+                                      ? openAssetRequest(request.id, 'view')
+                                      : setOpenResourceRequestPreviewId(request.id)
+                                  }
                                 >
                                   <Eye className="mr-1 h-3.5 w-3.5" />
-                                  Preview 213RR
+                                  {activeOrganizationId ? 'Open request' : 'Preview 213RR'}
                                 </Button>
                                 <Button
                                   type="button"
@@ -31678,7 +31757,7 @@ function App() {
                         isLoading={isLoadingOrganizationAssetRequests}
                         workspaceName={activeWorkspaceRosterLabel}
                         glassItemBorderClasses={glassItemBorderClasses}
-                        onOpenRequest={setOpenAssetRequestDetailId}
+                        onOpenRequest={(requestId) => openAssetRequest(requestId, 'view')}
                       />
                     )}
 
@@ -36604,13 +36683,7 @@ function App() {
                                       </div>
                                     )}
                                     </div>
-                                    <div
-                                      className={cn(
-                                        'space-y-3',
-                                        formIsLocked &&
-                                          'pointer-events-none opacity-70 select-none'
-                                      )}
-                                    >
+                                    <div className="space-y-3">
                                     <Ics204FormSections
                                       form={form}
                                       canEdit={effectiveCanEditWorkspaceForms}
@@ -36621,6 +36694,10 @@ function App() {
                                       drafts={ics204SectionDraftsByFormId[form.id] ?? {}}
                                       expandedWorkAssignmentKey={expandedIcs204WorkAssignmentKey}
                                       onExpandedWorkAssignmentKeyChange={setExpandedIcs204WorkAssignmentKey}
+                                      expandedResourceAssignedKey={expandedIcs204ResourceAssignedKey}
+                                      onExpandedResourceAssignedKeyChange={
+                                        setExpandedIcs204ResourceAssignedKey
+                                      }
                                       assigneeOptions={assignedUnitOptions}
                                       workAssignmentTargetOptions={workAssignmentTargetOptions}
                                       roster={activeWorkspaceRoster}
@@ -40144,9 +40221,10 @@ function App() {
       <AssetRequestModal
         open={detailResourceRequest !== null}
         onOpenChange={(open) => {
-          if (!open) setOpenAssetRequestDetailId(null)
+          if (!open) setOpenAssetRequestDetail(null)
         }}
         request={detailResourceRequest}
+        defaultMode={openAssetRequestDetail?.defaultMode ?? 'view'}
         canEdit={Boolean(activeOrganizationId)}
         isSubmitting={isUpdatingAssetRequest}
         incidentOptions={assetRequestIncidentOptions}
