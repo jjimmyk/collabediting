@@ -7,11 +7,12 @@ import { WorkAssignmentTargetPicker } from '@/features/work-assignments/WorkAssi
 import { Ics215HaveLinkPage } from '@/features/ics215/Ics215HaveLinkPage'
 import { Ics215TacticCell } from '@/features/ics215/Ics215TacticCell'
 import { Ics215HaveCell, HaveLinkSparkleButton } from '@/features/ics215/Ics215HaveCell'
+import { Ics215NeedCell } from '@/features/ics215/Ics215NeedCell'
+import { useIcs215NeedAssetRequestLink } from '@/features/ics215/useIcs215NeedAssetRequestLink'
 import type { Ics215ResourceValue } from '@/features/ics215/types'
 import {
   EMPTY_RESOURCE_VALUE,
   applyIcs215NeedRecalc,
-  computeIcs215Need,
   formatResourceValueDisplay,
   ICS215_OVERFLOW_COLUMNS,
   type Ics215WorkAssignmentsTableBaseProps,
@@ -41,23 +42,27 @@ function ResourceValueCell({
   value,
   editing,
   canLinkAssets = false,
+  canLinkNeedAssetRequests = false,
   columnLabel,
   onRequiredChange,
   onManualHaveChange,
   onOpenHaveLinkDialog,
+  onOpenNeedAssetRequest,
 }: {
   value: Ics215ResourceValue
   editing: boolean
   canLinkAssets?: boolean
+  canLinkNeedAssetRequests?: boolean
   columnLabel: string
   onRequiredChange: (next: string) => void
   onManualHaveChange: (have: string) => void
   onOpenHaveLinkDialog: () => void
+  onOpenNeedAssetRequest?: () => void
 }) {
   if (!editing) {
-    const linked = isHaveLinkedToRoster(value)
+    const linkedHave = isHaveLinkedToRoster(value)
     const display = formatResourceValueDisplay(value)
-    if (linked && resolveHaveDisplayValue(value).length > 0) {
+    if (linkedHave && resolveHaveDisplayValue(value).length > 0) {
       return (
         <div className="flex items-start gap-0.5">
           {canLinkAssets ? (
@@ -77,14 +82,25 @@ function ResourceValueCell({
       )
     }
     return (
-      <div className="flex items-start gap-0.5">
-        {canLinkAssets ? (
-          <HaveLinkSparkleButton
-            columnLabel={columnLabel}
-            onOpenLinkDialog={onOpenHaveLinkDialog}
-          />
-        ) : null}
-        <span className="block min-w-0 flex-1 px-1 py-1 text-[11px] leading-tight">{display}</span>
+      <div className="grid grid-cols-3 gap-0.5">
+        <span className="block px-1 py-1 text-[11px] leading-tight">
+          {value.required.trim() || '—'}
+        </span>
+        <Ics215HaveCell
+          value={value}
+          editing={false}
+          canLinkAssets={canLinkAssets}
+          columnLabel={columnLabel}
+          onManualChange={onManualHaveChange}
+          onOpenLinkDialog={onOpenHaveLinkDialog}
+        />
+        <Ics215NeedCell
+          value={value}
+          editing={false}
+          canLinkAssetRequests={canLinkNeedAssetRequests}
+          columnLabel={columnLabel}
+          onOpenAssetRequest={onOpenNeedAssetRequest ?? (() => undefined)}
+        />
       </div>
     )
   }
@@ -106,12 +122,13 @@ function ResourceValueCell({
         onManualChange={onManualHaveChange}
         onOpenLinkDialog={onOpenHaveLinkDialog}
       />
-      <span
-        title="Need (Required − Have)"
-        className="flex h-7 items-center rounded border border-transparent bg-muted/20 px-1 text-[11px] text-muted-foreground"
-      >
-        {computeIcs215Need(value.required, resolveHaveDisplayValue(value)) || '—'}
-      </span>
+      <Ics215NeedCell
+        value={value}
+        editing={editing}
+        canLinkAssetRequests={canLinkNeedAssetRequests}
+        columnLabel={columnLabel}
+        onOpenAssetRequest={onOpenNeedAssetRequest ?? (() => undefined)}
+      />
     </div>
   )
 }
@@ -131,6 +148,9 @@ export function Ics215WorkAssignmentsSpreadsheetTable({
   lockedAssignee,
   editing,
   canLinkAssets = false,
+  canLinkNeedAssetRequests = false,
+  onOpenNeedAssetRequest,
+  onOpenLinkedNeedAssetRequest,
   onRequestEdit,
   onChange,
   onHaveFillComplete,
@@ -190,6 +210,19 @@ export function Ics215WorkAssignmentsSpreadsheetTable({
     getAccessToken,
     onApplyWorkAssignmentsDraft: onChange,
     onPersistWorkAssignments,
+  })
+
+  const needLink = useIcs215NeedAssetRequestLink({
+    workAssignments,
+    resourceColumns,
+    workAssignmentTargetOptions,
+    onOpenCreateAssetRequest: (context) => {
+      if (!editing) onRequestEdit?.()
+      window.setTimeout(() => onOpenNeedAssetRequest?.(context), 0)
+    },
+    onOpenExistingAssetRequest: (storageRecordId) => {
+      onOpenLinkedNeedAssetRequest?.(storageRecordId)
+    },
   })
 
   const openHaveLinkWithEdit = (
@@ -445,6 +478,7 @@ export function Ics215WorkAssignmentsSpreadsheetTable({
                               value={row.resourceValues[column.id] ?? EMPTY_RESOURCE_VALUE}
                               editing={editing}
                               canLinkAssets={canLinkAssets}
+                              canLinkNeedAssetRequests={canLinkNeedAssetRequests}
                               columnLabel={column.label}
                               onRequiredChange={(next) =>
                                 patchResourceField(row.id, column.id, 'required', next)
@@ -463,6 +497,14 @@ export function Ics215WorkAssignmentsSpreadsheetTable({
                                     ? 'review'
                                     : 'create',
                                   workAssignmentContext,
+                                })
+                              }
+                              onOpenNeedAssetRequest={() =>
+                                needLink.openNeedAssetRequest({
+                                  row,
+                                  columnId: column.id,
+                                  columnLabel: column.label,
+                                  value: row.resourceValues[column.id] ?? EMPTY_RESOURCE_VALUE,
                                 })
                               }
                             />

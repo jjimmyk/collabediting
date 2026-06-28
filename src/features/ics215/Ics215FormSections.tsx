@@ -81,6 +81,9 @@ type Ics215FormSectionsProps = {
   ) => void
   onPersistWorkAssignmentsDraft?: (draft: Ics215WorkAssignmentsDraft) => void
   workAssignmentsSyncTooltip?: Ics215Ics204WorkSyncTooltipState
+  canLinkNeedAssetRequests?: boolean
+  onOpenNeedAssetRequest?: (context: import('@/features/ics215/ics215-need-asset-request-link').Ics215NeedCellContext) => void
+  onOpenLinkedNeedAssetRequest?: (storageRecordId: string) => void
 }
 
 function isSectionEditing(
@@ -123,6 +126,9 @@ export function Ics215FormSections({
   haveLinkRosterWorkspaceControls,
   showPositionAssets = true,
   ics234Objectives = [],
+  canLinkNeedAssetRequests = false,
+  onOpenNeedAssetRequest,
+  onOpenLinkedNeedAssetRequest,
 }: Ics215FormSectionsProps) {
   const [workAssignmentsMaximized, setWorkAssignmentsMaximized] = useState(false)
 
@@ -269,6 +275,9 @@ export function Ics215FormSections({
       tableLayout={maximized ? 'maximized' : 'default'}
       editing={workAssignmentsEditing}
       canLinkAssets={canEdit && !formIsLocked}
+      canLinkNeedAssetRequests={canLinkNeedAssetRequests && canEdit && !formIsLocked}
+      onOpenNeedAssetRequest={onOpenNeedAssetRequest}
+      onOpenLinkedNeedAssetRequest={onOpenLinkedNeedAssetRequest}
       onRequestEdit={() => onStartSectionEdit('work-assignments')}
       onChange={(next) => onPatchDraft('work-assignments', next)}
       onPersistWorkAssignments={onPersistWorkAssignmentsDraft}

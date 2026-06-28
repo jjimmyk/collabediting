@@ -7,6 +7,8 @@ import { WorkAssignmentTargetPicker } from '@/features/work-assignments/WorkAssi
 import { Ics215HaveLinkPage } from '@/features/ics215/Ics215HaveLinkPage'
 import { Ics215TacticCell } from '@/features/ics215/Ics215TacticCell'
 import { Ics215HaveCell } from '@/features/ics215/Ics215HaveCell'
+import { Ics215NeedCell } from '@/features/ics215/Ics215NeedCell'
+import { useIcs215NeedAssetRequestLink } from '@/features/ics215/useIcs215NeedAssetRequestLink'
 import { isHaveLinkedToRoster } from '@/features/ics215/ics215-have-asset-link'
 import { useIcs215HaveRosterLink } from '@/features/ics215/useIcs215HaveAssetLink'
 import type { Ics215ResourceValue } from '@/features/ics215/types'
@@ -52,19 +54,23 @@ function LegacyResourceValueCell({
   field,
   editing,
   canLinkAssets = false,
+  canLinkNeedAssetRequests = false,
   columnLabel,
   onChange,
   onManualHaveChange,
   onOpenHaveLinkDialog,
+  onOpenNeedAssetRequest,
 }: {
   value: Ics215ResourceValue
   field: 'required' | 'have' | 'need'
   editing: boolean
   canLinkAssets?: boolean
+  canLinkNeedAssetRequests?: boolean
   columnLabel: string
   onChange: (nextValue: string) => void
   onManualHaveChange?: (have: string) => void
   onOpenHaveLinkDialog?: () => void
+  onOpenNeedAssetRequest?: () => void
 }) {
   if (field === 'have') {
     return (
@@ -80,11 +86,14 @@ function LegacyResourceValueCell({
   }
 
   if (field === 'need') {
-    const need = applyIcs215NeedRecalc(value).need
     return (
-      <span className="block px-1 py-1 text-[11px] leading-tight text-muted-foreground">
-        {need.trim().length > 0 ? need : '—'}
-      </span>
+      <Ics215NeedCell
+        value={value}
+        editing={editing}
+        canLinkAssetRequests={canLinkNeedAssetRequests}
+        columnLabel={columnLabel}
+        onOpenAssetRequest={onOpenNeedAssetRequest ?? (() => undefined)}
+      />
     )
   }
 
@@ -151,6 +160,9 @@ export function Ics215WorkAssignmentsLegacyTable({
   lockedAssignee,
   editing,
   canLinkAssets = false,
+  canLinkNeedAssetRequests = false,
+  onOpenNeedAssetRequest,
+  onOpenLinkedNeedAssetRequest,
   onRequestEdit,
   onChange,
   onHaveFillComplete,
@@ -212,6 +224,19 @@ export function Ics215WorkAssignmentsLegacyTable({
     getAccessToken,
     onApplyWorkAssignmentsDraft: onChange,
     onPersistWorkAssignments,
+  })
+
+  const needLink = useIcs215NeedAssetRequestLink({
+    workAssignments,
+    resourceColumns,
+    workAssignmentTargetOptions,
+    onOpenCreateAssetRequest: (context) => {
+      if (!editing) onRequestEdit?.()
+      window.setTimeout(() => onOpenNeedAssetRequest?.(context), 0)
+    },
+    onOpenExistingAssetRequest: (storageRecordId) => {
+      onOpenLinkedNeedAssetRequest?.(storageRecordId)
+    },
   })
 
   const openHaveLinkWithEdit = (
@@ -534,6 +559,7 @@ export function Ics215WorkAssignmentsLegacyTable({
                               field={rhnRow.field}
                               editing={editing}
                               canLinkAssets={canLinkAssets}
+                              canLinkNeedAssetRequests={canLinkNeedAssetRequests}
                               columnLabel={column.label}
                               onChange={(nextValue) =>
                                 patchResourceField(row.id, column.id, rhnRow.field, nextValue)
@@ -548,6 +574,14 @@ export function Ics215WorkAssignmentsLegacyTable({
                                   columnLabel: column.label,
                                   mode: isHaveLinkedToRoster(value) ? 'review' : 'create',
                                   workAssignmentContext,
+                                })
+                              }
+                              onOpenNeedAssetRequest={() =>
+                                needLink.openNeedAssetRequest({
+                                  row,
+                                  columnId: column.id,
+                                  columnLabel: column.label,
+                                  value,
                                 })
                               }
                             />

@@ -1,5 +1,6 @@
 import { fillHaveForResourceValue } from '@/features/resources/workspace-asset-have-lookup'
 import { resolveHaveDisplayValue } from '@/features/ics215/ics215-have-asset-link'
+import { resolveNeedDisplayValue } from '@/features/ics215/ics215-need-asset-request-link'
 import type { PositionRosterEntry } from '@/features/roster/workspace-position-roster'
 import type { ResourceListItemData } from '@/features/resources/types'
 import type { Ics234ObjectiveRow } from '@/features/ics234/types'
@@ -15,6 +16,7 @@ import {
   createNextIcs215WorkAssignmentId,
 } from '@/features/ics215/utils'
 import { normalizeWorkAssignmentTargetValue } from '@/lib/work-assignment-target'
+import type { Ics215NeedCellContext } from '@/features/ics215/ics215-need-asset-request-link'
 import type { HaveLinkRosterActions } from '@/features/ics215/have-link-roster-actions'
 import type { WorkspaceRosterMember } from '@/lib/workspace-types'
 
@@ -85,6 +87,9 @@ export type Ics215WorkAssignmentsTableBaseProps = {
   positionRosterEntries?: PositionRosterEntry[]
   editing: boolean
   canLinkAssets?: boolean
+  canLinkNeedAssetRequests?: boolean
+  onOpenNeedAssetRequest?: (context: Ics215NeedCellContext) => void
+  onOpenLinkedNeedAssetRequest?: (storageRecordId: string) => void
   tableLayout?: Ics215WorkAssignmentsTableLayout
   onRequestEdit?: () => void
   onChange: (next: {
@@ -323,8 +328,8 @@ export function useIcs215WorkAssignmentsTable({
 
 export function formatResourceValueDisplay(value: Ics215ResourceValue | undefined): string {
   if (!value) return '—'
-  const parts = [value.required, resolveHaveDisplayValue(value), value.need].map((part) =>
-    part.trim()
+  const parts = [value.required, resolveHaveDisplayValue(value), resolveNeedDisplayValue(value)].map(
+    (part) => part.trim()
   )
   if (parts.every((part) => part.length === 0)) return '—'
   return parts.join(', ')

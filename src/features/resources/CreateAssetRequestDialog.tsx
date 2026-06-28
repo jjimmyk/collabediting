@@ -34,6 +34,10 @@ import {
   type CreateResourceRequestInput,
   type ResourceRequestItem,
 } from '@/lib/ics-213rr-resource-request'
+import {
+  applyNeedSeedToCreateInput,
+  type AssetRequestNeedSeed,
+} from '@/lib/asset-request-ics215-prefill'
 
 type CreateAssetRequestDialogProps = {
   open: boolean
@@ -49,6 +53,7 @@ type CreateAssetRequestDialogProps = {
   glassItemBorderClasses?: string
   workspaceContext?: AssetRequestWorkspaceContext | null
   resolveAsset?: AssetTransferResolveAsset
+  needSeed?: AssetRequestNeedSeed | null
   onSubmit: (input: CreateResourceRequestInput) => Promise<boolean>
 }
 
@@ -66,6 +71,7 @@ export function CreateAssetRequestDialog({
   glassItemBorderClasses = '',
   workspaceContext = null,
   resolveAsset,
+  needSeed = null,
   onSubmit,
 }: CreateAssetRequestDialogProps) {
   const [formValue, setFormValue] = useState<CreateResourceRequestInput>(
@@ -96,17 +102,19 @@ export function CreateAssetRequestDialog({
 
     if (!workspaceContext) return
 
+    const base = createEmptyResourceRequestInput({
+      requestedByName: defaultRequestedByName,
+      incidentName: workspaceContext.workspaceName,
+      mapLocation: workspaceContext.mapLocation ?? undefined,
+      sourceWorkspaceId: workspaceContext.workspaceId,
+      sourceWorkspaceKind: workspaceContext.workspaceKind,
+      sourceWorkspaceName: workspaceContext.workspaceName,
+    })
+
     setFormValue(
-      createEmptyResourceRequestInput({
-        requestedByName: defaultRequestedByName,
-        incidentName: workspaceContext.workspaceName,
-        mapLocation: workspaceContext.mapLocation ?? undefined,
-        sourceWorkspaceId: workspaceContext.workspaceId,
-        sourceWorkspaceKind: workspaceContext.workspaceKind,
-        sourceWorkspaceName: workspaceContext.workspaceName,
-      })
+      needSeed ? applyNeedSeedToCreateInput(base, needSeed) : base
     )
-  }, [defaultRequestedByName, open, workspaceContext])
+  }, [defaultRequestedByName, needSeed, open, workspaceContext])
 
   const transferConfirmations = useMemo(
     () =>

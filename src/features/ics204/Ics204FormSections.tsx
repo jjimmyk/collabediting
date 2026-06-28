@@ -43,6 +43,9 @@ import { fillHaveForResourceRequirementRow } from '@/features/resources/workspac
 import type { ResourceListItemData } from '@/features/resources/types'
 import { cn } from '@/lib/utils'
 import { is215SyncedResourceRow } from '@/features/ics204/sync-ics215-have-resources'
+import { Ics204AssetRequestStatusBadges } from '@/features/ics204/Ics204AssetRequestStatusBadges'
+import type { AssetWorkspaceOption } from '@/features/resources/types'
+import type { AssetTransferResolveAsset, ResourceRequestItem } from '@/lib/ics-213rr-resource-request'
 
 type Ics204FormSectionsProps = {
   form: Ics204FormState
@@ -76,6 +79,9 @@ type Ics204FormSectionsProps = {
   autoFillHaveFromAssets?: boolean
   onAutoFillHaveFromAssetsChange?: (enabled: boolean) => void
   onHaveFillComplete?: (filledCount: number) => void
+  assetRequestsByStorageId?: Record<string, ResourceRequestItem>
+  workspaceOptions?: AssetWorkspaceOption[]
+  resolveAsset?: AssetTransferResolveAsset
 }
 
 function isSectionEditing(
@@ -116,6 +122,9 @@ export function Ics204FormSections({
   autoFillHaveFromAssets = false,
   onAutoFillHaveFromAssetsChange,
   onHaveFillComplete,
+  assetRequestsByStorageId = {},
+  workspaceOptions = [],
+  resolveAsset,
 }: Ics204FormSectionsProps) {
   const sectionDisabled = formIsLocked || !canEdit
   const assignmentInfo =
@@ -544,7 +553,14 @@ export function Ics204FormSections({
                               : undefined
                           }
                         />
-                        {is215SyncedResourceRow(row) ? (
+                        {assetRequestsByStorageId && workspaceOptions && resolveAsset ? (
+                          <Ics204AssetRequestStatusBadges
+                            row={row}
+                            assetRequestsByStorageId={assetRequestsByStorageId}
+                            workspaceOptions={workspaceOptions}
+                            resolveAsset={resolveAsset}
+                          />
+                        ) : is215SyncedResourceRow(row) ? (
                           <Badge variant="secondary" className="text-[10px]">
                             From ICS-215 Have
                           </Badge>

@@ -30,6 +30,16 @@ export type Ics204ResourceAssignedRow = {
   /** Same encoding for manually added roster items (not linked in ICS-215) */
   manualRosterRef?: string | null
   rosterHaveRefType?: WorkAssignmentTargetType | null
+  /** Set when row is managed by ICS-215 Need → asset request sync */
+  assetRequestNeedLink?: Ics204AssetRequestNeedLink | null
+}
+
+export type Ics204AssetRequestNeedLink = {
+  assetRequestStorageRecordId: string
+  assetRequestNumber: string
+  ics215RowId: number
+  ics215ColumnId: string
+  assetKey: string
 }
 
 export type Ics204ResourceRequirementRow = {

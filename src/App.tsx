@@ -293,6 +293,10 @@ import {
   unlinkHaveRefFromIcs215Form,
   type Ics204HaveResourcesSyncContext,
 } from '@/features/ics204/sync-ics215-have-resources'
+import {
+  syncIcs215NeedAssetRequestsToLinkedIcs204Forms,
+  type Ics204NeedAssetRequestSyncContext,
+} from '@/features/ics204/sync-ics215-need-asset-requests'
 import { Ics204RosterResourceAddDialog } from '@/features/ics204/Ics204RosterResourceAddDialog'
 import { Ics204ExportPreviewDialog } from '@/features/ics204/Ics204ExportPreviewDialog'
 import { Ics204aDocumentDialog } from '@/features/ics204a/Ics204aDocumentDialog'
@@ -419,6 +423,12 @@ import {
   ics215AuthorColor,
 } from '@/features/ics215/utils'
 import { recalcIcs215WorkAssignmentsDraftNeed } from '@/features/ics215/ics215-work-assignments-table-shared'
+import {
+  applyNeedAssetRequestLinkToForm,
+  applyNeedAssetRequestLinkToWorkAssignmentsDraft,
+} from '@/features/ics215/ics215-need-asset-request-link'
+import type { Ics215NeedCellContext } from '@/features/ics215/ics215-need-asset-request-link'
+import type { AssetRequestNeedSeed } from '@/lib/asset-request-ics215-prefill'
 import { buildHaveLinkRosterActions } from '@/features/ics215/build-have-link-roster-actions'
 import { resolveMemberHaveRefByEmail } from '@/features/ics215/have-link-roster-actions'
 import { useIcs215WorkspaceForm } from '@/hooks/useIcs215WorkspaceForm'
@@ -8231,6 +8241,9 @@ function App() {
   const [ics215SectionDrafts, setIcs215SectionDrafts] = useState<Ics215FormSectionDrafts>({})
   const ics215FormRef = useRef(ics215Form)
   ics215FormRef.current = ics215Form
+  const commitNeedAssetRequestLinkRef = useRef<
+    (request: ResourceRequestItem, link: import('@/lib/ics-213rr-resource-request').AssetRequestIcs215NeedLink) => void
+  >(() => {})
   const ics215VersionsRef = useRef(ics215Versions)
   ics215VersionsRef.current = ics215Versions
   const [ics215aForm, setIcs215aForm] = useState<Ics215aFormState | null>(null)
@@ -8859,6 +8872,9 @@ function App() {
         }
 
         setOrganizationAssetRequests((previous) => [...previous, result.request])
+        if (input.ics215NeedLink && result.request.storageRecordId) {
+          commitNeedAssetRequestLinkRef.current(result.request, input.ics215NeedLink)
+        }
         setResourcesPanelView('resource-requests')
         if (input.sourceWorkspaceId) {
           toast.success(
@@ -9093,6 +9109,9 @@ function App() {
   const [isAddAssetToOrgChartOpen, setIsAddAssetToOrgChartOpen] = useState(false)
   const [isCreateOrganizationAssetOpen, setIsCreateOrganizationAssetOpen] = useState(false)
   const [isCreateAssetRequestOpen, setIsCreateAssetRequestOpen] = useState(false)
+  const [assetRequestNeedSeed, setAssetRequestNeedSeed] = useState<AssetRequestNeedSeed | null>(
+    null
+  )
   const [isAddWorkspaceAssetOpen, setIsAddWorkspaceAssetOpen] = useState(false)
   const [isCreatingOrganizationAsset, setIsCreatingOrganizationAsset] = useState(false)
   const [isCreatingAssetRequest, setIsCreatingAssetRequest] = useState(false)
@@ -14546,6 +14565,29 @@ function App() {
       haveLinkTargetOptions: buildHaveLinkTargetOptions(workAssignmentTargetOptions),
     }),
     [activeWorkspaceRoster, resourceCategoriesById, workAssignmentTargetOptions, workspaceAssetsByKey]
+  )
+  const organizationAssetRequestsByStorageId = useMemo(
+    () =>
+      Object.fromEntries(
+        organizationAssetRequests
+          .filter((request) => request.storageRecordId?.trim())
+          .map((request) => [request.storageRecordId!.trim(), request])
+      ),
+    [organizationAssetRequests]
+  )
+  const ics204NeedAssetRequestSyncContext = useMemo(
+    (): Ics204NeedAssetRequestSyncContext => ({
+      ...ics204HaveResourcesSyncContext,
+      assetRequestsByStorageId: organizationAssetRequestsByStorageId,
+      workspaceOptions: assetWorkspaceOptions,
+      resolveAsset: assetRequestResolveAsset,
+    }),
+    [
+      assetRequestResolveAsset,
+      assetWorkspaceOptions,
+      ics204HaveResourcesSyncContext,
+      organizationAssetRequestsByStorageId,
+    ]
   )
   const ics204AssignedUnitOptionsKey = useMemo(
     () => serializeIcs204AssigneeOptionsKey(ics204AssignedUnitOptions),
@@ -24110,6 +24152,148 @@ function App() {
       [section]: value,
     }))
   }
+  const mergeIcs204FormsAfter215ResourceSyncs = (
+    nextForm: Ics215FormState,
+    options: {
+      resourceSyncSkipFormIds: Set<string>
+      requestsByStorageId?: Record<string, ResourceRequestItem>
+    }
+  ) => {
+    const updated204FormsFromWork = syncIcs215WorkAssignmentsToLinkedIcs204Forms(
+      nextForm,
+      ics204Forms
+    )
+    const workSyncById = new Map(updated204FormsFromWork.map((form) => [form.id, form]))
+    const base204Forms = ics204Forms.map((entry) => workSyncById.get(entry.id) ?? entry)
+    const updated204FormsFromHave = syncIcs215HaveResourcesToLinkedIcs204Forms(
+      nextForm,
+      base204Forms,
+      ics204HaveResourcesSyncContext,
+      options.resourceSyncSkipFormIds
+    )
+    const haveSyncById = new Map(updated204FormsFromHave.map((form) => [form.id, form]))
+    const base204ForNeed = ics204Forms.map(
+      (entry) => haveSyncById.get(entry.id) ?? workSyncById.get(entry.id) ?? entry
+    )
+    const needSyncContext: Ics204NeedAssetRequestSyncContext = {
+      ...ics204NeedAssetRequestSyncContext,
+      assetRequestsByStorageId:
+        options.requestsByStorageId ?? ics204NeedAssetRequestSyncContext.assetRequestsByStorageId,
+    }
+    const updated204FormsFromNeed = syncIcs215NeedAssetRequestsToLinkedIcs204Forms(
+      nextForm,
+      base204ForNeed,
+      needSyncContext,
+      options.resourceSyncSkipFormIds
+    )
+    const needSyncById = new Map(updated204FormsFromNeed.map((form) => [form.id, form]))
+    const updated204FormIds = new Set([
+      ...updated204FormsFromWork.map((form) => form.id),
+      ...updated204FormsFromHave.map((form) => form.id),
+      ...updated204FormsFromNeed.map((form) => form.id),
+    ])
+
+    if (updated204FormIds.size === 0) {
+      return { updated204FormIds, workCount: 0, haveCount: 0, needCount: 0 }
+    }
+
+    setIcs204Forms((previous) =>
+      previous.map((entry) => {
+        const next =
+          needSyncById.get(entry.id) ??
+          haveSyncById.get(entry.id) ??
+          workSyncById.get(entry.id) ??
+          entry
+        return updated204FormIds.has(entry.id) ? cloneIcs204FormState(next) : entry
+      })
+    )
+
+    for (const formId of updated204FormIds) {
+      const updated =
+        needSyncById.get(formId) ?? haveSyncById.get(formId) ?? workSyncById.get(formId)
+      if (!updated) continue
+      const cloned = cloneIcs204FormState(updated)
+      const formVersions = ics204VersionsById[updated.id] ?? []
+      const latest204Version = formVersions[formVersions.length - 1]
+      if (latest204Version && latest204Version.signatures.length === 0) {
+        handleIcs204SaveDraft(updated.id, cloned, latest204Version)
+      }
+      if (activeWorkspaceSupabaseId) {
+        void syncIcs204AttachmentsForDocument(
+          activeWorkspaceSupabaseId,
+          updated.id,
+          cloned.resourcesAssigned
+            .map(getIcs204ResourceRowAssetKey)
+            .filter((assetKey): assetKey is string => Boolean(assetKey))
+        ).catch((syncError) => {
+          console.error(syncError)
+        })
+      }
+    }
+
+    return {
+      updated204FormIds,
+      workCount: updated204FormsFromWork.length,
+      haveCount: updated204FormsFromHave.length,
+      needCount: updated204FormsFromNeed.length,
+    }
+  }
+  commitNeedAssetRequestLinkRef.current = (request, link) => {
+    if (!ics215Form || !request.storageRecordId) return
+    const linkedForm = applyNeedAssetRequestLinkToForm(ics215Form, link, request)
+    setIcs215Form(cloneIcs215FormState(linkedForm))
+    setIcs215SectionDrafts((previous) => {
+      const draft = previous['work-assignments']
+      if (!draft) return previous
+      return {
+        ...previous,
+        'work-assignments': applyNeedAssetRequestLinkToWorkAssignmentsDraft(draft, link, request),
+      }
+    })
+
+    const resourceSyncSkipFormIds = new Set(
+      Object.entries(ics204EditingSectionsByFormId)
+        .filter(([, sections]) => sections?.['resources-assigned'])
+        .map(([formId]) => formId)
+    )
+    const requestsByStorageId = {
+      ...organizationAssetRequestsByStorageId,
+      [request.storageRecordId]: request,
+    }
+    const syncResult = mergeIcs204FormsAfter215ResourceSyncs(linkedForm, {
+      resourceSyncSkipFormIds,
+      requestsByStorageId,
+    })
+    const latestVersion = ics215Versions[ics215Versions.length - 1]
+    if (latestVersion && latestVersion.signatures.length === 0) {
+      handleIcs215SaveDraft(linkedForm, latestVersion)
+    }
+    if (syncResult.needCount === 0 && syncResult.updated204FormIds.size === 0) {
+      toast.message('ICS-215 Need linked. Add transfer assets to populate ICS-204 Resources Assigned.')
+    }
+  }
+  const handleOpenNeedAssetRequest = (context: Ics215NeedCellContext) => {
+    if (!activeWorkspaceSupabaseId || !assetRequestWorkspaceContext) {
+      toast.error('Asset requests require an active workspace.')
+      return
+    }
+    setAssetRequestNeedSeed({
+      needContext: context,
+      workspaceId: activeWorkspaceSupabaseId,
+    })
+    setIsCreateAssetRequestOpen(true)
+  }
+  const handleOpenLinkedNeedAssetRequest = (storageRecordId: string) => {
+    const request = organizationAssetRequests.find(
+      (entry) => entry.storageRecordId === storageRecordId
+    )
+    if (!request) {
+      toast.error('Asset request not found.')
+      return
+    }
+    setResourcesPanelView('resource-requests')
+    setOpenResourceRequestPreviewId(request.id)
+  }
   const persistIcs215WorkAssignmentsFromDraft = (
     draft: Ics215WorkAssignmentsDraft,
     options: { closeEdit?: boolean } = {}
@@ -24118,72 +24302,29 @@ function App() {
     const nextForm = applyIcs215SectionDraft(ics215Form, 'work-assignments', draft)
     setIcs215Form(cloneIcs215FormState(nextForm))
 
-    const updated204FormsFromWork = syncIcs215WorkAssignmentsToLinkedIcs204Forms(nextForm, ics204Forms)
-    const workSyncById = new Map(updated204FormsFromWork.map((form) => [form.id, form]))
-    const base204Forms = ics204Forms.map((entry) => workSyncById.get(entry.id) ?? entry)
     const resourceSyncSkipFormIds = new Set(
       Object.entries(ics204EditingSectionsByFormId)
         .filter(([, sections]) => sections?.['resources-assigned'])
         .map(([formId]) => formId)
     )
-    const updated204FormsFromResources = syncIcs215HaveResourcesToLinkedIcs204Forms(
-      nextForm,
-      base204Forms,
-      ics204HaveResourcesSyncContext,
-      resourceSyncSkipFormIds
-    )
-    const resourceSyncById = new Map(
-      updated204FormsFromResources.map((form) => [form.id, form])
-    )
-    const updated204FormIds = new Set([
-      ...updated204FormsFromWork.map((form) => form.id),
-      ...updated204FormsFromResources.map((form) => form.id),
-    ])
-    if (updated204FormIds.size > 0) {
-      setIcs204Forms((previous) =>
-        previous.map((entry) => {
-          const next =
-            resourceSyncById.get(entry.id) ?? workSyncById.get(entry.id) ?? entry
-          return updated204FormIds.has(entry.id) ? cloneIcs204FormState(next) : entry
-        })
-      )
-      for (const formId of updated204FormIds) {
-        const updated = resourceSyncById.get(formId) ?? workSyncById.get(formId)
-        if (!updated) continue
-        const cloned = cloneIcs204FormState(updated)
-        const formVersions = ics204VersionsById[updated.id] ?? []
-        const latest204Version = formVersions[formVersions.length - 1]
-        if (latest204Version && latest204Version.signatures.length === 0) {
-          handleIcs204SaveDraft(updated.id, cloned, latest204Version)
-        }
-        if (activeWorkspaceSupabaseId) {
-          void syncIcs204AttachmentsForDocument(
-            activeWorkspaceSupabaseId,
-            updated.id,
-            cloned.resourcesAssigned
-              .map(getIcs204ResourceRowAssetKey)
-              .filter((assetKey): assetKey is string => Boolean(assetKey))
-          ).catch((syncError) => {
-            console.error(syncError)
-          })
-        }
-      }
-      if (options.closeEdit) {
-        const workCount = updated204FormsFromWork.length
-        const resourceCount = updated204FormsFromResources.length
-        if (workCount > 0 && resourceCount > 0) {
-          toast.success(
-            `Synced work assignments and resources to ${updated204FormIds.size} ICS-204 list${updated204FormIds.size === 1 ? '' : 's'}.`
-          )
-        } else if (workCount > 0) {
-          toast.success(
-            `Synced work assignments to ${workCount} ICS-204 list${workCount === 1 ? '' : 's'}.`
-          )
-        } else if (resourceCount > 0) {
-          toast.success(
-            `Synced resources assigned to ${resourceCount} ICS-204 list${resourceCount === 1 ? '' : 's'}.`
-          )
-        }
+    const syncResult = mergeIcs204FormsAfter215ResourceSyncs(nextForm, {
+      resourceSyncSkipFormIds,
+    })
+    const { updated204FormIds, workCount, haveCount, needCount } = syncResult
+    if (options.closeEdit && updated204FormIds.size > 0) {
+      const resourceCount = haveCount + needCount
+      if (workCount > 0 && resourceCount > 0) {
+        toast.success(
+          `Synced work assignments and resources to ${updated204FormIds.size} ICS-204 list${updated204FormIds.size === 1 ? '' : 's'}.`
+        )
+      } else if (workCount > 0) {
+        toast.success(
+          `Synced work assignments to ${workCount} ICS-204 list${workCount === 1 ? '' : 's'}.`
+        )
+      } else if (resourceCount > 0) {
+        toast.success(
+          `Synced resources assigned to ${resourceCount} ICS-204 list${resourceCount === 1 ? '' : 's'}.`
+        )
       }
     }
 
@@ -35434,6 +35575,9 @@ function App() {
                     ics234Objectives={displayIcs234Form?.objectives ?? []}
                     onAppendVersion={handleIcs215AppendVersion}
                     onSignReview={handleIcs215SignReview}
+                    canLinkNeedAssetRequests={Boolean(activeWorkspaceSupabaseId && assetRequestWorkspaceContext)}
+                    onOpenNeedAssetRequest={handleOpenNeedAssetRequest}
+                    onOpenLinkedNeedAssetRequest={handleOpenLinkedNeedAssetRequest}
                   />
                   </OperationalPeriodHistoricalFormShell>
                 )}
@@ -36390,6 +36534,9 @@ function App() {
                                       autoFillHaveFromAssets={autoFillHaveFromWorkspaceAssets}
                                       onAutoFillHaveFromAssetsChange={setAutoFillHaveFromWorkspaceAssets}
                                       onHaveFillComplete={handleHaveFillComplete}
+                                      assetRequestsByStorageId={organizationAssetRequestsByStorageId}
+                                      workspaceOptions={assetWorkspaceOptions}
+                                      resolveAsset={assetRequestResolveAsset}
                                     />
                                     </div>
                                     {!viewingPastFormVersion &&
@@ -38860,7 +39007,10 @@ function App() {
       />
       <CreateAssetRequestDialog
         open={isCreateAssetRequestOpen}
-        onOpenChange={setIsCreateAssetRequestOpen}
+        onOpenChange={(open) => {
+          setIsCreateAssetRequestOpen(open)
+          if (!open) setAssetRequestNeedSeed(null)
+        }}
         isSubmitting={isCreatingAssetRequest || isLoadingOrganizationAssetRequests}
         defaultRequestedByName={defaultAssetRequestRequestedByName}
         incidentOptions={assetRequestIncidentOptions}
@@ -38872,6 +39022,7 @@ function App() {
         glassItemBorderClasses={glassItemBorderClasses}
         workspaceContext={assetRequestWorkspaceContext}
         resolveAsset={assetRequestResolveAsset}
+        needSeed={assetRequestNeedSeed}
         onSubmit={handleCreateAssetRequest}
       />
       <AddWorkspaceAssetDialog

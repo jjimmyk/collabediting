@@ -2,6 +2,14 @@ import type { Ics201VersionSignature } from '@/features/ics201/types'
 
 export type Ics215HaveSource = 'manual' | 'linked-roster' | 'linked-assets'
 
+export type Ics215NeedLinkRef = {
+  assetRequestStorageRecordId: string
+  assetRequestNumber: string
+  linkedAt: string
+}
+
+export type Ics215NeedSource = 'computed' | 'linked-asset-request'
+
 export type Ics215ResourceValue = {
   required: string
   have: string
@@ -11,6 +19,8 @@ export type Ics215ResourceValue = {
   /** Roster/asset/category target values (work-assignment encoding) */
   linkedHaveRefs?: string[]
   haveSource?: Ics215HaveSource
+  linkedNeedAssetRequest?: Ics215NeedLinkRef | null
+  needSource?: Ics215NeedSource
 }
 
 export type Ics215ResourceColumn = {

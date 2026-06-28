@@ -99,6 +99,9 @@ type Ics215WorkspacePanelProps = {
   haveLinkRosterWorkspaceControls?: HaveLinkRosterWorkspaceControls
   showPositionAssets?: boolean
   ics234Objectives?: Ics234ObjectiveRow[]
+  canLinkNeedAssetRequests?: boolean
+  onOpenNeedAssetRequest?: (context: import('@/features/ics215/ics215-need-asset-request-link').Ics215NeedCellContext) => void
+  onOpenLinkedNeedAssetRequest?: (storageRecordId: string) => void
   onAppendVersion: (
     form: Ics215FormState,
     signatures?: Ics201VersionSignature[],
@@ -148,6 +151,9 @@ export function Ics215WorkspacePanel({
   haveLinkRosterWorkspaceControls,
   showPositionAssets = true,
   ics234Objectives = [],
+  canLinkNeedAssetRequests = false,
+  onOpenNeedAssetRequest,
+  onOpenLinkedNeedAssetRequest,
   onAppendVersion,
   onSignReview,
 }: Ics215WorkspacePanelProps) {
@@ -543,6 +549,9 @@ export function Ics215WorkspacePanel({
             haveLinkRosterWorkspaceControls={haveLinkRosterWorkspaceControls}
             showPositionAssets={showPositionAssets}
             ics234Objectives={ics234Objectives}
+            canLinkNeedAssetRequests={canLinkNeedAssetRequests}
+            onOpenNeedAssetRequest={onOpenNeedAssetRequest}
+            onOpenLinkedNeedAssetRequest={onOpenLinkedNeedAssetRequest}
           />
         </div>
 

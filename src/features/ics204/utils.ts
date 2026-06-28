@@ -18,6 +18,8 @@ import type {
   Ics204VersionRow,
   Ics204WorkAssignmentRow,
 } from '@/features/ics204/types'
+import type { NeedLinkedAssetEntry } from '@/features/ics204/sync-ics215-need-asset-requests'
+import type { Ics204NeedAssetRequestSyncContext } from '@/features/ics204/sync-ics215-need-asset-requests'
 import { formatWorkAssignmentTargetLabel, parseWorkAssignmentTarget } from '@/lib/work-assignment-target'
 import type { WorkAssignmentTargetType } from '@/lib/work-assignment-target'
 import type { PositionResourceCategoryEntry } from '@/lib/workspace-resource-category-types'
@@ -240,6 +242,44 @@ export function createIcs204ResourceAssignedRowFromRosterRef(
   }
 }
 
+function snapshotFromAssetKey(
+  rowId: number,
+  assetKey: string,
+  assetsByKey: Record<string, ResourceListItemData>
+): Ics204ResourceSnapshot {
+  const asset = assetsByKey[assetKey]
+  if (asset) {
+    return snapshotFromResourceListItem(asset)
+  }
+  const snapshot = EMPTY_RESOURCE_SNAPSHOT(rowId, assetKey)
+  snapshot.assetKey = assetKey
+  snapshot.type = 'Asset'
+  snapshot.notes = 'Asset unavailable'
+  return snapshot
+}
+
+export function createIcs204ResourceAssignedRowFromAssetRequestAsset(
+  rowId: number,
+  entry: NeedLinkedAssetEntry,
+  context: Ics204NeedAssetRequestSyncContext,
+  existing?: Ics204ResourceAssignedRow
+): Ics204ResourceAssignedRow {
+  const snapshot = snapshotFromAssetKey(rowId, entry.assetKey, context.assetsByKey)
+  return {
+    id: rowId,
+    resourceId: snapshot.id,
+    assetKey: entry.assetKey,
+    reportingInfoNotes: entry.reportingInfoNotes || existing?.reportingInfoNotes || '',
+    has204A: existing?.has204A ?? false,
+    resourceSnapshot: snapshot,
+    ics204a: existing?.has204A ? existing.ics204a ?? null : null,
+    rosterHaveRef: existing?.rosterHaveRef ?? null,
+    manualRosterRef: existing?.manualRosterRef ?? null,
+    rosterHaveRefType: existing?.rosterHaveRefType ?? null,
+    assetRequestNeedLink: entry.link,
+  }
+}
+
 export function getIcs204ResourceRowRefKey(row: Ics204ResourceAssignedRow): string | null {
   const synced = row.rosterHaveRef?.trim()
   if (synced) return synced
@@ -312,6 +352,7 @@ export function normalizeIcs204ResourceAssignedRow(
     rosterHaveRef: row.rosterHaveRef ?? null,
     manualRosterRef: row.manualRosterRef ?? null,
     rosterHaveRefType: row.rosterHaveRefType ?? null,
+    assetRequestNeedLink: row.assetRequestNeedLink ?? null,
   }
 }
 

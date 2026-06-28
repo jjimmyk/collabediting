@@ -5,6 +5,7 @@ import type {
   Ics215WorkAssignmentRow,
 } from '@/features/ics215/types'
 import { applyIcs215NeedRecalc } from '@/features/ics215/ics215-work-assignments-table-shared'
+import { normalizeNeedLinkFields } from '@/features/ics215/ics215-need-asset-request-link'
 import type { ResourceListItemData } from '@/features/resources/types'
 import type { WorkAssignmentTargetType } from '@/lib/work-assignment-target'
 import { parseWorkAssignmentTarget } from '@/lib/work-assignment-target'
@@ -241,14 +242,18 @@ export function normalizeIcs215ResourceValue(raw: unknown): Ics215ResourceValue 
     migratedRefs.length > 0 &&
     (normalized.haveSource === 'linked-roster' || normalized.haveSource === 'linked-assets')
   ) {
-    return applyIcs215NeedRecalc({
-      ...normalized,
-      have: formatHaveCountFromRefs(migratedRefs),
-    })
+    return normalizeNeedLinkFields(
+      applyIcs215NeedRecalc({
+        ...normalized,
+        have: formatHaveCountFromRefs(migratedRefs),
+      })
+    )
   }
 
-  return normalized
+  return normalizeNeedLinkFields(normalized)
 }
+
+export { normalizeNeedLinkFields } from '@/features/ics215/ics215-need-asset-request-link'
 
 export function partitionHaveLinkRefs(
   eligibleOptions: WorkAssignmentTargetOption[],

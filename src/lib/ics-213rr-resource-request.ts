@@ -109,6 +109,18 @@ export type ResourceRequestItem = {
   recordUpdatedAt?: string
   /** Resolved display name for organization_asset_requests.created_by */
   recordCreatedByName?: string
+  /** When created from ICS-215 Need cell linkage */
+  ics215NeedLink?: AssetRequestIcs215NeedLink
+}
+
+export type AssetRequestIcs215NeedLink = {
+  workspaceId: string
+  rowId: number
+  columnId: string
+  assigneeKey: string
+  columnLabel: string
+  workAssignment: string
+  reportingLocation: string
 }
 
 export type DocxBlock =
@@ -349,6 +361,28 @@ function normalizeReslFields(raw: Partial<ResourceRequestItem>): {
   }
 }
 
+function normalizeIcs215NeedLink(raw: unknown): AssetRequestIcs215NeedLink | undefined {
+  if (!raw || typeof raw !== 'object') return undefined
+  const record = raw as Record<string, unknown>
+  const workspaceId = String(record.workspaceId ?? '').trim()
+  const rowId = typeof record.rowId === 'number' ? record.rowId : Number.parseInt(String(record.rowId ?? ''), 10)
+  const columnId = String(record.columnId ?? '').trim()
+  const assigneeKey = String(record.assigneeKey ?? '').trim()
+  const columnLabel = String(record.columnLabel ?? '').trim()
+  const workAssignment = String(record.workAssignment ?? '').trim()
+  const reportingLocation = String(record.reportingLocation ?? '').trim()
+  if (!workspaceId || !Number.isFinite(rowId) || !columnId || !assigneeKey) return undefined
+  return {
+    workspaceId,
+    rowId,
+    columnId,
+    assigneeKey,
+    columnLabel,
+    workAssignment,
+    reportingLocation,
+  }
+}
+
 export function normalizeResourceRequestItem(raw: Partial<ResourceRequestItem>): ResourceRequestItem {
   const items =
     Array.isArray(raw.items) && raw.items.length > 0
@@ -435,6 +469,7 @@ export function normalizeResourceRequestItem(raw: Partial<ResourceRequestItem>):
       typeof raw.recordCreatedByName === 'string' && raw.recordCreatedByName.trim()
         ? raw.recordCreatedByName.trim()
         : undefined,
+    ics215NeedLink: normalizeIcs215NeedLink(raw.ics215NeedLink),
   }
 }
 
@@ -1427,6 +1462,7 @@ export function buildResourceRequestFromInput(
     sourceWorkspaceKind: input.sourceWorkspaceKind,
     sourceWorkspaceName: input.sourceWorkspaceName,
     assetTransferConfirmations: input.assetTransferConfirmations,
+    ics215NeedLink: input.ics215NeedLink,
   })
 }
 
