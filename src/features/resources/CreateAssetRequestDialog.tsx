@@ -36,6 +36,7 @@ import {
 } from '@/lib/ics-213rr-resource-request'
 import {
   applyNeedSeedToCreateInput,
+  buildIcs215NeedLinkFromContext,
   type AssetRequestNeedSeed,
 } from '@/lib/asset-request-ics215-prefill'
 
@@ -129,9 +130,16 @@ export function CreateAssetRequestDialog({
   )
 
   const handleSubmit = async () => {
+    const ics215NeedLink =
+      formValue.ics215NeedLink ??
+      (needSeed
+        ? buildIcs215NeedLinkFromContext(needSeed.needContext, needSeed.workspaceId)
+        : undefined)
+
     const payload: CreateResourceRequestInput = workspaceContext
       ? {
           ...formValue,
+          ics215NeedLink,
           incidentName: workspaceContext.workspaceName,
           sourceWorkspaceId: workspaceContext.workspaceId,
           sourceWorkspaceKind: workspaceContext.workspaceKind,
@@ -141,6 +149,7 @@ export function CreateAssetRequestDialog({
         }
       : {
           ...formValue,
+          ics215NeedLink,
           assetTransferConfirmations: undefined,
         }
 
@@ -159,7 +168,10 @@ export function CreateAssetRequestDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="!flex !h-[92vh] !max-h-[92vh] !w-[96vw] !max-w-[96vw] flex-col gap-0 overflow-hidden p-0 sm:!max-w-[96vw]">
+      <DialogContent
+        showCloseButton={false}
+        className="!flex !h-[92vh] !max-h-[92vh] !w-[96vw] !max-w-[96vw] flex-col gap-0 overflow-hidden p-0 sm:!max-w-[96vw]"
+      >
         <DialogHeader className="shrink-0 border-b px-6 py-4">
           <DialogTitle>Create asset request</DialogTitle>
           <DialogDescription>

@@ -1,6 +1,6 @@
 import { X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { AssetRequestDetailPanel } from '@/features/resources/AssetRequestDetailPanel'
 import type { AssetWorkspaceOption, ResourceListItemData } from '@/features/resources/types'
 import type { WorkspacePositionCatalog } from '@/features/roster/workspace-positions'
@@ -44,15 +44,19 @@ export function AssetRequestDetailSheet({
 }: AssetRequestDetailSheetProps) {
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="flex w-full flex-col gap-0 p-0 sm:max-w-xl">
+      <SheetContent
+        side="right"
+        showCloseButton={false}
+        className="flex w-full flex-col gap-0 p-0 sm:max-w-xl"
+      >
         <SheetHeader className="flex-row items-center justify-between gap-2 border-b px-4 py-3">
           <div className="min-w-0 text-left">
             <SheetTitle className="truncate text-base">
               {request ? request.requestNumber : 'Asset request'}
             </SheetTitle>
-            {request ? (
-              <p className="truncate text-xs text-muted-foreground">{request.incidentName}</p>
-            ) : null}
+            <SheetDescription className="truncate">
+              {request ? request.incidentName : 'Asset request details'}
+            </SheetDescription>
           </div>
           <Button
             type="button"
