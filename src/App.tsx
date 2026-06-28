@@ -666,6 +666,11 @@ import {
 import { AddWorkspacePositionDialog } from '@/features/roster/AddWorkspacePositionDialog'
 import { BuildTeamRosterStep } from '@/features/roster/BuildTeamRosterStep'
 import { CreateActivationPageLayout } from '@/features/activation/CreateActivationPageLayout'
+import { WorkspaceAssetRequestSpendSection } from '@/features/analytics/WorkspaceAssetRequestSpendSection'
+import {
+  filterSpendRowsByDateRange,
+  flattenWorkspaceAssetRequestSpendRows,
+} from '@/features/analytics/workspace-asset-request-spend'
 import {
   getCreateActivationKindFromPath,
   isBuildTeamActivationStep,
@@ -18859,6 +18864,31 @@ function App() {
       ),
     [analyticsStartTime, analyticsEndTime, analyticsSelectedRegions]
   )
+  const workspaceAssetRequestSpendRows = useMemo(
+    () =>
+      isInWorkspaceContext && activeWorkspaceSupabaseId
+        ? flattenWorkspaceAssetRequestSpendRows(
+            organizationAssetRequests,
+            activeWorkspaceSupabaseId,
+            activeWorkspaceRoster
+          )
+        : [],
+    [
+      activeWorkspaceRoster,
+      activeWorkspaceSupabaseId,
+      isInWorkspaceContext,
+      organizationAssetRequests,
+    ]
+  )
+  const filteredWorkspaceAssetRequestSpendRows = useMemo(
+    () =>
+      filterSpendRowsByDateRange(
+        workspaceAssetRequestSpendRows,
+        analyticsStartTime,
+        analyticsEndTime
+      ),
+    [workspaceAssetRequestSpendRows, analyticsStartTime, analyticsEndTime]
+  )
   const analyticsIncidentCategoryCounts = useMemo(
     () => aggregateAnalyticsCategoryCounts(analyticsFilteredRecords, 'incident'),
     [analyticsFilteredRecords]
@@ -31566,6 +31596,12 @@ function App() {
                             Select at least one region to view analytics.
                           </p>
                         )}
+                        {isInWorkspaceContext && (
+                          <p className="text-xs text-muted-foreground">
+                            Asset request spend uses the date range above; region filters apply
+                            only to incident and event analytics below.
+                          </p>
+                        )}
                       </div>
                     </section>
 
@@ -31633,6 +31669,17 @@ function App() {
                           Hide all
                         </Button>
                       </div>
+                    )}
+
+                    {isInWorkspaceContext && (
+                      <WorkspaceAssetRequestSpendSection
+                        rows={filteredWorkspaceAssetRequestSpendRows}
+                        allWorkspaceRowCount={workspaceAssetRequestSpendRows.length}
+                        isLoading={isLoadingOrganizationAssetRequests}
+                        workspaceName={activeWorkspaceRosterLabel}
+                        glassItemBorderClasses={glassItemBorderClasses}
+                        onOpenRequest={setOpenAssetRequestDetailId}
+                      />
                     )}
 
                     <section
