@@ -1,6 +1,7 @@
 import { Button } from '@/components/ui/button'
 import { AssetRequestLineItemFields } from '@/features/resources/AssetRequestLineItemFields'
-import type { ResourceListItemData } from '@/features/resources/types'
+import type { AssetWorkspaceOption, ResourceListItemData } from '@/features/resources/types'
+import type { WorkspacePositionCatalog } from '@/features/roster/workspace-positions'
 import type { AssetRequestLineItem } from '@/lib/ics-213rr-resource-request'
 import { Trash2 } from 'lucide-react'
 
@@ -12,6 +13,8 @@ type AssetRequestLineItemFormProps = {
   canRemove: boolean
   organizationAssets: ResourceListItemData[]
   orgAssetIdsByKey?: Record<string, string>
+  workspaceOptions?: AssetWorkspaceOption[]
+  positionCatalog?: WorkspacePositionCatalog | null
   glassItemBorderClasses?: string
   idPrefix?: string
 }
@@ -24,6 +27,8 @@ export function AssetRequestLineItemForm({
   canRemove,
   organizationAssets,
   orgAssetIdsByKey = {},
+  workspaceOptions = [],
+  positionCatalog = null,
   glassItemBorderClasses = '',
   idPrefix = 'asset-request-item',
 }: AssetRequestLineItemFormProps) {
@@ -53,6 +58,8 @@ export function AssetRequestLineItemForm({
         onChange={onChange}
         organizationAssets={organizationAssets}
         orgAssetIdsByKey={orgAssetIdsByKey}
+        workspaceOptions={workspaceOptions}
+        positionCatalog={positionCatalog}
         glassItemBorderClasses={glassItemBorderClasses}
         idPrefix={idPrefix}
       />

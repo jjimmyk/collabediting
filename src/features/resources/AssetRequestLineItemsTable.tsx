@@ -8,7 +8,8 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { OrganizationAssetPickerPopover } from '@/features/resources/OrganizationAssetPickerPopover'
-import type { ResourceListItemData } from '@/features/resources/types'
+import type { AssetWorkspaceOption, ResourceListItemData } from '@/features/resources/types'
+import type { WorkspacePositionCatalog } from '@/features/roster/workspace-positions'
 import {
   computeLineItemTotalCost,
   fromDatetimeLocalInputValue,
@@ -24,6 +25,8 @@ type AssetRequestLineItemsTableProps = {
   onRemoveItem: (index: number) => void
   organizationAssets: ResourceListItemData[]
   orgAssetIdsByKey?: Record<string, string>
+  workspaceOptions?: AssetWorkspaceOption[]
+  positionCatalog?: WorkspacePositionCatalog | null
   glassItemBorderClasses?: string
 }
 
@@ -33,6 +36,8 @@ export function AssetRequestLineItemsTable({
   onRemoveItem,
   organizationAssets,
   orgAssetIdsByKey = {},
+  workspaceOptions = [],
+  positionCatalog = null,
   glassItemBorderClasses = '',
 }: AssetRequestLineItemsTableProps) {
   return (
@@ -238,6 +243,8 @@ export function AssetRequestLineItemsTable({
                     glassItemBorderClasses={glassItemBorderClasses}
                     selected={item.assetsToTransfer}
                     onChange={(assetsToTransfer) => patch({ assetsToTransfer })}
+                    workspaceOptions={workspaceOptions}
+                    positionCatalog={positionCatalog}
                     idPrefix={`asset-request-table-item-${index}`}
                   />
                 </td>

@@ -168,6 +168,8 @@ import {
   getResourceRequestSearchValues,
   getResourceRequestTotalQuantity,
   getPendingTransferConfirmations,
+  buildAssetRequestTransferRef,
+  replaceTransferAssetInRequest,
   printResourceRequestPdf,
   type AssetRequestWorkspaceContext,
   type AssetTransferResolveAsset,
@@ -250,6 +252,7 @@ import { createOrganizationAsset, updateOrganizationAsset } from '@/lib/organiza
 import {
   createOrganizationAssetRequest,
   fetchOrganizationAssetRequests,
+  updateOrganizationAssetRequest,
 } from '@/lib/organization-asset-request-service'
 import { CreateOrganizationDialog } from '@/features/organization/CreateOrganizationDialog'
 import { OrgMembersSheet } from '@/features/organization/OrgMembersSheet'
@@ -8895,20 +8898,38 @@ function App() {
         const succeeded = results.filter((result) => result.status === 'fulfilled').length
         const failed = results.length - succeeded
         const appliedAt = new Date().toISOString()
+        const updatedRequest: ResourceRequestItem = {
+          ...request,
+          assetTransferConfirmations: request.assetTransferConfirmations?.map((confirmation) =>
+            pending.some((pendingEntry) => pendingEntry.assetKey === confirmation.assetKey)
+              ? { ...confirmation, appliedAt }
+              : confirmation
+          ),
+        }
 
-        setOrganizationAssetRequests((previous) =>
-          previous.map((entry) => {
-            if (entry.id !== request.id) return entry
-            return {
-              ...entry,
-              assetTransferConfirmations: entry.assetTransferConfirmations?.map((confirmation) =>
-                pending.some((pendingEntry) => pendingEntry.assetKey === confirmation.assetKey)
-                  ? { ...confirmation, appliedAt }
-                  : confirmation
-              ),
-            }
+        if (activeOrganizationId) {
+          const accessToken = await getAccessToken()
+          const persistResult = await updateOrganizationAssetRequest({
+            accessToken,
+            organizationId: activeOrganizationId,
+            request: updatedRequest,
           })
-        )
+          if (persistResult.ok) {
+            setOrganizationAssetRequests((previous) =>
+              previous.map((entry) =>
+                entry.id === persistResult.request.id ? persistResult.request : entry
+              )
+            )
+          } else {
+            setOrganizationAssetRequests((previous) =>
+              previous.map((entry) => (entry.id === request.id ? updatedRequest : entry))
+            )
+          }
+        } else {
+          setOrganizationAssetRequests((previous) =>
+            previous.map((entry) => (entry.id === request.id ? updatedRequest : entry))
+          )
+        }
 
         if (failed === 0) {
           toast.success(
@@ -8928,7 +8949,58 @@ function App() {
         setApplyingAssetRequestTransferId(null)
       }
     },
-    [assetRequestResolveAsset, assignAsset]
+    [activeOrganizationId, assetRequestResolveAsset, assignAsset, getAccessToken]
+  )
+  const handleReplaceAssetRequestTransfer = useCallback(
+    async (request: ResourceRequestItem, oldAssetKey: string, newAsset: ResourceListItemData) => {
+      if (!activeOrganizationId) {
+        toast.error('Select an organization before updating asset requests.')
+        return
+      }
+
+      setIsReplacingAssetRequestTransfer(true)
+      try {
+        const newRef = buildAssetRequestTransferRef({
+          assetKey: newAsset.assetKey,
+          organizationAssetId: orgAssetIdsByKey[newAsset.assetKey],
+          name: newAsset.name,
+          type: newAsset.type,
+        })
+        let updated: ResourceRequestItem
+        try {
+          updated = replaceTransferAssetInRequest(
+            request,
+            oldAssetKey,
+            newRef,
+            assetRequestResolveAsset
+          )
+        } catch (error) {
+          toast.error(error instanceof Error ? error.message : 'Could not replace transfer asset.')
+          return
+        }
+
+        const accessToken = await getAccessToken()
+        const result = await updateOrganizationAssetRequest({
+          accessToken,
+          organizationId: activeOrganizationId,
+          request: updated,
+        })
+        if (!result.ok) {
+          toast.error(result.message)
+          return
+        }
+
+        setOrganizationAssetRequests((previous) =>
+          previous.map((entry) => (entry.id === result.request.id ? result.request : entry))
+        )
+        toast.success(`Transfer asset updated to ${newAsset.name}.`)
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : 'Could not replace transfer asset.')
+      } finally {
+        setIsReplacingAssetRequestTransfer(false)
+      }
+    },
+    [activeOrganizationId, assetRequestResolveAsset, getAccessToken, orgAssetIdsByKey]
   )
   const handleUpdateOrganizationAsset = useCallback(
     async (resource: ResourceListItemData) => {
@@ -9025,6 +9097,7 @@ function App() {
   const [isCreatingOrganizationAsset, setIsCreatingOrganizationAsset] = useState(false)
   const [isCreatingAssetRequest, setIsCreatingAssetRequest] = useState(false)
   const [isApplyingAssetRequestTransfers, setIsApplyingAssetRequestTransfers] = useState(false)
+  const [isReplacingAssetRequestTransfer, setIsReplacingAssetRequestTransfer] = useState(false)
   const [applyingAssetRequestTransferId, setApplyingAssetRequestTransferId] = useState<
     number | null
   >(null)
@@ -29173,13 +29246,19 @@ function App() {
                               <AssetRequestDetailPanel
                                 request={request}
                                 organizationAssets={hubAssets}
+                                orgAssetIdsByKey={orgAssetIdsByKey}
                                 workspaceOptions={assetWorkspaceOptions}
+                                positionCatalog={
+                                  isInWorkspaceContext ? workspacePositionCatalog : null
+                                }
                                 resolveAsset={assetRequestResolveAsset}
                                 onApplyTransfers={handleApplyAssetRequestTransfers}
+                                onReplaceTransferAsset={handleReplaceAssetRequestTransfer}
                                 isApplyingTransfers={
                                   isApplyingAssetRequestTransfers &&
                                   applyingAssetRequestTransferId === request.id
                                 }
+                                isReplacingTransferAsset={isReplacingAssetRequestTransfer}
                               />
                             </div>
                           </CollapsibleContent>
@@ -38789,6 +38868,7 @@ function App() {
         organizationAssets={hubAssets}
         orgAssetIdsByKey={orgAssetIdsByKey}
         workspaceOptions={assetWorkspaceOptions}
+        positionCatalog={isInWorkspaceContext ? workspacePositionCatalog : null}
         glassItemBorderClasses={glassItemBorderClasses}
         workspaceContext={assetRequestWorkspaceContext}
         resolveAsset={assetRequestResolveAsset}

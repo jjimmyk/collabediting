@@ -101,6 +101,8 @@ export type ResourceRequestItem = {
   sourceWorkspaceKind?: 'incident' | 'exercise'
   sourceWorkspaceName?: string
   assetTransferConfirmations?: AssetTransferConfirmation[]
+  /** Supabase row UUID when loaded from or saved to API */
+  storageRecordId?: string
 }
 
 export type DocxBlock =
@@ -395,6 +397,10 @@ export function normalizeResourceRequestItem(raw: Partial<ResourceRequestItem>):
         ? raw.sourceWorkspaceName.trim()
         : undefined,
     assetTransferConfirmations: normalizeAssetTransferConfirmations(raw.assetTransferConfirmations),
+    storageRecordId:
+      typeof raw.storageRecordId === 'string' && raw.storageRecordId.trim()
+        ? raw.storageRecordId.trim()
+        : undefined,
   }
 }
 
@@ -1464,4 +1470,70 @@ export function filterResourceRequestsForWorkspace(
 ): ResourceRequestItem[] {
   if (!workspaceId) return []
   return requests.filter((request) => request.sourceWorkspaceId === workspaceId)
+}
+
+export function buildAssetRequestTransferRef(params: {
+  assetKey: string
+  organizationAssetId?: string
+  name: string
+  type: string
+}): AssetRequestTransferRef {
+  return {
+    assetKey: params.assetKey.trim(),
+    organizationAssetId: String(params.organizationAssetId ?? '').trim(),
+    name: params.name.trim(),
+    type: params.type.trim(),
+  }
+}
+
+export function canReplaceTransferAsset(
+  request: ResourceRequestItem,
+  oldAssetKey: string,
+  resolveAsset: AssetTransferResolveAsset
+): boolean {
+  const confirmation = request.assetTransferConfirmations?.find(
+    (entry) => entry.assetKey === oldAssetKey
+  )
+  if (!confirmation) return true
+  return getTransferConfirmationStatus(confirmation, resolveAsset) !== 'applied'
+}
+
+export function replaceTransferAssetInRequest(
+  request: ResourceRequestItem,
+  oldAssetKey: string,
+  newRef: AssetRequestTransferRef,
+  resolveAsset: AssetTransferResolveAsset
+): ResourceRequestItem {
+  if (!request.sourceWorkspaceId) {
+    throw new Error('Request is not linked to a workspace.')
+  }
+  if (!canReplaceTransferAsset(request, oldAssetKey, resolveAsset)) {
+    throw new Error('Cannot replace an asset that has already been transferred.')
+  }
+
+  const targetWorkspaceId = request.sourceWorkspaceId
+  const updatedItems = getResourceRequestLineItems(request).map((item) => ({
+    ...item,
+    assetsToTransfer: item.assetsToTransfer.some((ref) => ref.assetKey === oldAssetKey)
+      ? item.assetsToTransfer.map((ref) => (ref.assetKey === oldAssetKey ? newRef : ref))
+      : item.assetsToTransfer,
+  }))
+
+  const existingConfirmations = request.assetTransferConfirmations ?? []
+  const withoutOld = existingConfirmations.filter((entry) => entry.assetKey !== oldAssetKey)
+  const newConfirmation = buildInitialTransferConfirmations(
+    [{ ...createEmptyAssetRequestLineItem(), assetsToTransfer: [newRef] }],
+    targetWorkspaceId,
+    resolveAsset
+  )[0]
+
+  const nextConfirmations = newConfirmation
+    ? [...withoutOld.filter((entry) => entry.assetKey !== newRef.assetKey), newConfirmation]
+    : withoutOld
+
+  return normalizeResourceRequestItem({
+    ...request,
+    items: updatedItems,
+    assetTransferConfirmations: nextConfirmations.length > 0 ? nextConfirmations : undefined,
+  })
 }

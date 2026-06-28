@@ -53,6 +53,14 @@ export function orgChartValueToReportsTo(value: string): string | null {
   return value === NOT_ON_ORG_CHART_VALUE ? null : value
 }
 
+export function getOrgChartPlacementLabel(
+  reportsTo: string | null | undefined,
+  _catalog?: WorkspacePositionCatalog | null
+): string {
+  const normalized = (reportsTo ?? '').trim()
+  return normalized.length > 0 ? normalized : 'Not on org chart'
+}
+
 function attachOrgChartNodeToTree(
   nodes: OrgChartNode[],
   parentName: string,

@@ -1,11 +1,15 @@
 import { useMemo, useState } from 'react'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { AssetTransferSelectedCards } from '@/features/resources/AssetTransferSelectedCards'
-import type { ResourceListItemData } from '@/features/resources/types'
-import type { AssetRequestTransferRef } from '@/lib/ics-213rr-resource-request'
-import { Search } from 'lucide-react'
+import { OrganizationAssetBrowseList } from '@/features/resources/OrganizationAssetBrowseList'
+import type { AssetWorkspaceOption, ResourceListItemData } from '@/features/resources/types'
+import type { WorkspacePositionCatalog } from '@/features/roster/workspace-positions'
+import {
+  buildAssetRequestTransferRef,
+  type AssetRequestTransferRef,
+} from '@/lib/ics-213rr-resource-request'
+
+export type OrganizationAssetPickerMode = 'multi' | 'replace-single'
 
 type OrganizationAssetPickerProps = {
   assets: ResourceListItemData[]
@@ -13,19 +17,27 @@ type OrganizationAssetPickerProps = {
   glassItemBorderClasses?: string
   selected: AssetRequestTransferRef[]
   onChange: (next: AssetRequestTransferRef[]) => void
+  workspaceOptions?: AssetWorkspaceOption[]
+  positionCatalog?: WorkspacePositionCatalog | null
   idPrefix?: string
+  mode?: OrganizationAssetPickerMode
+  excludeAssetKeys?: string[]
+  onReplaceSelect?: (asset: ResourceListItemData) => void
+  showSelectedSection?: boolean
+  browseLabel?: string
+  selectedLabel?: string
 }
 
-function assetToTransferRef(
+export function assetToTransferRef(
   asset: ResourceListItemData,
   orgAssetIdsByKey: Record<string, string>
 ): AssetRequestTransferRef {
-  return {
+  return buildAssetRequestTransferRef({
     assetKey: asset.assetKey,
     organizationAssetId: orgAssetIdsByKey[asset.assetKey] ?? '',
     name: asset.name,
     type: asset.type,
-  }
+  })
 }
 
 export function OrganizationAssetPicker({
@@ -34,27 +46,27 @@ export function OrganizationAssetPicker({
   glassItemBorderClasses = '',
   selected,
   onChange,
+  workspaceOptions = [],
+  positionCatalog = null,
   idPrefix = 'asset-picker',
+  mode = 'multi',
+  excludeAssetKeys = [],
+  onReplaceSelect,
+  showSelectedSection = mode === 'multi',
+  browseLabel = 'Browse organization assets',
+  selectedLabel = 'Selected for transfer',
 }: OrganizationAssetPickerProps) {
   const [query, setQuery] = useState('')
 
   const selectedKeys = useMemo(() => new Set(selected.map((ref) => ref.assetKey)), [selected])
-
-  const filteredAssets = useMemo(() => {
-    const normalized = query.trim().toLowerCase()
-    return assets
-      .filter((asset) => !selectedKeys.has(asset.assetKey))
-      .filter((asset) => {
-        if (!normalized) return true
-        return [asset.name, asset.type, asset.owner, asset.location, asset.assetKey]
-          .join(' ')
-          .toLowerCase()
-          .includes(normalized)
-      })
-      .slice(0, 20)
-  }, [assets, query, selectedKeys])
+  const excludeKeys = useMemo(() => new Set(excludeAssetKeys), [excludeAssetKeys])
 
   const addAsset = (asset: ResourceListItemData) => {
+    if (mode === 'replace-single') {
+      onReplaceSelect?.(asset)
+      setQuery('')
+      return
+    }
     onChange([...selected, assetToTransferRef(asset, orgAssetIdsByKey)])
     setQuery('')
   }
@@ -64,54 +76,36 @@ export function OrganizationAssetPicker({
   }
 
   return (
-    <div className="space-y-3">
-      <Label htmlFor={`${idPrefix}-search`} className="text-xs">
-        Asset to transfer
-      </Label>
-
-      <AssetTransferSelectedCards
-        selected={selected}
-        organizationAssets={assets}
-        glassItemBorderClasses={glassItemBorderClasses}
-        onRemove={removeAsset}
-      />
-
-      <div className="relative">
-        <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          id={`${idPrefix}-search`}
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder="Search organization assets to add"
-          className="h-8 pl-7 text-xs"
+    <div className="space-y-4">
+      <div className="space-y-3">
+        <Label className="text-xs">{browseLabel}</Label>
+        <OrganizationAssetBrowseList
+          assets={assets}
+          selectedKeys={selectedKeys}
+          excludeKeys={excludeKeys}
+          workspaceOptions={workspaceOptions}
+          positionCatalog={positionCatalog}
+          glassItemBorderClasses={glassItemBorderClasses}
+          onAdd={addAsset}
+          query={query}
+          onQueryChange={setQuery}
+          idPrefix={idPrefix}
         />
       </div>
-      {assets.length === 0 ? (
-        <p className="text-[11px] text-muted-foreground">No organization assets available.</p>
-      ) : filteredAssets.length === 0 ? (
-        <p className="text-[11px] text-muted-foreground">
-          {query.trim() ? 'No matching assets.' : 'All matching assets are already selected.'}
-        </p>
-      ) : (
-        <div className="max-h-48 space-y-1 overflow-y-auto rounded-md border bg-background p-1">
-          {filteredAssets.map((asset) => (
-            <Button
-              key={asset.assetKey}
-              type="button"
-              variant="ghost"
-              className="h-auto w-full justify-start px-2 py-1.5 text-left text-xs"
-              onClick={() => addAsset(asset)}
-            >
-              <span className="truncate">
-                {asset.name} · {asset.type}
-                {asset.location ? (
-                  <span className="text-muted-foreground"> · {asset.location}</span>
-                ) : null}
-              </span>
-            </Button>
-          ))}
+
+      {showSelectedSection ? (
+        <div className="space-y-2 border-t pt-4">
+          <Label className="text-xs">{selectedLabel}</Label>
+          <AssetTransferSelectedCards
+            selected={selected}
+            organizationAssets={assets}
+            workspaceOptions={workspaceOptions}
+            positionCatalog={positionCatalog}
+            glassItemBorderClasses={glassItemBorderClasses}
+            onRemove={removeAsset}
+          />
         </div>
-      )}
+      ) : null}
     </div>
   )
 }

@@ -10,7 +10,8 @@ import {
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { OrganizationAssetPicker } from '@/features/resources/OrganizationAssetPicker'
-import type { ResourceListItemData } from '@/features/resources/types'
+import type { AssetWorkspaceOption, ResourceListItemData } from '@/features/resources/types'
+import type { WorkspacePositionCatalog } from '@/features/roster/workspace-positions'
 import {
   computeLineItemTotalCost,
   fromDatetimeLocalInputValue,
@@ -25,6 +26,8 @@ export type AssetRequestLineItemFieldsProps = {
   onChange: (next: AssetRequestLineItem) => void
   organizationAssets: ResourceListItemData[]
   orgAssetIdsByKey?: Record<string, string>
+  workspaceOptions?: AssetWorkspaceOption[]
+  positionCatalog?: WorkspacePositionCatalog | null
   glassItemBorderClasses?: string
   idPrefix?: string
   compact?: boolean
@@ -55,6 +58,8 @@ export function AssetRequestLineItemFields({
   onChange,
   organizationAssets,
   orgAssetIdsByKey = {},
+  workspaceOptions = [],
+  positionCatalog = null,
   glassItemBorderClasses = '',
   idPrefix = 'asset-request-item',
   compact = false,
@@ -266,6 +271,8 @@ export function AssetRequestLineItemFields({
         glassItemBorderClasses={glassItemBorderClasses}
         selected={value.assetsToTransfer}
         onChange={(assetsToTransfer) => patch({ assetsToTransfer })}
+        workspaceOptions={workspaceOptions}
+        positionCatalog={positionCatalog}
         idPrefix={`${fieldPrefix}-transfer`}
       />
     </div>

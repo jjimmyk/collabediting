@@ -58,6 +58,8 @@ type ResourceListItemCardProps = {
   isUpdatingAssetCheckInStatus?: boolean
   onAssetCheckInStatusChange?: (status: WorkspaceMemberCheckInStatus) => void
   variant?: 'default' | 'orgChart'
+  showCollapsedAssignmentSummary?: boolean
+  orgChartPlacementLabel?: string
 }
 
 const COST_UNIT_TYPE_OPTIONS: ResourceCostUnitType[] = ['per day', 'per hour', 'to purchase']
@@ -126,6 +128,8 @@ export function ResourceListItemCard({
   isUpdatingAssetCheckInStatus = false,
   onAssetCheckInStatusChange,
   variant = 'default',
+  showCollapsedAssignmentSummary = false,
+  orgChartPlacementLabel,
 }: ResourceListItemCardProps) {
   const [internalOpen, setInternalOpen] = useState(defaultOpen)
   const [isEditing, setIsEditing] = useState(false)
@@ -134,6 +138,11 @@ export function ResourceListItemCard({
   const activeResource = isEditing && draft ? draft : resource
   const showAssignmentInline = showInlineAssignment ?? Boolean(onAssignmentChange)
   const isOrgChartVariant = variant === 'orgChart'
+  const resolvedOrgChartLabel =
+    orgChartPlacementLabel ??
+    (resource.orgChartReportsTo?.trim() ? resource.orgChartReportsTo.trim() : 'Not on org chart')
+  const resolvedWorkspaceLabel =
+    getResourceWorkspaceAssignmentLabel(resource) || 'Unassigned'
 
   useEffect(() => {
     if (!isEditing) {
@@ -299,6 +308,18 @@ export function ResourceListItemCard({
               </div>
             )}
             {headerAddon}
+            {showCollapsedAssignmentSummary ? (
+              <div className="mt-1 space-y-0.5 text-[10px] text-muted-foreground">
+                <p>
+                  <span className="font-medium text-foreground/80">Incident / Exercise workspace:</span>{' '}
+                  {resolvedWorkspaceLabel}
+                </p>
+                <p>
+                  <span className="font-medium text-foreground/80">Org chart placement:</span>{' '}
+                  {resolvedOrgChartLabel}
+                </p>
+              </div>
+            ) : null}
           </ItemContent>
           <ItemActions>
             {isEditing ? (

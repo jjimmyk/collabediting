@@ -1,6 +1,7 @@
 import { Badge } from '@/components/ui/badge'
 import { AssetRequestTransferSection } from '@/features/resources/AssetRequestTransferSection'
 import type { AssetWorkspaceOption, ResourceListItemData } from '@/features/resources/types'
+import type { WorkspacePositionCatalog } from '@/features/roster/workspace-positions'
 import {
   formatLegacyOrderCostLsc,
   getLineItemPriorityLabel,
@@ -63,19 +64,31 @@ function AssetRequestLineItemDetail({ item, index }: { item: AssetRequestLineIte
 type AssetRequestDetailPanelProps = {
   request: ResourceRequestItem
   organizationAssets?: ResourceListItemData[]
+  orgAssetIdsByKey?: Record<string, string>
   workspaceOptions?: AssetWorkspaceOption[]
+  positionCatalog?: WorkspacePositionCatalog | null
   resolveAsset?: AssetTransferResolveAsset
   onApplyTransfers?: (request: ResourceRequestItem) => void
+  onReplaceTransferAsset?: (
+    request: ResourceRequestItem,
+    oldAssetKey: string,
+    newAsset: ResourceListItemData
+  ) => void
   isApplyingTransfers?: boolean
+  isReplacingTransferAsset?: boolean
 }
 
 export function AssetRequestDetailPanel({
   request,
   organizationAssets = [],
+  orgAssetIdsByKey = {},
   workspaceOptions = [],
+  positionCatalog = null,
   resolveAsset,
   onApplyTransfers,
+  onReplaceTransferAsset,
   isApplyingTransfers = false,
+  isReplacingTransferAsset = false,
 }: AssetRequestDetailPanelProps) {
   const lineItems = getResourceRequestLineItems(request)
 
@@ -107,10 +120,16 @@ export function AssetRequestDetailPanel({
         mode="view"
         request={request}
         organizationAssets={organizationAssets}
+        orgAssetIdsByKey={orgAssetIdsByKey}
         workspaceOptions={workspaceOptions}
+        positionCatalog={positionCatalog}
         confirmations={request.assetTransferConfirmations ?? []}
         onApplyTransfers={() => onApplyTransfers?.(request)}
+        onReplaceTransferAsset={(oldAssetKey, newAsset) =>
+          onReplaceTransferAsset?.(request, oldAssetKey, newAsset)
+        }
         isApplying={isApplyingTransfers}
+        isReplacingTransferAsset={isReplacingTransferAsset}
         resolveAsset={assetResolver}
       />
     </div>

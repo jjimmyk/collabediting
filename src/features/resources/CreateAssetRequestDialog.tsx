@@ -23,6 +23,7 @@ import { AssetRequestRequestedByForm } from '@/features/resources/AssetRequestRe
 import { AssetRequestSectionChiefApprovalForm } from '@/features/resources/AssetRequestSectionChiefApprovalForm'
 import { AssetRequestTransferSection } from '@/features/resources/AssetRequestTransferSection'
 import type { AssetWorkspaceOption, ResourceListItemData } from '@/features/resources/types'
+import type { WorkspacePositionCatalog } from '@/features/roster/workspace-positions'
 import {
   buildInitialTransferConfirmations,
   createEmptyResourceRequestInput,
@@ -45,6 +46,7 @@ type CreateAssetRequestDialogProps = {
   organizationAssets?: ResourceListItemData[]
   orgAssetIdsByKey?: Record<string, string>
   workspaceOptions?: AssetWorkspaceOption[]
+  positionCatalog?: WorkspacePositionCatalog | null
   glassItemBorderClasses?: string
   workspaceContext?: AssetRequestWorkspaceContext | null
   resolveAsset?: AssetTransferResolveAsset
@@ -61,6 +63,7 @@ export function CreateAssetRequestDialog({
   organizationAssets = [],
   orgAssetIdsByKey = {},
   workspaceOptions = [],
+  positionCatalog = null,
   glassItemBorderClasses = '',
   workspaceContext = null,
   resolveAsset,
@@ -195,6 +198,8 @@ export function CreateAssetRequestDialog({
               onChangeItems={(items) => setFormValue((previous) => ({ ...previous, items }))}
               organizationAssets={organizationAssets}
               orgAssetIdsByKey={orgAssetIdsByKey}
+              workspaceOptions={workspaceOptions}
+              positionCatalog={positionCatalog}
               glassItemBorderClasses={glassItemBorderClasses}
             />
             <AssetRequestRequestedByForm value={formValue} onChange={setFormValue} />
@@ -208,7 +213,9 @@ export function CreateAssetRequestDialog({
                 lineItems={formValue.items}
                 workspaceContext={workspaceContext}
                 organizationAssets={organizationAssets}
+                orgAssetIdsByKey={orgAssetIdsByKey}
                 workspaceOptions={workspaceOptions}
+                positionCatalog={positionCatalog}
                 confirmations={transferConfirmations}
                 onConfirmationChange={handleTransferConfirmationChange}
                 resolveAsset={assetResolver}

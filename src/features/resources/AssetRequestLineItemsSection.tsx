@@ -2,7 +2,8 @@ import { Button } from '@/components/ui/button'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { AssetRequestLineItemsList } from '@/features/resources/AssetRequestLineItemsList'
 import { AssetRequestLineItemsTable } from '@/features/resources/AssetRequestLineItemsTable'
-import type { ResourceListItemData } from '@/features/resources/types'
+import type { AssetWorkspaceOption, ResourceListItemData } from '@/features/resources/types'
+import type { WorkspacePositionCatalog } from '@/features/roster/workspace-positions'
 import { createEmptyAssetRequestLineItem, type AssetRequestLineItem } from '@/lib/ics-213rr-resource-request'
 import { LayoutList, Plus, Table2 } from 'lucide-react'
 
@@ -15,6 +16,8 @@ type AssetRequestLineItemsSectionProps = {
   onChangeItems: (items: AssetRequestLineItem[]) => void
   organizationAssets: ResourceListItemData[]
   orgAssetIdsByKey?: Record<string, string>
+  workspaceOptions?: AssetWorkspaceOption[]
+  positionCatalog?: WorkspacePositionCatalog | null
   glassItemBorderClasses?: string
 }
 
@@ -25,6 +28,8 @@ export function AssetRequestLineItemsSection({
   onChangeItems,
   organizationAssets,
   orgAssetIdsByKey = {},
+  workspaceOptions = [],
+  positionCatalog = null,
   glassItemBorderClasses = '',
 }: AssetRequestLineItemsSectionProps) {
   const updateItem = (index: number, next: AssetRequestLineItem) => {
@@ -81,6 +86,8 @@ export function AssetRequestLineItemsSection({
           onRemoveItem={removeItem}
           organizationAssets={organizationAssets}
           orgAssetIdsByKey={orgAssetIdsByKey}
+          workspaceOptions={workspaceOptions}
+          positionCatalog={positionCatalog}
           glassItemBorderClasses={glassItemBorderClasses}
         />
       ) : (
@@ -90,6 +97,8 @@ export function AssetRequestLineItemsSection({
           onRemoveItem={removeItem}
           organizationAssets={organizationAssets}
           orgAssetIdsByKey={orgAssetIdsByKey}
+          workspaceOptions={workspaceOptions}
+          positionCatalog={positionCatalog}
           glassItemBorderClasses={glassItemBorderClasses}
         />
       )}

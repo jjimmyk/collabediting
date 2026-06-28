@@ -1,5 +1,6 @@
 import { AssetRequestLineItemForm } from '@/features/resources/AssetRequestLineItemForm'
-import type { ResourceListItemData } from '@/features/resources/types'
+import type { AssetWorkspaceOption, ResourceListItemData } from '@/features/resources/types'
+import type { WorkspacePositionCatalog } from '@/features/roster/workspace-positions'
 import type { AssetRequestLineItem } from '@/lib/ics-213rr-resource-request'
 
 type AssetRequestLineItemsListProps = {
@@ -8,6 +9,8 @@ type AssetRequestLineItemsListProps = {
   onRemoveItem: (index: number) => void
   organizationAssets: ResourceListItemData[]
   orgAssetIdsByKey?: Record<string, string>
+  workspaceOptions?: AssetWorkspaceOption[]
+  positionCatalog?: WorkspacePositionCatalog | null
   glassItemBorderClasses?: string
 }
 
@@ -17,6 +20,8 @@ export function AssetRequestLineItemsList({
   onRemoveItem,
   organizationAssets,
   orgAssetIdsByKey = {},
+  workspaceOptions = [],
+  positionCatalog = null,
   glassItemBorderClasses = '',
 }: AssetRequestLineItemsListProps) {
   return (
@@ -31,6 +36,8 @@ export function AssetRequestLineItemsList({
           canRemove={items.length > 1}
           organizationAssets={organizationAssets}
           orgAssetIdsByKey={orgAssetIdsByKey}
+          workspaceOptions={workspaceOptions}
+          positionCatalog={positionCatalog}
           glassItemBorderClasses={glassItemBorderClasses}
         />
       ))}

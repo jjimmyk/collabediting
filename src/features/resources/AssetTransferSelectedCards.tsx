@@ -3,7 +3,9 @@ import { Button } from '@/components/ui/button'
 import { Item, ItemContent, ItemTitle } from '@/components/ui/item'
 import { AssetListHeaderRow } from '@/features/resources/AssetListHeaderRow'
 import { ResourceListItemCard } from '@/features/resources/ResourceListItemCard'
-import type { ResourceListItemData } from '@/features/resources/types'
+import type { AssetWorkspaceOption, ResourceListItemData } from '@/features/resources/types'
+import { getOrgChartPlacementLabel } from '@/features/roster/workspace-asset-org-chart'
+import type { WorkspacePositionCatalog } from '@/features/roster/workspace-positions'
 import { isOrganizationManagedAssetKey } from '@/lib/organization-asset-catalog'
 import type { AssetRequestTransferRef } from '@/lib/ics-213rr-resource-request'
 import { X } from 'lucide-react'
@@ -12,6 +14,8 @@ import { cn } from '@/lib/utils'
 type AssetTransferSelectedCardsProps = {
   selected: AssetRequestTransferRef[]
   organizationAssets: ResourceListItemData[]
+  workspaceOptions?: AssetWorkspaceOption[]
+  positionCatalog?: WorkspacePositionCatalog | null
   glassItemBorderClasses: string
   onRemove: (assetKey: string) => void
 }
@@ -19,6 +23,8 @@ type AssetTransferSelectedCardsProps = {
 export function AssetTransferSelectedCards({
   selected,
   organizationAssets,
+  workspaceOptions = [],
+  positionCatalog = null,
   glassItemBorderClasses,
   onRemove,
 }: AssetTransferSelectedCardsProps) {
@@ -79,6 +85,12 @@ export function AssetTransferSelectedCards({
             showInlineAssignment={false}
             readOnlyWorkspaceAssignmentFields
             organizationManaged={isOrganizationManagedAssetKey(asset.assetKey)}
+            workspaceOptions={workspaceOptions}
+            showCollapsedAssignmentSummary
+            orgChartPlacementLabel={getOrgChartPlacementLabel(
+              asset.orgChartReportsTo,
+              positionCatalog
+            )}
             open={isOpen}
             onOpenChange={(open) => setExpandedAssetKey(open ? ref.assetKey : null)}
             onHeaderClick={() =>

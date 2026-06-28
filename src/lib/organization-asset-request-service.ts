@@ -45,7 +45,11 @@ function mapApiRequest(raw: Record<string, unknown>): ResourceRequestItem | null
   if (!payload || typeof payload !== 'object') return null
   const item = payload as ResourceRequestItem
   if (typeof item.id !== 'number' || !Array.isArray(item.mapLocation)) return null
-  return normalizeResourceRequestItem(item)
+  const recordId = typeof raw.id === 'string' ? raw.id : undefined
+  return normalizeResourceRequestItem({
+    ...item,
+    storageRecordId: recordId,
+  })
 }
 
 export async function fetchOrganizationAssetRequests(params: {
@@ -152,4 +156,64 @@ export async function createOrganizationAssetRequest(params: {
   }
 
   return { ok: true, request: created }
+}
+
+export async function updateOrganizationAssetRequest(params: {
+  accessToken?: string | null
+  organizationId: string | null
+  request: ResourceRequestItem
+}): Promise<
+  { ok: true; request: ResourceRequestItem } | { ok: false; message: string }
+> {
+  if (!params.organizationId) {
+    return { ok: false, message: 'Select an organization before updating asset requests.' }
+  }
+
+  const normalized = normalizeResourceRequestItem(params.request)
+
+  if (!isSupabaseConfigured) {
+    const existing = readLocalOrganizationAssetRequests(params.organizationId)
+    const next = existing.map((entry) =>
+      entry.id === normalized.id ? normalized : entry
+    )
+    writeLocalOrganizationAssetRequests(params.organizationId, next)
+    return { ok: true, request: normalized }
+  }
+
+  if (!params.accessToken) {
+    return { ok: false, message: 'Sign in again to update asset requests.' }
+  }
+
+  if (!normalized.storageRecordId) {
+    return { ok: false, message: 'Asset request record id is missing.' }
+  }
+
+  const response = await fetch('/api/update-organization-asset-request', {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${params.accessToken}`,
+    },
+    body: JSON.stringify({
+      organizationId: params.organizationId,
+      recordId: normalized.storageRecordId,
+      payload: normalized,
+    }),
+  })
+
+  const payload = (await response.json().catch(() => ({}))) as {
+    error?: string
+    request?: Record<string, unknown>
+  }
+
+  if (!response.ok || !payload.request) {
+    return { ok: false, message: payload.error ?? 'Could not update asset request.' }
+  }
+
+  const updated = mapApiRequest(payload.request)
+  if (!updated) {
+    return { ok: false, message: 'Updated asset request returned invalid data.' }
+  }
+
+  return { ok: true, request: updated }
 }

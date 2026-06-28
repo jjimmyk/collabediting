@@ -12,6 +12,7 @@ import {
 import {
   createOrganizationAssetRequest,
   fetchOrganizationAssetRequests,
+  updateOrganizationAssetRequest,
 } from '@/lib/organization-asset-request-service'
 
 const ORG_ID = 'org-test-asset-requests'
@@ -127,5 +128,35 @@ describe('organization asset request service', () => {
     expect(fetched.requests).toHaveLength(1)
     expect(fetched.requests[0]?.requestNumber).toBe(created.request.requestNumber)
     expect(getResourceRequestItemCount(fetched.requests[0]!)).toBe(2)
+  })
+
+  it('updates an existing request in local storage', async () => {
+    const created = await createOrganizationAssetRequest({
+      organizationId: ORG_ID,
+      input: {
+        ...createEmptyResourceRequestInput({ requestedByName: 'Alex Rivera' }),
+        incidentName: 'Gulf Coast Response',
+        items: [validLineItem()],
+      },
+      existingRequests: [],
+    })
+    expect(created.ok).toBe(true)
+    if (!created.ok) return
+
+    const updated = await updateOrganizationAssetRequest({
+      organizationId: ORG_ID,
+      request: {
+        ...created.request,
+        notes: 'Updated after transfer replacement.',
+      },
+    })
+    expect(updated.ok).toBe(true)
+    if (!updated.ok) return
+    expect(updated.request.notes).toBe('Updated after transfer replacement.')
+
+    const fetched = await fetchOrganizationAssetRequests({ organizationId: ORG_ID })
+    expect(fetched.ok).toBe(true)
+    if (!fetched.ok) return
+    expect(fetched.requests[0]?.notes).toBe('Updated after transfer replacement.')
   })
 })
