@@ -429,6 +429,7 @@ import {
 } from '@/features/ics215/ics215-need-asset-request-link'
 import type { Ics215NeedCellContext } from '@/features/ics215/ics215-need-asset-request-link'
 import type { AssetRequestNeedSeed } from '@/lib/asset-request-ics215-prefill'
+import { formatAssetRequestNeedLinkSummary } from '@/lib/asset-request-ics215-need-link-display'
 import { buildHaveLinkRosterActions } from '@/features/ics215/build-have-link-roster-actions'
 import { resolveMemberHaveRefByEmail } from '@/features/ics215/have-link-roster-actions'
 import { useIcs215WorkspaceForm } from '@/hooks/useIcs215WorkspaceForm'
@@ -632,6 +633,8 @@ import { AddWorkspaceAssetDialog } from '@/features/resources/AddWorkspaceAssetD
 import { CreateOrganizationAssetDialog } from '@/features/resources/CreateOrganizationAssetDialog'
 import { CreateAssetRequestDialog } from '@/features/resources/CreateAssetRequestDialog'
 import { AssetRequestDetailPanel } from '@/features/resources/AssetRequestDetailPanel'
+import { AssetRequestDetailSheet } from '@/features/resources/AssetRequestDetailSheet'
+import { AssetRequestNeedLinkBadge } from '@/features/resources/AssetRequestNeedLinkBadge'
 import { AssetWorkspaceAssignmentSelect } from '@/features/resources/AssetWorkspaceAssignmentSelect'
 import {
   SINGLE_RESOURCE_POSITION_LABEL,
@@ -8616,6 +8619,7 @@ function App() {
   const [openResourceRequestPreviewId, setOpenResourceRequestPreviewId] = useState<number | null>(
     null
   )
+  const [openAssetRequestDetailId, setOpenAssetRequestDetailId] = useState<number | null>(null)
   const [incidentList, setIncidentList] = useState<IncidentListItem[]>([
     {
       id: 1,
@@ -11105,6 +11109,10 @@ function App() {
   const previewResourceRequest = useMemo(
     () => resourceRequests.find((request) => request.id === openResourceRequestPreviewId) ?? null,
     [resourceRequests, openResourceRequestPreviewId]
+  )
+  const detailResourceRequest = useMemo(
+    () => organizationAssetRequests.find((request) => request.id === openAssetRequestDetailId) ?? null,
+    [organizationAssetRequests, openAssetRequestDetailId]
   )
   const exportResourceRequestWord = (request: ResourceRequestItem) => {
     downloadDocx(
@@ -24291,8 +24299,7 @@ function App() {
       toast.error('Asset request not found.')
       return
     }
-    setResourcesPanelView('resource-requests')
-    setOpenResourceRequestPreviewId(request.id)
+    setOpenAssetRequestDetailId(request.id)
   }
   const persistIcs215WorkAssignmentsFromDraft = (
     draft: Ics215WorkAssignmentsDraft,
@@ -29149,6 +29156,7 @@ function App() {
                             <th className="px-2 py-2 font-semibold">Qty</th>
                             <th className="px-2 py-2 font-semibold">Priority</th>
                             <th className="px-2 py-2 font-semibold">Status</th>
+                            <th className="px-2 py-2 font-semibold">ICS-215 Need</th>
                             <th className="px-2 py-2 font-semibold">Requested By</th>
                             <th className="px-2 py-2 font-semibold">Reporting Location</th>
                             <th className="px-2 py-2 font-semibold">ETA (LSC)</th>
@@ -29177,6 +29185,10 @@ function App() {
                                   {getResourceRequestPrioritySummary(request)}
                                 </td>
                                 <td className="px-2 py-2">{request.status}</td>
+                                <td className="max-w-[14rem] px-2 py-2">
+                                  {formatAssetRequestNeedLinkSummary(request, activeWorkspaceRoster) ??
+                                    '—'}
+                                </td>
                                 <td className="max-w-[10rem] px-2 py-2">{request.requestedByName}</td>
                                 <td className="max-w-[12rem] px-2 py-2">
                                   {request.orderRequestedReportingLocation}
@@ -29241,6 +29253,10 @@ function App() {
                     const key = `resource-request-${request.id}`
                     const isOpen = expandedItemId === key
                     const recordSummary = getAssetRequestRecordSummaryLine(request)
+                    const needLinkSummary = formatAssetRequestNeedLinkSummary(
+                      request,
+                      activeWorkspaceRoster
+                    )
                     return (
                       <Item
                         key={request.id}
@@ -29270,9 +29286,18 @@ function App() {
                                 {recordSummary ? (
                                   <span className="block text-[11px]">{recordSummary}</span>
                                 ) : null}
+                                {needLinkSummary ? (
+                                  <span className="block text-[11px] text-muted-foreground">
+                                    {needLinkSummary}
+                                  </span>
+                                ) : null}
                               </ItemDescription>
                             </ItemContent>
                             <ItemActions>
+                              <AssetRequestNeedLinkBadge
+                                request={request}
+                                roster={activeWorkspaceRoster}
+                              />
                               <Badge
                                 variant="outline"
                                 className={cn(
@@ -29392,6 +29417,7 @@ function App() {
                                 positionCatalog={
                                   isInWorkspaceContext ? workspacePositionCatalog : null
                                 }
+                                roster={activeWorkspaceRoster}
                                 resolveAsset={assetRequestResolveAsset}
                                 onApplyTransfers={handleApplyAssetRequestTransfers}
                                 onReplaceTransferAsset={handleReplaceAssetRequestTransfer}
@@ -40014,6 +40040,23 @@ function App() {
           </div>
         </SheetContent>
       </Sheet>
+      <AssetRequestDetailSheet
+        open={detailResourceRequest !== null}
+        onOpenChange={(open) => {
+          if (!open) setOpenAssetRequestDetailId(null)
+        }}
+        request={detailResourceRequest}
+        organizationAssets={hubAssets}
+        orgAssetIdsByKey={orgAssetIdsByKey}
+        workspaceOptions={assetWorkspaceOptions}
+        positionCatalog={isInWorkspaceContext ? workspacePositionCatalog : null}
+        roster={activeWorkspaceRoster}
+        resolveAsset={assetRequestResolveAsset}
+        onApplyTransfers={handleApplyAssetRequestTransfers}
+        onReplaceTransferAsset={handleReplaceAssetRequestTransfer}
+        isApplyingTransfers={isApplyingAssetRequestTransfers}
+        isReplacingTransferAsset={isReplacingAssetRequestTransfer}
+      />
       <Dialog
         open={previewResourceRequest !== null}
         onOpenChange={(open) => {

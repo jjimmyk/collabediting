@@ -14,6 +14,7 @@ type Ics204AssetRequestStatusBadgesProps = {
   assetRequestsByStorageId: Record<string, ResourceRequestItem>
   workspaceOptions: AssetWorkspaceOption[]
   resolveAsset: AssetTransferResolveAsset
+  pendingWorkspaceAssignment?: boolean
 }
 
 function workspaceLabelForId(
@@ -49,6 +50,7 @@ export function Ics204AssetRequestStatusBadges({
   assetRequestsByStorageId,
   workspaceOptions,
   resolveAsset,
+  pendingWorkspaceAssignment = false,
 }: Ics204AssetRequestStatusBadgesProps) {
   const needLink = row.assetRequestNeedLink
   const request = needLink
@@ -72,6 +74,11 @@ export function Ics204AssetRequestStatusBadges({
       {is215NeedSyncedResourceRow(row) && needLink ? (
         <Badge variant="secondary" className="text-[10px]">
           Requested · {needLink.assetRequestNumber}
+        </Badge>
+      ) : null}
+      {pendingWorkspaceAssignment ? (
+        <Badge variant="outline" className="border-dotted text-[10px] text-amber-700 dark:text-amber-400">
+          Pending workspace assignment
         </Badge>
       ) : null}
       {assetKey ? (

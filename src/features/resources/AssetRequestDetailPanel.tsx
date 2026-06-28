@@ -1,7 +1,13 @@
 import { Badge } from '@/components/ui/badge'
+import { AssetRequestNeedLinkBadge } from '@/features/resources/AssetRequestNeedLinkBadge'
 import { AssetRequestTransferSection } from '@/features/resources/AssetRequestTransferSection'
 import type { AssetWorkspaceOption, ResourceListItemData } from '@/features/resources/types'
 import type { WorkspacePositionCatalog } from '@/features/roster/workspace-positions'
+import {
+  formatAssetRequestNeedLinkAssignee,
+  formatAssetRequestNeedLinkResourceKind,
+  hasAssetRequestNeedLink,
+} from '@/lib/asset-request-ics215-need-link-display'
 import {
   formatLegacyOrderCostLsc,
   getLineItemPriorityLabel,
@@ -10,12 +16,45 @@ import {
   type AssetTransferResolveAsset,
   type ResourceRequestItem,
 } from '@/lib/ics-213rr-resource-request'
+import type { WorkspaceRosterMember } from '@/lib/workspace-types'
 
 function DetailField({ label, value }: { label: string; value: string }) {
   return (
     <p>
       <span className="font-medium">{label}:</span> {value.trim() || '—'}
     </p>
+  )
+}
+
+function AssetRequestNeedLinkSection({
+  request,
+  roster = [],
+}: {
+  request: ResourceRequestItem
+  roster?: WorkspaceRosterMember[]
+}) {
+  const link = request.ics215NeedLink
+  if (!hasAssetRequestNeedLink(request) || !link) return null
+
+  return (
+    <div className="space-y-2 rounded-md border border-dashed border-primary/30 bg-primary/5 p-3 text-xs">
+      <div className="flex flex-wrap items-center gap-2">
+        <p className="font-semibold text-foreground">Linked ICS-215 Need cell</p>
+        <AssetRequestNeedLinkBadge request={request} roster={roster} />
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <DetailField
+          label="Assignee"
+          value={formatAssetRequestNeedLinkAssignee(link, roster)}
+        />
+        <DetailField
+          label="Resource column"
+          value={formatAssetRequestNeedLinkResourceKind(link)}
+        />
+        <DetailField label="Work assignment" value={link.workAssignment} />
+        <DetailField label="ICS-215 reporting location" value={link.reportingLocation} />
+      </div>
+    </div>
   )
 }
 
@@ -67,6 +106,7 @@ type AssetRequestDetailPanelProps = {
   orgAssetIdsByKey?: Record<string, string>
   workspaceOptions?: AssetWorkspaceOption[]
   positionCatalog?: WorkspacePositionCatalog | null
+  roster?: WorkspaceRosterMember[]
   resolveAsset?: AssetTransferResolveAsset
   onApplyTransfers?: (request: ResourceRequestItem) => void
   onReplaceTransferAsset?: (
@@ -84,6 +124,7 @@ export function AssetRequestDetailPanel({
   orgAssetIdsByKey = {},
   workspaceOptions = [],
   positionCatalog = null,
+  roster = [],
   resolveAsset,
   onApplyTransfers,
   onReplaceTransferAsset,
@@ -98,6 +139,7 @@ export function AssetRequestDetailPanel({
 
   return (
     <div className="space-y-3 text-sm">
+      <AssetRequestNeedLinkSection request={request} roster={roster} />
       <div className="grid grid-cols-2 gap-2">
         <DetailField label="Incident" value={request.incidentName} />
         <DetailField label="Date/time initiated" value={request.dateTimeInitiated} />

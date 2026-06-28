@@ -1346,19 +1346,20 @@ export function createEmptyResourceRequestInput(
 
 export function validateAssetRequestLineItem(
   item: AssetRequestLineItem,
-  index: number
+  index: number,
+  options: { fromIcs215Need?: boolean } = {}
 ): string | null {
   const label = `Item ${index + 1}`
-  if (!item.kind.trim()) {
+  if (!options.fromIcs215Need && !item.kind.trim()) {
     return `${label}: Kind is required.`
   }
-  if (!item.type.trim()) {
+  if (!options.fromIcs215Need && !item.type.trim()) {
     return `${label}: Type is required.`
   }
   if (!item.detailedItemDescription.trim()) {
     return `${label}: Detailed description is required.`
   }
-  if (!item.requestedReportingLocation.trim()) {
+  if (!options.fromIcs215Need && !item.requestedReportingLocation.trim()) {
     return `${label}: Reporting location is required.`
   }
   if (!Number.isFinite(item.quantity) || item.quantity < 0) {
@@ -1385,8 +1386,9 @@ export function validateCreateResourceRequestInput(
   if (items.length === 0) {
     return 'Add at least one requested item.'
   }
+  const fromIcs215Need = Boolean(input.ics215NeedLink?.assigneeKey?.trim())
   for (let index = 0; index < items.length; index += 1) {
-    const lineError = validateAssetRequestLineItem(items[index], index)
+    const lineError = validateAssetRequestLineItem(items[index], index, { fromIcs215Need })
     if (lineError) return lineError
   }
   return null

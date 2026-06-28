@@ -1,6 +1,5 @@
 import type { AssetRequestIcs215NeedLink } from '@/lib/ics-213rr-resource-request'
 import type { Ics215NeedCellContext } from '@/features/ics215/ics215-need-asset-request-link'
-import { parseColumnLabelToKindType } from '@/features/ics215/ics215-need-asset-request-link'
 import {
   createEmptyAssetRequestLineItem,
   type AssetRequestLineItem,
@@ -30,18 +29,17 @@ export function buildIcs215NeedLinkFromContext(
 export function buildPrefilledLineItemFromNeedContext(
   context: Ics215NeedCellContext
 ): AssetRequestLineItem {
-  const { kind, type } = parseColumnLabelToKindType(context.columnLabel)
   const quantityRaw = Number.parseFloat(context.need.trim())
   const quantity = Number.isFinite(quantityRaw) && quantityRaw > 0 ? quantityRaw : 1
-  const descriptionParts = [context.workAssignment.trim(), context.columnLabel.trim()].filter(Boolean)
+  const columnLabel = context.columnLabel.trim()
 
   return {
     ...createEmptyAssetRequestLineItem(),
-    kind,
-    type,
+    kind: '',
+    type: '',
     quantity,
-    detailedItemDescription: descriptionParts.join(' — ') || context.columnLabel,
-    requestedReportingLocation: context.reportingLocation.trim() || 'TBD',
+    detailedItemDescription: columnLabel,
+    requestedReportingLocation: '',
   }
 }
 

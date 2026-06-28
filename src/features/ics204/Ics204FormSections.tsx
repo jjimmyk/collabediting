@@ -44,6 +44,7 @@ import type { ResourceListItemData } from '@/features/resources/types'
 import { cn } from '@/lib/utils'
 import { is215SyncedResourceRow } from '@/features/ics204/sync-ics215-have-resources'
 import { Ics204AssetRequestStatusBadges } from '@/features/ics204/Ics204AssetRequestStatusBadges'
+import { isIcs204ResourcePendingWorkspaceAssignment } from '@/features/ics204/ics204-asset-request-transfer-status'
 import type { AssetWorkspaceOption } from '@/features/resources/types'
 import type { AssetTransferResolveAsset, ResourceRequestItem } from '@/lib/ics-213rr-resource-request'
 
@@ -534,12 +535,26 @@ export function Ics204FormSections({
                 {resourcesAssigned.map((row) => {
                   const editingResources = isSectionEditing(editingSections, 'resources-assigned')
                   const resourceSnapshot = resolveIcs204ResourceSnapshot(row)
+                  const linkedRequest = row.assetRequestNeedLink?.assetRequestStorageRecordId
+                    ? assetRequestsByStorageId[
+                        row.assetRequestNeedLink.assetRequestStorageRecordId
+                      ]
+                    : undefined
+                  const pendingWorkspaceAssignment =
+                    resolveAsset &&
+                    isIcs204ResourcePendingWorkspaceAssignment(row, linkedRequest, resolveAsset)
                   return (
                     <div
                       key={row.id}
                       className="grid grid-cols-[minmax(0,1fr)_14rem_3.5rem_auto] items-start gap-2"
                     >
-                      <div className="min-w-0 space-y-1">
+                      <div
+                        className={cn(
+                          'min-w-0 space-y-1 rounded-md',
+                          pendingWorkspaceAssignment &&
+                            'border border-dotted border-amber-500/70 p-1.5'
+                        )}
+                      >
                         <ResourceListItemCard
                           resource={resourceSnapshot}
                           glassItemBorderClasses={glassItemBorderClasses}
@@ -559,6 +574,7 @@ export function Ics204FormSections({
                             assetRequestsByStorageId={assetRequestsByStorageId}
                             workspaceOptions={workspaceOptions}
                             resolveAsset={resolveAsset}
+                            pendingWorkspaceAssignment={pendingWorkspaceAssignment}
                           />
                         ) : is215SyncedResourceRow(row) ? (
                           <Badge variant="secondary" className="text-[10px]">
