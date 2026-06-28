@@ -1639,3 +1639,52 @@ export function replaceTransferAssetInRequest(
     assetTransferConfirmations: nextConfirmations.length > 0 ? nextConfirmations : undefined,
   })
 }
+
+export function resourceRequestToEditInput(request: ResourceRequestItem): CreateResourceRequestInput {
+  const normalized = normalizeResourceRequestItem(request)
+  const { id: _id, ...input } = normalized
+  return input
+}
+
+export function mergeTransferConfirmationsForUpdate(
+  existing: AssetTransferConfirmation[] | undefined,
+  items: AssetRequestLineItem[],
+  targetWorkspaceId: string,
+  resolveAsset: AssetTransferResolveAsset
+): AssetTransferConfirmation[] {
+  const fresh = buildInitialTransferConfirmations(items, targetWorkspaceId, resolveAsset)
+  const existingByKey = new Map((existing ?? []).map((confirmation) => [confirmation.assetKey, confirmation]))
+  return fresh.map((confirmation) => {
+    const prior = existingByKey.get(confirmation.assetKey)
+    if (!prior) return confirmation
+    return {
+      ...confirmation,
+      confirmed: prior.confirmed,
+      appliedAt: prior.appliedAt,
+      previousWorkspaceId: prior.previousWorkspaceId ?? confirmation.previousWorkspaceId,
+    }
+  })
+}
+
+export function buildUpdatedResourceRequestFromInput(
+  existing: ResourceRequestItem,
+  input: CreateResourceRequestInput
+): ResourceRequestItem {
+  const built = buildResourceRequestFromInput(
+    {
+      ...input,
+      ics215NeedLink: input.ics215NeedLink ?? existing.ics215NeedLink,
+    },
+    { id: existing.id, requestNumber: existing.requestNumber }
+  )
+
+  return normalizeResourceRequestItem({
+    ...built,
+    storageRecordId: existing.storageRecordId,
+    recordCreatedAt: existing.recordCreatedAt,
+    recordUpdatedAt: existing.recordUpdatedAt,
+    recordCreatedByName: existing.recordCreatedByName,
+    assetTransferConfirmations:
+      input.assetTransferConfirmations ?? existing.assetTransferConfirmations,
+  })
+}

@@ -8,22 +8,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { AssetRequestFinanceForm } from '@/features/resources/AssetRequestFinanceForm'
-import {
-  AssetRequestIncidentDetailsForm,
-  type ResourceRequestIncidentOption,
-} from '@/features/resources/AssetRequestIncidentDetailsForm'
-import { AssetRequestLogisticsForm } from '@/features/resources/AssetRequestLogisticsForm'
-import {
-  AssetRequestLineItemsSection,
-  type AssetRequestItemsView,
-} from '@/features/resources/AssetRequestLineItemsSection'
-import { AssetRequestPlansForm } from '@/features/resources/AssetRequestPlansForm'
-import { AssetRequestRequestedByForm } from '@/features/resources/AssetRequestRequestedByForm'
-import { AssetRequestSectionChiefApprovalForm } from '@/features/resources/AssetRequestSectionChiefApprovalForm'
-import { AssetRequestTransferSection } from '@/features/resources/AssetRequestTransferSection'
+import { AssetRequestFormBody } from '@/features/resources/AssetRequestFormBody'
+import type { ResourceRequestIncidentOption } from '@/features/resources/AssetRequestIncidentDetailsForm'
+import type { AssetRequestItemsView } from '@/features/resources/AssetRequestLineItemsSection'
 import type { AssetWorkspaceOption, ResourceListItemData } from '@/features/resources/types'
 import type { WorkspacePositionCatalog } from '@/features/roster/workspace-positions'
+import {
+  applyNeedSeedToCreateInput,
+  buildIcs215NeedLinkFromContext,
+  type AssetRequestNeedSeed,
+} from '@/lib/asset-request-ics215-prefill'
 import {
   buildInitialTransferConfirmations,
   createEmptyResourceRequestInput,
@@ -34,11 +28,6 @@ import {
   type CreateResourceRequestInput,
   type ResourceRequestItem,
 } from '@/lib/ics-213rr-resource-request'
-import {
-  applyNeedSeedToCreateInput,
-  buildIcs215NeedLinkFromContext,
-  type AssetRequestNeedSeed,
-} from '@/lib/asset-request-ics215-prefill'
 
 type CreateAssetRequestDialogProps = {
   open: boolean
@@ -112,9 +101,7 @@ export function CreateAssetRequestDialog({
       sourceWorkspaceName: workspaceContext.workspaceName,
     })
 
-    setFormValue(
-      needSeed ? applyNeedSeedToCreateInput(base, needSeed) : base
-    )
+    setFormValue(needSeed ? applyNeedSeedToCreateInput(base, needSeed) : base)
   }, [defaultRequestedByName, needSeed, open, workspaceContext])
 
   const transferConfirmations = useMemo(
@@ -181,45 +168,22 @@ export function CreateAssetRequestDialog({
         </DialogHeader>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4">
-          <div className="space-y-6">
-            <AssetRequestIncidentDetailsForm
-              value={formValue}
-              onChange={setFormValue}
-              incidentOptions={incidentOptions}
-              previewRequestNumber={previewRequestNumber}
-              workspaceContext={workspaceContext}
-            />
-            <AssetRequestLineItemsSection
-              items={formValue.items}
-              view={requestedItemsView}
-              onViewChange={setRequestedItemsView}
-              onChangeItems={(items) => setFormValue((previous) => ({ ...previous, items }))}
-              organizationAssets={organizationAssets}
-              orgAssetIdsByKey={orgAssetIdsByKey}
-              workspaceOptions={workspaceOptions}
-              positionCatalog={positionCatalog}
-              glassItemBorderClasses={glassItemBorderClasses}
-              targetWorkspaceId={workspaceContext?.workspaceId ?? null}
-            />
-            <AssetRequestRequestedByForm value={formValue} onChange={setFormValue} />
-            <AssetRequestSectionChiefApprovalForm value={formValue} onChange={setFormValue} />
-            <AssetRequestPlansForm value={formValue} onChange={setFormValue} />
-            <AssetRequestLogisticsForm value={formValue} onChange={setFormValue} />
-            <AssetRequestFinanceForm value={formValue} onChange={setFormValue} />
-            {workspaceContext ? (
-              <AssetRequestTransferSection
-                mode="create"
-                lineItems={formValue.items}
-                workspaceContext={workspaceContext}
-                organizationAssets={organizationAssets}
-                orgAssetIdsByKey={orgAssetIdsByKey}
-                workspaceOptions={workspaceOptions}
-                positionCatalog={positionCatalog}
-                confirmations={transferConfirmations}
-                resolveAsset={assetResolver}
-              />
-            ) : null}
-          </div>
+          <AssetRequestFormBody
+            formValue={formValue}
+            onChange={setFormValue}
+            requestedItemsView={requestedItemsView}
+            onRequestedItemsViewChange={setRequestedItemsView}
+            incidentOptions={incidentOptions}
+            previewRequestNumber={previewRequestNumber}
+            workspaceContext={workspaceContext}
+            organizationAssets={organizationAssets}
+            orgAssetIdsByKey={orgAssetIdsByKey}
+            workspaceOptions={workspaceOptions}
+            positionCatalog={positionCatalog}
+            glassItemBorderClasses={glassItemBorderClasses}
+            resolveAsset={resolveAsset}
+            transferConfirmations={transferConfirmations}
+          />
         </div>
 
         <DialogFooter className="shrink-0 border-t px-6 py-4 sm:justify-between">

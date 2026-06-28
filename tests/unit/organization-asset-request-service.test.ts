@@ -130,6 +130,31 @@ describe('organization asset request service', () => {
     expect(getResourceRequestItemCount(fetched.requests[0]!)).toBe(2)
   })
 
+  it('rejects invalid updates before persisting', async () => {
+    const created = await createOrganizationAssetRequest({
+      organizationId: ORG_ID,
+      input: {
+        ...createEmptyResourceRequestInput({ requestedByName: 'Alex Rivera' }),
+        incidentName: 'Gulf Coast Response',
+        items: [validLineItem()],
+      },
+      existingRequests: [],
+    })
+    expect(created.ok).toBe(true)
+    if (!created.ok) return
+
+    const invalid = await updateOrganizationAssetRequest({
+      organizationId: ORG_ID,
+      request: {
+        ...created.request,
+        incidentName: '',
+      },
+    })
+    expect(invalid.ok).toBe(false)
+    if (invalid.ok) return
+    expect(invalid.message).toBe('Incident name is required.')
+  })
+
   it('updates an existing request in local storage', async () => {
     const created = await createOrganizationAssetRequest({
       organizationId: ORG_ID,

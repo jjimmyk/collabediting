@@ -3,6 +3,7 @@ import {
   generateResourceRequestNumber,
   nextResourceRequestId,
   normalizeResourceRequestItem,
+  resourceRequestToEditInput,
   type CreateResourceRequestInput,
   type ResourceRequestItem,
   validateCreateResourceRequestInput,
@@ -183,6 +184,10 @@ export async function updateOrganizationAssetRequest(params: {
   }
 
   const normalized = normalizeResourceRequestItem(params.request)
+  const validationError = validateCreateResourceRequestInput(resourceRequestToEditInput(normalized))
+  if (validationError) {
+    return { ok: false, message: validationError }
+  }
   const now = new Date().toISOString()
   const normalizedWithMetadata: ResourceRequestItem = {
     ...normalized,

@@ -45,7 +45,7 @@ export function NeedAssetRequestSparkleButton({
             disabled={disabled || columnLabel.trim().length < 2}
             aria-label={
               linked
-                ? `View asset request linked to Need for ${columnLabel}`
+                ? `View or edit asset request linked to Need for ${columnLabel}`
                 : `Create asset request for Need on ${columnLabel}`
             }
             className="h-6 w-6 shrink-0 text-muted-foreground hover:text-foreground"
@@ -59,7 +59,7 @@ export function NeedAssetRequestSparkleButton({
         </TooltipTrigger>
         <TooltipContent className="max-w-xs">
           {linked
-            ? `View asset request linked to Need for “${columnLabel.trim() || 'resource'}”.`
+            ? `View or edit asset request linked to Need for “${columnLabel.trim() || 'resource'}”.`
             : `Create asset request for Need on “${columnLabel.trim() || 'resource'}”.`}
         </TooltipContent>
       </Tooltip>

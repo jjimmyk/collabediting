@@ -170,6 +170,7 @@ import {
   getResourceRequestTotalQuantity,
   getPendingTransferConfirmations,
   buildAssetRequestTransferRef,
+  buildUpdatedResourceRequestFromInput,
   replaceTransferAssetInRequest,
   printResourceRequestPdf,
   type AssetRequestWorkspaceContext,
@@ -633,7 +634,7 @@ import { AddWorkspaceAssetDialog } from '@/features/resources/AddWorkspaceAssetD
 import { CreateOrganizationAssetDialog } from '@/features/resources/CreateOrganizationAssetDialog'
 import { CreateAssetRequestDialog } from '@/features/resources/CreateAssetRequestDialog'
 import { AssetRequestDetailPanel } from '@/features/resources/AssetRequestDetailPanel'
-import { AssetRequestDetailSheet } from '@/features/resources/AssetRequestDetailSheet'
+import { AssetRequestModal } from '@/features/resources/AssetRequestModal'
 import { AssetRequestNeedLinkBadge } from '@/features/resources/AssetRequestNeedLinkBadge'
 import { AssetWorkspaceAssignmentSelect } from '@/features/resources/AssetWorkspaceAssignmentSelect'
 import {
@@ -9119,6 +9120,7 @@ function App() {
   const [isAddWorkspaceAssetOpen, setIsAddWorkspaceAssetOpen] = useState(false)
   const [isCreatingOrganizationAsset, setIsCreatingOrganizationAsset] = useState(false)
   const [isCreatingAssetRequest, setIsCreatingAssetRequest] = useState(false)
+  const [isUpdatingAssetRequest, setIsUpdatingAssetRequest] = useState(false)
   const [isApplyingAssetRequestTransfers, setIsApplyingAssetRequestTransfers] = useState(false)
   const [isReplacingAssetRequestTransfer, setIsReplacingAssetRequestTransfer] = useState(false)
   const [applyingAssetRequestTransferId, setApplyingAssetRequestTransferId] = useState<
@@ -24300,6 +24302,58 @@ function App() {
       return
     }
     setOpenAssetRequestDetailId(request.id)
+  }
+  const handleUpdateAssetRequest = async (
+    input: CreateResourceRequestInput,
+    existing: ResourceRequestItem
+  ) => {
+    if (!activeOrganizationId) {
+      toast.error('Select an organization before updating asset requests.')
+      return false
+    }
+
+    setIsUpdatingAssetRequest(true)
+    try {
+      const updated = buildUpdatedResourceRequestFromInput(existing, {
+        ...input,
+        ics215NeedLink: existing.ics215NeedLink ?? input.ics215NeedLink,
+      })
+      const accessToken = await getAccessToken()
+      const result = await updateOrganizationAssetRequest({
+        accessToken,
+        organizationId: activeOrganizationId,
+        request: updated,
+      })
+      if (!result.ok) {
+        toast.error(result.message)
+        return false
+      }
+
+      setOrganizationAssetRequests((previous) =>
+        previous.map((entry) => (entry.id === result.request.id ? result.request : entry))
+      )
+
+      if (ics215Form && result.request.storageRecordId) {
+        const resourceSyncSkipFormIds = new Set(
+          Object.entries(ics204EditingSectionsByFormId)
+            .filter(([, sections]) => sections?.['resources-assigned'])
+            .map(([formId]) => formId)
+        )
+        const requestsByStorageId = {
+          ...organizationAssetRequestsByStorageId,
+          [result.request.storageRecordId]: result.request,
+        }
+        mergeIcs204FormsAfter215ResourceSyncs(ics215Form, {
+          resourceSyncSkipFormIds,
+          requestsByStorageId,
+        })
+      }
+
+      toast.success(`Asset request ${result.request.requestNumber} updated.`)
+      return true
+    } finally {
+      setIsUpdatingAssetRequest(false)
+    }
   }
   const persistIcs215WorkAssignmentsFromDraft = (
     draft: Ics215WorkAssignmentsDraft,
@@ -40040,18 +40094,27 @@ function App() {
           </div>
         </SheetContent>
       </Sheet>
-      <AssetRequestDetailSheet
+      <AssetRequestModal
         open={detailResourceRequest !== null}
         onOpenChange={(open) => {
           if (!open) setOpenAssetRequestDetailId(null)
         }}
         request={detailResourceRequest}
+        canEdit={Boolean(activeOrganizationId)}
+        isSubmitting={isUpdatingAssetRequest}
+        incidentOptions={assetRequestIncidentOptions}
         organizationAssets={hubAssets}
         orgAssetIdsByKey={orgAssetIdsByKey}
         workspaceOptions={assetWorkspaceOptions}
         positionCatalog={isInWorkspaceContext ? workspacePositionCatalog : null}
+        glassItemBorderClasses={glassItemBorderClasses}
+        workspaceContext={assetRequestWorkspaceContext}
         roster={activeWorkspaceRoster}
         resolveAsset={assetRequestResolveAsset}
+        onSave={handleUpdateAssetRequest}
+        onPreview={(request) => setOpenResourceRequestPreviewId(request.id)}
+        onExportWord={exportResourceRequestWord}
+        onExportPdf={exportResourceRequestPdf}
         onApplyTransfers={handleApplyAssetRequestTransfers}
         onReplaceTransferAsset={handleReplaceAssetRequestTransfer}
         isApplyingTransfers={isApplyingAssetRequestTransfers}
