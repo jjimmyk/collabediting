@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { Item, ItemActions, ItemContent, ItemDescription, ItemTitle } from '@/components/ui/item'
+import { Item, ItemContent, ItemDescription, ItemTitle } from '@/components/ui/item'
 import { AssetListHeaderRow } from '@/features/resources/AssetListHeaderRow'
 import { AssetOrgChartPlacementSelect } from '@/features/resources/AssetOrgChartPlacementSelect'
 import { AssignAssetToWorkspacePicker } from '@/features/resources/AssignAssetToWorkspacePicker'
@@ -29,7 +28,6 @@ type WorkspaceAssignedAssetsPanelProps = {
   onAssignmentChange: (assetKey: string, workspaceId: string | null) => void
   onOrgChartPlacementChange?: (assetKey: string, reportsTo: string | null) => void
   onAssignAsset?: (assetKey: string) => void
-  onOpenHubAssets?: () => void
   onUpdateOrganizationAsset?: (resource: ResourceListItemData) => void
   onAssetCheckInStatusChange?: (assetKey: string, status: WorkspaceMemberCheckInStatus) => void
   ics204LabelsByDocumentId?: Record<string, string>
@@ -51,7 +49,6 @@ export function WorkspaceAssignedAssetsPanel({
   onAssignmentChange,
   onOrgChartPlacementChange,
   onAssignAsset,
-  onOpenHubAssets,
   onUpdateOrganizationAsset,
   onAssetCheckInStatusChange,
   ics204LabelsByDocumentId,
@@ -76,16 +73,9 @@ export function WorkspaceAssignedAssetsPanel({
             <ItemTitle>No assets assigned</ItemTitle>
             <ItemDescription>
               No assets are currently assigned to {workspaceLabel}. Choose an unassigned asset
-              below or manage assignments from the hub Assets tab.
+              below to assign one to this workspace.
             </ItemDescription>
           </ItemContent>
-          {onOpenHubAssets ? (
-            <ItemActions>
-              <Button type="button" size="sm" variant="outline" onClick={onOpenHubAssets}>
-                Open Hub Assets
-              </Button>
-            </ItemActions>
-          ) : null}
         </Item>
         {onAssignAsset ? (
           <div className={cn('rounded-md border px-3 py-2.5', glassItemBorderClasses)}>
@@ -106,11 +96,6 @@ export function WorkspaceAssignedAssetsPanel({
         <p className="text-xs text-muted-foreground">
           {assets.length} {assets.length === 1 ? 'asset' : 'assets'} assigned to this workspace
         </p>
-        {onOpenHubAssets ? (
-          <Button type="button" size="sm" variant="outline" className="h-7 text-xs" onClick={onOpenHubAssets}>
-            Open Hub Assets
-          </Button>
-        ) : null}
       </div>
       <div className="flex flex-col gap-2 px-0.5 pt-1">
         <AssetListHeaderRow />

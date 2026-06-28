@@ -26,6 +26,7 @@ type OrganizationAssetPickerProps = {
   showSelectedSection?: boolean
   browseLabel?: string
   selectedLabel?: string
+  targetWorkspaceId?: string | null
 }
 
 export function assetToTransferRef(
@@ -55,6 +56,7 @@ export function OrganizationAssetPicker({
   showSelectedSection = mode === 'multi',
   browseLabel = 'Browse organization assets',
   selectedLabel = 'Selected for transfer',
+  targetWorkspaceId = null,
 }: OrganizationAssetPickerProps) {
   const [query, setQuery] = useState('')
 
@@ -104,6 +106,7 @@ export function OrganizationAssetPicker({
           query={query}
           onQueryChange={setQuery}
           idPrefix={idPrefix}
+          targetWorkspaceId={targetWorkspaceId}
         />
       </div>
     </div>

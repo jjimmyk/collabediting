@@ -28777,12 +28777,6 @@ function App() {
                         ? handleAssignAssetToCurrentWorkspace
                         : undefined
                     }
-                    onOpenHubAssets={() => {
-                      setActiveIncidentWorkspaceId(null)
-                      setActiveExerciseWorkspaceId(null)
-                      setActiveTab('resources')
-                      setResourcesPanelView('resources')
-                    }}
                   />
                 )}
 

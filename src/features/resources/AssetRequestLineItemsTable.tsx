@@ -29,6 +29,7 @@ type AssetRequestLineItemsTableProps = {
   workspaceOptions?: AssetWorkspaceOption[]
   positionCatalog?: WorkspacePositionCatalog | null
   glassItemBorderClasses?: string
+  targetWorkspaceId?: string | null
 }
 
 export function AssetRequestLineItemsTable({
@@ -40,6 +41,7 @@ export function AssetRequestLineItemsTable({
   workspaceOptions = [],
   positionCatalog = null,
   glassItemBorderClasses = '',
+  targetWorkspaceId = null,
 }: AssetRequestLineItemsTableProps) {
   return (
     <div className="overflow-x-auto rounded-md border">
@@ -248,6 +250,7 @@ export function AssetRequestLineItemsTable({
                     workspaceOptions={workspaceOptions}
                     positionCatalog={positionCatalog}
                     idPrefix={`asset-request-table-item-${index}`}
+                    targetWorkspaceId={targetWorkspaceId}
                   />
                 </td>
                 <td className="sticky right-0 z-10 bg-background px-2 py-2">

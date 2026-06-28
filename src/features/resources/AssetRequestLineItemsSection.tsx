@@ -19,6 +19,7 @@ type AssetRequestLineItemsSectionProps = {
   workspaceOptions?: AssetWorkspaceOption[]
   positionCatalog?: WorkspacePositionCatalog | null
   glassItemBorderClasses?: string
+  targetWorkspaceId?: string | null
 }
 
 export function AssetRequestLineItemsSection({
@@ -31,6 +32,7 @@ export function AssetRequestLineItemsSection({
   workspaceOptions = [],
   positionCatalog = null,
   glassItemBorderClasses = '',
+  targetWorkspaceId = null,
 }: AssetRequestLineItemsSectionProps) {
   const updateItem = (index: number, next: AssetRequestLineItem) => {
     onChangeItems(items.map((item, itemIndex) => (itemIndex === index ? next : item)))
@@ -89,6 +91,7 @@ export function AssetRequestLineItemsSection({
           workspaceOptions={workspaceOptions}
           positionCatalog={positionCatalog}
           glassItemBorderClasses={glassItemBorderClasses}
+          targetWorkspaceId={targetWorkspaceId}
         />
       ) : (
         <AssetRequestLineItemsTable
@@ -100,6 +103,7 @@ export function AssetRequestLineItemsSection({
           workspaceOptions={workspaceOptions}
           positionCatalog={positionCatalog}
           glassItemBorderClasses={glassItemBorderClasses}
+          targetWorkspaceId={targetWorkspaceId}
         />
       )}
     </div>

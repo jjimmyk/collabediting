@@ -1,7 +1,14 @@
 import { useMemo, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 import { AssetListHeaderRow } from '@/features/resources/AssetListHeaderRow'
+import { getAssetWorkspaceAssignmentBlockReason } from '@/features/resources/asset-transfer-eligibility'
 import { ResourceListItemCard } from '@/features/resources/ResourceListItemCard'
 import type { AssetWorkspaceOption, ResourceListItemData } from '@/features/resources/types'
 import { getOrgChartPlacementLabel } from '@/features/roster/workspace-asset-org-chart'
@@ -23,6 +30,7 @@ type OrganizationAssetBrowseListProps = {
   onQueryChange: (query: string) => void
   idPrefix: string
   emptyMessage?: string
+  targetWorkspaceId?: string | null
 }
 
 export function OrganizationAssetBrowseList({
@@ -37,6 +45,7 @@ export function OrganizationAssetBrowseList({
   onQueryChange,
   idPrefix,
   emptyMessage = 'No organization assets available.',
+  targetWorkspaceId = null,
 }: OrganizationAssetBrowseListProps) {
   const [expandedAssetKey, setExpandedAssetKey] = useState<string | null>(null)
 
@@ -100,53 +109,78 @@ export function OrganizationAssetBrowseList({
             review details, then add it to transfer.
           </p>
           <AssetListHeaderRow showActionSpacer={false} />
-          <div className="max-h-[min(50vh,28rem)] space-y-2 overflow-y-auto pr-1">
-            {filteredAssets.map((asset) => {
-              const isOpen = expandedAssetKey === asset.assetKey
-              return (
-                <ResourceListItemCard
-                  key={asset.assetKey}
-                  resource={asset}
-                  glassItemBorderClasses={glassItemBorderClasses}
-                  editable={false}
-                  showEditButton={false}
-                  showMapAction={false}
-                  readOnlyWorkspaceAssignmentFields
-                  organizationManaged={isOrganizationManagedAssetKey(asset.assetKey)}
-                  workspaceOptions={workspaceOptions}
-                  showCollapsedAssignmentSummary
-                  orgChartPlacementLabel={getOrgChartPlacementLabel(
-                    asset.orgChartReportsTo,
-                    positionCatalog
-                  )}
-                  open={isOpen}
-                  onOpenChange={(open) => setExpandedAssetKey(open ? asset.assetKey : null)}
-                  onHeaderClick={() =>
-                    setExpandedAssetKey((previous) =>
-                      previous === asset.assetKey ? null : asset.assetKey
-                    )
-                  }
-                  headerActions={
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="h-8 gap-1 px-2 text-xs"
-                      aria-label={`Add ${asset.name} to transfer`}
-                      onClick={(event) => {
-                        event.stopPropagation()
-                        onAdd(asset)
-                        setExpandedAssetKey(null)
-                      }}
-                    >
-                      <Plus className="h-3.5 w-3.5" />
-                      Add
-                    </Button>
-                  }
-                />
-              )
-            })}
-          </div>
+          <TooltipProvider delayDuration={150}>
+            <div className="max-h-[min(50vh,28rem)] space-y-2 overflow-y-auto pr-1">
+              {filteredAssets.map((asset) => {
+                const isOpen = expandedAssetKey === asset.assetKey
+                const blockReason = getAssetWorkspaceAssignmentBlockReason(
+                  asset,
+                  targetWorkspaceId,
+                  workspaceOptions
+                )
+                const addButton = (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-8 gap-1 px-2 text-xs"
+                    disabled={Boolean(blockReason)}
+                    aria-label={
+                      blockReason ??
+                      `Add ${asset.name} to transfer`
+                    }
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      if (blockReason) return
+                      onAdd(asset)
+                      setExpandedAssetKey(null)
+                    }}
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    Add
+                  </Button>
+                )
+
+                return (
+                  <ResourceListItemCard
+                    key={asset.assetKey}
+                    resource={asset}
+                    glassItemBorderClasses={glassItemBorderClasses}
+                    editable={false}
+                    showEditButton={false}
+                    showMapAction={false}
+                    readOnlyWorkspaceAssignmentFields
+                    organizationManaged={isOrganizationManagedAssetKey(asset.assetKey)}
+                    workspaceOptions={workspaceOptions}
+                    showCollapsedAssignmentSummary
+                    orgChartPlacementLabel={getOrgChartPlacementLabel(
+                      asset.orgChartReportsTo,
+                      positionCatalog
+                    )}
+                    open={isOpen}
+                    onOpenChange={(open) => setExpandedAssetKey(open ? asset.assetKey : null)}
+                    onHeaderClick={() =>
+                      setExpandedAssetKey((previous) =>
+                        previous === asset.assetKey ? null : asset.assetKey
+                      )
+                    }
+                    headerActions={
+                      blockReason ? (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="inline-flex">{addButton}</span>
+                          </TooltipTrigger>
+                          <TooltipContent>{blockReason}</TooltipContent>
+                        </Tooltip>
+                      ) : (
+                        addButton
+                      )
+                    }
+                  />
+                )
+              })}
+            </div>
+          </TooltipProvider>
         </div>
       )}
     </div>

@@ -12,6 +12,7 @@ type OrganizationAssetPickerPopoverProps = {
   workspaceOptions?: AssetWorkspaceOption[]
   positionCatalog?: WorkspacePositionCatalog | null
   idPrefix: string
+  targetWorkspaceId?: string | null
 }
 
 export function OrganizationAssetPickerPopover({
@@ -23,6 +24,7 @@ export function OrganizationAssetPickerPopover({
   workspaceOptions = [],
   positionCatalog = null,
   idPrefix,
+  targetWorkspaceId = null,
 }: OrganizationAssetPickerPopoverProps) {
   return (
     <OrganizationAssetPickerDialog
@@ -34,6 +36,7 @@ export function OrganizationAssetPickerPopover({
       workspaceOptions={workspaceOptions}
       positionCatalog={positionCatalog}
       idPrefix={idPrefix}
+      targetWorkspaceId={targetWorkspaceId}
     />
   )
 }

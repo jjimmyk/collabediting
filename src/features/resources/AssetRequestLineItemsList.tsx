@@ -12,6 +12,7 @@ type AssetRequestLineItemsListProps = {
   workspaceOptions?: AssetWorkspaceOption[]
   positionCatalog?: WorkspacePositionCatalog | null
   glassItemBorderClasses?: string
+  targetWorkspaceId?: string | null
 }
 
 export function AssetRequestLineItemsList({
@@ -23,6 +24,7 @@ export function AssetRequestLineItemsList({
   workspaceOptions = [],
   positionCatalog = null,
   glassItemBorderClasses = '',
+  targetWorkspaceId = null,
 }: AssetRequestLineItemsListProps) {
   return (
     <div className="space-y-3">
@@ -39,6 +41,7 @@ export function AssetRequestLineItemsList({
           workspaceOptions={workspaceOptions}
           positionCatalog={positionCatalog}
           glassItemBorderClasses={glassItemBorderClasses}
+          targetWorkspaceId={targetWorkspaceId}
         />
       ))}
     </div>

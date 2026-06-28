@@ -201,6 +201,7 @@ export function CreateAssetRequestDialog({
               workspaceOptions={workspaceOptions}
               positionCatalog={positionCatalog}
               glassItemBorderClasses={glassItemBorderClasses}
+              targetWorkspaceId={workspaceContext?.workspaceId ?? null}
             />
             <AssetRequestRequestedByForm value={formValue} onChange={setFormValue} />
             <AssetRequestSectionChiefApprovalForm value={formValue} onChange={setFormValue} />

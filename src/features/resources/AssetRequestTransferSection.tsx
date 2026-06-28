@@ -244,6 +244,7 @@ function TransferAssetRow({
                   onReplaceSelect={(newAsset) =>
                     onReplaceTransferAsset(transferRef.assetKey, newAsset)
                   }
+                  targetWorkspaceId={targetWorkspaceId}
                 />
               </>
             ) : null}

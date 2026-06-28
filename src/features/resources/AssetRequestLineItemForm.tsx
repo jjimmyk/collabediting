@@ -16,6 +16,7 @@ type AssetRequestLineItemFormProps = {
   workspaceOptions?: AssetWorkspaceOption[]
   positionCatalog?: WorkspacePositionCatalog | null
   glassItemBorderClasses?: string
+  targetWorkspaceId?: string | null
   idPrefix?: string
 }
 
@@ -30,6 +31,7 @@ export function AssetRequestLineItemForm({
   workspaceOptions = [],
   positionCatalog = null,
   glassItemBorderClasses = '',
+  targetWorkspaceId = null,
   idPrefix = 'asset-request-item',
 }: AssetRequestLineItemFormProps) {
   return (
@@ -62,6 +64,7 @@ export function AssetRequestLineItemForm({
         positionCatalog={positionCatalog}
         glassItemBorderClasses={glassItemBorderClasses}
         idPrefix={idPrefix}
+        targetWorkspaceId={targetWorkspaceId}
       />
     </div>
   )

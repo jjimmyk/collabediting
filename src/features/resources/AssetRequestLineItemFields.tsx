@@ -30,6 +30,7 @@ export type AssetRequestLineItemFieldsProps = {
   workspaceOptions?: AssetWorkspaceOption[]
   positionCatalog?: WorkspacePositionCatalog | null
   glassItemBorderClasses?: string
+  targetWorkspaceId?: string | null
   idPrefix?: string
   compact?: boolean
 }
@@ -62,6 +63,7 @@ export function AssetRequestLineItemFields({
   workspaceOptions = [],
   positionCatalog = null,
   glassItemBorderClasses = '',
+  targetWorkspaceId = null,
   idPrefix = 'asset-request-item',
   compact = false,
 }: AssetRequestLineItemFieldsProps) {
@@ -276,6 +278,7 @@ export function AssetRequestLineItemFields({
         workspaceOptions={workspaceOptions}
         positionCatalog={positionCatalog}
         idPrefix={`${fieldPrefix}-transfer`}
+        targetWorkspaceId={targetWorkspaceId}
       />
     </div>
   )

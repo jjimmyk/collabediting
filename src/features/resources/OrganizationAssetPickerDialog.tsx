@@ -16,7 +16,11 @@ import {
 import type { AssetWorkspaceOption, ResourceListItemData } from '@/features/resources/types'
 import type { WorkspacePositionCatalog } from '@/features/roster/workspace-positions'
 import type { AssetRequestTransferRef } from '@/lib/ics-213rr-resource-request'
+import { cn } from '@/lib/utils'
 import { Package } from 'lucide-react'
+
+export const ORG_ASSET_PICKER_DIALOG_CONTENT_CLASS =
+  'flex max-h-[90vh] w-[min(98vw,128rem)] !max-w-[min(98vw,128rem)] sm:!max-w-[min(98vw,128rem)] flex-col gap-0 overflow-hidden p-0'
 
 type OrganizationAssetPickerDialogProps = {
   assets: ResourceListItemData[]
@@ -34,6 +38,7 @@ type OrganizationAssetPickerDialogProps = {
   excludeAssetKeys?: string[]
   onReplaceSelect?: (asset: ResourceListItemData) => void
   showSelectedSection?: boolean
+  targetWorkspaceId?: string | null
   open?: boolean
   onOpenChange?: (open: boolean) => void
   hideTrigger?: boolean
@@ -55,6 +60,7 @@ export function OrganizationAssetPickerDialog({
   excludeAssetKeys = [],
   onReplaceSelect,
   showSelectedSection,
+  targetWorkspaceId = null,
   open: controlledOpen,
   onOpenChange: controlledOnOpenChange,
   hideTrigger = false,
@@ -93,7 +99,7 @@ export function OrganizationAssetPickerDialog({
       ) : null}
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="flex max-h-[90vh] w-[min(98vw,128rem)] max-w-[128rem] flex-col gap-0 overflow-hidden p-0">
+        <DialogContent className={cn(ORG_ASSET_PICKER_DIALOG_CONTENT_CLASS)}>
           <DialogHeader className="shrink-0 border-b px-6 py-4">
             <DialogTitle>{dialogTitle}</DialogTitle>
             <DialogDescription>{dialogDescription}</DialogDescription>
@@ -112,6 +118,7 @@ export function OrganizationAssetPickerDialog({
               excludeAssetKeys={excludeAssetKeys}
               onReplaceSelect={handleReplaceSelect}
               showSelectedSection={showSelectedSection ?? mode === 'multi'}
+              targetWorkspaceId={targetWorkspaceId}
             />
           </div>
           <DialogFooter className="shrink-0 border-t px-6 py-4">
