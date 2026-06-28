@@ -103,6 +103,12 @@ export type ResourceRequestItem = {
   assetTransferConfirmations?: AssetTransferConfirmation[]
   /** Supabase row UUID when loaded from or saved to API */
   storageRecordId?: string
+  /** Row metadata from organization_asset_requests.created_at */
+  recordCreatedAt?: string
+  /** Row metadata from organization_asset_requests.updated_at */
+  recordUpdatedAt?: string
+  /** Resolved display name for organization_asset_requests.created_by */
+  recordCreatedByName?: string
 }
 
 export type DocxBlock =
@@ -416,6 +422,18 @@ export function normalizeResourceRequestItem(raw: Partial<ResourceRequestItem>):
     storageRecordId:
       typeof raw.storageRecordId === 'string' && raw.storageRecordId.trim()
         ? raw.storageRecordId.trim()
+        : undefined,
+    recordCreatedAt:
+      typeof raw.recordCreatedAt === 'string' && raw.recordCreatedAt.trim()
+        ? raw.recordCreatedAt.trim()
+        : undefined,
+    recordUpdatedAt:
+      typeof raw.recordUpdatedAt === 'string' && raw.recordUpdatedAt.trim()
+        ? raw.recordUpdatedAt.trim()
+        : undefined,
+    recordCreatedByName:
+      typeof raw.recordCreatedByName === 'string' && raw.recordCreatedByName.trim()
+        ? raw.recordCreatedByName.trim()
         : undefined,
   }
 }
@@ -1435,10 +1453,9 @@ export function buildInitialTransferConfirmations(
   return collectUniqueTransferAssets(items).map((ref) => {
     const asset = resolveAsset(ref.assetKey)
     const previousWorkspaceId = asset?.assignedWorkspaceId ?? null
-    const alreadyThere = previousWorkspaceId === targetWorkspaceId
     return {
       assetKey: ref.assetKey,
-      confirmed: !alreadyThere,
+      confirmed: false,
       previousWorkspaceId,
       targetWorkspaceId,
       appliedAt: null,
@@ -1486,6 +1503,37 @@ export function filterResourceRequestsForWorkspace(
 ): ResourceRequestItem[] {
   if (!workspaceId) return []
   return requests.filter((request) => request.sourceWorkspaceId === workspaceId)
+}
+
+export function formatAssetRequestRecordTimestamp(iso?: string): string | null {
+  if (!iso?.trim()) return null
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return null
+  return date.toLocaleString([], {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  })
+}
+
+export function getAssetRequestRecordCreatedByLabel(request: ResourceRequestItem): string | null {
+  const name = request.recordCreatedByName?.trim() || request.requestedByName?.trim()
+  return name || null
+}
+
+export function getAssetRequestRecordSummaryLine(request: ResourceRequestItem): string | null {
+  const createdBy = getAssetRequestRecordCreatedByLabel(request)
+  const updatedAt = formatAssetRequestRecordTimestamp(
+    request.recordUpdatedAt ?? request.recordCreatedAt
+  )
+  if (createdBy && updatedAt) {
+    return `Created by ${createdBy} · Last updated ${updatedAt}`
+  }
+  if (createdBy) return `Created by ${createdBy}`
+  if (updatedAt) return `Last updated ${updatedAt}`
+  return null
 }
 
 export function buildAssetRequestTransferRef(params: {

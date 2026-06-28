@@ -46,9 +46,15 @@ function mapApiRequest(raw: Record<string, unknown>): ResourceRequestItem | null
   const item = payload as ResourceRequestItem
   if (typeof item.id !== 'number' || !Array.isArray(item.mapLocation)) return null
   const recordId = typeof raw.id === 'string' ? raw.id : undefined
+  const createdAt = typeof raw.createdAt === 'string' ? raw.createdAt : undefined
+  const updatedAt = typeof raw.updatedAt === 'string' ? raw.updatedAt : undefined
+  const createdByName = typeof raw.createdByName === 'string' ? raw.createdByName : undefined
   return normalizeResourceRequestItem({
     ...item,
     storageRecordId: recordId,
+    recordCreatedAt: createdAt,
+    recordUpdatedAt: updatedAt,
+    recordCreatedByName: createdByName,
   })
 }
 
@@ -119,10 +125,17 @@ export async function createOrganizationAssetRequest(params: {
     id: nextResourceRequestId(existing),
     requestNumber,
   })
+  const now = new Date().toISOString()
+  const requestWithMetadata: ResourceRequestItem = {
+    ...request,
+    recordCreatedAt: now,
+    recordUpdatedAt: now,
+    recordCreatedByName: params.input.requestedByName.trim() || undefined,
+  }
 
   if (!isSupabaseConfigured) {
-    writeLocalOrganizationAssetRequests(params.organizationId, [...existing, request])
-    return { ok: true, request }
+    writeLocalOrganizationAssetRequests(params.organizationId, [...existing, requestWithMetadata])
+    return { ok: true, request: requestWithMetadata }
   }
 
   if (!params.accessToken) {
@@ -137,7 +150,7 @@ export async function createOrganizationAssetRequest(params: {
     },
     body: JSON.stringify({
       organizationId: params.organizationId,
-      payload: request,
+      payload: requestWithMetadata,
     }),
   })
 
@@ -170,14 +183,20 @@ export async function updateOrganizationAssetRequest(params: {
   }
 
   const normalized = normalizeResourceRequestItem(params.request)
+  const now = new Date().toISOString()
+  const normalizedWithMetadata: ResourceRequestItem = {
+    ...normalized,
+    recordUpdatedAt: now,
+    recordCreatedAt: normalized.recordCreatedAt ?? now,
+  }
 
   if (!isSupabaseConfigured) {
     const existing = readLocalOrganizationAssetRequests(params.organizationId)
     const next = existing.map((entry) =>
-      entry.id === normalized.id ? normalized : entry
+      entry.id === normalizedWithMetadata.id ? normalizedWithMetadata : entry
     )
     writeLocalOrganizationAssetRequests(params.organizationId, next)
-    return { ok: true, request: normalized }
+    return { ok: true, request: normalizedWithMetadata }
   }
 
   if (!params.accessToken) {
@@ -196,8 +215,8 @@ export async function updateOrganizationAssetRequest(params: {
     },
     body: JSON.stringify({
       organizationId: params.organizationId,
-      recordId: normalized.storageRecordId,
-      payload: normalized,
+      recordId: normalizedWithMetadata.storageRecordId,
+      payload: normalizedWithMetadata,
     }),
   })
 

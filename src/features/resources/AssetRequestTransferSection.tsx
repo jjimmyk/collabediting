@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Checkbox } from '@/components/ui/checkbox'
 import {
   Collapsible,
   CollapsibleContent,
@@ -31,7 +30,7 @@ import { cn } from '@/lib/utils'
 import { ChevronDown, Replace } from 'lucide-react'
 
 const TRANSFER_GRID_CREATE =
-  'grid grid-cols-[auto_minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,7rem)] items-center gap-3'
+  'grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)] items-center gap-3'
 const TRANSFER_GRID_VIEW =
   'grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,8rem)_minmax(0,7rem)] items-center gap-3'
 
@@ -46,7 +45,6 @@ type AssetRequestTransferSectionProps = {
   positionCatalog?: WorkspacePositionCatalog | null
   glassItemBorderClasses?: string
   confirmations: AssetTransferConfirmation[]
-  onConfirmationChange?: (assetKey: string, confirmed: boolean) => void
   onApplyTransfers?: () => void
   onReplaceTransferAsset?: (oldAssetKey: string, newAsset: ResourceListItemData) => void
   isApplying?: boolean
@@ -106,7 +104,6 @@ type TransferAssetRowProps = {
   orgAssetIdsByKey: Record<string, string>
   glassItemBorderClasses?: string
   resolveAsset: AssetTransferResolveAsset
-  onConfirmationChange?: (assetKey: string, confirmed: boolean) => void
   onReplaceTransferAsset?: (oldAssetKey: string, newAsset: ResourceListItemData) => void
   isReplacingTransferAsset?: boolean
 }
@@ -126,7 +123,6 @@ function TransferAssetRow({
   orgAssetIdsByKey,
   glassItemBorderClasses = '',
   resolveAsset,
-  onConfirmationChange,
   onReplaceTransferAsset,
   isReplacingTransferAsset = false,
 }: TransferAssetRowProps) {
@@ -136,12 +132,9 @@ function TransferAssetRow({
   const currentWorkspaceLabel = asset
     ? getResourceWorkspaceAssignmentLabel(asset) || 'Unassigned'
     : workspaceLabelForId(confirmation?.previousWorkspaceId, workspaceOptions)
-  const currentAssignmentId = asset?.assignedWorkspaceId ?? confirmation?.previousWorkspaceId ?? null
-  const alreadyThere = currentAssignmentId === targetWorkspaceId
   const status = confirmation
     ? getTransferConfirmationStatus(confirmation, resolveAsset)
     : 'skipped'
-  const checkboxDisabled = mode === 'create' && alreadyThere
   const canReplace =
     mode === 'view' &&
     request != null &&
@@ -158,17 +151,6 @@ function TransferAssetRow({
     <Collapsible open={expanded} onOpenChange={setExpanded} className="rounded-md border">
       <div className="overflow-x-auto">
         <div className={cn('min-w-[720px] px-2 py-2 text-xs', gridClass)}>
-          {mode === 'create' ? (
-            <Checkbox
-              checked={confirmation?.confirmed ?? false}
-              disabled={checkboxDisabled}
-              onCheckedChange={(checked) =>
-                onConfirmationChange?.(transferRef.assetKey, checked === true)
-              }
-              aria-label={`Confirm transfer for ${transferRef.name}`}
-            />
-          ) : null}
-
           <div className="min-w-0">
             <CollapsibleTrigger asChild>
               <button
@@ -205,8 +187,9 @@ function TransferAssetRow({
             </Badge>
           ) : null}
 
-          <div className="flex items-center justify-end gap-1">
-            {mode === 'view' && onReplaceTransferAsset ? (
+          {mode === 'view' ? (
+            <div className="flex items-center justify-end gap-1">
+              {onReplaceTransferAsset ? (
               <>
                 <Button
                   type="button"
@@ -247,8 +230,9 @@ function TransferAssetRow({
                   targetWorkspaceId={targetWorkspaceId}
                 />
               </>
-            ) : null}
-          </div>
+              ) : null}
+            </div>
+          ) : null}
         </div>
       </div>
 
@@ -295,7 +279,6 @@ export function AssetRequestTransferSection({
   positionCatalog = null,
   glassItemBorderClasses = '',
   confirmations,
-  onConfirmationChange,
   onApplyTransfers,
   onReplaceTransferAsset,
   isApplying = false,
@@ -349,7 +332,7 @@ export function AssetRequestTransferSection({
     <Ics213rrNumberedBox title="Asset Transfer">
       <p className="mb-3 text-xs text-muted-foreground">
         {mode === 'create'
-          ? `Confirm which assets should be transferred to ${targetWorkspaceName} after the request is created. Use Apply Transfers on the request detail to execute.`
+          ? `After this request is created and approved, the owner(s) of the assets below will be able to confirm transfer of those assets to the workspace ${targetWorkspaceName}.`
           : `Review assets marked for transfer to ${targetWorkspaceName}. Expand each asset for full details, replace if needed, then apply transfers when ready.`}
       </p>
 
@@ -360,12 +343,11 @@ export function AssetRequestTransferSection({
             headerGridClass
           )}
         >
-          {mode === 'create' ? <span>Confirm</span> : null}
           <span>Asset</span>
           <span>Current workspace</span>
           <span>Target workspace</span>
           {mode === 'view' ? <span>Status</span> : null}
-          <span className="text-right">Actions</span>
+          {mode === 'view' ? <span className="text-right">Actions</span> : null}
         </div>
       </div>
 
@@ -390,7 +372,6 @@ export function AssetRequestTransferSection({
               orgAssetIdsByKey={orgAssetIdsByKey}
               glassItemBorderClasses={glassItemBorderClasses}
               resolveAsset={resolveAsset}
-              onConfirmationChange={onConfirmationChange}
               onReplaceTransferAsset={onReplaceTransferAsset}
               isReplacingTransferAsset={isReplacingTransferAsset}
             />

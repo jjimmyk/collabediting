@@ -30,7 +30,6 @@ import {
   generateResourceRequestNumber,
   validateCreateResourceRequestInput,
   type AssetRequestWorkspaceContext,
-  type AssetTransferConfirmation,
   type AssetTransferResolveAsset,
   type CreateResourceRequestInput,
   type ResourceRequestItem,
@@ -74,9 +73,6 @@ export function CreateAssetRequestDialog({
   )
   const [validationError, setValidationError] = useState<string | null>(null)
   const [requestedItemsView, setRequestedItemsView] = useState<AssetRequestItemsView>('list')
-  const [transferConfirmations, setTransferConfirmations] = useState<AssetTransferConfirmation[]>(
-    []
-  )
 
   const previewRequestNumber = useMemo(
     () => generateResourceRequestNumber(existingRequests),
@@ -95,7 +91,6 @@ export function CreateAssetRequestDialog({
       setFormValue(createEmptyResourceRequestInput({ requestedByName: defaultRequestedByName }))
       setValidationError(null)
       setRequestedItemsView('list')
-      setTransferConfirmations([])
       return
     }
 
@@ -113,34 +108,17 @@ export function CreateAssetRequestDialog({
     )
   }, [defaultRequestedByName, open, workspaceContext])
 
-  useEffect(() => {
-    if (!open || !workspaceContext) {
-      setTransferConfirmations([])
-      return
-    }
-
-    setTransferConfirmations((previous) => {
-      const next = buildInitialTransferConfirmations(
-        formValue.items,
-        workspaceContext.workspaceId,
-        assetResolver
-      )
-      return next.map((confirmation) => {
-        const existing = previous.find((entry) => entry.assetKey === confirmation.assetKey)
-        if (!existing) return confirmation
-        if (confirmation.previousWorkspaceId === confirmation.targetWorkspaceId) {
-          return confirmation
-        }
-        return { ...confirmation, confirmed: existing.confirmed }
-      })
-    })
-  }, [assetResolver, formValue.items, open, workspaceContext])
-
-  const handleTransferConfirmationChange = (assetKey: string, confirmed: boolean) => {
-    setTransferConfirmations((previous) =>
-      previous.map((entry) => (entry.assetKey === assetKey ? { ...entry, confirmed } : entry))
-    )
-  }
+  const transferConfirmations = useMemo(
+    () =>
+      workspaceContext
+        ? buildInitialTransferConfirmations(
+            formValue.items,
+            workspaceContext.workspaceId,
+            assetResolver
+          )
+        : [],
+    [assetResolver, formValue.items, workspaceContext]
+  )
 
   const handleSubmit = async () => {
     const payload: CreateResourceRequestInput = workspaceContext
@@ -218,7 +196,6 @@ export function CreateAssetRequestDialog({
                 workspaceOptions={workspaceOptions}
                 positionCatalog={positionCatalog}
                 confirmations={transferConfirmations}
-                onConfirmationChange={handleTransferConfirmationChange}
                 resolveAsset={assetResolver}
               />
             ) : null}

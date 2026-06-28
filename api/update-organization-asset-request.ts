@@ -4,6 +4,7 @@ import {
   ORGANIZATION_ASSET_REQUEST_SELECT,
   mapOrganizationAssetRequestRow,
   parseResourceRequestPayload,
+  resolveOrganizationAssetRequestCreatorName,
   type DbOrganizationAssetRequestRow,
 } from './organization-asset-request-shared.js'
 import { userBelongsToOrganization, userIsPlatformOrgAdmin } from './org-shared.js'
@@ -100,7 +101,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const { data, error } = await admin
       .from('organization_asset_requests')
-      .update({ payload })
+      .update({
+        payload,
+        updated_at: new Date().toISOString(),
+      })
       .eq('id', recordId)
       .eq('organization_id', organizationId)
       .select(ORGANIZATION_ASSET_REQUEST_SELECT)
@@ -110,9 +114,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(500).json({ error: error?.message ?? 'Could not update asset request.' })
     }
 
+    const createdByName = await resolveOrganizationAssetRequestCreatorName(
+      admin,
+      (existing as DbOrganizationAssetRequestRow).created_by
+    )
+
     return res.status(200).json({
       ok: true,
-      request: mapOrganizationAssetRequestRow(data as DbOrganizationAssetRequestRow),
+      request: mapOrganizationAssetRequestRow(data as DbOrganizationAssetRequestRow, createdByName),
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Update organization asset request failed.'

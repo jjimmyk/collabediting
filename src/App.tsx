@@ -164,6 +164,7 @@ import {
   getResourceRequestItemFieldValue,
   getResourceRequestKindTypeSummary,
   getResourceRequestPrimaryDescription,
+  getAssetRequestRecordSummaryLine,
   getResourceRequestPrioritySummary,
   getResourceRequestSearchValues,
   getResourceRequestTotalQuantity,
@@ -29098,6 +29099,7 @@ function App() {
                   cardFilteredResourceRequests.map((request) => {
                     const key = `resource-request-${request.id}`
                     const isOpen = expandedItemId === key
+                    const recordSummary = getAssetRequestRecordSummaryLine(request)
                     return (
                       <Item
                         key={request.id}
@@ -29118,10 +29120,15 @@ function App() {
                           >
                             <ItemContent>
                               <ItemTitle>{getResourceRequestPrimaryDescription(request)}</ItemTitle>
-                              <ItemDescription>
-                                {request.requestNumber} · {request.incidentName} ·{' '}
-                                {getResourceRequestItemCount(request)} item
-                                {getResourceRequestItemCount(request) === 1 ? '' : 's'}
+                              <ItemDescription className="space-y-0.5">
+                                <span>
+                                  {request.requestNumber} · {request.incidentName} ·{' '}
+                                  {getResourceRequestItemCount(request)} item
+                                  {getResourceRequestItemCount(request) === 1 ? '' : 's'}
+                                </span>
+                                {recordSummary ? (
+                                  <span className="block text-[11px]">{recordSummary}</span>
+                                ) : null}
                               </ItemDescription>
                             </ItemContent>
                             <ItemActions>

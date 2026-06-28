@@ -7,6 +7,7 @@ import {
   createEmptyResourceRequestInput,
   getPendingTransferConfirmations,
   filterResourceRequestsForWorkspace,
+  getAssetRequestRecordSummaryLine,
   normalizeResourceRequestItem,
   validateCreateResourceRequestInput,
   type AssetRequestLineItem,
@@ -89,14 +90,14 @@ describe('asset request transfer helpers', () => {
     expect(collectUniqueTransferAssets(items)).toHaveLength(2)
   })
 
-  it('defaults confirmation to checked when asset is not already assigned', () => {
+  it('defaults confirmation to unchecked until asset owners approve transfer', () => {
     const confirmations = buildInitialTransferConfirmations(
       [lineItemWithTransfer('asset-1')],
       'ws-target',
       () => ({ assignedWorkspaceId: 'ws-other' })
     )
 
-    expect(confirmations[0]?.confirmed).toBe(true)
+    expect(confirmations[0]?.confirmed).toBe(false)
     expect(confirmations[0]?.targetWorkspaceId).toBe('ws-target')
   })
 
@@ -139,6 +140,19 @@ describe('asset request transfer helpers', () => {
 
     expect(pending).toHaveLength(1)
     expect(pending[0]?.assetKey).toBe('asset-1')
+  })
+})
+
+describe('asset request record metadata', () => {
+  it('formats creator and last updated summary line', () => {
+    const request = normalizeResourceRequestItem({
+      id: 1,
+      recordCreatedByName: 'Alex Rivera',
+      recordUpdatedAt: '2026-06-22T15:30:00.000Z',
+    } as Partial<ResourceRequestItem>)
+
+    expect(getAssetRequestRecordSummaryLine(request)).toContain('Created by Alex Rivera')
+    expect(getAssetRequestRecordSummaryLine(request)).toContain('Last updated')
   })
 })
 
