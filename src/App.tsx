@@ -789,6 +789,13 @@ import { Ics201TutorialWizard } from '@/features/ics201/Ics201TutorialWizard'
 import { UscgInitialResponseTutorialWizard } from '@/features/uscg-workspace/UscgInitialResponseTutorialWizard'
 import { HubTutorialWizard } from '@/features/hub/HubTutorialWizard'
 import { HubMapLayersPanel } from '@/features/hub/map-layers/HubMapLayersPanel'
+import { HubCisaDashboardPanel } from '@/features/hub/cisa-dashboards/HubCisaDashboardPanel'
+import {
+  getHubCisaDashboardLabel,
+  HUB_CISA_DASHBOARD_MENU_ITEMS,
+  isHubCisaDashboardTab,
+} from '@/features/hub/cisa-dashboards/dashboard-registry'
+import { HubCisaDashboardIcon } from '@/features/hub/cisa-dashboards/HubCisaDashboardIcon'
 import {
   applyLiveDistrictSummaryToGraphic,
   isHubAorBoundaryGraphicAttributes,
@@ -4313,6 +4320,13 @@ type LeftTab =
   | 'seerist'
   | 'workspace-settings'
   | 'files'
+  | 'cisa-national-geospatial-cop'
+  | 'cisa-cyber-operations'
+  | 'cisa-fusion-cell'
+  | 'cisa-hirt-infrastructure-analysis'
+  | 'cisa-sector-dependency-consequence'
+  | 'cisa-leadership-decision-view'
+  | 'interagency-dashboard'
   | `form-${string}`
 
 const WORKSPACE_FORMS_MENU: Array<{ id: string; tab: LeftTab; label: string }> = [
@@ -4356,6 +4370,7 @@ const HUB_MORE_MENU: Array<{ tab: LeftTab; label: string }> = [
   { tab: 'exercises', label: 'Exercises' },
   { tab: 'incident-list', label: 'Incidents' },
   { tab: 'sitreps', label: 'SITREPs' },
+  ...HUB_CISA_DASHBOARD_MENU_ITEMS,
 ]
 
 function formatWorkspaceDropdownTriggerLabel(menuLabel: string, selectedItemLabel: string | null) {
@@ -10453,6 +10468,7 @@ function App() {
     if (tab === 'exercise-objectives') return 'Exercise Objectives'
     if (tab === 'sitreps') return 'SITREPs'
     if (tab === 'seerist') return 'Seerist'
+    if (isHubCisaDashboardTab(tab)) return getHubCisaDashboardLabel(tab)
     if (tab === 'workspace-settings') {
       return isInExerciseWorkspace ? 'Exercise Settings' : 'Incident Settings'
     }
@@ -18024,22 +18040,23 @@ function App() {
           id: item.tab,
           value: item.label,
           label: item.label,
-          icon:
-            item.tab === 'analytics' ? (
-              <BarChart3 className="h-4 w-4" />
-            ) : item.tab === 'map-layers' ? (
-              <Layers className="h-4 w-4" />
-            ) : item.tab === 'seerist' ? (
-              <Radar className="h-4 w-4" />
-            ) : item.tab === 'resources' ? (
-              <Box className="h-4 w-4" />
-            ) : item.tab === 'exercises' ? (
-              <Shield className="h-4 w-4" />
-            ) : item.tab === 'sitreps' ? (
-              <FileText className="h-4 w-4" />
-            ) : (
-              <AlertTriangle className="h-4 w-4" />
-            ),
+          icon: isHubCisaDashboardTab(item.tab) ? (
+            <HubCisaDashboardIcon dashboardId={item.tab} />
+          ) : item.tab === 'analytics' ? (
+            <BarChart3 className="h-4 w-4" />
+          ) : item.tab === 'map-layers' ? (
+            <Layers className="h-4 w-4" />
+          ) : item.tab === 'seerist' ? (
+            <Radar className="h-4 w-4" />
+          ) : item.tab === 'resources' ? (
+            <Box className="h-4 w-4" />
+          ) : item.tab === 'exercises' ? (
+            <Shield className="h-4 w-4" />
+          ) : item.tab === 'sitreps' ? (
+            <FileText className="h-4 w-4" />
+          ) : (
+            <AlertTriangle className="h-4 w-4" />
+          ),
           isSelected: activeTab === item.tab,
           onSelect: () => setActiveTab(item.tab),
         })),
@@ -27779,6 +27796,7 @@ function App() {
                       'Events'
                     ))}
                   {activeTab === 'analytics' && 'Analytics'}
+                  {isHubCisaDashboardTab(activeTab) && getHubCisaDashboardLabel(activeTab)}
                   {activeTab === 'map-layers' && 'Map Layers'}
                   {activeTab === 'briefing' && 'Incident Briefing ICS-201'}
                   {activeTab === 'msel' && 'MSEL'}
@@ -32491,6 +32509,13 @@ function App() {
                       </div>
                     </section>
                   </div>
+                )}
+
+                {isHubCisaDashboardTab(activeTab) && (
+                  <HubCisaDashboardPanel
+                    dashboardId={activeTab}
+                    glassItemBorderClasses={glassItemBorderClasses}
+                  />
                 )}
 
                 {activeTab === 'map-layers' && !isInWorkspaceContext && (
