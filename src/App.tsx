@@ -8859,7 +8859,6 @@ function App() {
 
         setOrganizationAssetRequests((previous) => [...previous, result.request])
         setResourcesPanelView('resource-requests')
-        setOpenResourceRequestPreviewId(result.request.id)
         if (input.sourceWorkspaceId) {
           toast.success(
             `Asset request ${result.request.requestNumber} created. Review transfers and click Apply Transfers when ready.`

@@ -157,8 +157,27 @@ export function computeLineItemTotalCost(
   costPerUnit: number | null
 ): number | null {
   if (costPerUnit == null || !Number.isFinite(costPerUnit)) return null
-  if (!Number.isFinite(quantity) || quantity < 1) return null
+  if (!Number.isFinite(quantity) || quantity < 0) return null
+  if (quantity === 0) return 0
   return Math.round(quantity * costPerUnit * 100) / 100
+}
+
+export function parseAssetRequestLineItemQuantity(raw: string): number {
+  const trimmed = raw.trim()
+  if (trimmed === '' || trimmed === '-') return 0
+  const parsed = Number.parseFloat(trimmed)
+  if (!Number.isFinite(parsed) || parsed < 0) return 0
+  return parsed
+}
+
+export function normalizeAssetRequestLineItemQuantity(value: unknown): number {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return Math.max(0, value)
+  }
+  if (typeof value === 'string') {
+    return parseAssetRequestLineItemQuantity(value)
+  }
+  return 1
 }
 
 export function formatLegacyOrderCostLsc(
@@ -205,10 +224,7 @@ function lineItemFromLegacyFields(source: Partial<ResourceRequestItem>): AssetRe
 }
 
 function normalizeAssetRequestLineItem(raw: Partial<AssetRequestLineItem>): AssetRequestLineItem {
-  const quantity =
-    typeof raw.quantity === 'number' && Number.isFinite(raw.quantity)
-      ? Math.max(1, Math.round(raw.quantity))
-      : 1
+  const quantity = normalizeAssetRequestLineItemQuantity(raw.quantity)
   const costPerUnit =
     typeof raw.costPerUnit === 'number' && Number.isFinite(raw.costPerUnit)
       ? raw.costPerUnit
@@ -1292,8 +1308,8 @@ export function validateAssetRequestLineItem(
   if (!item.requestedReportingLocation.trim()) {
     return `${label}: Reporting location is required.`
   }
-  if (!Number.isFinite(item.quantity) || item.quantity < 1) {
-    return `${label}: Quantity must be at least 1.`
+  if (!Number.isFinite(item.quantity) || item.quantity < 0) {
+    return `${label}: Quantity must be 0 or greater.`
   }
   return null
 }

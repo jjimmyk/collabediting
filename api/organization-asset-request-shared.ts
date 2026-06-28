@@ -64,7 +64,7 @@ export function parseResourceRequestPayload(body: Record<string, unknown>): Reso
       if (!String(lineItem.detailedItemDescription ?? '').trim()) return null
       if (!String(lineItem.requestedReportingLocation ?? '').trim()) return null
       const quantity = Number(lineItem.quantity)
-      if (!Number.isFinite(quantity) || quantity < 1) return null
+      if (!Number.isFinite(quantity) || quantity < 0) return null
     }
     return item
   }

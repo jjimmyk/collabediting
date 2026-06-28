@@ -30,6 +30,11 @@ import {
 import { cn } from '@/lib/utils'
 import { ChevronDown, Replace } from 'lucide-react'
 
+const TRANSFER_GRID_CREATE =
+  'grid grid-cols-[auto_minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,7rem)] items-center gap-3'
+const TRANSFER_GRID_VIEW =
+  'grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,8rem)_minmax(0,7rem)] items-center gap-3'
+
 type AssetRequestTransferSectionProps = {
   mode: 'create' | 'view'
   lineItems?: AssetRequestLineItem[]
@@ -39,6 +44,7 @@ type AssetRequestTransferSectionProps = {
   orgAssetIdsByKey?: Record<string, string>
   workspaceOptions?: AssetWorkspaceOption[]
   positionCatalog?: WorkspacePositionCatalog | null
+  glassItemBorderClasses?: string
   confirmations: AssetTransferConfirmation[]
   onConfirmationChange?: (assetKey: string, confirmed: boolean) => void
   onApplyTransfers?: () => void
@@ -146,93 +152,105 @@ function TransferAssetRow({
     [transferRefs]
   )
 
+  const gridClass = mode === 'create' ? TRANSFER_GRID_CREATE : TRANSFER_GRID_VIEW
+
   return (
     <Collapsible open={expanded} onOpenChange={setExpanded} className="rounded-md border">
-      <div className="grid grid-cols-[auto_minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1fr)_auto_auto] items-center gap-2 px-2 py-2 text-xs">
-        {mode === 'create' ? (
-          <Checkbox
-            checked={confirmation?.confirmed ?? false}
-            disabled={checkboxDisabled}
-            onCheckedChange={(checked) =>
-              onConfirmationChange?.(transferRef.assetKey, checked === true)
-            }
-            aria-label={`Confirm transfer for ${transferRef.name}`}
-          />
-        ) : (
-          <span aria-hidden className="w-4" />
-        )}
-        <div className="min-w-0">
-          <p className="truncate font-medium">
-            {assetLabel(transferRef.assetKey, transferRefs, organizationAssets)}
-          </p>
-          {asset ? (
-            <p className="truncate text-[10px] text-muted-foreground">
-              Org chart: {getOrgChartPlacementLabel(asset.orgChartReportsTo, positionCatalog)}
-            </p>
+      <div className="overflow-x-auto">
+        <div className={cn('min-w-[720px] px-2 py-2 text-xs', gridClass)}>
+          {mode === 'create' ? (
+            <Checkbox
+              checked={confirmation?.confirmed ?? false}
+              disabled={checkboxDisabled}
+              onCheckedChange={(checked) =>
+                onConfirmationChange?.(transferRef.assetKey, checked === true)
+              }
+              aria-label={`Confirm transfer for ${transferRef.name}`}
+            />
           ) : null}
-        </div>
-        <p className="truncate">{currentWorkspaceLabel || 'Unassigned'}</p>
-        <p className="truncate">{targetWorkspaceName}</p>
-        {mode === 'view' ? (
-          <Badge variant={statusBadgeVariant(status)} className="justify-self-start text-[10px]">
-            {statusLabel(status)}
-          </Badge>
-        ) : (
-          <span />
-        )}
-        <div className="flex items-center justify-end gap-1">
-          {mode === 'view' && onReplaceTransferAsset ? (
-            <>
-              <Button
+
+          <div className="min-w-0">
+            <CollapsibleTrigger asChild>
+              <button
                 type="button"
-                variant="outline"
-                size="sm"
-                className="h-7 gap-1 px-2 text-[10px]"
-                disabled={!canReplace || isReplacingTransferAsset}
-                title={
-                  canReplace
-                    ? 'Replace with a different organization asset'
-                    : 'Cannot replace an asset that has already been transferred'
-                }
-                onClick={() => setReplaceOpen(true)}
+                className="flex w-full min-w-0 items-start gap-2 rounded-md text-left hover:bg-muted/40"
               >
-                <Replace className="h-3 w-3" />
-                Replace
-              </Button>
-              <OrganizationAssetPickerDialog
-                assets={organizationAssets}
-                orgAssetIdsByKey={orgAssetIdsByKey}
-                glassItemBorderClasses={glassItemBorderClasses}
-                selected={[]}
-                onChange={() => undefined}
-                workspaceOptions={workspaceOptions}
-                positionCatalog={positionCatalog}
-                idPrefix={`transfer-replace-${transferRef.assetKey}`}
-                mode="replace-single"
-                excludeAssetKeys={excludeAssetKeys}
-                showSelectedSection={false}
-                open={replaceOpen}
-                onOpenChange={setReplaceOpen}
-                hideTrigger
-                dialogTitle={`Replace ${transferRef.name || 'asset'}`}
-                dialogDescription="Choose a different organization asset to transfer instead. This updates all line items that reference the original asset."
-                onReplaceSelect={(newAsset) => onReplaceTransferAsset(transferRef.assetKey, newAsset)}
-              />
-            </>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-medium">
+                    {assetLabel(transferRef.assetKey, transferRefs, organizationAssets)}
+                  </p>
+                  {asset ? (
+                    <p className="truncate text-[10px] text-muted-foreground">
+                      Org chart:{' '}
+                      {getOrgChartPlacementLabel(asset.orgChartReportsTo, positionCatalog)}
+                    </p>
+                  ) : null}
+                </div>
+                <ChevronDown
+                  className={cn(
+                    'mt-0.5 h-4 w-4 shrink-0 text-muted-foreground transition-transform',
+                    expanded && 'rotate-180'
+                  )}
+                />
+              </button>
+            </CollapsibleTrigger>
+          </div>
+
+          <p className="truncate">{currentWorkspaceLabel || 'Unassigned'}</p>
+          <p className="truncate">{targetWorkspaceName}</p>
+
+          {mode === 'view' ? (
+            <Badge variant={statusBadgeVariant(status)} className="w-fit text-[10px]">
+              {statusLabel(status)}
+            </Badge>
           ) : null}
-          <CollapsibleTrigger asChild>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7"
-              aria-label={expanded ? 'Collapse asset details' : 'Expand asset details'}
-            >
-              <ChevronDown className={cn('h-4 w-4 transition-transform', expanded && 'rotate-180')} />
-            </Button>
-          </CollapsibleTrigger>
+
+          <div className="flex items-center justify-end gap-1">
+            {mode === 'view' && onReplaceTransferAsset ? (
+              <>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-7 gap-1 px-2 text-[10px]"
+                  disabled={!canReplace || isReplacingTransferAsset}
+                  title={
+                    canReplace
+                      ? 'Replace with a different organization asset'
+                      : 'Cannot replace an asset that has already been transferred'
+                  }
+                  onClick={() => setReplaceOpen(true)}
+                >
+                  <Replace className="h-3 w-3" />
+                  Replace
+                </Button>
+                <OrganizationAssetPickerDialog
+                  assets={organizationAssets}
+                  orgAssetIdsByKey={orgAssetIdsByKey}
+                  glassItemBorderClasses={glassItemBorderClasses}
+                  selected={[]}
+                  onChange={() => undefined}
+                  workspaceOptions={workspaceOptions}
+                  positionCatalog={positionCatalog}
+                  idPrefix={`transfer-replace-${transferRef.assetKey}`}
+                  mode="replace-single"
+                  excludeAssetKeys={excludeAssetKeys}
+                  showSelectedSection={false}
+                  open={replaceOpen}
+                  onOpenChange={setReplaceOpen}
+                  hideTrigger
+                  dialogTitle={`Replace ${transferRef.name || 'asset'}`}
+                  dialogDescription="Choose a different organization asset to transfer instead. This updates all line items that reference the original asset."
+                  onReplaceSelect={(newAsset) =>
+                    onReplaceTransferAsset(transferRef.assetKey, newAsset)
+                  }
+                />
+              </>
+            ) : null}
+          </div>
         </div>
       </div>
+
       <CollapsibleContent>
         <div className="border-t bg-muted/10 px-2 py-2">
           {asset ? (
@@ -274,6 +292,7 @@ export function AssetRequestTransferSection({
   orgAssetIdsByKey = {},
   workspaceOptions = [],
   positionCatalog = null,
+  glassItemBorderClasses = '',
   confirmations,
   onConfirmationChange,
   onApplyTransfers,
@@ -300,6 +319,8 @@ export function AssetRequestTransferSection({
             getTransferConfirmationStatus(confirmation, resolveAsset) === 'pending'
         ).length
       : 0
+
+  const headerGridClass = mode === 'create' ? TRANSFER_GRID_CREATE : TRANSFER_GRID_VIEW
 
   if (!targetWorkspaceId) {
     if (mode === 'create') return null
@@ -331,13 +352,20 @@ export function AssetRequestTransferSection({
           : `Review assets marked for transfer to ${targetWorkspaceName}. Expand each asset for full details, replace if needed, then apply transfers when ready.`}
       </p>
 
-      <div className="mb-2 hidden gap-2 px-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground md:grid md:grid-cols-[auto_minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1fr)_auto_auto]">
-        {mode === 'create' ? <span>Confirm</span> : null}
-        <span>Asset</span>
-        <span>Current workspace</span>
-        <span>Target workspace</span>
-        {mode === 'view' ? <span>Status</span> : <span />}
-        <span className="text-right">Actions</span>
+      <div className="overflow-x-auto">
+        <div
+          className={cn(
+            'mb-2 min-w-[720px] px-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground',
+            headerGridClass
+          )}
+        >
+          {mode === 'create' ? <span>Confirm</span> : null}
+          <span>Asset</span>
+          <span>Current workspace</span>
+          <span>Target workspace</span>
+          {mode === 'view' ? <span>Status</span> : null}
+          <span className="text-right">Actions</span>
+        </div>
       </div>
 
       <div className="space-y-2">
@@ -359,6 +387,7 @@ export function AssetRequestTransferSection({
               positionCatalog={positionCatalog}
               organizationAssets={organizationAssets}
               orgAssetIdsByKey={orgAssetIdsByKey}
+              glassItemBorderClasses={glassItemBorderClasses}
               resolveAsset={resolveAsset}
               onConfirmationChange={onConfirmationChange}
               onReplaceTransferAsset={onReplaceTransferAsset}

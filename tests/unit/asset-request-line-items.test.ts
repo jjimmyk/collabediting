@@ -183,6 +183,34 @@ describe('asset request line items', () => {
 
   it('computes total cost from quantity and unit cost', () => {
     expect(computeLineItemTotalCost(4, 125.5)).toBe(502)
+    expect(computeLineItemTotalCost(0, 125.5)).toBe(0)
+    expect(computeLineItemTotalCost(1.5, 10)).toBe(15)
     expect(computeLineItemTotalCost(1, null)).toBeNull()
+  })
+
+  it('allows zero and fractional quantities', () => {
+    const item = {
+      ...createEmptyAssetRequestLineItem(),
+      kind: 'Teams',
+      type: 'Support',
+      detailedItemDescription: 'Standby crew',
+      requestedReportingLocation: 'Staging',
+      quantity: 0,
+    }
+    expect(validateAssetRequestLineItem(item, 0)).toBeNull()
+
+    const fractional = { ...item, quantity: 2.5 }
+    expect(validateAssetRequestLineItem(fractional, 0)).toBeNull()
+
+    const built = buildResourceRequestFromInput(
+      {
+        ...createEmptyResourceRequestInput(),
+        incidentName: 'Test',
+        requestedByName: 'Alex',
+        items: [fractional],
+      },
+      { id: 1, requestNumber: 'RR-2026-0001' }
+    )
+    expect(built.items[0]?.quantity).toBe(2.5)
   })
 })

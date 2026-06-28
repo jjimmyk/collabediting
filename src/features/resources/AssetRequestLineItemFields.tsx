@@ -16,6 +16,7 @@ import {
   computeLineItemTotalCost,
   fromDatetimeLocalInputValue,
   isStandardLineItemPriority,
+  parseAssetRequestLineItemQuantity,
   toDatetimeLocalInputValue,
   type AssetRequestLineItem,
 } from '@/lib/ics-213rr-resource-request'
@@ -89,10 +90,11 @@ export function AssetRequestLineItemFields({
           <Input
             id={`${fieldPrefix}-quantity`}
             type="number"
-            min={1}
+            min={0}
+            step="any"
             value={value.quantity}
             onChange={(event) => {
-              const quantity = Math.max(1, Number.parseInt(event.target.value, 10) || 1)
+              const quantity = parseAssetRequestLineItemQuantity(event.target.value)
               patch({
                 quantity,
                 totalCost: computeLineItemTotalCost(quantity, value.costPerUnit) ?? value.totalCost,

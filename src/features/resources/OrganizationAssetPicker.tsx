@@ -77,7 +77,21 @@ export function OrganizationAssetPicker({
 
   return (
     <div className="space-y-4">
-      <div className="space-y-3">
+      {showSelectedSection ? (
+        <div className="space-y-2">
+          <Label className="text-xs">{selectedLabel}</Label>
+          <AssetTransferSelectedCards
+            selected={selected}
+            organizationAssets={assets}
+            workspaceOptions={workspaceOptions}
+            positionCatalog={positionCatalog}
+            glassItemBorderClasses={glassItemBorderClasses}
+            onRemove={removeAsset}
+          />
+        </div>
+      ) : null}
+
+      <div className="space-y-3 border-t pt-4">
         <Label className="text-xs">{browseLabel}</Label>
         <OrganizationAssetBrowseList
           assets={assets}
@@ -92,20 +106,6 @@ export function OrganizationAssetPicker({
           idPrefix={idPrefix}
         />
       </div>
-
-      {showSelectedSection ? (
-        <div className="space-y-2 border-t pt-4">
-          <Label className="text-xs">{selectedLabel}</Label>
-          <AssetTransferSelectedCards
-            selected={selected}
-            organizationAssets={assets}
-            workspaceOptions={workspaceOptions}
-            positionCatalog={positionCatalog}
-            glassItemBorderClasses={glassItemBorderClasses}
-            onRemove={removeAsset}
-          />
-        </div>
-      ) : null}
     </div>
   )
 }

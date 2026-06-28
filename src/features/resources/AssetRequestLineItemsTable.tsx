@@ -14,6 +14,7 @@ import {
   computeLineItemTotalCost,
   fromDatetimeLocalInputValue,
   isStandardLineItemPriority,
+  parseAssetRequestLineItemQuantity,
   toDatetimeLocalInputValue,
   type AssetRequestLineItem,
 } from '@/lib/ics-213rr-resource-request'
@@ -77,10 +78,11 @@ export function AssetRequestLineItemsTable({
                 <td className="px-2 py-2">
                   <Input
                     type="number"
-                    min={1}
+                    min={0}
+                    step="any"
                     value={item.quantity}
                     onChange={(event) => {
-                      const quantity = Math.max(1, Number.parseInt(event.target.value, 10) || 1)
+                      const quantity = parseAssetRequestLineItemQuantity(event.target.value)
                       patch({
                         quantity,
                         totalCost:

@@ -93,7 +93,7 @@ export function OrganizationAssetPickerDialog({
       ) : null}
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="flex max-h-[90vh] w-[min(96vw,64rem)] max-w-5xl flex-col gap-0 overflow-hidden p-0">
+        <DialogContent className="flex max-h-[90vh] w-[min(98vw,128rem)] max-w-[128rem] flex-col gap-0 overflow-hidden p-0">
           <DialogHeader className="shrink-0 border-b px-6 py-4">
             <DialogTitle>{dialogTitle}</DialogTitle>
             <DialogDescription>{dialogDescription}</DialogDescription>
