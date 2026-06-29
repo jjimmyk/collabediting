@@ -58,17 +58,20 @@ export function Ics205aContactRowsList({
               open={isOpen}
               onOpenChange={(open) => setExpandedContactKey(open ? contactKey : null)}
             >
-              <div className="relative px-3 py-2.5 pr-16">
-                <ItemContent className="min-w-0">
+              <div className="flex min-w-0 items-center gap-2 px-3 py-2.5">
+                <ItemContent className="min-w-0 flex-1">
                   <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
                     Contact {index + 1}
                     {positionLabel.trim() ? ` · ${positionLabel}` : ''}
                   </p>
                   {!isOpen ? (
-                    <Ics202ReadOnlyField value={formatIcs205aContactRowSummary(row, optionsInput)} />
+                    <Ics202ReadOnlyField
+                      value={formatIcs205aContactRowSummary(row, optionsInput)}
+                      className="min-w-0 truncate"
+                    />
                   ) : null}
                 </ItemContent>
-                <ItemActions className="absolute right-3 top-1/2 flex w-16 -translate-y-1/2 justify-end gap-0">
+                <ItemActions className="flex shrink-0 items-center gap-0">
                   {editingContacts ? (
                     <Button
                       type="button"
