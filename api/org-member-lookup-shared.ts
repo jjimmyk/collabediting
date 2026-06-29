@@ -1,9 +1,12 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { loadOrganizationMemberProfilesByMemberIds } from './org-member-profile-shared.js'
 
 export type ResolvedOrgMember = {
+  organizationMemberId: string
   organizationMemberEmail: string
   userId: string | null
   fullName: string | null
+  qualifications: string[]
 }
 
 export async function loadActiveOrganizationMembers(
@@ -12,7 +15,7 @@ export async function loadActiveOrganizationMembers(
 ): Promise<ResolvedOrgMember[]> {
   const { data: orgMembers, error: orgMembersError } = await admin
     .from('organization_members')
-    .select('user_id, email')
+    .select('id, user_id, email')
     .eq('organization_id', organizationId)
     .eq('status', 'active')
     .order('email', { ascending: true })
@@ -24,10 +27,12 @@ export async function loadActiveOrganizationMembers(
 
   const rows =
     orgMembers?.flatMap((member) => {
+      const organizationMemberId = typeof member.id === 'string' ? member.id : ''
       const email = typeof member.email === 'string' ? member.email.trim().toLowerCase() : ''
-      if (!email) return []
+      if (!organizationMemberId || !email) return []
       return [
         {
+          organizationMemberId,
           email,
           userId: typeof member.user_id === 'string' ? member.user_id : null,
         },
@@ -84,16 +89,24 @@ export async function loadActiveOrganizationMembers(
     }
   }
 
+  const memberProfiles = await loadOrganizationMemberProfilesByMemberIds(
+    admin,
+    rows.map((row) => row.organizationMemberId)
+  )
+
   return rows.map((row) => {
     const profileFromUserId = row.userId ? profileById.get(row.userId) : undefined
     const profileFromEmail = profileByEmail.get(row.email)
     const userId = row.userId ?? profileFromEmail?.id ?? null
     const fullName = profileFromUserId?.fullName ?? profileFromEmail?.fullName ?? null
+    const memberProfile = memberProfiles.get(row.organizationMemberId)
 
     return {
+      organizationMemberId: row.organizationMemberId,
       organizationMemberEmail: row.email,
       userId,
       fullName,
+      qualifications: memberProfile?.qualifications ?? [],
     }
   })
 }

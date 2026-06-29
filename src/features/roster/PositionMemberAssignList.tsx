@@ -8,6 +8,7 @@ import {
   orgMemberStatusLabel,
   type OrgMemberPickerMode,
 } from '@/features/roster/position-member-assign-picker'
+import { PersonPickerQualificationsLine } from '@/features/roster/PersonPickerQualificationsLine'
 import type { OrgMemberSearchResult } from '@/lib/workspace-service'
 import type { WorkspaceRosterMember } from '@/lib/workspace-types'
 import { cn } from '@/lib/utils'
@@ -34,6 +35,7 @@ function AssignListButton({
   email,
   detail,
   statusLabel,
+  qualifications,
   selected,
   disabled,
   onClick,
@@ -41,6 +43,7 @@ function AssignListButton({
   email: string
   detail?: string | null
   statusLabel?: string | null
+  qualifications?: string[] | null
   selected: boolean
   disabled: boolean
   onClick: () => void
@@ -61,6 +64,7 @@ function AssignListButton({
       {statusLabel ? (
         <span className="text-[11px] text-muted-foreground">{statusLabel}</span>
       ) : null}
+      <PersonPickerQualificationsLine qualifications={qualifications} />
     </button>
   )
 }
@@ -156,6 +160,7 @@ export function PositionMemberAssignList({
               key={`roster-${member.id}`}
               email={member.email}
               detail={formatMemberPositionSummary(member.icsPositions)}
+              qualifications={member.qualifications}
               selected={selection?.rosterMemberId === member.id}
               disabled={disabled}
               onClick={() => {
@@ -179,6 +184,7 @@ export function PositionMemberAssignList({
               key={`org-${result.id ?? result.email}`}
               email={result.email}
               detail={result.fullName}
+              qualifications={result.qualifications}
               statusLabel={orgMemberStatusLabel(result, orgPickerMode, position)}
               selected={selection?.userId === result.id && selection.rosterMemberId === null}
               disabled={disabled || !result.id}

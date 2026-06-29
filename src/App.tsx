@@ -259,7 +259,12 @@ import {
 } from '@/lib/organization-asset-request-service'
 import { CreateOrganizationDialog } from '@/features/organization/CreateOrganizationDialog'
 import { OrgMembersSheet } from '@/features/organization/OrgMembersSheet'
+import { OrgMemberProfileSheet } from '@/features/organization/OrgMemberProfileSheet'
 import { OrganizationProfileMenuSection } from '@/features/organization/OrganizationProfileMenuSection'
+import {
+  enrichWorkspaceRosterWithQualifications,
+  fetchOrganizationMemberQualificationsByUserIds,
+} from '@/lib/organization-member-profile-service'
 import type {
   Ics204FormSectionDrafts,
   Ics204FormState,
@@ -6626,6 +6631,13 @@ function App() {
   >([])
   const [isLoadingOrgMembers, setIsLoadingOrgMembers] = useState(false)
   const [isInvitingOrgMember, setIsInvitingOrgMember] = useState(false)
+  const [isOrgMemberProfileOpen, setIsOrgMemberProfileOpen] = useState(false)
+  const [orgMemberProfileTarget, setOrgMemberProfileTarget] = useState<
+    import('@/lib/organization-types').OrganizationMemberRecord | null
+  >(null)
+  const [rosterQualificationsByUserId, setRosterQualificationsByUserId] = useState<
+    Map<string, string[]>
+  >(() => new Map())
   const [incidentWorkspaceNavQuery, setIncidentWorkspaceNavQuery] = useState('')
   const [exerciseWorkspaceNavQuery, setExerciseWorkspaceNavQuery] = useState('')
   useEffect(() => {
@@ -8747,6 +8759,38 @@ function App() {
   >(() => buildDefaultLocalWorkspaceRosters())
   const [supabaseWorkspaceRoster, setSupabaseWorkspaceRoster] = useState<WorkspaceRosterMember[]>(
     []
+  )
+  useEffect(() => {
+    if (!isSupabaseEnabled || !activeOrganizationId) {
+      setRosterQualificationsByUserId(new Map())
+      return
+    }
+
+    const userIds = supabaseWorkspaceRoster
+      .map((member) => member.userId)
+      .filter((userId): userId is string => typeof userId === 'string' && userId.length > 0)
+
+    if (userIds.length === 0) {
+      setRosterQualificationsByUserId(new Map())
+      return
+    }
+
+    let cancelled = false
+    void fetchOrganizationMemberQualificationsByUserIds(activeOrganizationId, userIds).then(
+      (map) => {
+        if (!cancelled) {
+          setRosterQualificationsByUserId(map)
+        }
+      }
+    )
+
+    return () => {
+      cancelled = true
+    }
+  }, [activeOrganizationId, isSupabaseEnabled, supabaseWorkspaceRoster])
+  const enrichedSupabaseWorkspaceRoster = useMemo(
+    () => enrichWorkspaceRosterWithQualifications(supabaseWorkspaceRoster, rosterQualificationsByUserId),
+    [rosterQualificationsByUserId, supabaseWorkspaceRoster]
   )
   const [workspaceMemberSchedules, setWorkspaceMemberSchedules] = useState<
     WorkspaceMemberScheduleRow[]
@@ -12348,7 +12392,7 @@ function App() {
     getAccessToken,
   })
   const activeWorkspaceRoster = isSupabaseEnabled
-    ? supabaseWorkspaceRoster
+    ? enrichedSupabaseWorkspaceRoster
     : activeWorkspaceRosterKey !== null
       ? buildLocalRosterMembersFromPlan(
           localWorkspaceRostersByKey[activeWorkspaceRosterKey] ?? [],
@@ -16301,6 +16345,49 @@ function App() {
       setIsLoadingOrgMembers(false)
     }
   }, [activeOrganizationId])
+  const openOrganizationMemberProfile = useCallback(
+    (member: import('@/lib/organization-types').OrganizationMemberRecord) => {
+      setOrgMemberProfileTarget(member)
+      setIsOrgMemberProfileOpen(true)
+    },
+    []
+  )
+  const openMyOrganizationMemberProfile = useCallback(async () => {
+    if (!activeOrganizationId || !user?.id) {
+      toast.error('Sign in to view your profile.')
+      return
+    }
+
+    let members = orgMembers
+    if (members.length === 0) {
+      members = await fetchOrganizationMembers(activeOrganizationId)
+      setOrgMembers(members)
+    }
+
+    const selfMember = members.find((member) => member.userId === user.id)
+    if (!selfMember) {
+      toast.error('Could not find your organization membership.')
+      return
+    }
+
+    openOrganizationMemberProfile(selfMember)
+  }, [activeOrganizationId, openOrganizationMemberProfile, orgMembers, user?.id])
+  const refreshRosterMemberQualifications = useCallback(async () => {
+    if (!isSupabaseEnabled || !activeOrganizationId) {
+      setRosterQualificationsByUserId(new Map())
+      return
+    }
+
+    const userIds = supabaseWorkspaceRoster
+      .map((member) => member.userId)
+      .filter((memberUserId): memberUserId is string => typeof memberUserId === 'string')
+
+    const map = await fetchOrganizationMemberQualificationsByUserIds(
+      activeOrganizationId,
+      userIds
+    )
+    setRosterQualificationsByUserId(map)
+  }, [activeOrganizationId, isSupabaseEnabled, supabaseWorkspaceRoster])
   const handleCreateOrganization = useCallback(
     async (input: { name: string; slug: string }) => {
       setIsCreatingOrganization(true)
@@ -27561,6 +27648,9 @@ function App() {
                     onSelectOrganization={setActiveOrganizationId}
                     onCreateOrganization={() => setIsCreateOrganizationOpen(true)}
                     onManageMembers={() => setIsOrgMembersOpen(true)}
+                    onOpenMyProfile={() => {
+                      void openMyOrganizationMemberProfile()
+                    }}
                     canManageMembers={isOrgAdmin}
                   />
                   <DropdownMenuSeparator />
@@ -39571,6 +39661,22 @@ function App() {
         isInviting={isInvitingOrgMember}
         onRefresh={refreshOrganizationMembers}
         onInvite={handleInviteOrganizationMember}
+        onOpenMemberProfile={openOrganizationMemberProfile}
+      />
+      <OrgMemberProfileSheet
+        open={isOrgMemberProfileOpen}
+        onOpenChange={setIsOrgMemberProfileOpen}
+        organizationMemberId={orgMemberProfileTarget?.id ?? null}
+        memberEmail={orgMemberProfileTarget?.email ?? ''}
+        memberFullName={orgMemberProfileTarget?.fullName ?? null}
+        canEdit={
+          Boolean(orgMemberProfileTarget) &&
+          (orgMemberProfileTarget?.userId === user?.id || isOrgAdmin)
+        }
+        getAccessToken={getAccessToken}
+        onSaved={() => {
+          void refreshRosterMemberQualifications()
+        }}
       />
       <AddWorkspacePositionDialog
         open={isAddWorkspacePositionOpen}

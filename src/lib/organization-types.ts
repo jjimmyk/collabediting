@@ -19,6 +19,23 @@ export type OrganizationMemberRecord = {
   joinedAt: string | null
 }
 
+export type OrganizationMemberProfile = {
+  organizationMemberId: string
+  phone: string | null
+  address: string | null
+  defaultRadioContact: string | null
+  homeAorNodeId: string | null
+  qualifications: string[]
+}
+
+export type OrganizationMemberProfileUpdateInput = {
+  phone?: string | null
+  address?: string | null
+  defaultRadioContact?: string | null
+  homeAorNodeId?: string | null
+  qualifications?: string[]
+}
+
 export type CreatedOrganization = {
   organizationId: string
   name: string

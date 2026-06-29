@@ -1,4 +1,4 @@
-import { Check, Plus, Users } from 'lucide-react'
+import { Check, Plus, UserCircle, Users } from 'lucide-react'
 import {
   DropdownMenuItem,
   DropdownMenuLabel,
@@ -13,6 +13,7 @@ type OrganizationProfileMenuSectionProps = {
   onSelectOrganization: (organizationId: string) => void
   onCreateOrganization: () => void
   onManageMembers: () => void
+  onOpenMyProfile?: () => void
   canManageMembers: boolean
 }
 
@@ -22,6 +23,7 @@ export function OrganizationProfileMenuSection({
   onSelectOrganization,
   onCreateOrganization,
   onManageMembers,
+  onOpenMyProfile,
   canManageMembers,
 }: OrganizationProfileMenuSectionProps) {
   const activeOrganization = resolveDisplayOrganization(
@@ -58,6 +60,12 @@ export function OrganizationProfileMenuSection({
         <Plus className="mr-2 h-4 w-4" />
         Create organization
       </DropdownMenuItem>
+      {onOpenMyProfile ? (
+        <DropdownMenuItem onClick={onOpenMyProfile}>
+          <UserCircle className="mr-2 h-4 w-4" />
+          My profile
+        </DropdownMenuItem>
+      ) : null}
       {canManageMembers ? (
         <DropdownMenuItem onClick={onManageMembers}>
           <Users className="mr-2 h-4 w-4" />

@@ -595,6 +595,7 @@ export type OrgMemberSearchResult = {
   id: string | null
   email: string
   fullName: string | null
+  qualifications: string[]
   alreadyOnRoster?: boolean
   canAdd?: boolean
 }
@@ -632,7 +633,10 @@ export async function searchOrgMembersForWorkspace(params: {
     throw new Error(payload.error ?? 'Could not search for people.')
   }
 
-  return payload.results ?? []
+  return (payload.results ?? []).map((result) => ({
+    ...result,
+    qualifications: result.qualifications ?? [],
+  }))
 }
 
 export async function addExistingWorkspaceMember(params: {

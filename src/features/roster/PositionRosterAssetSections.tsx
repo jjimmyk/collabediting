@@ -17,6 +17,7 @@ import {
 } from '@/components/ui/select'
 import type { ResourceListItemData } from '@/features/resources/types'
 import { CompetencyFunctionSelect } from '@/features/roster/CompetencyFunctionSelect'
+import { PersonPickerQualificationsLine } from '@/features/roster/PersonPickerQualificationsLine'
 import type { PositionAssetRosterEntry } from '@/lib/workspace-position-asset-types'
 import type { WorkspaceRosterMember } from '@/lib/workspace-types'
 
@@ -67,8 +68,11 @@ export function AssetPointOfContactSelect({
         <SelectContent>
           <SelectItem value="__none__">No POC selected</SelectItem>
           {members.map((member) => (
-            <SelectItem key={member.id} value={member.id}>
-              {member.email}
+            <SelectItem key={member.id} value={member.id} textValue={member.email}>
+              <span className="flex flex-col items-start gap-0.5 py-0.5">
+                <span>{member.email}</span>
+                <PersonPickerQualificationsLine qualifications={member.qualifications} />
+              </span>
             </SelectItem>
           ))}
         </SelectContent>

@@ -23,6 +23,7 @@ type OrgMembersSheetProps = {
   isInviting: boolean
   onRefresh: () => Promise<void>
   onInvite: (email: string) => Promise<boolean>
+  onOpenMemberProfile?: (member: OrganizationMemberRecord) => void
 }
 
 export function OrgMembersSheet({
@@ -35,6 +36,7 @@ export function OrgMembersSheet({
   isInviting,
   onRefresh,
   onInvite,
+  onOpenMemberProfile,
 }: OrgMembersSheetProps) {
   const [emailDraft, setEmailDraft] = useState('')
 
@@ -93,9 +95,11 @@ export function OrgMembersSheet({
               <p className="text-sm text-muted-foreground">No members found.</p>
             ) : (
               members.map((member) => (
-                <div
+                <button
                   key={member.id}
-                  className="flex items-start justify-between gap-3 rounded-md border px-3 py-2"
+                  type="button"
+                  className="flex w-full items-start justify-between gap-3 rounded-md border px-3 py-2 text-left hover:bg-muted/50"
+                  onClick={() => onOpenMemberProfile?.(member)}
                 >
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium">{member.email}</p>
@@ -111,7 +115,7 @@ export function OrgMembersSheet({
                       {member.status}
                     </Badge>
                   </div>
-                </div>
+                </button>
               ))
             )}
           </div>

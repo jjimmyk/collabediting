@@ -9,6 +9,7 @@ import {
   formatMemberPositionSummary,
   isSelectableOrgMember,
 } from '@/features/roster/position-member-assign-picker'
+import { PersonPickerQualificationsLine } from '@/features/roster/PersonPickerQualificationsLine'
 import type { OrgMemberSearchResult } from '@/lib/workspace-service'
 import type { WorkspaceRosterMember } from '@/lib/workspace-types'
 
@@ -26,10 +27,12 @@ type PositionMemberAssignPickerProps = {
 function MemberResultButton({
   email,
   detail,
+  qualifications,
   onClick,
 }: {
   email: string
   detail?: string | null
+  qualifications?: string[] | null
   onClick: () => void
 }) {
   return (
@@ -44,6 +47,7 @@ function MemberResultButton({
       {detail ? (
         <span className="truncate text-[11px] text-muted-foreground">{detail}</span>
       ) : null}
+      <PersonPickerQualificationsLine qualifications={qualifications} />
     </Button>
   )
 }
@@ -162,6 +166,7 @@ export function PositionMemberAssignPicker({
                       key={`roster-${member.id}`}
                       email={member.email}
                       detail={formatMemberPositionSummary(member.icsPositions)}
+                      qualifications={member.qualifications}
                       onClick={() => {
                         onSelectRosterMember(member.id)
                         setOpen(false)
@@ -180,6 +185,7 @@ export function PositionMemberAssignPicker({
                       key={`org-${result.id ?? result.email}`}
                       email={result.email}
                       detail={result.fullName}
+                      qualifications={result.qualifications}
                       onClick={() => {
                         if (!result.id) return
                         onSelectOrgMember?.(result.id)

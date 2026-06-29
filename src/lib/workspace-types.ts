@@ -33,6 +33,8 @@ export type WorkspaceRosterMember = {
   checkInStatus: WorkspaceMemberCheckInStatus
   addedAt: string
   userId: string | null
+  /** Org-scoped profile qualifications (optional enrichment). */
+  qualifications?: string[]
 }
 
 export type WorkspaceMetadataRecord = {

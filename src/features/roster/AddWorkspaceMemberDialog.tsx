@@ -48,6 +48,7 @@ import {
   isSelectableOrgMember,
   orgMemberStatusLabel,
 } from '@/features/roster/position-member-assign-picker'
+import { PersonPickerQualificationsLine } from '@/features/roster/PersonPickerQualificationsLine'
 import { WORKSPACE_ROSTER_POSITIONS } from '@/lib/ics-positions'
 import { cn } from '@/lib/utils'
 
@@ -593,6 +594,7 @@ export function AddWorkspaceMemberDialog({
                         {statusLabel ? (
                           <span className="text-[11px] text-muted-foreground">{statusLabel}</span>
                         ) : null}
+                        <PersonPickerQualificationsLine qualifications={result.qualifications} />
                       </button>
                     )
                   })

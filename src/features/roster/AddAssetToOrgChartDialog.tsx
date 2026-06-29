@@ -19,6 +19,7 @@ import {
 } from '@/components/ui/select'
 import type { ResourceListItemData } from '@/features/resources/types'
 import { ICS_ORG_CHART_ROOT_POSITION } from '@/features/roster/ics-org-chart-structure'
+import { PersonPickerQualificationsLine } from '@/features/roster/PersonPickerQualificationsLine'
 import {
   assetEffectiveWhenSummary,
   validateAssetEffectiveWhen,
@@ -338,8 +339,11 @@ export function AddAssetToOrgChartDialog({
                     </SelectTrigger>
                     <SelectContent>
                       {pocMembers.map((member) => (
-                        <SelectItem key={member.id} value={member.id}>
-                          {member.email}
+                        <SelectItem key={member.id} value={member.id} textValue={member.email}>
+                          <span className="flex flex-col items-start gap-0.5 py-0.5">
+                            <span>{member.email}</span>
+                            <PersonPickerQualificationsLine qualifications={member.qualifications} />
+                          </span>
                         </SelectItem>
                       ))}
                     </SelectContent>

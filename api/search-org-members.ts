@@ -15,6 +15,7 @@ export type OrgMemberSearchResult = {
   id: string | null
   email: string
   fullName: string | null
+  qualifications: string[]
   alreadyOnRoster: boolean
   canAdd: boolean
 }
@@ -141,11 +142,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       loadRosterExclusions(admin, workspaceId, position),
     ])
 
+    const qualificationsByUserId = new Map<string, string[]>()
+    const qualificationsByEmail = new Map<string, string[]>()
+    for (const member of orgMembers) {
+      if (member.userId) {
+        qualificationsByUserId.set(member.userId, member.qualifications)
+      }
+      qualificationsByEmail.set(member.organizationMemberEmail, member.qualifications)
+    }
+
     const profileMatches = orgMembers.flatMap((member) => {
       const email = member.organizationMemberEmail
       const userId = member.userId
       const fullName = member.fullName
-      const haystack = `${email} ${fullName ?? ''}`.toLowerCase()
+      const haystack = `${email} ${fullName ?? ''} ${member.qualifications.join(' ')}`.toLowerCase()
       if (query.length > 0 && !haystack.includes(query)) {
         return []
       }
@@ -169,6 +179,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         id: entry.userId,
         email: entry.email,
         fullName: entry.fullName,
+        qualifications:
+          (entry.userId ? qualificationsByUserId.get(entry.userId) : undefined) ??
+          qualificationsByEmail.get(entry.email) ??
+          [],
         alreadyOnRoster: entry.alreadyOnRoster,
         canAdd: entry.canAdd,
       }))
