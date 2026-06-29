@@ -44,6 +44,8 @@ import type { RosterPanelLayoutMode } from '@/features/roster/roster-layout'
 import type { WorkspacePositionType } from '@/features/roster/workspace-position-type'
 import { PositionOrgChartAssigneeSummary } from '@/features/roster/PositionOrgChartAssigneeSummary'
 import type { OrgChartExportScope } from '@/features/roster/org-chart-export-scope'
+import { PositionIcs215aLocationSection } from '@/features/roster/PositionIcs215aLocationSection'
+import type { Ics215aLocationByPositionEntry } from '@/features/ics215a/types'
 
 type PositionRosterCardProps = {
   entry: PositionRosterEntry
@@ -127,6 +129,8 @@ type PositionRosterCardProps = {
   activeHaveCell?: import('@/features/roster/PositionRosterAssignmentSections').PositionRosterUnifiedAssignmentSectionsProps['activeHaveCell']
   highlightedHaveRef?: import('@/features/roster/PositionRosterAssignmentSections').PositionRosterUnifiedAssignmentSectionsProps['highlightedHaveRef']
   haveLinkPickMode?: import('@/features/ics215/have-link-pick-mode').HaveLinkPickMode
+  ics215aLocationEntries?: Ics215aLocationByPositionEntry[]
+  onFocusIcs215aRowOnMap?: (rowId: number) => void
 } & Partial<PositionRosterAssetHandlers>
 
 export function PositionRosterCard({
@@ -203,6 +207,8 @@ export function PositionRosterCard({
   activeHaveCell = null,
   highlightedHaveRef = null,
   haveLinkPickMode,
+  ics215aLocationEntries = [],
+  onFocusIcs215aRowOnMap,
 }: PositionRosterCardProps) {
   const [orgModalOpen, setOrgModalOpen] = useState(false)
   const isOrg = variant === 'org'
@@ -268,6 +274,8 @@ export function PositionRosterCard({
     activeHaveCell,
     highlightedHaveRef,
     haveLinkPickMode,
+    ics215aLocationEntries,
+    onFocusIcs215aRowOnMap,
   }
 
   if (isOrg) {
@@ -299,6 +307,12 @@ export function PositionRosterCard({
                 <p className="truncate text-[10px] text-muted-foreground">
                   Type: {entry.positionTypeLabel}
                 </p>
+              ) : null}
+              {ics215aLocationEntries.length > 0 ? (
+                <PositionIcs215aLocationSection
+                  entries={ics215aLocationEntries}
+                  variant="compact"
+                />
               ) : null}
             </div>
           </div>

@@ -10,13 +10,18 @@ import {
   Ics202SectionEditActions,
   Ics202SectionHeader,
 } from '@/features/ics202/Ics202SectionToolbar'
+import { Ics215aIncidentAreaField } from '@/features/ics215a/Ics215aIncidentAreaField'
+import { Ics215aLocationField } from '@/features/ics215a/Ics215aLocationField'
 import { ICS215A_RISK_GAIN_LEVELS, ICS215A_SECTION_LABELS } from '@/features/ics215a/constants'
+import { createDefaultIcs215aLocation } from '@/features/ics215a/location-utils'
 import type {
   Ics215aFormSectionDrafts,
   Ics215aFormState,
+  Ics215aIncidentArea,
   Ics215aIncidentInfoDraft,
   Ics215aOperationalPeriodDraft,
   Ics215aRiskGainLevel,
+  Ics215aSafetyAnalysisLocation,
   Ics215aSafetyAnalysisRow,
   Ics215aSectionId,
 } from '@/features/ics215a/types'
@@ -26,6 +31,7 @@ import {
   extractIcs215aPreparedByDraft,
   formatIcs215aRiskGain,
 } from '@/features/ics215a/utils'
+import type { WorkspacePositionCatalog } from '@/features/roster/workspace-positions'
 import { cn } from '@/lib/utils'
 
 type Ics215aFormSectionsProps = {
@@ -34,6 +40,7 @@ type Ics215aFormSectionsProps = {
   formIsLocked: boolean
   isSaving: boolean
   glassItemBorderClasses: string
+  positionCatalog: WorkspacePositionCatalog
   editingSections: Partial<Record<Ics215aSectionId, boolean>>
   drafts: Ics215aFormSectionDrafts
   onStartSectionEdit: (section: Ics215aSectionId) => void
@@ -44,6 +51,10 @@ type Ics215aFormSectionsProps = {
     section: S,
     value: Ics215aFormSectionDrafts[S]
   ) => void
+  onZoomToMap?: (rowId: number) => void
+  ics215aZoomTargetRowId?: number | null
+  ics215aDrawingRowId?: number | null
+  onStartIcs215aMapDraw?: (rowId: number, mode: 'point' | 'polygon') => void
 }
 
 function isSectionEditing(
@@ -59,6 +70,7 @@ export function Ics215aFormSections({
   formIsLocked,
   isSaving,
   glassItemBorderClasses,
+  positionCatalog,
   editingSections,
   drafts,
   onStartSectionEdit,
@@ -66,6 +78,10 @@ export function Ics215aFormSections({
   onSaveSection,
   onGenerateSection,
   onPatchDraft,
+  onZoomToMap,
+  ics215aZoomTargetRowId = null,
+  ics215aDrawingRowId = null,
+  onStartIcs215aMapDraw,
 }: Ics215aFormSectionsProps) {
   const incidentInfo =
     isSectionEditing(editingSections, 'incident-info') && drafts['incident-info']
@@ -98,23 +114,25 @@ export function Ics215aFormSections({
 
   const patchSafetyRow = (
     rowId: number,
-    field: keyof Ics215aSafetyAnalysisRow,
-    value: string
+    patch: Partial<Ics215aSafetyAnalysisRow>
   ) => {
     onPatchDraft(
       'safety-analysis',
-      safetyAnalysisRows.map((row) =>
-        row.id === rowId
-          ? {
-              ...row,
-              [field]:
-                field === 'riskLevel' || field === 'gainLevel'
-                  ? (value as Ics215aRiskGainLevel)
-                  : value,
-            }
-          : row
-      )
+      safetyAnalysisRows.map((row) => (row.id === rowId ? { ...row, ...patch } : row))
     )
+  }
+
+  const patchSafetyRowField = (
+    rowId: number,
+    field: 'hazardsRisks' | 'mitigations' | 'riskLevel' | 'gainLevel',
+    value: string
+  ) => {
+    patchSafetyRow(rowId, {
+      [field]:
+        field === 'riskLevel' || field === 'gainLevel'
+          ? (value as Ics215aRiskGainLevel)
+          : value,
+    })
   }
 
   const addSafetyRow = () => {
@@ -125,7 +143,8 @@ export function Ics215aFormSections({
           safetyAnalysisRows.length === 0
             ? 1
             : Math.max(...safetyAnalysisRows.map((row) => row.id)) + 1,
-        incidentArea: '',
+        incidentArea: { kind: 'custom', name: '' },
+        location: createDefaultIcs215aLocation(),
         hazardsRisks: '',
         mitigations: '',
         riskLevel: '',
@@ -288,43 +307,49 @@ export function Ics215aFormSections({
                   <p className="text-[11px] font-semibold text-muted-foreground xl:hidden">
                     Row {index + 1}
                   </p>
-                  {(
-                    [
-                      ['5. Incident Area', 'incidentArea', false],
-                      ['6. Hazards/Risks', 'hazardsRisks', true],
-                      ['7. Mitigations', 'mitigations', true],
-                    ] as const
-                  ).map(([label, field, multiline]) => (
-                    <div key={field} className="space-y-1">
-                      <Ics202FieldLabel>{label}</Ics202FieldLabel>
-                      {editingSafety ? (
-                        multiline ? (
-                          <Textarea
-                            value={row[field]}
-                            onChange={(event) => patchSafetyRow(row.id, field, event.target.value)}
-                            className="min-h-12 text-xs"
-                          />
-                        ) : (
-                          <input
-                            value={row[field]}
-                            onChange={(event) => patchSafetyRow(row.id, field, event.target.value)}
-                            className="h-8 w-full rounded-md border bg-transparent px-2 text-xs outline-none"
-                          />
-                        )
-                      ) : multiline ? (
-                        <Ics202ReadOnlyTextBlock value={row[field]} />
-                      ) : (
-                        <Ics202ReadOnlyField value={row[field]} />
-                      )}
-                    </div>
-                  ))}
+                  <Ics215aIncidentAreaField
+                    value={row.incidentArea}
+                    onChange={(incidentArea: Ics215aIncidentArea) =>
+                      patchSafetyRow(row.id, { incidentArea })
+                    }
+                    positionCatalog={positionCatalog}
+                    canEdit={editingSafety}
+                  />
+                  <div className="space-y-1">
+                    <Ics202FieldLabel>6. Hazards/Risks</Ics202FieldLabel>
+                    {editingSafety ? (
+                      <Textarea
+                        value={row.hazardsRisks}
+                        onChange={(event) =>
+                          patchSafetyRowField(row.id, 'hazardsRisks', event.target.value)
+                        }
+                        className="min-h-12 text-xs"
+                      />
+                    ) : (
+                      <Ics202ReadOnlyTextBlock value={row.hazardsRisks} />
+                    )}
+                  </div>
+                  <div className="space-y-1">
+                    <Ics202FieldLabel>7. Mitigations</Ics202FieldLabel>
+                    {editingSafety ? (
+                      <Textarea
+                        value={row.mitigations}
+                        onChange={(event) =>
+                          patchSafetyRowField(row.id, 'mitigations', event.target.value)
+                        }
+                        className="min-h-12 text-xs"
+                      />
+                    ) : (
+                      <Ics202ReadOnlyTextBlock value={row.mitigations} />
+                    )}
+                  </div>
                   <div className="space-y-1">
                     <Ics202FieldLabel>8. Risk</Ics202FieldLabel>
                     {editingSafety ? (
                       <select
                         value={row.riskLevel}
                         onChange={(event) =>
-                          patchSafetyRow(row.id, 'riskLevel', event.target.value)
+                          patchSafetyRowField(row.id, 'riskLevel', event.target.value)
                         }
                         className="h-8 w-full rounded-md border bg-transparent px-2 text-xs outline-none"
                       >
@@ -345,7 +370,7 @@ export function Ics215aFormSections({
                       <select
                         value={row.gainLevel}
                         onChange={(event) =>
-                          patchSafetyRow(row.id, 'gainLevel', event.target.value)
+                          patchSafetyRowField(row.id, 'gainLevel', event.target.value)
                         }
                         className="h-8 w-full rounded-md border bg-transparent px-2 text-xs outline-none"
                       >
@@ -376,6 +401,22 @@ export function Ics215aFormSections({
                       <Ics202ReadOnlyField value={formatIcs215aRiskGain(row)} />
                     )}
                   </div>
+                  <Ics215aLocationField
+                    value={row.location}
+                    onChange={(location: Ics215aSafetyAnalysisLocation) =>
+                      patchSafetyRow(row.id, { location })
+                    }
+                    canEdit={editingSafety}
+                    canZoom
+                    onZoomToMap={() => onZoomToMap?.(row.id)}
+                    isZoomTarget={ics215aZoomTargetRowId === row.id}
+                    isDrawingOnMap={ics215aDrawingRowId === row.id}
+                    onStartMapDraw={
+                      onStartIcs215aMapDraw
+                        ? (mode) => onStartIcs215aMapDraw(row.id, mode)
+                        : undefined
+                    }
+                  />
                 </div>
               ))}
             </>

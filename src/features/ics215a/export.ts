@@ -1,4 +1,8 @@
 import { ICS215A_SECTION_LABELS } from '@/features/ics215a/constants'
+import {
+  formatIcs215aIncidentAreaLabel,
+  formatIcs215aLocationSummary,
+} from '@/features/ics215a/location-utils'
 import type { Ics215aFormState } from '@/features/ics215a/types'
 import { formatIcs215aRiskGain } from '@/features/ics215a/utils'
 
@@ -134,7 +138,11 @@ export function buildIcs215aDocxBlocks(
   } else {
     form.safetyAnalysisRows.forEach((row, index) => {
       pushParagraph(`Row ${index + 1}`)
-      pushField('Incident Area', row.incidentArea)
+      pushField(
+        'Incident Area',
+        formatIcs215aIncidentAreaLabel(row.incidentArea)
+      )
+      pushField('Location', formatIcs215aLocationSummary(row.location))
       pushField('Hazards/Risks', row.hazardsRisks)
       pushField('Mitigations', row.mitigations)
       pushField('Risk/Gain', formatIcs215aRiskGain(row))

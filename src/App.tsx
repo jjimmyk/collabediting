@@ -450,8 +450,16 @@ import {
   createEmptyIcs215aForm,
   createLocalIcs215aDocumentId,
   extractIcs215aSectionDraft,
+  getIcs215aFormForExport,
   ics215aAuthorColor,
 } from '@/features/ics215a/utils'
+import {
+  buildIcs215aLocationsByPosition,
+  createDefaultIcs215aLocation,
+  getIcs215aLocationMapFeatures,
+  createMapFeaturesFromSketchSummary,
+} from '@/features/ics215a/location-utils'
+import { focusMapFeaturesOnView } from '@/lib/map-feature-focus'
 import { useIcs215aWorkspaceForm } from '@/hooks/useIcs215aWorkspaceForm'
 import { ICS205_SECTION_PROMPTS } from '@/features/ics205/constants'
 import { Ics205WorkspacePanel } from '@/features/ics205/Ics205WorkspacePanel'
@@ -990,7 +998,6 @@ import { useMselInjectDeliveries } from '@/features/exercise-msel/useMselInjectD
 import { useMselInjectMapLayer } from '@/features/exercise-msel/useMselInjectMapLayer'
 import {
   getInjectMapFeatures,
-  getMapFeaturesExtent,
   normalizeInjectMapFeatures,
 } from '@/features/exercise-msel/msel-geometry-utils'
 import type {
@@ -6593,6 +6600,13 @@ function App() {
   const workspaceSettingsSketchViewModelRef = useRef<SketchViewModel | null>(null)
   const preserveWorkspaceSettingsGeometryRef = useRef(false)
   const [isDrawingWorkspaceSettingsOnMap, setIsDrawingWorkspaceSettingsOnMap] = useState(false)
+  const ics215aSketchViewModelRef = useRef<SketchViewModel | null>(null)
+  const [isDrawingIcs215aOnMap, setIsDrawingIcs215aOnMap] = useState(false)
+  const [ics215aDrawTarget, setIcs215aDrawTarget] = useState<{
+    rowId: number
+    mode: 'point' | 'polygon'
+  } | null>(null)
+  const [ics215aZoomTargetRowId, setIcs215aZoomTargetRowId] = useState<number | null>(null)
   const ics201SketchLayerRef = useRef<GraphicsLayer | null>(null)
   const ics201SketchViewModelRef = useRef<SketchViewModel | null>(null)
   const [isDrawingIcs201Polygon, setIsDrawingIcs201Polygon] = useState(false)
@@ -12058,30 +12072,12 @@ function App() {
       setActiveMselPlacementMode(null)
     }
   }, [activeTab, isActiveTabletopExerciseWorkspace, mselViewTab])
-  const focusMselMapFeatures = useCallback((features: ReturnType<typeof getInjectMapFeatures>) => {
-    const view = mapViewRef.current
-    if (!view || features.length === 0) {
-      return
-    }
-
-    if (features.length === 1 && features[0]?.type === 'point') {
-      const [longitude, latitude] = features[0].coordinates
-      void view.goTo({ center: [longitude, latitude], zoom: 12 })
-      return
-    }
-
-    const extent = getMapFeaturesExtent(features)
-    if (!extent) {
-      return
-    }
-
-    const span = Math.max(extent.xmax - extent.xmin, extent.ymax - extent.ymin)
-    const zoom = span > 5 ? 6 : span > 1 ? 8 : span > 0.2 ? 10 : 12
-    void view.goTo({
-      center: [(extent.xmin + extent.xmax) / 2, (extent.ymin + extent.ymax) / 2],
-      zoom,
-    })
-  }, [])
+  const focusMselMapFeatures = useCallback(
+    (features: ReturnType<typeof getInjectMapFeatures>) => {
+      void focusMapFeaturesOnView(mapViewRef.current, features, { animate: false })
+    },
+    []
+  )
   const focusMselInjectOnMap = useCallback(
     (inject: MselInject) => {
       focusMselMapFeatures(getInjectMapFeatures(inject))
@@ -14202,6 +14198,40 @@ function App() {
     ics215aVersions,
     historicalIcs215aView
   )
+  const ics215aLocationsByPosition = useMemo(() => {
+    if (!displayIcs215aForm) {
+      return {}
+    }
+    const exportForm = getIcs215aFormForExport(displayIcs215aForm, ics215aSectionDrafts)
+    return buildIcs215aLocationsByPosition(exportForm.safetyAnalysisRows)
+  }, [displayIcs215aForm, ics215aSectionDrafts])
+  const focusIcs215aRowOnMap = useCallback(
+    (rowId: number) => {
+      if (!displayIcs215aForm) {
+        return
+      }
+      const exportForm = getIcs215aFormForExport(displayIcs215aForm, ics215aSectionDrafts)
+      const row = exportForm.safetyAnalysisRows.find((entry) => entry.id === rowId)
+      if (!row) {
+        return
+      }
+      const features = getIcs215aLocationMapFeatures(row.location)
+      if (features.length === 0) {
+        return
+      }
+      setIcs215aZoomTargetRowId(rowId)
+      setIsMapVisible(true)
+      void focusMapFeaturesOnView(mapViewRef.current, features, {
+        padding: getMapViewportPadding(),
+        animate: false,
+      })
+    },
+    [displayIcs215aForm, ics215aSectionDrafts, getMapViewportPadding]
+  )
+  const handleStartIcs215aMapDraw = useCallback((rowId: number, mode: 'point' | 'polygon') => {
+    setIcs215aDrawTarget({ rowId, mode })
+    setIsMapVisible(true)
+  }, [])
   const displayIcs205Form = resolveDisplayForm(
     isViewingHistoricalOperationalPeriod,
     ics205Form,
@@ -14493,6 +14523,148 @@ function App() {
       cleanupWorkspaceSettingsSketch()
     }
   }, [activeTab, canEditIcs201Form, workspaceSettingsDraft?.locationMethod])
+
+  useEffect(() => {
+    const cleanupIcs215aSketch = () => {
+      const sketchViewModel = ics215aSketchViewModelRef.current
+      if (sketchViewModel) {
+        try {
+          sketchViewModel.cancel()
+          sketchViewModel.destroy()
+        } catch {
+          /* ignore */
+        }
+        ics215aSketchViewModelRef.current = null
+      }
+      setIsDrawingIcs215aOnMap(false)
+    }
+
+    if (activeTab !== 'form-ICS-215A' || !ics215aDrawTarget) {
+      cleanupIcs215aSketch()
+      return
+    }
+
+    setIsMapVisible(true)
+
+    const view = mapViewRef.current
+    const layer = drawLocationLayerRef.current
+    if (!view || !layer) {
+      cleanupIcs215aSketch()
+      return
+    }
+
+    let cancelled = false
+    let sketchViewModel: SketchViewModel | null = null
+    const drawTarget = ics215aDrawTarget
+
+    const updateRowLocationFromDraw = (
+      mapFeatures: MselMapFeature[],
+      geometrySummary: string
+    ) => {
+      setIcs215aSectionDrafts((previous) => {
+        const draft = previous['safety-analysis']
+        if (!draft) {
+          return previous
+        }
+        return {
+          ...previous,
+          'safety-analysis': draft.map((row) =>
+            row.id === drawTarget.rowId
+              ? {
+                  ...row,
+                  location: {
+                    ...row.location,
+                    method: drawTarget.mode === 'point' ? 'draw-point' : 'draw-polygon',
+                    mapFeatures,
+                    geometrySummary,
+                  },
+                }
+              : row
+          ),
+        }
+      })
+    }
+
+    const start = async () => {
+      try {
+        await view.when()
+      } catch {
+        return
+      }
+      if (cancelled) {
+        return
+      }
+
+      sketchViewModel = new SketchViewModel({
+        view,
+        layer,
+        updateOnGraphicClick: true,
+      })
+      ics215aSketchViewModelRef.current = sketchViewModel
+      setIsDrawingIcs215aOnMap(true)
+
+      sketchViewModel.on('create', (event) => {
+        if (event.state !== 'complete' || !event.graphic?.geometry) {
+          return
+        }
+
+        layer.removeAll()
+        layer.add(event.graphic)
+
+        const geometry = event.graphic.geometry
+        if (geometry.type === 'point') {
+          const point = geometry as Point
+          if (point.latitude == null || point.longitude == null) {
+            updateRowLocationFromDraw([], 'Point selected')
+            setIcs215aDrawTarget(null)
+            return
+          }
+          const { mapFeatures, geometrySummary } = createMapFeaturesFromSketchSummary({
+            mode: 'point',
+            latitude: point.latitude,
+            longitude: point.longitude,
+          })
+          updateRowLocationFromDraw(mapFeatures, geometrySummary)
+          setIcs215aDrawTarget(null)
+          return
+        }
+
+        if (geometry.type === 'polygon') {
+          const polygon = geometry as Polygon
+          const ring =
+            polygon.rings?.[0]
+              ?.filter(
+                (pair: number[]): pair is [number, number] =>
+                  Array.isArray(pair) && pair.length >= 2
+              )
+              .map((pair) => [pair[0], pair[1]] as [number, number]) ?? []
+          const centroid = geometry.extent?.center
+          const latitude = centroid?.latitude ?? 0
+          const longitude = centroid?.longitude ?? 0
+          const { mapFeatures, geometrySummary } = createMapFeaturesFromSketchSummary({
+            mode: 'polygon',
+            latitude,
+            longitude,
+            polygonRing: ring,
+          })
+          updateRowLocationFromDraw(mapFeatures, geometrySummary)
+          setIcs215aDrawTarget(null)
+        }
+      })
+
+      sketchViewModel.cancel()
+      layer.removeAll()
+      void sketchViewModel.create(drawTarget.mode === 'point' ? 'point' : 'polygon')
+    }
+
+    void start()
+
+    return () => {
+      cancelled = true
+      cleanupIcs215aSketch()
+    }
+  }, [activeTab, ics215aDrawTarget])
+
   const activePositionPermissions = isSupabaseEnabled
     ? activeWorkspacePositionPermissions
     : activeWorkspaceRosterKey !== null
@@ -20981,7 +21153,8 @@ function App() {
             patchIcs215aSectionDraft(section, [
               {
                 id: 1,
-                incidentArea: 'Division A — North Sector',
+                incidentArea: { kind: 'custom', name: 'Division A — North Sector' },
+                location: createDefaultIcs215aLocation(),
                 hazardsRisks:
                   'Unstable footing, limited visibility, potential exposure to hazardous materials.',
                 mitigations:
@@ -31293,6 +31466,8 @@ function App() {
                         )
                       }}
                       haveLinkIndexByRef={workspaceHaveLinkIndex}
+                      ics215aLocationsByPosition={ics215aLocationsByPosition}
+                      onFocusIcs215aRowOnMap={focusIcs215aRowOnMap}
                     />
                         </div>
                       ) : (
@@ -31431,6 +31606,8 @@ function App() {
                         void clearResourceCategoryFillById(categoryId)
                       }}
                       haveLinkIndexByRef={workspaceHaveLinkIndex}
+                      ics215aLocationsByPosition={ics215aLocationsByPosition}
+                      onFocusIcs215aRowOnMap={focusIcs215aRowOnMap}
                     />
                       )}
                       </RosterZoomContainer>
@@ -35960,6 +36137,11 @@ function App() {
                     onSignReview={handleIcs215aSignReview}
                     downloadDocx={downloadDocx}
                     downloadPdf={downloadPdf}
+                    positionCatalog={workspacePositionCatalog}
+                    onZoomToMap={focusIcs215aRowOnMap}
+                    ics215aZoomTargetRowId={ics215aZoomTargetRowId}
+                    ics215aDrawingRowId={ics215aDrawTarget?.rowId ?? null}
+                    onStartIcs215aMapDraw={handleStartIcs215aMapDraw}
                   />
                   </OperationalPeriodHistoricalFormShell>
                 )}

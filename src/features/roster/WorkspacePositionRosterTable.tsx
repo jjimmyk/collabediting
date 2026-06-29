@@ -51,6 +51,7 @@ import { RosterMemberCheckInStatusSelect } from '@/features/roster/RosterMemberC
 import type { PositionOpAdvanceLabel } from '@/lib/operational-period-roster-types'
 import type { WorkspacePositionCatalog, WorkspacePositionMeta } from '@/features/roster/workspace-positions'
 import type { WorkspacePositionType } from '@/features/roster/workspace-position-type'
+import type { Ics215aLocationByPositionIndex } from '@/features/ics215a/location-utils'
 import { cn } from '@/lib/utils'
 
 type WorkspacePositionRosterTableProps = {
@@ -130,6 +131,8 @@ type WorkspacePositionRosterTableProps = {
   highlightedHaveRef?: PositionRosterUnifiedAssignmentSectionsProps['highlightedHaveRef']
   haveLinkPickMode?: import('@/features/ics215/have-link-pick-mode').HaveLinkPickMode
   assignmentSectionsLayout?: import('@/features/roster/PositionRosterAssignmentSections').PositionAssignmentSectionsLayout
+  ics215aLocationsByPosition?: Ics215aLocationByPositionIndex
+  onFocusIcs215aRowOnMap?: (rowId: number) => void
 } & Partial<PositionRosterAssetHandlers>
 
 function AssignedMembersList({
@@ -292,6 +295,8 @@ export function WorkspacePositionRosterTable({
   highlightedHaveRef = null,
   haveLinkPickMode,
   assignmentSectionsLayout = 'stacked',
+  ics215aLocationsByPosition = {},
+  onFocusIcs215aRowOnMap,
 }: WorkspacePositionRosterTableProps) {
   const tableColumnCount =
     3 +
@@ -707,6 +712,10 @@ export function WorkspacePositionRosterTable({
                         }
                       : undefined
                   }
+                  ics215aLocationEntries={
+                    ics215aLocationsByPosition[managedEntry.position] ?? []
+                  }
+                  onFocusIcs215aRowOnMap={onFocusIcs215aRowOnMap}
                 />
               </div>
             </>

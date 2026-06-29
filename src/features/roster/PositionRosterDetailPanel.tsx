@@ -23,6 +23,8 @@ import type { WorkspacePositionMeta, WorkspacePositionCatalog } from '@/features
 import type { HaveLinkPickMode } from '@/features/ics215/have-link-pick-mode'
 import { HaveLinkPositionDetailPick } from '@/features/ics215/HaveLinkDetailPickSection'
 import { PositionIdentitySection } from '@/features/roster/PositionIdentitySection'
+import { PositionIcs215aLocationSection } from '@/features/roster/PositionIcs215aLocationSection'
+import type { Ics215aLocationByPositionEntry } from '@/features/ics215a/types'
 
 type PositionRosterDetailPanelProps = {
   entry: PositionRosterEntry
@@ -101,6 +103,8 @@ type PositionRosterDetailPanelProps = {
   activeHaveCell?: PositionRosterUnifiedAssignmentSectionsProps['activeHaveCell']
   highlightedHaveRef?: PositionRosterUnifiedAssignmentSectionsProps['highlightedHaveRef']
   haveLinkPickMode?: HaveLinkPickMode
+  ics215aLocationEntries?: Ics215aLocationByPositionEntry[]
+  onFocusIcs215aRowOnMap?: (rowId: number) => void
 } & Partial<PositionRosterAssetHandlers>
 
 export function PositionRosterDetailPanel({
@@ -174,6 +178,8 @@ export function PositionRosterDetailPanel({
   activeHaveCell = null,
   highlightedHaveRef = null,
   haveLinkPickMode,
+  ics215aLocationEntries = [],
+  onFocusIcs215aRowOnMap,
 }: PositionRosterDetailPanelProps) {
   const assetsHandlersReady = Boolean(
     onAssignAsset &&
@@ -243,6 +249,13 @@ export function PositionRosterDetailPanel({
         onToggleAllowWorkAssignment={onToggleAllowWorkAssignment}
         onPositionTypeChange={onPositionTypeChange}
       />
+
+      {ics215aLocationEntries.length > 0 ? (
+        <PositionIcs215aLocationSection
+          entries={ics215aLocationEntries}
+          onFocusRow={onFocusIcs215aRowOnMap}
+        />
+      ) : null}
 
       {showOpAdvanceLabels && onOpAdvanceLabelChange ? (
         <div className="space-y-1.5 rounded-md border bg-muted/20 px-2.5 py-2">

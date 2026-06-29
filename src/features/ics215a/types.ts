@@ -1,10 +1,34 @@
 import type { Ics201VersionSignature } from '@/features/ics201/types'
+import type { MselMapFeature } from '@/features/exercise-msel/types'
 
 export type Ics215aRiskGainLevel = 'L' | 'M' | 'H' | ''
 
+export type Ics215aIncidentArea =
+  | { kind: 'roster-position'; position: string }
+  | { kind: 'custom'; name: string }
+
+export type Ics215aLocationMethod =
+  | ''
+  | 'enter-address'
+  | 'enter-coordinates'
+  | 'enter-polygon-coordinates'
+  | 'draw-point'
+  | 'draw-polygon'
+
+export type Ics215aSafetyAnalysisLocation = {
+  method: Ics215aLocationMethod
+  address?: string
+  latitude?: string
+  longitude?: string
+  polygonCoordinatesText?: string
+  geometrySummary?: string
+  mapFeatures?: MselMapFeature[]
+}
+
 export type Ics215aSafetyAnalysisRow = {
   id: number
-  incidentArea: string
+  incidentArea: Ics215aIncidentArea
+  location: Ics215aSafetyAnalysisLocation
   hazardsRisks: string
   mitigations: string
   riskLevel: Ics215aRiskGainLevel
@@ -95,4 +119,10 @@ export type Ics215aFormSectionDrafts = {
   'operational-period'?: Ics215aOperationalPeriodDraft
   'safety-analysis'?: Ics215aSafetyAnalysisRow[]
   'prepared-by'?: Ics215aPreparedByDraft
+}
+
+export type Ics215aLocationByPositionEntry = {
+  rowId: number
+  location: Ics215aSafetyAnalysisLocation
+  summary: string
 }

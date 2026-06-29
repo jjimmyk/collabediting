@@ -40,6 +40,8 @@ import type {
   Ics215aVersion,
 } from '@/features/ics215a/types'
 import { cloneIcs215aFormState, getIcs215aFormForExport } from '@/features/ics215a/utils'
+import { formatIcs215aIncidentAreaLabel } from '@/features/ics215a/location-utils'
+import type { WorkspacePositionCatalog } from '@/features/roster/workspace-positions'
 import { cn } from '@/lib/utils'
 
 type ExportBlock = Ics215aDocxBlock
@@ -76,6 +78,11 @@ type Ics215aWorkspacePanelProps = {
   ) => void
   downloadDocx: (filename: string, blocks: ExportBlock[], options?: ExportOptions) => void
   downloadPdf: (filename: string, blocks: ExportBlock[], options?: ExportOptions) => void
+  positionCatalog: WorkspacePositionCatalog
+  onZoomToMap?: (rowId: number) => void
+  ics215aZoomTargetRowId?: number | null
+  ics215aDrawingRowId?: number | null
+  onStartIcs215aMapDraw?: (rowId: number, mode: 'point' | 'polygon') => void
 }
 
 export function Ics215aWorkspacePanel({
@@ -98,6 +105,11 @@ export function Ics215aWorkspacePanel({
   onSignReview,
   downloadDocx,
   downloadPdf,
+  positionCatalog,
+  onZoomToMap,
+  ics215aZoomTargetRowId = null,
+  ics215aDrawingRowId = null,
+  onStartIcs215aMapDraw,
 }: Ics215aWorkspacePanelProps) {
   const liveFormRef = useRef<Ics215aFormState | null>(null)
   const [viewingPastVersion, setViewingPastVersion] = useState<Ics215aVersion | null>(null)
@@ -465,6 +477,7 @@ export function Ics215aWorkspacePanel({
             formIsLocked={formIsLocked}
             isSaving={isSaving}
             glassItemBorderClasses={glassItemBorderClasses}
+            positionCatalog={positionCatalog}
             editingSections={editingSections}
             drafts={sectionDrafts}
             onStartSectionEdit={onStartSectionEdit}
@@ -472,6 +485,10 @@ export function Ics215aWorkspacePanel({
             onSaveSection={onSaveSection}
             onGenerateSection={onGenerateSection}
             onPatchDraft={onPatchSectionDraft}
+            onZoomToMap={onZoomToMap}
+            ics215aZoomTargetRowId={ics215aZoomTargetRowId}
+            ics215aDrawingRowId={ics215aDrawingRowId}
+            onStartIcs215aMapDraw={onStartIcs215aMapDraw}
           />
         </div>
 
@@ -537,7 +554,13 @@ export function Ics215aWorkspacePanel({
                       ? 'Current'
                       : `v${indexInAll + 1}`
                   const preview = (
-                    version.snapshot.safetyAnalysisRows[0]?.incidentArea ||
+                    formatIcs215aIncidentAreaLabel(
+                      version.snapshot.safetyAnalysisRows[0]?.incidentArea ?? {
+                        kind: 'custom',
+                        name: '',
+                      },
+                      positionCatalog
+                    ) ||
                     version.snapshot.incidentName ||
                     ''
                   ).slice(0, 80)

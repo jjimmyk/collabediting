@@ -183,6 +183,8 @@ type WorkspaceOrgChartRosterProps = {
   activeHaveCell?: PositionRosterUnifiedAssignmentSectionsProps['activeHaveCell']
   highlightedHaveRef?: PositionRosterUnifiedAssignmentSectionsProps['highlightedHaveRef']
   haveLinkPickMode?: HaveLinkPickMode
+  ics215aLocationsByPosition?: import('@/features/ics215a/location-utils').Ics215aLocationByPositionIndex
+  onFocusIcs215aRowOnMap?: (rowId: number) => void
   assignmentSectionsLayout?: PositionAssignmentSectionsLayout
   isProjected?: boolean
   rosterTimeHorizon?: OrgChartExportScope
@@ -297,6 +299,8 @@ type OrgChartRenderProps = {
   activeHaveCell?: PositionRosterUnifiedAssignmentSectionsProps['activeHaveCell']
   highlightedHaveRef?: PositionRosterUnifiedAssignmentSectionsProps['highlightedHaveRef']
   haveLinkPickMode?: HaveLinkPickMode
+  ics215aLocationsByPosition?: import('@/features/ics215a/location-utils').Ics215aLocationByPositionIndex
+  onFocusIcs215aRowOnMap?: (rowId: number) => void
 }
 
 function isSubordinateRowChild(node: OrgChartNode): boolean {
@@ -632,6 +636,8 @@ function PositionNode({
   isProjected = false,
   rosterTimeHorizon = 'current_op',
   managementEntriesByPosition,
+  ics215aLocationsByPosition = {},
+  onFocusIcs215aRowOnMap,
 }: {
   position: string
   color?: OrgChartColor
@@ -827,6 +833,8 @@ function PositionNode({
             activeHaveCell={activeHaveCell}
             highlightedHaveRef={highlightedHaveRef}
             haveLinkPickMode={haveLinkPickMode}
+            ics215aLocationEntries={ics215aLocationsByPosition[position] ?? []}
+            onFocusIcs215aRowOnMap={onFocusIcs215aRowOnMap}
           />
         </OrgChartCardAnchor>
       ) : (
@@ -912,6 +920,8 @@ function PositionNode({
           activeHaveCell={activeHaveCell}
           highlightedHaveRef={highlightedHaveRef}
           haveLinkPickMode={haveLinkPickMode}
+          ics215aLocationEntries={ics215aLocationsByPosition[position] ?? []}
+          onFocusIcs215aRowOnMap={onFocusIcs215aRowOnMap}
         />
       )}
       {!suppressChildren ? (
@@ -1290,6 +1300,8 @@ export function WorkspaceOrgChartRoster({
   activeHaveCell = null,
   highlightedHaveRef = null,
   haveLinkPickMode,
+  ics215aLocationsByPosition = {},
+  onFocusIcs215aRowOnMap,
 }: WorkspaceOrgChartRosterProps) {
   const [selectedAssetKey, setSelectedAssetKey] = useState<string | null>(null)
   const [selectedSingleResourceMemberId, setSelectedSingleResourceMemberId] = useState<string | null>(
@@ -1421,6 +1433,8 @@ export function WorkspaceOrgChartRoster({
     activeHaveCell,
     highlightedHaveRef,
     haveLinkPickMode,
+    ics215aLocationsByPosition,
+    onFocusIcs215aRowOnMap,
   }
 
   const wideRenderProps: OrgChartWideRenderProps = {

@@ -3,13 +3,20 @@ import {
   ICS215A_DEFAULT_SAFETY_ANALYSIS_ROW_COUNT,
   ICS215A_RISK_GAIN_LEVELS,
 } from '@/features/ics215a/constants'
+import {
+  createDefaultIcs215aLocation,
+  migrateIncidentArea,
+  normalizeIcs215aLocation,
+} from '@/features/ics215a/location-utils'
 import type {
   Ics215aFormSectionDrafts,
   Ics215aFormState,
+  Ics215aIncidentArea,
   Ics215aIncidentInfoDraft,
   Ics215aOperationalPeriodDraft,
   Ics215aPreparedByDraft,
   Ics215aRiskGainLevel,
+  Ics215aSafetyAnalysisLocation,
   Ics215aSafetyAnalysisRow,
   Ics215aSectionId,
   Ics215aVersion,
@@ -19,6 +26,24 @@ import type {
 function normalizeRiskGainLevel(value: unknown): Ics215aRiskGainLevel {
   if (value === 'L' || value === 'M' || value === 'H') return value
   return ''
+}
+
+function cloneIncidentArea(area: Ics215aIncidentArea): Ics215aIncidentArea {
+  if (area.kind === 'roster-position') {
+    return { kind: 'roster-position', position: area.position }
+  }
+  return { kind: 'custom', name: area.name }
+}
+
+function cloneLocation(location: Ics215aSafetyAnalysisLocation): Ics215aSafetyAnalysisLocation {
+  return {
+    ...location,
+    mapFeatures: location.mapFeatures?.map((feature) =>
+      feature.type === 'point'
+        ? { ...feature, coordinates: [...feature.coordinates] as [number, number] }
+        : { ...feature, rings: feature.rings.map((ring) => ring.map((pair) => [...pair] as [number, number])) }
+    ),
+  }
 }
 
 export function formatIcs215aRiskGain(row: Ics215aSafetyAnalysisRow): string {
@@ -31,7 +56,11 @@ export function formatIcs215aRiskGain(row: Ics215aSafetyAnalysisRow): string {
 export function cloneIcs215aSafetyAnalysisRows(
   rows: Ics215aSafetyAnalysisRow[]
 ): Ics215aSafetyAnalysisRow[] {
-  return rows.map((row) => ({ ...row }))
+  return rows.map((row) => ({
+    ...row,
+    incidentArea: cloneIncidentArea(row.incidentArea),
+    location: cloneLocation(row.location),
+  }))
 }
 
 export function cloneIcs215aFormState(form: Ics215aFormState): Ics215aFormState {
@@ -46,7 +75,8 @@ export function createDefaultIcs215aSafetyAnalysisRows(
 ): Ics215aSafetyAnalysisRow[] {
   return Array.from({ length: count }, (_, index) => ({
     id: index + 1,
-    incidentArea: '',
+    incidentArea: { kind: 'custom', name: '' },
+    location: createDefaultIcs215aLocation(),
     hazardsRisks: '',
     mitigations: '',
     riskLevel: '',
@@ -55,16 +85,18 @@ export function createDefaultIcs215aSafetyAnalysisRows(
 }
 
 function normalizeSafetyAnalysisRow(
-  row: Ics215aSafetyAnalysisRow,
+  row: Ics215aSafetyAnalysisRow | Record<string, unknown>,
   index: number
 ): Ics215aSafetyAnalysisRow {
+  const record = row as Record<string, unknown>
   return {
-    id: typeof row.id === 'number' ? row.id : index + 1,
-    incidentArea: String(row.incidentArea ?? ''),
-    hazardsRisks: String(row.hazardsRisks ?? ''),
-    mitigations: String(row.mitigations ?? ''),
-    riskLevel: normalizeRiskGainLevel(row.riskLevel),
-    gainLevel: normalizeRiskGainLevel(row.gainLevel),
+    id: typeof record.id === 'number' ? record.id : index + 1,
+    incidentArea: migrateIncidentArea(record.incidentArea),
+    location: normalizeIcs215aLocation(record.location),
+    hazardsRisks: String(record.hazardsRisks ?? ''),
+    mitigations: String(record.mitigations ?? ''),
+    riskLevel: normalizeRiskGainLevel(record.riskLevel),
+    gainLevel: normalizeRiskGainLevel(record.gainLevel),
   }
 }
 
@@ -211,7 +243,9 @@ export function applyIcs215aSectionDraft(
     case 'safety-analysis':
       return {
         ...form,
-        safetyAnalysisRows: cloneIcs215aSafetyAnalysisRows(draft as Ics215aSafetyAnalysisRow[]),
+        safetyAnalysisRows: cloneIcs215aSafetyAnalysisRows(
+          (draft as Ics215aSafetyAnalysisRow[]).map(normalizeSafetyAnalysisRow)
+        ),
       }
     case 'prepared-by':
       return {
