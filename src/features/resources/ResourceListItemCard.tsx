@@ -308,7 +308,9 @@ export function ResourceListItemCard({
                     </span>
                   )}
                   {organizationManaged ? null : (
-                    <AlmisDataSourceIcon className="shrink-0" />
+                    <span className="shrink-0">
+                      <AlmisDataSourceIcon />
+                    </span>
                   )}
                 </div>
               </div>

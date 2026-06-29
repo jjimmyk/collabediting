@@ -426,7 +426,7 @@ export function GeospatialCopDashboardPanel({
                     open={isOpen}
                     editable={false}
                     readOnlyWorkspaceAssignmentFields
-                    showWorkspaceAssignment={false}
+                    showInlineAssignment={false}
                     onOpenChange={(open) => setExpandedAssetKey(open ? listKey : null)}
                     onHeaderClick={() =>
                       setExpandedAssetKey((previous) => (previous === listKey ? null : listKey))
