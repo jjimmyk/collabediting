@@ -679,6 +679,20 @@ import {
 } from '@/features/roster/position-roster-removal'
 import { AddWorkspacePositionDialog } from '@/features/roster/AddWorkspacePositionDialog'
 import { BuildTeamRosterStep } from '@/features/roster/BuildTeamRosterStep'
+import { ActivationNotificationsStep } from '@/features/activation/ActivationNotificationsStep'
+import {
+  buildActivationNotificationBaseMessage,
+  buildActivationNotificationBody,
+  resolveActivationNotificationRecipientEmails,
+  resolveCustomMessageDeliveries,
+  summarizeNonPratusChannels,
+  type ActivationInitialReportInput,
+} from '@/features/activation/activation-notification-delivery'
+import {
+  createDefaultActivationNotificationSettings,
+  formatActivationNotificationChannelLabel,
+  type ActivationNotificationSettings,
+} from '@/features/activation/activation-notification-types'
 import { CreateActivationPageLayout } from '@/features/activation/CreateActivationPageLayout'
 import { WorkspaceAssetRequestSpendSection } from '@/features/analytics/WorkspaceAssetRequestSpendSection'
 import {
@@ -6718,6 +6732,8 @@ function App() {
   )
   const [initialIncidentReport, setInitialIncidentReport] =
     useState<InitialIncidentReportState>(createDefaultInitialIncidentReport)
+  const [activationNotificationSettings, setActivationNotificationSettings] =
+    useState<ActivationNotificationSettings>(createDefaultActivationNotificationSettings)
   const [isCreateEventOpen, setIsCreateEventOpen] = useState(false)
   const [isCreateExerciseOpen, setIsCreateExerciseOpen] = useState(false)
   const [createEventReport, setCreateEventReport] =
@@ -6747,6 +6763,7 @@ function App() {
     'Initial Incident Report',
     'Build Team',
     'Schedule Meetings',
+    'Notifications',
   ] as const
   const createExerciseSteps = [
     'Name & Location',
@@ -6754,6 +6771,7 @@ function App() {
     'Initial Exercise Report',
     'Build Team',
     'Schedule Meetings',
+    'Notifications',
     'Define MSEL Injects',
   ] as const
   const [createExerciseStep, setCreateExerciseStep] = useState(0)
@@ -6836,6 +6854,7 @@ function App() {
     setExpandedMeetingItemId(null)
     setMeetingScheduleItems(defaultMeetingScheduleItems)
     setInitialIncidentReport(createDefaultInitialIncidentReport())
+    setActivationNotificationSettings(createDefaultActivationNotificationSettings())
     setCreateExerciseStep(0)
     setExerciseObjectives(defaultExerciseObjectives())
     setIsExerciseObjectiveLibraryOpen(false)
@@ -6996,6 +7015,13 @@ function App() {
     summaryParts.push(
       `${mselCount} MSEL inject${mselCount === 1 ? '' : 's'} defined.`
     )
+    if (activationNotificationSettings.channels.length > 0) {
+      summaryParts.push(
+        `Notified via ${activationNotificationSettings.channels
+          .map(formatActivationNotificationChannelLabel)
+          .join(', ')}.`
+      )
+    }
     const summary = summaryParts.join(' ')
     const resourcesCommitted = incidentTeamTemplate
       ? `${incidentTeamTemplate} exercise team standing up`
@@ -7047,6 +7073,7 @@ function App() {
           aors: incidentAors.length > 0 ? [...incidentAors] : undefined,
           location,
           exerciseMsel,
+          activationNotifications: activationNotificationSettings,
         }
 
         const result = await createWorkspace({
@@ -7084,6 +7111,14 @@ function App() {
         setSupabaseWorkspaceRoster(roster)
         const planSummary = await fetchWorkspaceRosterPlan(result.workspace.workspaceId)
         setWorkspaceRosterPlanSummary(planSummary)
+        const pratusDeliveryCount = await sendActivationPratusNotifications({
+          kind: 'exercise',
+          name: displayName,
+          workflowLabel,
+          settings: activationNotificationSettings,
+          draft: activationRosterDraft,
+          initialReport: initialIncidentReport,
+        })
         closeCreateActivation()
         if (!rosterPlanResult.ok) {
           toast.error(
@@ -7092,7 +7127,12 @@ function App() {
           enterExerciseWorkspace(persistedExercise)
           return
         }
-        toast.success(`${displayName} created. Exercise activation requests have been sent.`)
+        toast.success(`${displayName} created.`, {
+          description: buildActivationCreatedToastDescription(
+            activationNotificationSettings,
+            pratusDeliveryCount
+          ),
+        })
         enterExerciseWorkspace(persistedExercise)
       } finally {
         setIsCreatingWorkspace(false)
@@ -7123,7 +7163,20 @@ function App() {
         applied: true,
       }),
     }))
-    toast.success(`${displayName} created. Exercise activation requests have been sent.`)
+    const pratusDeliveryCount = await sendActivationPratusNotifications({
+      kind: 'exercise',
+      name: displayName,
+      workflowLabel,
+      settings: activationNotificationSettings,
+      draft: activationRosterDraft,
+      initialReport: initialIncidentReport,
+    })
+    toast.success(`${displayName} created.`, {
+      description: buildActivationCreatedToastDescription(
+        activationNotificationSettings,
+        pratusDeliveryCount
+      ),
+    })
     closeCreateActivation()
     enterExerciseWorkspace(newExercise)
   }
@@ -7196,6 +7249,13 @@ function App() {
     summaryParts.push(
       `${meetingsScheduled} meeting${meetingsScheduled === 1 ? '' : 's'} scheduled.`
     )
+    if (activationNotificationSettings.channels.length > 0) {
+      summaryParts.push(
+        `Notified via ${activationNotificationSettings.channels
+          .map(formatActivationNotificationChannelLabel)
+          .join(', ')}.`
+      )
+    }
     const summary = summaryParts.join(' ')
     const resourcesCommitted = incidentTeamTemplate
       ? `${incidentTeamTemplate} team standing up`
@@ -7244,6 +7304,17 @@ function App() {
           workspaceFormat: incidentWorkflow,
           incidentComplexity,
           organizationId: activeOrganizationId ?? undefined,
+          metadata: {
+            category: incidentCategory.trim() || 'Special Event',
+            templateId: incidentTemplate || undefined,
+            locationMethod: incidentGeometrySummary ? 'draw-point' : 'enter-coordinates',
+            geometrySummary: incidentGeometrySummary || undefined,
+            aors: incidentAors.length > 0 ? [...incidentAors] : undefined,
+            location,
+            relatedEventIds:
+              incidentRelatedEventIds.length > 0 ? [...incidentRelatedEventIds] : undefined,
+            activationNotifications: activationNotificationSettings,
+          },
         })
 
         if (!result.ok) {
@@ -7273,6 +7344,14 @@ function App() {
         setSupabaseWorkspaceRoster(roster)
         const planSummary = await fetchWorkspaceRosterPlan(result.workspace.workspaceId)
         setWorkspaceRosterPlanSummary(planSummary)
+        const pratusDeliveryCount = await sendActivationPratusNotifications({
+          kind: 'incident',
+          name: displayName,
+          workflowLabel,
+          settings: activationNotificationSettings,
+          draft: activationRosterDraft,
+          initialReport: initialIncidentReport,
+        })
         closeCreateActivation()
         if (!rosterPlanResult.ok) {
           toast.error(
@@ -7281,9 +7360,12 @@ function App() {
           enterIncidentWorkspace(persistedIncident)
           return
         }
-        toast.success(
-          `${displayName} created. Activation requests have been sent.`
-        )
+        toast.success(`${displayName} created.`, {
+          description: buildActivationCreatedToastDescription(
+            activationNotificationSettings,
+            pratusDeliveryCount
+          ),
+        })
         enterIncidentWorkspace(persistedIncident)
       } finally {
         setIsCreatingWorkspace(false)
@@ -7307,9 +7389,20 @@ function App() {
         applied: true,
       }),
     }))
-    toast.success(
-      `${displayName} created. Activation requests have been sent.`
-    )
+    const pratusDeliveryCount = await sendActivationPratusNotifications({
+      kind: 'incident',
+      name: displayName,
+      workflowLabel,
+      settings: activationNotificationSettings,
+      draft: activationRosterDraft,
+      initialReport: initialIncidentReport,
+    })
+    toast.success(`${displayName} created.`, {
+      description: buildActivationCreatedToastDescription(
+        activationNotificationSettings,
+        pratusDeliveryCount
+      ),
+    })
     closeCreateActivation()
     enterIncidentWorkspace(newIncident)
   }
@@ -13324,7 +13417,7 @@ function App() {
     },
     [profileEmail]
   )
-  const handleSendHubNotification = useCallback(
+  const deliverHubNotifications = useCallback(
     async ({
       title,
       summary,
@@ -13353,22 +13446,17 @@ function App() {
         persisted.forEach((notification) => {
           upsertHubNotificationInTab(notification, true)
         })
-      } else {
-        recipientEmails.forEach((recipientEmail) => {
-          deliverHubNotificationLocally({
-            recipientEmail,
-            title,
-            summary,
-            severity,
-            owner,
-          })
-        })
+        return
       }
 
-      toast.success('Notification sent', {
-        description: `Delivered to ${recipientEmails.length} recipient${
-          recipientEmails.length === 1 ? '' : 's'
-        }.`,
+      recipientEmails.forEach((recipientEmail) => {
+        deliverHubNotificationLocally({
+          recipientEmail,
+          title,
+          summary,
+          severity,
+          owner,
+        })
       })
     },
     [
@@ -13377,6 +13465,114 @@ function App() {
       profileEmail,
       upsertHubNotificationInTab,
     ]
+  )
+  const sendActivationPratusNotifications = useCallback(
+    async (input: {
+      kind: 'incident' | 'exercise'
+      name: string
+      workflowLabel?: string | null
+      settings: ActivationNotificationSettings
+      draft: BuildTeamRosterDraft
+      initialReport: ActivationInitialReportInput
+    }) => {
+      if (!input.settings.channels.includes('pratus')) {
+        return 0
+      }
+
+      const { title, summary: baseSummary } = buildActivationNotificationBaseMessage({
+        kind: input.kind,
+        name: input.name,
+        workflowLabel: input.workflowLabel,
+      })
+      const severity: NotificationItem['severity'] =
+        input.kind === 'incident' ? 'High' : 'Medium'
+      let deliveryCount = 0
+
+      const baseRecipients = resolveActivationNotificationRecipientEmails(input.draft)
+      if (baseRecipients.length > 0) {
+        await deliverHubNotifications({
+          title,
+          summary: buildActivationNotificationBody({
+            baseSummary,
+            includeInitialReport: input.settings.includeInitialReport,
+            initialReport: input.initialReport,
+          }),
+          severity,
+          recipientEmails: baseRecipients,
+        })
+        deliveryCount += baseRecipients.length
+      }
+
+      const customDeliveries = resolveCustomMessageDeliveries(
+        input.draft,
+        input.settings.customMessages
+      )
+      for (const delivery of customDeliveries) {
+        await deliverHubNotifications({
+          title: `${title} — targeted message`,
+          summary: buildActivationNotificationBody({
+            baseSummary: delivery.message,
+            includeInitialReport: input.settings.includeInitialReport,
+            initialReport: input.initialReport,
+          }),
+          severity,
+          recipientEmails: delivery.recipientEmails,
+        })
+        deliveryCount += delivery.recipientEmails.length
+      }
+
+      return deliveryCount
+    },
+    [deliverHubNotifications]
+  )
+  const buildActivationCreatedToastDescription = useCallback(
+    (settings: ActivationNotificationSettings, pratusDeliveryCount: number) => {
+      const descriptionParts: string[] = []
+      if (settings.channels.includes('pratus')) {
+        if (pratusDeliveryCount > 0) {
+          descriptionParts.push(
+            `PRATUS notifications sent to ${pratusDeliveryCount} recipient${
+              pratusDeliveryCount === 1 ? '' : 's'
+            }.`
+          )
+        } else {
+          descriptionParts.push('PRATUS selected, but no roster recipients were available.')
+        }
+      }
+      const pendingNote = summarizeNonPratusChannels(settings.channels)
+      if (pendingNote) {
+        descriptionParts.push(pendingNote)
+      }
+      return descriptionParts.length > 0 ? descriptionParts.join(' ') : undefined
+    },
+    []
+  )
+  const handleSendHubNotification = useCallback(
+    async ({
+      title,
+      summary,
+      severity,
+      recipientEmails,
+    }: {
+      title: string
+      summary: string
+      severity: NotificationItem['severity']
+      recipientEmails: string[]
+    }) => {
+      await deliverHubNotifications({
+        title,
+        summary,
+        severity,
+        recipientEmails,
+      })
+
+      toast.success('Notification sent', {
+        description: `Delivered to ${recipientEmails.length} recipient${
+          recipientEmails.length === 1 ? '' : 's'
+        }.`,
+      })
+    },
+    [deliverHubNotifications]
   )
   const handleSendMselInject = useCallback(
     async ({
@@ -27321,7 +27517,17 @@ function App() {
             </div>
           </div>
         )}
-        {isExerciseActivationWizard && activationStep === 5 && renderExerciseMselInjectsEditor()}
+        {((activationStep === 4 && !isExerciseActivationWizard) ||
+          (activationStep === 5 && isExerciseActivationWizard)) && (
+          <ActivationNotificationsStep
+            settings={activationNotificationSettings}
+            onChange={setActivationNotificationSettings}
+            rosterDraft={activationRosterDraft}
+            activationKind={isExerciseActivationWizard ? 'exercise' : 'incident'}
+            initialReport={initialIncidentReport}
+          />
+        )}
+        {isExerciseActivationWizard && activationStep === 6 && renderExerciseMselInjectsEditor()}
           </div>
         </CreateActivationPageLayout>
       </>

@@ -51,9 +51,13 @@ export function CreateActivationPageLayout({
         <div
           className={cn(
             'grid gap-2',
-            steps.length === 6
-              ? 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-6'
-              : 'grid-cols-2 sm:grid-cols-4'
+            steps.length === 7
+              ? 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-7'
+              : steps.length === 5
+                ? 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-5'
+                : steps.length === 6
+                  ? 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-6'
+                  : 'grid-cols-2 sm:grid-cols-4'
           )}
         >
           {steps.map((stepLabel, index) => {

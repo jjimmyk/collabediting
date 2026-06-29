@@ -47,6 +47,7 @@ export type WorkspaceMetadataRecord = {
   address?: string
   location?: [number, number]
   exerciseMsel?: import('@/features/exercise-msel/types').ExerciseMselState
+  activationNotifications?: import('@/features/activation/activation-notification-types').ActivationNotificationSettings
 }
 
 export type AccessibleWorkspace = {
