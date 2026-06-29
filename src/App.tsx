@@ -14803,6 +14803,20 @@ function App() {
       workspacePositionCatalog,
     ]
   )
+  const ics205aContactRowOptionsInput = useMemo(
+    () => ({
+      roster: activeWorkspaceRoster,
+      positionEntries: positionRosterEntries,
+      catalog: workspacePositionCatalog,
+      assetsByKey: workspaceAssetsByKey,
+    }),
+    [
+      activeWorkspaceRoster,
+      positionRosterEntries,
+      workspaceAssetsByKey,
+      workspacePositionCatalog,
+    ]
+  )
   const resourceCategoriesById = useMemo(() => {
     const map: Record<
       string,
@@ -21298,21 +21312,27 @@ function App() {
             patchIcs205aSectionDraft(section, [
               {
                 id: 1,
-                assignedPosition: 'Incident Commander',
-                name: 'Incident Commander',
-                contactMethods: 'Radio: Command Net 1 · Cell: (555) 010-0101',
+                assignedPosition: 'position:Incident Commander',
+                name: 'custom:Incident Commander',
+                cellPhone: '(555) 010-0101',
+                radioFrequency: 'Command Net 1',
+                other: '',
               },
               {
                 id: 2,
-                assignedPosition: 'Communications Unit Leader',
-                name: 'Communications Unit Leader',
-                contactMethods: 'Radio: Command Net 1 · Pager: (555) 010-0102',
+                assignedPosition: 'position:Communications Unit Leader',
+                name: 'custom:Communications Unit Leader',
+                cellPhone: '(555) 010-0102',
+                radioFrequency: 'Command Net 1',
+                other: 'Pager',
               },
               {
                 id: 3,
-                assignedPosition: 'Operations Section Chief',
-                name: 'Operations Section Chief',
-                contactMethods: 'Radio: Tactical Net 2 · Cell: (555) 010-0103',
+                assignedPosition: 'position:Operations Section Chief',
+                name: 'custom:Operations Section Chief',
+                cellPhone: '(555) 010-0103',
+                radioFrequency: 'Tactical Net 2',
+                other: '',
               },
               ...createDefaultIcs205aContactRows().slice(3),
             ])
@@ -36191,6 +36211,7 @@ function App() {
                     onPatchSectionDraft={patchIcs205aSectionDraft}
                     onAppendVersion={handleIcs205aAppendVersion}
                     onSignReview={handleIcs205aSignReview}
+                    contactRowOptionsInput={ics205aContactRowOptionsInput}
                     downloadDocx={downloadDocx}
                     downloadPdf={downloadPdf}
                   />

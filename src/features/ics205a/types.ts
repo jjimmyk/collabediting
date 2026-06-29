@@ -2,9 +2,13 @@ import type { Ics201VersionSignature } from '@/features/ics201/types'
 
 export type Ics205aContactRow = {
   id: number
+  /** Encoded roster target: position | single_resource | org_chart_asset */
   assignedPosition: string
+  /** Encoded name target: member | position_asset | single_resource | org_chart_asset | resource_category | custom */
   name: string
-  contactMethods: string
+  cellPhone: string
+  radioFrequency: string
+  other: string
 }
 
 export type Ics205aFormState = {

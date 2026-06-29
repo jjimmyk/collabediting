@@ -39,6 +39,7 @@ import type {
   Ics205aSectionId,
   Ics205aVersion,
 } from '@/features/ics205a/types'
+import type { Ics205aContactRowOptionsInput } from '@/features/ics205a/ics205a-contact-row-options'
 import { cloneIcs205aFormState, getIcs205aFormForExport } from '@/features/ics205a/utils'
 import { cn } from '@/lib/utils'
 
@@ -74,6 +75,7 @@ type Ics205aWorkspacePanelProps = {
     latestVersion: Ics205aVersion,
     signature: Ics201VersionSignature
   ) => void
+  contactRowOptionsInput: Ics205aContactRowOptionsInput
   downloadDocx: (filename: string, blocks: ExportBlock[], options?: ExportOptions) => void
   downloadPdf: (filename: string, blocks: ExportBlock[], options?: ExportOptions) => void
 }
@@ -96,6 +98,7 @@ export function Ics205aWorkspacePanel({
   onPatchSectionDraft,
   onAppendVersion,
   onSignReview,
+  contactRowOptionsInput,
   downloadDocx,
   downloadPdf,
 }: Ics205aWorkspacePanelProps) {
@@ -122,7 +125,10 @@ export function Ics205aWorkspacePanel({
     return getIcs205aFormForExport(form, sectionDrafts)
   }
 
-  const getExportContext = () => ({ incidentName })
+  const getExportContext = () => ({
+    incidentName,
+    contactRowOptionsInput,
+  })
 
   const openPreview = () => {
     const exportForm = getExportForm()
@@ -263,7 +269,7 @@ export function Ics205aWorkspacePanel({
 
   return (
     <>
-      <div className="space-y-3">
+      <div className="min-w-0 max-w-full space-y-3">
         <div className="flex items-center justify-end gap-2">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -455,7 +461,7 @@ export function Ics205aWorkspacePanel({
 
         <div
           className={cn(
-            'space-y-3',
+            'min-w-0 max-w-full space-y-3',
             formIsLocked && 'pointer-events-none opacity-70 select-none'
           )}
         >
@@ -467,6 +473,7 @@ export function Ics205aWorkspacePanel({
             glassItemBorderClasses={glassItemBorderClasses}
             editingSections={editingSections}
             drafts={sectionDrafts}
+            contactRowOptionsInput={contactRowOptionsInput}
             onStartSectionEdit={onStartSectionEdit}
             onCancelSectionEdit={onCancelSectionEdit}
             onSaveSection={onSaveSection}

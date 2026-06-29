@@ -29,16 +29,25 @@ export function createDefaultIcs205aContactRows(
     id: index + 1,
     assignedPosition: '',
     name: '',
-    contactMethods: '',
+    cellPhone: '',
+    radioFrequency: '',
+    other: '',
   }))
 }
 
-function normalizeContactRow(row: Ics205aContactRow, index: number): Ics205aContactRow {
+type LegacyIcs205aContactRow = Ics205aContactRow & { contactMethods?: string }
+
+function normalizeContactRow(row: LegacyIcs205aContactRow, index: number): Ics205aContactRow {
+  const legacyContactMethods = String(row.contactMethods ?? '').trim()
+  const other = String(row.other ?? '').trim() || legacyContactMethods
+
   return {
     id: typeof row.id === 'number' ? row.id : index + 1,
     assignedPosition: String(row.assignedPosition ?? ''),
     name: String(row.name ?? ''),
-    contactMethods: String(row.contactMethods ?? ''),
+    cellPhone: String(row.cellPhone ?? ''),
+    radioFrequency: String(row.radioFrequency ?? ''),
+    other,
   }
 }
 

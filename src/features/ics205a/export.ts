@@ -1,4 +1,9 @@
 import { ICS205A_SECTION_LABELS } from '@/features/ics205a/constants'
+import {
+  contactRowHasContent,
+  resolveIcs205aContactDisplayLabels,
+  type Ics205aContactRowOptionsInput,
+} from '@/features/ics205a/ics205a-contact-row-options'
 import type { Ics205aFormState } from '@/features/ics205a/types'
 
 export type Ics205aDocxBlock =
@@ -26,6 +31,7 @@ export type Ics205aDocxOptions = {
 
 export type Ics205aExportContext = {
   incidentName?: string
+  contactRowOptionsInput?: Ics205aContactRowOptionsInput
 }
 
 export function ics205aExportFilenameBase(form: Ics205aFormState): string {
@@ -110,18 +116,20 @@ export function buildIcs205aDocxBlocks(
   pushField('Operational Period Time To', form.operationalPeriodTimeTo)
 
   pushHeading(ICS205A_SECTION_LABELS['local-communications-info'])
-  const filledContacts = form.contactRows.filter(
-    (row) =>
-      row.assignedPosition.trim() || row.name.trim() || row.contactMethods.trim()
-  )
+  const filledContacts = form.contactRows.filter(contactRowHasContent)
   if (filledContacts.length === 0) {
     pushParagraph('No local communications contacts recorded.')
   } else {
     filledContacts.forEach((row, index) => {
+      const labels = context.contactRowOptionsInput
+        ? resolveIcs205aContactDisplayLabels(row, context.contactRowOptionsInput)
+        : { assignedPosition: row.assignedPosition, name: row.name }
       pushParagraph(`Contact ${index + 1}`)
-      pushField('Incident Assigned Position', row.assignedPosition)
-      pushField('Name', row.name)
-      pushField('Methods of Contact', row.contactMethods)
+      pushField('Incident Assigned Position', labels.assignedPosition)
+      pushField('Name', labels.name)
+      pushField('Cell Phone #', row.cellPhone)
+      pushField('Radio Frequency', row.radioFrequency)
+      pushField('Other', row.other)
     })
   }
 

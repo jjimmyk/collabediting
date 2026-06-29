@@ -1,16 +1,19 @@
 import { useState, type ReactNode } from 'react'
-import { ChevronDown, Trash2 } from 'lucide-react'
+import { LayoutList, Sparkles, Table2 } from 'lucide-react'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
-import { Item, ItemActions, ItemContent } from '@/components/ui/item'
-import { Textarea } from '@/components/ui/textarea'
+import { Item } from '@/components/ui/item'
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import {
   Ics202FieldLabel,
   Ics202ReadOnlyField,
-  Ics202ReadOnlyTextBlock,
   Ics202SectionEditActions,
   Ics202SectionHeader,
 } from '@/features/ics202/Ics202SectionToolbar'
+import { Ics205aContactRowsList } from '@/features/ics205a/Ics205aContactRowsList'
+import { Ics205aContactRowsTable } from '@/features/ics205a/Ics205aContactRowsTable'
+import { buildIcs205aContactsFromNextOpRoster } from '@/features/ics205a/build-ics205a-contacts-from-roster'
+import type { Ics205aContactRowOptionsInput } from '@/features/ics205a/ics205a-contact-row-options'
 import { ICS205A_SECTION_LABELS } from '@/features/ics205a/constants'
 import type {
   Ics205aContactRow,
@@ -33,6 +36,7 @@ type Ics205aFormSectionsProps = {
   glassItemBorderClasses: string
   editingSections: Partial<Record<Ics205aSectionId, boolean>>
   drafts: Ics205aFormSectionDrafts
+  contactRowOptionsInput: Ics205aContactRowOptionsInput
   onStartSectionEdit: (section: Ics205aSectionId) => void
   onCancelSectionEdit: (section: Ics205aSectionId) => void
   onSaveSection: (section: Ics205aSectionId) => void
@@ -58,13 +62,14 @@ export function Ics205aFormSections({
   glassItemBorderClasses,
   editingSections,
   drafts,
+  contactRowOptionsInput,
   onStartSectionEdit,
   onCancelSectionEdit,
   onSaveSection,
   onGenerateSection,
   onPatchDraft,
 }: Ics205aFormSectionsProps) {
-  const [expandedContactKey, setExpandedContactKey] = useState<string | null>(null)
+  const [contactsViewMode, setContactsViewMode] = useState<'list' | 'table'>('list')
 
   const incidentInfo =
     isSectionEditing(editingSections, 'incident-info') && drafts['incident-info']
@@ -87,14 +92,10 @@ export function Ics205aFormSections({
     onPatchDraft('prepared-by', { ...preparedBy, ...patch })
   }
 
-  const patchContactRow = (
-    rowId: number,
-    field: keyof Ics205aContactRow,
-    value: string
-  ) => {
+  const patchContactRow = (rowId: number, patch: Partial<Ics205aContactRow>) => {
     onPatchDraft(
       'local-communications-info',
-      contactRows.map((row) => (row.id === rowId ? { ...row, [field]: value } : row))
+      contactRows.map((row) => (row.id === rowId ? { ...row, ...patch } : row))
     )
   }
 
@@ -108,7 +109,9 @@ export function Ics205aFormSections({
             : Math.max(...contactRows.map((row) => row.id)) + 1,
         assignedPosition: '',
         name: '',
-        contactMethods: '',
+        cellPhone: '',
+        radioFrequency: '',
+        other: '',
       },
     ])
   }
@@ -118,6 +121,30 @@ export function Ics205aFormSections({
       'local-communications-info',
       contactRows.filter((row) => row.id !== rowId)
     )
+  }
+
+  const fillContactsFromRoster = () => {
+    if (!contactRowOptionsInput.catalog) {
+      toast.warning('Roster data is not available for this workspace.')
+      return
+    }
+
+    const assets = Object.values(contactRowOptionsInput.assetsByKey ?? {})
+    const rows = buildIcs205aContactsFromNextOpRoster({
+      catalog: contactRowOptionsInput.catalog,
+      positionEntries: contactRowOptionsInput.positionEntries,
+      roster: contactRowOptionsInput.roster,
+      assets,
+    })
+
+    onPatchDraft('local-communications-info', rows)
+
+    if (rows.length === 0) {
+      toast.warning('No next operational period roster entries to fill.')
+      return
+    }
+
+    toast.success(`Filled ${rows.length} contact${rows.length === 1 ? '' : 's'} from next OP roster.`)
   }
 
   const renderSectionShell = (
@@ -131,8 +158,8 @@ export function Ics205aFormSections({
         variant="outline"
         className={cn('min-w-0 flex-col items-stretch p-0', glassItemBorderClasses)}
       >
-        <div className="min-w-0 space-y-2 px-3 py-2.5">
-          <div className="flex items-center justify-between gap-2">
+        <div className="min-w-0 max-w-full space-y-2 px-3 py-2.5">
+          <div className="flex min-w-0 items-center justify-between gap-2">
             <Ics202SectionHeader
               sectionId="incident-info"
               title={ICS205A_SECTION_LABELS[section]}
@@ -156,9 +183,50 @@ export function Ics205aFormSections({
     )
   }
 
-  const contactSummary = (row: Ics205aContactRow) =>
-    [row.assignedPosition, row.name, row.contactMethods].filter(Boolean).join(' · ') ||
-    'No contact details'
+  const editingContacts = isSectionEditing(editingSections, 'local-communications-info')
+
+  const contactsToolbar = (
+    <div className="flex min-w-0 shrink flex-wrap items-center justify-end gap-2">
+      {editingContacts ? (
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          className="h-8 gap-1 text-xs"
+          onClick={fillContactsFromRoster}
+        >
+          <Sparkles className="h-3.5 w-3.5" />
+          Fill From Roster
+        </Button>
+      ) : null}
+      <ToggleGroup
+        type="single"
+        value={contactsViewMode}
+        onValueChange={(next) => {
+          if (next === 'list' || next === 'table') {
+            setContactsViewMode(next)
+          }
+        }}
+        variant="outline"
+        size="sm"
+        aria-label="Contacts view"
+      >
+        <ToggleGroupItem value="list" className="gap-1 px-2.5 text-xs">
+          <LayoutList className="h-3.5 w-3.5" />
+          List view
+        </ToggleGroupItem>
+        <ToggleGroupItem value="table" className="gap-1 px-2.5 text-xs">
+          <Table2 className="h-3.5 w-3.5" />
+          Table view
+        </ToggleGroupItem>
+      </ToggleGroup>
+      {editingContacts ? (
+        <Button type="button" size="sm" variant="outline" onClick={addContactRow}>
+          + Add Contact
+        </Button>
+      ) : null}
+    </div>
+  )
 
   return (
     <div className="space-y-3">
@@ -204,155 +272,29 @@ export function Ics205aFormSections({
 
       {renderSectionShell(
         'local-communications-info',
-        <div className="space-y-2">
-          {contactRows.length === 0 ? (
-            <p className="text-xs text-muted-foreground">No contacts recorded.</p>
+        <div className="min-w-0 max-w-full overflow-hidden">
+          {contactsViewMode === 'table' ? (
+            <Ics205aContactRowsTable
+              formId={form.id}
+              contactRows={contactRows}
+              editingContacts={editingContacts}
+              optionsInput={contactRowOptionsInput}
+              onPatchRow={patchContactRow}
+              onDeleteRow={deleteContactRow}
+            />
           ) : (
-            contactRows.map((row, index) => {
-              const contactKey = `${form.id}-${row.id}`
-              const isOpen = expandedContactKey === contactKey
-              const editingContacts = isSectionEditing(editingSections, 'local-communications-info')
-              return (
-                <Item
-                  key={row.id}
-                  variant="outline"
-                  className={cn(
-                    'relative min-w-0 w-full max-w-full flex-col items-stretch overflow-hidden p-0 [contain:layout]',
-                    glassItemBorderClasses
-                  )}
-                >
-                  <Collapsible
-                    open={isOpen}
-                    onOpenChange={(open) => setExpandedContactKey(open ? contactKey : null)}
-                  >
-                    <div className="relative px-3 py-2.5 pr-12">
-                      <ItemContent className="min-w-0">
-                        <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                          Contact {index + 1}
-                          {row.assignedPosition.trim() ? ` · ${row.assignedPosition}` : ''}
-                        </p>
-                        {editingContacts ? (
-                          <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
-                            <input
-                              value={row.assignedPosition}
-                              onChange={(event) =>
-                                patchContactRow(row.id, 'assignedPosition', event.target.value)
-                              }
-                              placeholder="Incident Assigned Position"
-                              className="h-8 rounded-md border bg-transparent px-2 text-xs outline-none"
-                            />
-                            <input
-                              value={row.name}
-                              onChange={(event) =>
-                                patchContactRow(row.id, 'name', event.target.value)
-                              }
-                              placeholder="Name"
-                              className="h-8 rounded-md border bg-transparent px-2 text-xs outline-none"
-                            />
-                            <input
-                              value={row.contactMethods}
-                              onChange={(event) =>
-                                patchContactRow(row.id, 'contactMethods', event.target.value)
-                              }
-                              placeholder="Methods of Contact"
-                              className="h-8 rounded-md border bg-transparent px-2 text-xs outline-none"
-                            />
-                          </div>
-                        ) : (
-                          <Ics202ReadOnlyField value={contactSummary(row)} />
-                        )}
-                      </ItemContent>
-                      <ItemActions className="absolute right-3 top-1/2 w-8 -translate-y-1/2 justify-end">
-                        {editingContacts ? (
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            aria-label="Delete contact"
-                            className="h-8 w-8 text-destructive hover:text-destructive"
-                            onClick={() => deleteContactRow(row.id)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        ) : (
-                          <CollapsibleTrigger asChild>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon"
-                              aria-label="Toggle contact details"
-                            >
-                              <ChevronDown
-                                className={cn(
-                                  'h-4 w-4 transition-transform',
-                                  isOpen && 'rotate-180'
-                                )}
-                              />
-                            </Button>
-                          </CollapsibleTrigger>
-                        )}
-                      </ItemActions>
-                    </div>
-                    <CollapsibleContent>
-                      <div className="min-w-0 max-w-full space-y-2 border-t px-3 py-2.5 pr-6">
-                        <div className="space-y-1">
-                          <Ics202FieldLabel>Incident Assigned Position</Ics202FieldLabel>
-                          {editingContacts ? (
-                            <input
-                              value={row.assignedPosition}
-                              onChange={(event) =>
-                                patchContactRow(row.id, 'assignedPosition', event.target.value)
-                              }
-                              className="h-8 w-full rounded-md border bg-transparent px-2 text-xs outline-none"
-                            />
-                          ) : (
-                            <Ics202ReadOnlyField value={row.assignedPosition} />
-                          )}
-                        </div>
-                        <div className="space-y-1">
-                          <Ics202FieldLabel>Name</Ics202FieldLabel>
-                          {editingContacts ? (
-                            <input
-                              value={row.name}
-                              onChange={(event) =>
-                                patchContactRow(row.id, 'name', event.target.value)
-                              }
-                              className="h-8 w-full rounded-md border bg-transparent px-2 text-xs outline-none"
-                            />
-                          ) : (
-                            <Ics202ReadOnlyField value={row.name} />
-                          )}
-                        </div>
-                        <div className="space-y-1">
-                          <Ics202FieldLabel>
-                            Methods of Contact (phone, pager, cell, radio, etc.)
-                          </Ics202FieldLabel>
-                          {editingContacts ? (
-                            <Textarea
-                              value={row.contactMethods}
-                              onChange={(event) =>
-                                patchContactRow(row.id, 'contactMethods', event.target.value)
-                              }
-                              className="min-h-12 text-xs"
-                              placeholder="Phone, pager, cell, radio, etc."
-                            />
-                          ) : (
-                            <Ics202ReadOnlyTextBlock value={row.contactMethods} />
-                          )}
-                        </div>
-                      </div>
-                    </CollapsibleContent>
-                  </Collapsible>
-                </Item>
-              )
-            })
+            <Ics205aContactRowsList
+              formId={form.id}
+              contactRows={contactRows}
+              editingContacts={editingContacts}
+              glassItemBorderClasses={glassItemBorderClasses}
+              optionsInput={contactRowOptionsInput}
+              onPatchRow={patchContactRow}
+              onDeleteRow={deleteContactRow}
+            />
           )}
         </div>,
-        isSectionEditing(editingSections, 'local-communications-info') ? (
-          <Button type="button" size="sm" variant="outline" onClick={addContactRow}>
-            + Add Contact
-          </Button>
-        ) : null
+        contactsToolbar
       )}
 
       {renderSectionShell(
