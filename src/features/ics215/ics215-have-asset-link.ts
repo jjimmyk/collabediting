@@ -258,13 +258,15 @@ export { normalizeNeedLinkFields } from '@/features/ics215/ics215-need-asset-req
 export function partitionHaveLinkRefs(
   eligibleOptions: WorkAssignmentTargetOption[],
   linkedRefs: string[],
-  nextOpEligibleRefs?: Set<string>
+  nextOpEligibleRefs?: Set<string>,
+  workspaceAssignedRefs?: Set<string>
 ): {
   available: WorkAssignmentTargetOption[]
   staleRefs: string[]
 } {
   const optionByValue = new Map(eligibleOptions.map((option) => [option.value, option]))
   const staleRefs = linkedRefs.filter((ref) => {
+    if (workspaceAssignedRefs?.has(ref)) return false
     if (!optionByValue.has(ref)) return true
     if (nextOpEligibleRefs && !nextOpEligibleRefs.has(ref)) return true
     return false
@@ -273,6 +275,56 @@ export function partitionHaveLinkRefs(
     available: eligibleOptions,
     staleRefs,
   }
+}
+
+export function collectWorkspaceAssignedHaveRefs(
+  workspaceAssets: ResourceListItemData[],
+  haveLinkTargetOptions: WorkAssignmentTargetOption[]
+): Set<string> {
+  const refs = new Set<string>()
+  for (const asset of workspaceAssets) {
+    const assetKey = asset.assetKey.trim()
+    if (!assetKey) continue
+    refs.add(assetKeyToHaveRef(assetKey, haveLinkTargetOptions))
+  }
+  return refs
+}
+
+export function isHaveRefEligibleForConfirm(
+  ref: string,
+  input: {
+    nextOpEligibleRefs: Set<string>
+    workspaceAssignedRefs: Set<string>
+  }
+): boolean {
+  const normalized = ref.trim()
+  if (!normalized) return false
+  return (
+    input.nextOpEligibleRefs.has(normalized) || input.workspaceAssignedRefs.has(normalized)
+  )
+}
+
+export function filterHaveRefsEligibleForConfirm(
+  selectedRefs: string[],
+  input: {
+    nextOpEligibleRefs: Set<string>
+    workspaceAssignedRefs: Set<string>
+  }
+): { eligibleRefs: string[]; strippedRosterOnlyCount: number } {
+  const eligibleRefs: string[] = []
+  let strippedRosterOnlyCount = 0
+
+  for (const ref of selectedRefs) {
+    const normalized = ref.trim()
+    if (!normalized) continue
+    if (isHaveRefEligibleForConfirm(normalized, input)) {
+      eligibleRefs.push(normalized)
+      continue
+    }
+    strippedRosterOnlyCount += 1
+  }
+
+  return { eligibleRefs, strippedRosterOnlyCount }
 }
 
 export function resolveAssetKeyFromHaveRef(ref: string): string | null {

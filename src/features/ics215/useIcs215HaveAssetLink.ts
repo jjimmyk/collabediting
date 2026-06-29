@@ -11,6 +11,8 @@ import {
   assetKeyToHaveRef,
   buildHaveLinkIndex,
   clearHaveRosterLink,
+  collectWorkspaceAssignedHaveRefs,
+  filterHaveRefsEligibleForConfirm,
   getConflictingHaveRefs,
   getLinkedHaveRefs,
   partitionHaveLinkRefs,
@@ -100,6 +102,11 @@ export function useIcs215HaveRosterLink({
     })
     return collectNextOpHaveLinkRefsFromTree(tree)
   }, [assetsByKey, positionRosterEntries, roster, showPositionAssets])
+
+  const workspaceAssignedRefs = useMemo(
+    () => collectWorkspaceAssignedHaveRefs(workspaceAssets, baseHaveLinkTargetOptions),
+    [workspaceAssets, baseHaveLinkTargetOptions]
+  )
 
   const applyAndPersistDraft = useCallback(
     (nextDraft: Ics215WorkAssignmentsDraft, persistMessage?: string) => {
@@ -232,13 +239,16 @@ export function useIcs215HaveRosterLink({
         return
       }
 
-      const eligibleSelectedRefs = selectedRefs.filter((ref) => nextOpEligibleRefs.has(ref))
-      const strippedCount = selectedRefs.length - eligibleSelectedRefs.length
-      if (strippedCount > 0) {
+      const { eligibleRefs: eligibleSelectedRefs, strippedRosterOnlyCount } =
+        filterHaveRefsEligibleForConfirm(selectedRefs, {
+          nextOpEligibleRefs,
+          workspaceAssignedRefs,
+        })
+      if (strippedRosterOnlyCount > 0) {
         toast.info(
-          strippedCount === 1
+          strippedRosterOnlyCount === 1
             ? 'Removed 1 link that is not scheduled for next OP.'
-            : `Removed ${strippedCount} links that are not scheduled for next OP.`
+            : `Removed ${strippedRosterOnlyCount} links that are not scheduled for next OP.`
         )
       }
 
@@ -272,6 +282,7 @@ export function useIcs215HaveRosterLink({
       currentDraft,
       baseHaveLinkTargetOptions,
       nextOpEligibleRefs,
+      workspaceAssignedRefs,
       closeHaveLinkDialog,
       applyAndPersistDraft,
     ]
@@ -312,7 +323,8 @@ export function useIcs215HaveRosterLink({
   const { staleRefs } = partitionHaveLinkRefs(
     haveLinkTargetOptions,
     linkedRefs,
-    nextOpEligibleRefs
+    nextOpEligibleRefs,
+    workspaceAssignedRefs
   )
 
   const suggestedRefs = useMemo(

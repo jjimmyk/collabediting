@@ -5,12 +5,16 @@ import {
   applyManualHaveValue,
   buildHaveLinkIndex,
   clearHaveRosterLink,
+  collectWorkspaceAssignedHaveRefs,
+  filterHaveRefsEligibleForConfirm,
   formatHaveLinkLocation,
   getConflictingHaveRefs,
   getLinkedHaveRefs,
   isHaveLinkedToRoster,
+  isHaveRefEligibleForConfirm,
   isHaveRefLinkedElsewhere,
   normalizeIcs215ResourceValue,
+  partitionHaveLinkRefs,
   removeHaveRosterLinkRefs,
   resolveHaveDisplayValue,
 } from '@/features/ics215/ics215-have-asset-link'
@@ -77,6 +81,28 @@ const helicopter: ResourceListItemData = {
   pointOfContactMemberId: null,
   competencyFunction: null,
 }
+
+const boatAlpha: ResourceListItemData = {
+  ...helicopter,
+  assetKey: 'org-boat-alpha-24c74de0',
+  id: 2,
+  name: 'Boat Alpha',
+  type: 'Small Boat',
+  unitName: 'Boat Alpha',
+}
+
+const boatCharlie: ResourceListItemData = {
+  ...helicopter,
+  assetKey: 'org-boat-charlie-cb1fbeaa',
+  id: 3,
+  name: 'Boat Charlie',
+  type: 'Small Boat',
+  unitName: 'Boat Charlie',
+}
+
+const boatAlphaRef = 'org_chart_asset:org-boat-alpha-24c74de0'
+const boatCharlieRef = 'org_chart_asset:org-boat-charlie-cb1fbeaa'
+const scheduledMemberRef = 'member:member-2\x1eAir Ops Branch'
 
 const heloRef = 'org_chart_asset:helo-1'
 const positionRef = 'position:Air Ops Branch'
@@ -355,6 +381,94 @@ describe('ics215-have-roster-link', () => {
     const next = patchResourceValueInDraft(draft, 1, 'col-helo', linked)
     expect(next.workAssignments[0]?.resourceValues['col-helo']?.have).toBe('1')
     expect(next.workAssignments[0]?.resourceValues['col-helo']?.linkedHaveRefs).toEqual([heloRef])
+  })
+})
+
+describe('ics215-have-workspace-asset-eligibility', () => {
+  it('collects workspace-assigned asset refs via assetKeyToHaveRef', () => {
+    const refs = collectWorkspaceAssignedHaveRefs(
+      [boatAlpha, boatCharlie],
+      sampleHaveLinkOptions
+    )
+
+    expect(refs.has(boatAlphaRef)).toBe(true)
+    expect(refs.has(boatCharlieRef)).toBe(true)
+  })
+
+  it('allows workspace-assigned asset refs on confirm without next-OP scheduling', () => {
+    const nextOpEligibleRefs = new Set<string>()
+    const workspaceAssignedRefs = collectWorkspaceAssignedHaveRefs(
+      [boatAlpha, boatCharlie],
+      sampleHaveLinkOptions
+    )
+
+    expect(
+      isHaveRefEligibleForConfirm(boatAlphaRef, {
+        nextOpEligibleRefs,
+        workspaceAssignedRefs,
+      })
+    ).toBe(true)
+
+    const filtered = filterHaveRefsEligibleForConfirm([boatAlphaRef, boatCharlieRef], {
+      nextOpEligibleRefs,
+      workspaceAssignedRefs,
+    })
+
+    expect(filtered.eligibleRefs).toEqual([boatAlphaRef, boatCharlieRef])
+    expect(filtered.strippedRosterOnlyCount).toBe(0)
+  })
+
+  it('still requires next-OP scheduling for roster-only refs', () => {
+    const nextOpEligibleRefs = new Set<string>([memberRef])
+    const workspaceAssignedRefs = collectWorkspaceAssignedHaveRefs(
+      [boatAlpha],
+      sampleHaveLinkOptions
+    )
+
+    expect(
+      isHaveRefEligibleForConfirm(scheduledMemberRef, {
+        nextOpEligibleRefs,
+        workspaceAssignedRefs,
+      })
+    ).toBe(false)
+
+    const filtered = filterHaveRefsEligibleForConfirm(
+      [boatAlphaRef, scheduledMemberRef],
+      {
+        nextOpEligibleRefs,
+        workspaceAssignedRefs,
+      }
+    )
+
+    expect(filtered.eligibleRefs).toEqual([boatAlphaRef])
+    expect(filtered.strippedRosterOnlyCount).toBe(1)
+  })
+
+  it('does not mark workspace-assigned asset refs stale when absent from nextOpEligibleRefs', () => {
+    const workspaceAssignedRefs = collectWorkspaceAssignedHaveRefs(
+      [boatAlpha],
+      sampleHaveLinkOptions
+    )
+    const { staleRefs } = partitionHaveLinkRefs(
+      sampleHaveLinkOptions,
+      [boatAlphaRef],
+      new Set<string>(),
+      workspaceAssignedRefs
+    )
+
+    expect(staleRefs).toEqual([])
+  })
+
+  it('marks workspace asset refs stale when no longer assigned to workspace', () => {
+    const workspaceAssignedRefs = collectWorkspaceAssignedHaveRefs([], sampleHaveLinkOptions)
+    const { staleRefs } = partitionHaveLinkRefs(
+      sampleHaveLinkOptions,
+      [boatAlphaRef],
+      new Set<string>(),
+      workspaceAssignedRefs
+    )
+
+    expect(staleRefs).toEqual([boatAlphaRef])
   })
 })
 
