@@ -3,6 +3,9 @@ import {
   getMapFeatureLabel,
 } from '@/features/exercise-msel/msel-geometry-utils'
 import type { MselMapFeature } from '@/features/exercise-msel/types'
+import Point from '@arcgis/core/geometry/Point'
+import Polygon from '@arcgis/core/geometry/Polygon'
+import * as webMercatorUtils from '@arcgis/core/geometry/support/webMercatorUtils'
 import type {
   Ics215aIncidentArea,
   Ics215aLocationByPositionEntry,
@@ -102,6 +105,52 @@ export function parsePolygonCoordinatesText(text: string): MselMapFeature[] {
   ]
 }
 
+function toGeographicPolygon(polygon: Polygon): Polygon {
+  if (polygon.spatialReference?.isWebMercator) {
+    return webMercatorUtils.webMercatorToGeographic(polygon) as Polygon
+  }
+  return polygon
+}
+
+function ringLooksLikeWebMercator(ring: number[][]): boolean {
+  return ring.some(
+    ([longitude, latitude]) =>
+      Math.abs(longitude) > 180 || Math.abs(latitude) > 90
+  )
+}
+
+function normalizePolygonRings(rawRings: unknown): number[][][] {
+  const rings = (Array.isArray(rawRings) ? rawRings : [])
+    .filter((ring): ring is unknown[] => Array.isArray(ring))
+    .map((ring) =>
+      ring
+        .map((vertex) =>
+          typeof vertex === 'string'
+            ? parseCoordinatePair(vertex)
+            : Array.isArray(vertex)
+              ? parseCoordinatePair(vertex.join(','))
+              : null
+        )
+        .filter((pair): pair is [number, number] => pair !== null)
+    )
+    .filter((ring) => ring.length >= 3)
+
+  if (rings.length === 0) {
+    return []
+  }
+
+  if (!ringLooksLikeWebMercator(rings[0] ?? [])) {
+    return rings
+  }
+
+  const projected = new Polygon({
+    rings,
+    spatialReference: { wkid: 3857 },
+  })
+  const geographic = toGeographicPolygon(projected)
+  return geographic.rings.filter((ring) => ring.length >= 3)
+}
+
 function normalizeMapFeatures(raw: unknown): MselMapFeature[] {
   if (!Array.isArray(raw)) {
     return []
@@ -126,21 +175,7 @@ function normalizeMapFeatures(raw: unknown): MselMapFeature[] {
     }
 
     if (record.type === 'polygon' && Array.isArray(record.rings)) {
-      const rings = record.rings
-        .filter((ring): ring is unknown[] => Array.isArray(ring))
-        .map((ring) =>
-          ring
-            .map((vertex) =>
-              typeof vertex === 'string'
-                ? parseCoordinatePair(vertex)
-                : Array.isArray(vertex)
-                  ? parseCoordinatePair(vertex.join(','))
-                  : null
-            )
-            .filter((pair): pair is [number, number] => pair !== null)
-        )
-        .filter((ring) => ring.length >= 3)
-
+      const rings = normalizePolygonRings(record.rings)
       if (rings.length > 0) {
         features.push({ id, type: 'polygon', rings })
       }
@@ -326,4 +361,56 @@ export function createMapFeaturesFromSketchSummary(input: {
     ],
     geometrySummary: `Polygon selected near ${input.latitude.toFixed(5)}, ${input.longitude.toFixed(5)}`,
   }
+}
+
+function ringToLngLatPairs(ring: number[][]): Array<[number, number]> {
+  const trimmed =
+    ring.length >= 2 &&
+    ring[0]?.[0] === ring[ring.length - 1]?.[0] &&
+    ring[0]?.[1] === ring[ring.length - 1]?.[1]
+      ? ring.slice(0, -1)
+      : ring
+
+  return trimmed
+    .filter((pair) => Array.isArray(pair) && pair.length >= 2)
+    .map((pair) => [Number(pair[0]), Number(pair[1])] as [number, number])
+    .filter(
+      ([longitude, latitude]) =>
+        Number.isFinite(longitude) &&
+        Number.isFinite(latitude) &&
+        longitude >= -180 &&
+        longitude <= 180 &&
+        latitude >= -90 &&
+        latitude <= 90
+    )
+}
+
+export function createMapFeaturesFromArcGisGeometry(
+  geometry: Point | Polygon
+): { mapFeatures: MselMapFeature[]; geometrySummary: string } {
+  if (geometry.type === 'point') {
+    const point = geometry as Point
+    if (point.latitude == null || point.longitude == null) {
+      return { mapFeatures: [], geometrySummary: 'Point selected' }
+    }
+    return createMapFeaturesFromSketchSummary({
+      mode: 'point',
+      latitude: point.latitude,
+      longitude: point.longitude,
+    })
+  }
+
+  if (geometry.type === 'polygon') {
+    const geographic = toGeographicPolygon(geometry as Polygon)
+    const ring = ringToLngLatPairs(geographic.rings[0] ?? [])
+    const centroid = geographic.extent?.center
+    return createMapFeaturesFromSketchSummary({
+      mode: 'polygon',
+      latitude: centroid?.latitude ?? ring[0]?.[1] ?? 0,
+      longitude: centroid?.longitude ?? ring[0]?.[0] ?? 0,
+      polygonRing: ring,
+    })
+  }
+
+  return { mapFeatures: [], geometrySummary: '' }
 }

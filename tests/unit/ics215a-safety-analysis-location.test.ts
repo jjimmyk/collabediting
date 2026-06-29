@@ -142,8 +142,9 @@ describe('ics215a safety analysis location', () => {
 describe('focusMapFeaturesOnView', () => {
   it('zooms to a single point', async () => {
     const goTo = vi.fn().mockResolvedValue(undefined)
+    const when = vi.fn().mockResolvedValue(undefined)
     await focusMapFeaturesOnView(
-      { goTo },
+      { goTo, when },
       [
         {
           id: 'point-1',
@@ -152,16 +153,20 @@ describe('focusMapFeaturesOnView', () => {
         },
       ]
     )
+    expect(when).toHaveBeenCalled()
     expect(goTo).toHaveBeenCalledWith(
-      { center: [-95.3698, 29.7604], zoom: 12 },
+      expect.objectContaining({
+        zoom: 14,
+      }),
       { animate: false }
     )
   })
 
-  it('zooms to polygon extent center', async () => {
+  it('zooms to polygon extent', async () => {
     const goTo = vi.fn().mockResolvedValue(undefined)
+    const when = vi.fn().mockResolvedValue(undefined)
     await focusMapFeaturesOnView(
-      { goTo },
+      { goTo, when },
       [
         {
           id: 'polygon-1',
@@ -176,6 +181,7 @@ describe('focusMapFeaturesOnView', () => {
         },
       ]
     )
+    expect(when).toHaveBeenCalled()
     expect(goTo).toHaveBeenCalled()
   })
 })

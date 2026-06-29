@@ -456,10 +456,10 @@ import {
 import {
   buildIcs215aLocationsByPosition,
   createDefaultIcs215aLocation,
+  createMapFeaturesFromArcGisGeometry,
   getIcs215aLocationMapFeatures,
-  createMapFeaturesFromSketchSummary,
 } from '@/features/ics215a/location-utils'
-import { focusMapFeaturesOnView } from '@/lib/map-feature-focus'
+import { focusMapFeaturesOnView, waitForMapView } from '@/lib/map-feature-focus'
 import { useIcs215aWorkspaceForm } from '@/hooks/useIcs215aWorkspaceForm'
 import { ICS205_SECTION_PROMPTS } from '@/features/ics205/constants'
 import { Ics205WorkspacePanel } from '@/features/ics205/Ics205WorkspacePanel'
@@ -14206,7 +14206,7 @@ function App() {
     return buildIcs215aLocationsByPosition(exportForm.safetyAnalysisRows)
   }, [displayIcs215aForm, ics215aSectionDrafts])
   const focusIcs215aRowOnMap = useCallback(
-    (rowId: number) => {
+    async (rowId: number) => {
       if (!displayIcs215aForm) {
         return
       }
@@ -14221,10 +14221,20 @@ function App() {
       }
       setIcs215aZoomTargetRowId(rowId)
       setIsMapVisible(true)
-      void focusMapFeaturesOnView(mapViewRef.current, features, {
-        padding: getMapViewportPadding(),
-        animate: false,
-      })
+
+      const view = await waitForMapView(() => mapViewRef.current)
+      if (!view) {
+        return
+      }
+
+      view.padding = getMapViewportPadding()
+      await focusMapFeaturesOnView(view, features, { animate: false })
+
+      if (features.length === 1 && features[0]?.type === 'point') {
+        await alignMapPointInVisibleArea(view, features[0].coordinates, 0.68)
+      } else {
+        scheduleHubMapViewLayoutRefresh(view, getMapViewportPadding)
+      }
     },
     [displayIcs215aForm, ics215aSectionDrafts, getMapViewportPadding]
   )
@@ -14612,41 +14622,10 @@ function App() {
         layer.add(event.graphic)
 
         const geometry = event.graphic.geometry
-        if (geometry.type === 'point') {
-          const point = geometry as Point
-          if (point.latitude == null || point.longitude == null) {
-            updateRowLocationFromDraw([], 'Point selected')
-            setIcs215aDrawTarget(null)
-            return
-          }
-          const { mapFeatures, geometrySummary } = createMapFeaturesFromSketchSummary({
-            mode: 'point',
-            latitude: point.latitude,
-            longitude: point.longitude,
-          })
-          updateRowLocationFromDraw(mapFeatures, geometrySummary)
-          setIcs215aDrawTarget(null)
-          return
-        }
-
-        if (geometry.type === 'polygon') {
-          const polygon = geometry as Polygon
-          const ring =
-            polygon.rings?.[0]
-              ?.filter(
-                (pair: number[]): pair is [number, number] =>
-                  Array.isArray(pair) && pair.length >= 2
-              )
-              .map((pair) => [pair[0], pair[1]] as [number, number]) ?? []
-          const centroid = geometry.extent?.center
-          const latitude = centroid?.latitude ?? 0
-          const longitude = centroid?.longitude ?? 0
-          const { mapFeatures, geometrySummary } = createMapFeaturesFromSketchSummary({
-            mode: 'polygon',
-            latitude,
-            longitude,
-            polygonRing: ring,
-          })
+        if (geometry.type === 'point' || geometry.type === 'polygon') {
+          const { mapFeatures, geometrySummary } = createMapFeaturesFromArcGisGeometry(
+            geometry as Point | Polygon
+          )
           updateRowLocationFromDraw(mapFeatures, geometrySummary)
           setIcs215aDrawTarget(null)
         }
