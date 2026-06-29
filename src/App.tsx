@@ -10982,6 +10982,7 @@ function App() {
   const userVisibleNotifications = notifications.filter((item) =>
     isNotificationVisibleToUser(item, profileEmail)
   )
+  const userVisibleNotificationCount = userVisibleNotifications.length
   const searchFilteredNotifications = userVisibleNotifications.filter((item) => {
     if (!normalizedQuery) {
       return true
@@ -27768,14 +27769,28 @@ function App() {
                       <TooltipTrigger asChild>
                         <Button
                           type="button"
-                          size="icon"
+                          size="sm"
                           variant={isGlassMode ? 'outline' : activeTab === 'notifications' ? 'default' : 'outline'}
-                          className={selectedGlassTabClasses(activeTab === 'notifications')}
+                          className={cn(
+                            'gap-1 px-2',
+                            selectedGlassTabClasses(activeTab === 'notifications')
+                          )}
                           onClick={() => setActiveTab('notifications')}
-                          aria-label="Open Notifications tab"
+                          aria-label={
+                            userVisibleNotificationCount > 0
+                              ? `Open Notifications tab (${userVisibleNotificationCount} notifications)`
+                              : 'Open Notifications tab'
+                          }
                           data-hub-tutorial="notifications-tab"
                         >
-                          <Bell className="h-4 w-4" />
+                          {userVisibleNotificationCount > 0 ? (
+                            <span className="flex h-4 min-w-4 shrink-0 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-semibold leading-none text-destructive-foreground">
+                              {userVisibleNotificationCount > 99
+                                ? '99+'
+                                : userVisibleNotificationCount}
+                            </span>
+                          ) : null}
+                          <Bell className="h-4 w-4 shrink-0" />
                         </Button>
                       </TooltipTrigger>
                       <TooltipContent side="bottom" sideOffset={6}>Notifications</TooltipContent>
