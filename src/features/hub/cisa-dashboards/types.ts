@@ -41,16 +41,26 @@ export type HubDashboardTableWidget = {
   rows: string[][]
 }
 
+export type HubDashboardTimelineSegmentsWidget = {
+  kind: 'timeline-segments'
+  id: string
+  title: string
+  description?: string
+  segments: Array<{ label: string; duration: string; detail?: string }>
+}
+
 export type HubDashboardWidget =
   | HubDashboardKpiWidget
   | HubDashboardBarChartWidget
   | HubDashboardCategoryBarsWidget
   | HubDashboardTableWidget
+  | HubDashboardTimelineSegmentsWidget
 
 export type HubCisaDashboardDefinition = {
   id: HubCisaDashboardId
   label: string
   description: string
+  audience?: string
   widgets: HubDashboardWidget[]
 }
 

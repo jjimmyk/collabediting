@@ -10,6 +10,7 @@ import type {
   HubDashboardCategoryBarsWidget,
   HubDashboardKpiWidget,
   HubDashboardTableWidget,
+  HubDashboardTimelineSegmentsWidget,
   HubDashboardWidget,
 } from '@/features/hub/cisa-dashboards/types'
 import { cn } from '@/lib/utils'
@@ -87,6 +88,40 @@ function CategoryBarsWidget({ widget }: { widget: HubDashboardCategoryBarsWidget
   )
 }
 
+function TimelineSegmentsWidget({ widget }: { widget: HubDashboardTimelineSegmentsWidget }) {
+  return (
+    <section className="rounded-md border bg-muted/10 p-3">
+      <p className="text-xs font-medium">{widget.title}</p>
+      {widget.description ? (
+        <p className="text-[10px] text-muted-foreground">{widget.description}</p>
+      ) : null}
+      <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-stretch">
+        {widget.segments.map((segment, index) => (
+          <div key={segment.label} className="flex min-w-0 flex-1 items-stretch gap-2">
+            <div className="min-w-0 flex-1 rounded-md border bg-muted/20 px-3 py-2.5">
+              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                {segment.label}
+              </p>
+              <p className="mt-1 text-lg font-semibold tabular-nums">{segment.duration}</p>
+              {segment.detail ? (
+                <p className="mt-0.5 text-[10px] text-muted-foreground">{segment.detail}</p>
+              ) : null}
+            </div>
+            {index < widget.segments.length - 1 ? (
+              <div
+                className="hidden shrink-0 items-center text-muted-foreground sm:flex"
+                aria-hidden="true"
+              >
+                →
+              </div>
+            ) : null}
+          </div>
+        ))}
+      </div>
+    </section>
+  )
+}
+
 function TableWidget({ widget }: { widget: HubDashboardTableWidget }) {
   return (
     <section className="overflow-hidden rounded-md border bg-muted/10">
@@ -134,6 +169,8 @@ function renderWidget(widget: HubDashboardWidget) {
       return <CategoryBarsWidget key={widget.id} widget={widget} />
     case 'table':
       return <TableWidget key={widget.id} widget={widget} />
+    case 'timeline-segments':
+      return <TimelineSegmentsWidget key={widget.id} widget={widget} />
     default:
       return null
   }

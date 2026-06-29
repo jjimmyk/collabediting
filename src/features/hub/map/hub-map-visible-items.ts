@@ -1,5 +1,6 @@
 import { getHubAorBoundaryDefinition, HUB_AOR_BOUNDARY_CATALOG } from '@/features/hub/aor/hub-aor-boundary-geometries'
 import type { HubAorBoundaryLevel } from '@/features/hub/aor/hub-aor-boundary-types'
+import { GEOSPATIAL_COP_AIS_LAYER } from '@/features/hub/cisa-dashboards/geospatial-cop-dashboard-data'
 import {
   getWeatherLayerDefinition,
   HUB_WEATHER_LAYER_CATALOG,
@@ -8,7 +9,7 @@ import {
 } from '@/features/hub/map-layers/weather-layer-catalog'
 import type { WeatherLayerStatus } from '@/features/hub/map-layers/useHubWeatherMapLayers'
 
-export type HubMapVisibleItemSource = 'weather' | 'aor'
+export type HubMapVisibleItemSource = 'weather' | 'aor' | 'geospatial-cop'
 
 export type HubMapVisibleItemKind =
   | 'map-layer'
@@ -63,8 +64,10 @@ function aorTypeLabel(level: HubAorBoundaryLevel): string {
 }
 
 function compareVisibleItems(left: HubMapVisibleItem, right: HubMapVisibleItem): number {
-  if (left.source !== right.source) {
-    return left.source === 'aor' ? -1 : 1
+  const leftSourceOrder = left.source === 'aor' ? 0 : 1
+  const rightSourceOrder = right.source === 'aor' ? 0 : 1
+  if (leftSourceOrder !== rightSourceOrder) {
+    return leftSourceOrder - rightSourceOrder
   }
 
   if (left.source === 'aor' && right.source === 'aor') {
@@ -94,7 +97,8 @@ function compareVisibleItems(left: HubMapVisibleItem, right: HubMapVisibleItem):
 export function buildHubMapVisibleItems(
   enabledWeatherLayerIds: Set<string>,
   enabledAorBoundaryIds: Set<string>,
-  weatherLayerStatuses: Record<string, WeatherLayerStatus> = {}
+  weatherLayerStatuses: Record<string, WeatherLayerStatus> = {},
+  geospatialCopAisLayerEnabled = false
 ): HubMapVisibleItem[] {
   const items: HubMapVisibleItem[] = []
 
@@ -134,6 +138,17 @@ export function buildHubMapVisibleItems(
       status: status === 'idle' ? undefined : status,
     })
   })
+
+  if (geospatialCopAisLayerEnabled) {
+    items.push({
+      id: GEOSPATIAL_COP_AIS_LAYER.id,
+      label: GEOSPATIAL_COP_AIS_LAYER.label,
+      kind: 'map-layer',
+      typeLabel: 'Map Layer',
+      groupLabel: 'National Geospatial COP',
+      source: 'geospatial-cop',
+    })
+  }
 
   return items.sort(compareVisibleItems)
 }

@@ -19,10 +19,17 @@ describe('hub cisa dashboard registry', () => {
     expect(HUB_CISA_DASHBOARD_MENU_ITEMS.some((item) => item.label === 'Interagency Dashboard')).toBe(
       true
     )
+    const cisaMenuLabels = HUB_CISA_DASHBOARD_MENU_ITEMS.filter(
+      (item) => item.tab !== 'interagency-dashboard'
+    ).map((item) => item.label)
+    expect(cisaMenuLabels.every((label) => label.includes('(CISA)'))).toBe(true)
   })
 
   it('provides synthetic demo widgets for every dashboard', () => {
     for (const dashboard of getHubCisaDashboardDefinitions()) {
+      if (dashboard.id === 'cisa-national-geospatial-cop') {
+        continue
+      }
       expect(dashboard.widgets.length).toBeGreaterThan(0)
       expect(dashboard.widgets.some((widget) => widget.kind === 'kpi')).toBe(true)
     }

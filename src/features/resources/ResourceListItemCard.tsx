@@ -16,7 +16,7 @@ import {
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { Item, ItemActions, ItemContent, ItemTitle } from '@/components/ui/item'
-import { AssetListHeaderRow, ASSET_LIST_ROW_GRID_CLASS } from '@/features/resources/AssetListHeaderRow'
+import { AssetListHeaderRow, ASSET_LIST_ROW_GRID_CLASS, ASSET_LIST_STATUS_CELL_CLASS } from '@/features/resources/AssetListHeaderRow'
 import { AssetStatusIndicator } from '@/features/resources/AssetStatusIndicator'
 import { AlmisDataSourceIcon } from '@/features/resources/AlmisDataSourceIcon'
 import type { AssetWorkspaceOption, ResourceCostUnitType, ResourceListItemData } from '@/features/resources/types'
@@ -270,42 +270,47 @@ export function ResourceListItemCard({
                 className={ASSET_LIST_ROW_GRID_CLASS}
                 aria-label={`Asset status: ${resource.assetStatus}, last updated ${resource.assetStatusUpdatedAt}`}
               >
-                <div className="min-w-0">
+                <div className="min-w-0 overflow-hidden">
                   {isEditing ? (
                     renderEditableInput('name', activeResource.name, { className: 'font-medium' })
                   ) : (
-                    <ItemTitle className="truncate">{resource.name}</ItemTitle>
+                    <ItemTitle className="block w-full min-w-0 truncate">{resource.name}</ItemTitle>
                   )}
                 </div>
-                <AssetStatusIndicator
-                  status={activeResource.assetStatus}
-                  showLabel={false}
-                  className="justify-self-center"
-                />
-                {isEditing && organizationManaged ? (
-                  <Select
-                    value={activeResource.assetStatus}
-                    onValueChange={(value) => patchDraft('assetStatus', value as AssetStatus)}
-                  >
-                    <SelectTrigger className="h-7 w-full text-[11px]">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {ASSET_STATUS_OPTIONS.map((status) => (
-                        <SelectItem key={status} value={status}>
-                          {status}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                ) : (
-                  <span className="text-xs font-normal tabular-nums text-muted-foreground whitespace-nowrap">
-                    {activeResource.assetStatusUpdatedAt}
-                  </span>
-                )}
-                <span className="justify-self-center">
-                  {organizationManaged ? null : <AlmisDataSourceIcon />}
-                </span>
+                <div className={ASSET_LIST_STATUS_CELL_CLASS}>
+                  <AssetStatusIndicator
+                    status={activeResource.assetStatus}
+                    showLabel={false}
+                    className="shrink-0"
+                  />
+                  {isEditing && organizationManaged ? (
+                    <Select
+                      value={activeResource.assetStatus}
+                      onValueChange={(value) => patchDraft('assetStatus', value as AssetStatus)}
+                    >
+                      <SelectTrigger className="h-7 min-w-0 flex-1 text-[11px]">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {ASSET_STATUS_OPTIONS.map((status) => (
+                          <SelectItem key={status} value={status}>
+                            {status}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <span
+                      className="min-w-0 flex-1 truncate text-[11px] font-normal tabular-nums text-muted-foreground"
+                      title={activeResource.assetStatusUpdatedAt}
+                    >
+                      {activeResource.assetStatusUpdatedAt}
+                    </span>
+                  )}
+                  {organizationManaged ? null : (
+                    <AlmisDataSourceIcon className="shrink-0" />
+                  )}
+                </div>
               </div>
             )}
             {headerAddon}

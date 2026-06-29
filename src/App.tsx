@@ -54,6 +54,7 @@ import {
   Eye,
   EyeOff,
   FileText,
+  Flag,
   Folder,
   FolderOpen,
   History,
@@ -790,12 +791,16 @@ import { UscgInitialResponseTutorialWizard } from '@/features/uscg-workspace/Usc
 import { HubTutorialWizard } from '@/features/hub/HubTutorialWizard'
 import { HubMapLayersPanel } from '@/features/hub/map-layers/HubMapLayersPanel'
 import { HubCisaDashboardPanel } from '@/features/hub/cisa-dashboards/HubCisaDashboardPanel'
+import { PORT_OF_HOUSTON_OUTAGE_HUB_INCIDENT_ID } from '@/features/hub/cisa-dashboards/geospatial-cop-dashboard-data'
 import {
   getHubCisaDashboardLabel,
-  HUB_CISA_DASHBOARD_MENU_ITEMS,
   isHubCisaDashboardTab,
 } from '@/features/hub/cisa-dashboards/dashboard-registry'
 import { HubCisaDashboardIcon } from '@/features/hub/cisa-dashboards/HubCisaDashboardIcon'
+import { FeatureFlagsPage } from '@/features/hub/feature-flags/FeatureFlagsPage'
+import { getHubMoreMenuItems } from '@/features/hub/feature-flags/hub-menu'
+import { useFeatureFlags } from '@/features/hub/feature-flags/useFeatureFlags'
+import { useGeospatialCopMapLayer } from '@/features/hub/cisa-dashboards/useGeospatialCopMapLayer'
 import {
   applyLiveDistrictSummaryToGraphic,
   isHubAorBoundaryGraphicAttributes,
@@ -1464,6 +1469,7 @@ const INCIDENT_CATEGORY_OPTIONS = [
   'Refinery Operations',
   'Pipeline / Hazmat',
   'Severe Weather',
+  'Port & Energy Infrastructure',
   'Exercise',
 ] as const
 
@@ -1471,6 +1477,7 @@ const INCIDENT_CATEGORY_COLORS: Record<(typeof INCIDENT_CATEGORY_OPTIONS)[number
   'Refinery Operations': [220, 38, 38],
   'Pipeline / Hazmat': [234, 88, 12],
   'Severe Weather': [37, 99, 235],
+  'Port & Energy Infrastructure': [217, 119, 6],
   Exercise: [147, 51, 234],
 }
 
@@ -4362,17 +4369,6 @@ const WORKSPACE_MORE_MENU: Array<{ tab: LeftTab; label: string }> = [
   { tab: 'workspace-settings', label: 'Settings' },
 ]
 
-const HUB_MORE_MENU: Array<{ tab: LeftTab; label: string }> = [
-  { tab: 'analytics', label: 'Analytics' },
-  { tab: 'map-layers', label: 'Map Layers' },
-  { tab: 'seerist', label: 'Seerist' },
-  { tab: 'resources', label: 'Assets' },
-  { tab: 'exercises', label: 'Exercises' },
-  { tab: 'incident-list', label: 'Incidents' },
-  { tab: 'sitreps', label: 'SITREPs' },
-  ...HUB_CISA_DASHBOARD_MENU_ITEMS,
-]
-
 function formatWorkspaceDropdownTriggerLabel(menuLabel: string, selectedItemLabel: string | null) {
   if (!selectedItemLabel) return menuLabel
   return `${menuLabel} · ${selectedItemLabel}`
@@ -6566,6 +6562,7 @@ function App() {
     setActiveOrganizationId,
     signOut,
   } = useAuth()
+  const { flags: featureFlags, setFlag: setFeatureFlag, isCisaEnabled } = useFeatureFlags()
   const mapContainerRef = useRef<HTMLDivElement | null>(null)
   const leftPanelRef = useRef<HTMLDivElement | null>(null)
   const searchComponentRef = useRef<HTMLDivElement | null>(null)
@@ -6588,6 +6585,7 @@ function App() {
   const analyticsResolutionBulkZoomRecordsRef = useRef<AnalyticsSeedRecord[] | null>(null)
   const mapGraphicsRef = useRef(new globalThis.Map<string, Graphic>())
   const aorBoundaryGraphicsRef = useRef(new globalThis.Map<string, Graphic>())
+  const geospatialCopGraphicsRef = useRef(new globalThis.Map<string, Graphic>())
   const createIncidentMapContainerRef = useRef<HTMLDivElement | null>(null)
   const createIncidentMapViewRef = useRef<MapView | null>(null)
   const createIncidentDrawLayerRef = useRef<GraphicsLayer | null>(null)
@@ -7448,6 +7446,7 @@ function App() {
   const [isSearchExpanded, setIsSearchExpanded] = useState(false)
   const [isSearchResultsOpen, setIsSearchResultsOpen] = useState(false)
   const [isMapVisible, setIsMapVisible] = useState(true)
+  const [geospatialCopAisLayerEnabled, setGeospatialCopAisLayerEnabled] = useState(false)
   const [selectedSearchResult, setSelectedSearchResult] = useState<SearchResult | null>(null)
   const [appliedFilterQuery, setAppliedFilterQuery] = useState<string | null>(null)
   const [appliedFilterLabel, setAppliedFilterLabel] = useState<string | null>(null)
@@ -8701,6 +8700,24 @@ function App() {
         'United States Coast Guard weather cell, refinery EOC teams (TX/LA), MPLX control center, mutual-aid contractor pre-positioning, parish/county OEM liaisons',
       relatedEventIds: [1, 5],
     },
+    {
+      id: PORT_OF_HOUSTON_OUTAGE_HUB_INCIDENT_ID,
+      name: 'Port of Houston Outage',
+      type: 'Infrastructure Outage / Port Operations',
+      category: 'Port & Energy Infrastructure',
+      status: 'Active',
+      severity: 'High',
+      region: 'Houston Ship Channel · Port of Houston',
+      location: [-95.028, 29.618],
+      lead: 'USCG Sector Houston-Galveston · Port Houston · CenterPoint Energy',
+      startedAt: '2026-04-26 06:12 CDT',
+      lastUpdate: '2026-04-26 14:22 CDT',
+      summary:
+        'Regional power disruption and terminal automation loss affecting Houston Ship Channel loadout, Barbours Cut container gates, and Bayport chemical berth scheduling. Unified coordination with Port Houston, CenterPoint Energy transmission control, and maritime stakeholders; one-way vessel traffic management in effect.',
+      resourcesCommitted:
+        'USCG VTS Houston, Port Houston harbor security, CenterPoint Energy grid restoration, MPLX terminal liaison, Harris County OEM',
+      relatedEventIds: [],
+    },
   ])
   const [incidentEventFilters, setIncidentEventFilters] = useState<number[]>([])
   const [incidentCategoryFilters, setIncidentCategoryFilters] = useState<string[]>([])
@@ -9216,6 +9233,7 @@ function App() {
   const [eventBusinessUnitFilters, setEventBusinessUnitFilters] = useState<string[]>([])
   const [isEventsSettingsOpen, setIsEventsSettingsOpen] = useState(false)
   const [isNotificationSettingsOpen, setIsNotificationSettingsOpen] = useState(false)
+  const [isFeatureFlagsOpen, setIsFeatureFlagsOpen] = useState(false)
   const [workspaceSettingsDraft, setWorkspaceSettingsDraft] =
     useState<WorkspaceNameLocationDraft | null>(null)
   const [workspaceSettingsKind, setWorkspaceSettingsKind] = useState<'incident' | 'exercise'>(
@@ -10786,7 +10804,9 @@ function App() {
     scale = 50000
   ) => {
     const targetGraphic =
-      mapGraphicsRef.current.get(mapKey) ?? aorBoundaryGraphicsRef.current.get(mapKey)
+      mapGraphicsRef.current.get(mapKey) ??
+      aorBoundaryGraphicsRef.current.get(mapKey) ??
+      geospatialCopGraphicsRef.current.get(mapKey)
     if (!targetGraphic) {
       const view = mapViewRef.current
       if (!view) {
@@ -11908,15 +11928,19 @@ function App() {
         : selectedWorkspaceMoreMenuItem.label
       : null
   )
+  const hubMoreMenuItems = useMemo(
+    () => getHubMoreMenuItems(isCisaEnabled),
+    [isCisaEnabled]
+  )
   const selectedHubMoreMenuItem = useMemo(
     () =>
       isInWorkspaceContext
         ? null
-        : (HUB_MORE_MENU.find((item) => item.tab === activeTab) ?? null),
-    [activeTab, isInWorkspaceContext]
+        : (hubMoreMenuItems.find((item) => item.tab === activeTab) ?? null),
+    [activeTab, hubMoreMenuItems, isInWorkspaceContext]
   )
   const isHubMoreTabActive =
-    !isInWorkspaceContext && HUB_MORE_MENU.some((item) => item.tab === activeTab)
+    !isInWorkspaceContext && hubMoreMenuItems.some((item) => item.tab === activeTab)
   const hubMoreTriggerLabel = formatWorkspaceDropdownTriggerLabel(
     'More',
     selectedHubMoreMenuItem?.label ?? null
@@ -12003,6 +12027,31 @@ function App() {
     mselViewTab === 'schedule' &&
     activeTab === 'msel' &&
     isMapVisible
+  const showGeospatialCopMapLayer =
+    isCisaEnabled &&
+    !isInWorkspaceContext &&
+    activeTab === 'cisa-national-geospatial-cop' &&
+    isMapVisible
+  useEffect(() => {
+    if (!isCisaEnabled && isHubCisaDashboardTab(activeTab)) {
+      setActiveTab('incident-list')
+    }
+  }, [activeTab, isCisaEnabled])
+  useEffect(() => {
+    if (!isCisaEnabled) {
+      setGeospatialCopAisLayerEnabled(false)
+    }
+  }, [isCisaEnabled])
+  useEffect(() => {
+    if (!isInWorkspaceContext && activeTab === 'cisa-national-geospatial-cop') {
+      setIsMapVisible(true)
+    }
+  }, [activeTab, isInWorkspaceContext])
+  useEffect(() => {
+    if (activeTab !== 'cisa-national-geospatial-cop') {
+      setGeospatialCopAisLayerEnabled(false)
+    }
+  }, [activeTab])
   useEffect(() => {
     if (activeTab !== 'msel' || !isActiveTabletopExerciseWorkspace || mselViewTab !== 'schedule') {
       setActiveMselPlacementInjectId(null)
@@ -12180,6 +12229,12 @@ function App() {
     enabledBoundaryIds: enabledAorBoundaryIds,
     boundaryGraphicsRef: aorBoundaryGraphicsRef,
   })
+  useGeospatialCopMapLayer({
+    enabled: showGeospatialCopMapLayer,
+    aisLayerEnabled: geospatialCopAisLayerEnabled,
+    mapViewRef,
+    graphicsRef: geospatialCopGraphicsRef,
+  })
   const toggleAorBoundary = useCallback((boundaryId: string, checked: boolean) => {
     setEnabledAorBoundaryIds((previous) => {
       const next = applyHubAorBoundaryToggle(previous, boundaryId, checked)
@@ -12200,11 +12255,17 @@ function App() {
       buildHubMapVisibleItems(
         enabledWeatherLayerIds,
         enabledAorBoundaryIds,
-        weatherLayerStatuses
+        weatherLayerStatuses,
+        geospatialCopAisLayerEnabled
       ),
-    [enabledWeatherLayerIds, enabledAorBoundaryIds, weatherLayerStatuses]
+    [enabledWeatherLayerIds, enabledAorBoundaryIds, weatherLayerStatuses, geospatialCopAisLayerEnabled]
   )
   const handleRemoveHubMapVisibleItem = useCallback((item: HubMapVisibleItem) => {
+    if (item.source === 'geospatial-cop') {
+      setGeospatialCopAisLayerEnabled(false)
+      return
+    }
+
     if (item.source === 'weather') {
       setEnabledWeatherLayerIds((previous) => {
         const next = new Set(previous)
@@ -12224,6 +12285,7 @@ function App() {
   const handleClearAllHubMapVisibleItems = useCallback(() => {
     hideAllWeatherMapLayers()
     hideAllAorBoundaries()
+    setGeospatialCopAisLayerEnabled(false)
   }, [hideAllAorBoundaries, hideAllWeatherMapLayers])
   const activeLocalRosterPlan =
     activeWorkspaceRosterKey !== null
@@ -18036,7 +18098,7 @@ function App() {
     return [
       {
         heading: 'More',
-        items: HUB_MORE_MENU.map((item) => ({
+        items: hubMoreMenuItems.map((item) => ({
           id: item.tab,
           value: item.label,
           label: item.label,
@@ -18058,11 +18120,11 @@ function App() {
             <AlertTriangle className="h-4 w-4" />
           ),
           isSelected: activeTab === item.tab,
-          onSelect: () => setActiveTab(item.tab),
+          onSelect: () => setActiveTab(item.tab as LeftTab),
         })),
       },
     ]
-  }, [activeTab, isInWorkspaceContext])
+  }, [activeTab, hubMoreMenuItems, isInWorkspaceContext])
   const handleWorkspaceSettingsSave = async () => {
     if (!workspaceSettingsDraft) {
       return
@@ -27332,6 +27394,15 @@ function App() {
                   <DropdownMenuSeparator />
                   <DropdownMenuItem
                     onClick={() => {
+                      setIsFeatureFlagsOpen(true)
+                    }}
+                  >
+                    <Flag className="mr-2 h-4 w-4" />
+                    Feature Flags
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onClick={() => {
                       void signOut()
                     }}
                   >
@@ -27749,6 +27820,7 @@ function App() {
                     activeTab === 'workspace-settings' ||
                     activeTab === 'notifications' ||
                     isNotificationSettingsOpen ||
+                    isFeatureFlagsOpen ||
                     activeTab === 'resources' ||
                     activeTab === 'briefing' ||
                     activeTab === 'msel') &&
@@ -27756,6 +27828,20 @@ function App() {
                 )}
               >
                 <CardTitle className="text-base">
+                  {isFeatureFlagsOpen ? (
+                    <div className="flex items-center gap-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setIsFeatureFlagsOpen(false)}
+                      >
+                        Back
+                      </Button>
+                      <span>Feature Flags</span>
+                    </div>
+                  ) : (
+                    <>
                   {activeTab === 'notifications' &&
                     (isNotificationSettingsOpen ? (
                       <div className="flex items-center gap-2">
@@ -27796,7 +27882,7 @@ function App() {
                       'Events'
                     ))}
                   {activeTab === 'analytics' && 'Analytics'}
-                  {isHubCisaDashboardTab(activeTab) && getHubCisaDashboardLabel(activeTab)}
+                  {isCisaEnabled && isHubCisaDashboardTab(activeTab) && getHubCisaDashboardLabel(activeTab)}
                   {activeTab === 'map-layers' && 'Map Layers'}
                   {activeTab === 'briefing' && 'Incident Briefing ICS-201'}
                   {activeTab === 'msel' && 'MSEL'}
@@ -27835,7 +27921,11 @@ function App() {
                     activeTab !== 'form-ICS-209' &&
                     activeTab !== 'form-ICS-214' &&
                     activeFormTabLabel}
+                    </>
+                  )}
                 </CardTitle>
+                {!isFeatureFlagsOpen ? (
+                  <>
                 {isViewingHistoricalOperationalPeriod && showOperationalPeriodFormSelector ? (
                   <Badge variant="outline">
                     Viewing {formatOperationalPeriodLabel(formsOperationalPeriodView as number)}{' '}
@@ -28600,8 +28690,18 @@ function App() {
                     </DropdownMenu>
                   </div>
                 )}
+                  </>
+                ) : null}
               </CardHeader>
               <CardContent className="min-h-0 min-w-0 flex-1 space-y-2 overflow-x-hidden overflow-y-auto [scrollbar-gutter:stable]">
+                {isFeatureFlagsOpen ? (
+                  <FeatureFlagsPage
+                    flags={featureFlags}
+                    glassItemBorderClasses={glassItemBorderClasses}
+                    onFlagChange={setFeatureFlag}
+                  />
+                ) : (
+                  <>
                 {activeTab === 'notifications' && isNotificationSettingsOpen && (
                   <NotificationSettingsPage
                     rules={notificationCreationRules}
@@ -32511,10 +32611,25 @@ function App() {
                   </div>
                 )}
 
-                {isHubCisaDashboardTab(activeTab) && (
+                {isCisaEnabled && isHubCisaDashboardTab(activeTab) && (
                   <HubCisaDashboardPanel
                     dashboardId={activeTab}
                     glassItemBorderClasses={glassItemBorderClasses}
+                    geospatialCopAisLayerEnabled={geospatialCopAisLayerEnabled}
+                    onGeospatialCopAisLayerEnabledChange={setGeospatialCopAisLayerEnabled}
+                    selectedPanelItemId={selectedPanelItemId}
+                    onFocusGeospatialCopMapItem={(mapKey, location) => {
+                      setSelectedPanelItemId(mapKey)
+                      void focusMapItem(mapKey, location, 30000)
+                    }}
+                    onEnterPortOfHoustonWorkspace={() => {
+                      const incident = incidentList.find(
+                        (entry) => entry.id === PORT_OF_HOUSTON_OUTAGE_HUB_INCIDENT_ID
+                      )
+                      if (incident) {
+                        enterIncidentWorkspace(incident)
+                      }
+                    }}
                   />
                 )}
 
@@ -37707,6 +37822,8 @@ function App() {
                     </div>
                   </Item>
                 )}
+                  </>
+                )}
               </CardContent>
             </Card>
           </CollapsibleContent>
@@ -39185,7 +39302,7 @@ function App() {
           onNavigateToTab={(tab) => setActiveTab(tab)}
           onEnsurePanelOpen={() => setIsObjectivesOpen(true)}
           onOpenMoreMenu={setIsHubMoreMenuOpen}
-          moreMenuLabels={HUB_MORE_MENU.map((item) => item.label)}
+          moreMenuLabels={hubMoreMenuItems.map((item) => item.label)}
         />
       )}
       <AddWorkspaceMemberDialog

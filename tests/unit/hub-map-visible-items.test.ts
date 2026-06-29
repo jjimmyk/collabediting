@@ -41,6 +41,19 @@ describe('hub-map-visible-items', () => {
     expect(filtered[0]?.label).toContain('Reflectivity')
   })
 
+  it('includes geospatial cop ais layer when enabled', () => {
+    const items = buildHubMapVisibleItems(new Set(), new Set(), {}, true)
+
+    expect(items).toHaveLength(1)
+    expect(items[0]).toMatchObject({
+      id: 'ais-vessel-tracks',
+      label: 'AIS',
+      kind: 'map-layer',
+      typeLabel: 'Map Layer',
+      source: 'geospatial-cop',
+    })
+  })
+
   it('removes a single aor boundary without cascading', () => {
     const districtId = hubAorDistrictBoundaryId(4)
     const sectorId = hubAorSectorBoundaryId('sector-miami')
