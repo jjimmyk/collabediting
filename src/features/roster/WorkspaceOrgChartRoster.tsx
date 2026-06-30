@@ -18,6 +18,8 @@ import { OrgChartCollapsibleAssetCard } from '@/features/roster/OrgChartCollapsi
 import { OrgChartNodeDetailDialog } from '@/features/roster/OrgChartNodeDetailDialog'
 import { HaveLinkSingleRefDetailPick } from '@/features/ics215/HaveLinkDetailPickSection'
 import type { HaveLinkPickMode } from '@/features/ics215/have-link-pick-mode'
+import type { RosterSchedulingPhase } from '@/lib/roster-scheduling-phase'
+import type { BuildTeamDraftMember } from '@/features/roster/roster-template-types'
 import {
   lookupHaveLinkLocation,
   resolveOrgChartAssetHaveRef,
@@ -107,8 +109,14 @@ type WorkspaceOrgChartRosterProps = {
   onToggleAllowWorkAssignment?: (position: string, enabled: boolean) => void
   onAssignExistingMember: (memberId: string, position: string) => void
   onSearchOrgMembers?: (query: string, position?: string) => Promise<OrgMemberSearchResult[]>
-  onAssignOrgMember?: (userId: string, position: string) => void
+  onAssignOrgMember?: (
+    userId: string,
+    position: string,
+    mode?: RosterInviteAssignmentMode,
+    email?: string
+  ) => void
   workspaceRosterMembers?: WorkspaceRosterMember[]
+  draftMembersForOrgDedupe?: BuildTeamDraftMember[]
   onScheduleAssignMember: (memberId: string, position: string) => void
   onScheduleUnassignMember: (memberId: string, position: string) => void
   onRemoveScheduledAssign: (memberId: string, position: string) => void
@@ -195,6 +203,8 @@ type WorkspaceOrgChartRosterProps = {
   isProjected?: boolean
   rosterTimeHorizon?: OrgChartExportScope
   managementEntriesByPosition?: Record<string, PositionRosterEntry>
+  rosterSchedulingPhase?: RosterSchedulingPhase
+  draftMembersForOrgDedupe?: BuildTeamDraftMember[]
 } & Partial<PositionRosterAssetHandlers>
 
 type OrgChartRenderProps = {
@@ -218,8 +228,14 @@ type OrgChartRenderProps = {
   onToggleEditIcs201: (position: string, enabled: boolean) => void
   onAssignExistingMember: (memberId: string, position: string) => void
   onSearchOrgMembers?: (query: string, position?: string) => Promise<OrgMemberSearchResult[]>
-  onAssignOrgMember?: (userId: string, position: string) => void
+  onAssignOrgMember?: (
+    userId: string,
+    position: string,
+    mode?: RosterInviteAssignmentMode,
+    email?: string
+  ) => void
   workspaceRosterMembers?: WorkspaceRosterMember[]
+  draftMembersForOrgDedupe?: BuildTeamDraftMember[]
   onScheduleAssignMember: (memberId: string, position: string) => void
   onScheduleUnassignMember: (memberId: string, position: string) => void
   onRemoveScheduledAssign: (memberId: string, position: string) => void
@@ -308,6 +324,8 @@ type OrgChartRenderProps = {
   haveLinkPickMode?: HaveLinkPickMode
   ics215aLocationsByPosition?: import('@/features/ics215a/location-utils').Ics215aLocationByPositionIndex
   onFocusIcs215aRowOnMap?: (rowId: number) => void
+  rosterSchedulingPhase?: RosterSchedulingPhase
+  draftMembersForOrgDedupe?: BuildTeamDraftMember[]
 }
 
 function isSubordinateRowChild(node: OrgChartNode): boolean {
@@ -649,6 +667,8 @@ function PositionNode({
   managementEntriesByPosition,
   ics215aLocationsByPosition = {},
   onFocusIcs215aRowOnMap,
+  rosterSchedulingPhase = 'live_ops',
+  draftMembersForOrgDedupe = [],
 }: {
   position: string
   color?: OrgChartColor
@@ -741,6 +761,10 @@ function PositionNode({
     activeHaveCell,
     highlightedHaveRef,
     haveLinkPickMode,
+    ics215aLocationsByPosition,
+    onFocusIcs215aRowOnMap,
+    rosterSchedulingPhase,
+    draftMembersForOrgDedupe,
   }
 
   const canRemove =
@@ -854,6 +878,8 @@ function PositionNode({
             haveLinkPickMode={haveLinkPickMode}
             ics215aLocationEntries={ics215aLocationsByPosition[position] ?? []}
             onFocusIcs215aRowOnMap={onFocusIcs215aRowOnMap}
+            rosterSchedulingPhase={rosterSchedulingPhase}
+            draftMembersForOrgDedupe={draftMembersForOrgDedupe}
           />
         </OrgChartCardAnchor>
       ) : (
@@ -941,6 +967,8 @@ function PositionNode({
           haveLinkPickMode={haveLinkPickMode}
           ics215aLocationEntries={ics215aLocationsByPosition[position] ?? []}
           onFocusIcs215aRowOnMap={onFocusIcs215aRowOnMap}
+          rosterSchedulingPhase={rosterSchedulingPhase}
+          draftMembersForOrgDedupe={draftMembersForOrgDedupe}
         />
       )}
       {!suppressChildren ? (
@@ -1324,6 +1352,8 @@ export function WorkspaceOrgChartRoster({
   haveLinkPickMode,
   ics215aLocationsByPosition = {},
   onFocusIcs215aRowOnMap,
+  rosterSchedulingPhase = 'live_ops',
+  draftMembersForOrgDedupe = [],
 }: WorkspaceOrgChartRosterProps) {
   const [selectedAssetKey, setSelectedAssetKey] = useState<string | null>(null)
   const [selectedSingleResourceMemberId, setSelectedSingleResourceMemberId] = useState<string | null>(
@@ -1459,6 +1489,8 @@ export function WorkspaceOrgChartRoster({
     haveLinkPickMode,
     ics215aLocationsByPosition,
     onFocusIcs215aRowOnMap,
+    rosterSchedulingPhase,
+    draftMembersForOrgDedupe,
   }
 
   const wideRenderProps: OrgChartWideRenderProps = {

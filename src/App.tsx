@@ -31764,6 +31764,7 @@ function App() {
                       orgChartTemplateSlug={workspaceRosterPlanSummary?.templateSlug ?? undefined}
                       zoom={rosterZoomLevel}
                       showOpAdvanceLabels={showPositionOpAdvanceLabels}
+                      rosterSchedulingPhase={rosterSchedulingPhase}
                       positionMetaByName={workspacePositionCatalog.positionMetaByName}
                       isUpdatingOpAdvanceLabel={updatingOpAdvanceLabelPosition}
                       onToggleEditIcs201={(position, enabled) => {
@@ -31928,6 +31929,7 @@ function App() {
                       isAssigningPosition={rosterAssigningPosition}
                       isDeletingCustomPosition={deletingCustomPosition}
                       showOpAdvanceLabels={showPositionOpAdvanceLabels}
+                      rosterSchedulingPhase={rosterSchedulingPhase}
                       positionMetaByName={workspacePositionCatalog.positionMetaByName}
                       isUpdatingOpAdvanceLabel={updatingOpAdvanceLabelPosition}
                       onToggleEditIcs201={(position, enabled) => {

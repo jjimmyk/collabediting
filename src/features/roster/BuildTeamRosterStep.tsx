@@ -23,12 +23,26 @@ import {
   buildDraftAssetsByKey,
   buildDraftPositionAssetsByPosition,
   buildDraftRosterMembers,
+  buildDraftMemberSchedulesByPosition,
+  buildDraftAssignableByPosition,
+  buildDraftScheduleAssignableByPosition,
+  buildDraftScheduleUnassignableByPosition,
+  buildDraftAssignableAssetsByPosition,
+  buildDraftScheduleAssignableAssetsByPosition,
+  buildDraftScheduleUnassignableAssetsByPosition,
 } from '@/features/roster/build-draft-position-catalog'
 import { defaultAllowWorkAssignment } from '@/lib/workspace-position-settings'
 import {
   applyTemplateToBuildTeamDraft,
   addDraftAsset,
+  assignDraftAssetToPosition,
+  assignDraftMemberToPosition,
+  assignDraftOrgUserToPosition,
   hasNonCreatorBuildTeamDraftEdits,
+  removeDraftAssetFromPosition,
+  removeScheduledDraftAssetAssign,
+  removeScheduledDraftAssignFromPosition,
+  unassignDraftMemberFromPosition,
   updateDraftCustomPosition,
 } from '@/features/roster/roster-draft-state'
 import {
@@ -55,6 +69,8 @@ import {
   buildPositionRosterEntries,
 } from '@/features/roster/workspace-position-roster'
 import type { PositionRosterInviteSubmitResult } from '@/features/roster/position-roster-messages'
+import type { RosterInviteAssignmentMode } from '@/features/roster/position-roster-messages'
+import type { RosterMemberEffectiveWhen } from '@/features/roster/roster-template-types'
 import type { WorkspacePositionType } from '@/features/roster/workspace-position-type'
 import type { ResourceListItemData } from '@/features/resources/types'
 import type { AddAssetToOrgChartSubmitInput } from '@/lib/roster-asset-assignment'
@@ -98,6 +114,8 @@ export function BuildTeamRosterStep({
   const [isAddPositionOpen, setIsAddPositionOpen] = useState(false)
   const [isAddAssetOpen, setIsAddAssetOpen] = useState(false)
   const [memberPositionPreset, setMemberPositionPreset] = useState<string | null>(null)
+  const [addMemberDefaultEffectiveWhen, setAddMemberDefaultEffectiveWhen] =
+    useState<RosterMemberEffectiveWhen>('now')
   const [draftCompetencyOptions, setDraftCompetencyOptions] = useState<string[]>([])
   const [pocOrgMembers, setPocOrgMembers] = useState<OrgMemberSearchResult[]>([])
 
@@ -115,6 +133,63 @@ export function BuildTeamRosterStep({
     () => buildDraftAssetSchedulesByPosition(draft),
     [draft]
   )
+  const draftMemberSchedulesByPosition = useMemo(
+    () => buildDraftMemberSchedulesByPosition(draft),
+    [draft]
+  )
+  const draftAssignableByPosition = useMemo(
+    () => buildDraftAssignableByPosition(draft, catalog),
+    [draft, catalog]
+  )
+  const draftScheduleAssignableByPosition = useMemo(
+    () => buildDraftScheduleAssignableByPosition(draft, catalog),
+    [draft, catalog]
+  )
+  const draftScheduleUnassignableByPosition = useMemo(
+    () => buildDraftScheduleUnassignableByPosition(draft, catalog),
+    [draft, catalog]
+  )
+  const draftAssignableAssetsByPosition = useMemo(
+    () =>
+      buildDraftAssignableAssetsByPosition(
+        draft,
+        organizationAssets,
+        catalog,
+        draftPositionAssetsByPosition,
+        draftAssetSchedulesByPosition
+      ),
+    [catalog, draft, draftAssetSchedulesByPosition, draftPositionAssetsByPosition, organizationAssets]
+  )
+  const draftScheduleAssignableAssetsByPosition = useMemo(
+    () =>
+      buildDraftScheduleAssignableAssetsByPosition(
+        draft,
+        organizationAssets,
+        catalog,
+        draftPositionAssetsByPosition,
+        draftAssetSchedulesByPosition
+      ),
+    [catalog, draft, draftAssetSchedulesByPosition, draftPositionAssetsByPosition, organizationAssets]
+  )
+  const draftScheduleUnassignableAssetsByPosition = useMemo(
+    () =>
+      buildDraftScheduleUnassignableAssetsByPosition(
+        draft,
+        organizationAssets,
+        catalog,
+        draftPositionAssetsByPosition,
+        draftAssetSchedulesByPosition,
+        draftAssetsByKey
+      ),
+    [
+      catalog,
+      draft,
+      draftAssetSchedulesByPosition,
+      draftAssetsByKey,
+      draftPositionAssetsByPosition,
+      organizationAssets,
+    ]
+  )
   const draftAssignedAssetKeys = useMemo(
     () => (draft.draftAssets ?? []).map((asset) => asset.assetKey),
     [draft.draftAssets]
@@ -130,13 +205,22 @@ export function BuildTeamRosterStep({
         positionSettings,
         '',
         catalog,
-        {},
+        draftMemberSchedulesByPosition,
         draftPositionAssetsByPosition,
         draftAssetSchedulesByPosition,
         draftAssetsByKey,
         {}
       ),
-    [catalog, draftAssetSchedulesByPosition, draftAssetsByKey, draftPositionAssetsByPosition, permissions, positionSettings, rosterMembers]
+    [
+      catalog,
+      draftAssetSchedulesByPosition,
+      draftAssetsByKey,
+      draftMemberSchedulesByPosition,
+      draftPositionAssetsByPosition,
+      permissions,
+      positionSettings,
+      rosterMembers,
+    ]
   )
 
   const visibleRosterPositions = useMemo(
@@ -404,6 +488,148 @@ export function BuildTeamRosterStep({
     [updateDraftMemberCompetency]
   )
 
+  const openInviteToPosition = useCallback(
+    (position: string, mode: RosterInviteAssignmentMode) => {
+      setMemberPositionPreset(position)
+      setAddMemberDefaultEffectiveWhen(
+        mode === 'schedule_on_op_advance' ? 'next_op_advance' : 'now'
+      )
+      setIsAddMemberOpen(true)
+    },
+    []
+  )
+
+  const handleAssignExistingMember = useCallback(
+    (memberId: string, position: string) => {
+      onDraftChange(
+        assignDraftMemberToPosition(draft, { memberId, position, effectiveWhen: 'now' })
+      )
+    },
+    [draft, onDraftChange]
+  )
+
+  const handleScheduleAssignMember = useCallback(
+    (memberId: string, position: string) => {
+      onDraftChange(
+        assignDraftMemberToPosition(draft, {
+          memberId,
+          position,
+          effectiveWhen: 'next_op_advance',
+        })
+      )
+    },
+    [draft, onDraftChange]
+  )
+
+  const handleAssignOrgMember = useCallback(
+    (
+      userId: string,
+      position: string,
+      mode?: RosterInviteAssignmentMode,
+      email?: string
+    ) => {
+      const effectiveWhen = mode === 'schedule_on_op_advance' ? 'next_op_advance' : 'now'
+      const memberEmail =
+        email ??
+        draft.draftMembers.find((member) => member.existingUserId === userId)?.email ??
+        ''
+      if (!memberEmail) {
+        return
+      }
+      onDraftChange(
+        assignDraftOrgUserToPosition(draft, {
+          userId,
+          email: memberEmail,
+          position,
+          effectiveWhen,
+        })
+      )
+    },
+    [draft, onDraftChange]
+  )
+
+  const handleUnassignMember = useCallback(
+    (memberId: string, position: string) => {
+      onDraftChange(unassignDraftMemberFromPosition(draft, memberId, position))
+    },
+    [draft, onDraftChange]
+  )
+
+  const handleRemoveScheduledAssign = useCallback(
+    (memberId: string, position: string) => {
+      onDraftChange(removeScheduledDraftAssignFromPosition(draft, memberId, position))
+    },
+    [draft, onDraftChange]
+  )
+
+  const handleAssignAsset = useCallback(
+    (assetKey: string, position: string, pointOfContactMemberId?: string) => {
+      const pocMember = pointOfContactMemberId
+        ? draft.draftMembers.find((member) => member.id === pointOfContactMemberId)
+        : undefined
+      onDraftChange(
+        assignDraftAssetToPosition(draft, {
+          assetKey,
+          position,
+          pointOfContactDraftMemberId: pointOfContactMemberId ?? null,
+          pointOfContactUserId: pocMember?.existingUserId ?? null,
+          effectiveWhen: 'now',
+        })
+      )
+    },
+    [draft, onDraftChange]
+  )
+
+  const handleScheduleAssignAsset = useCallback(
+    (assetKey: string, position: string) => {
+      onDraftChange(
+        assignDraftAssetToPosition(draft, {
+          assetKey,
+          position,
+          effectiveWhen: 'next_op_advance',
+        })
+      )
+    },
+    [draft, onDraftChange]
+  )
+
+  const handleUnassignAsset = useCallback(
+    (assetKey: string, position: string) => {
+      onDraftChange(removeDraftAssetFromPosition(draft, assetKey, position))
+    },
+    [draft, onDraftChange]
+  )
+
+  const handleRemoveScheduledAssignAsset = useCallback(
+    (assetKey: string, position: string) => {
+      onDraftChange(removeScheduledDraftAssetAssign(draft, assetKey, position))
+    },
+    [draft, onDraftChange]
+  )
+
+  const handleUpdateAssetPointOfContact = useCallback(
+    (assetKey: string, memberId: string | null) => {
+      const pocMember = memberId
+        ? draft.draftMembers.find((member) => member.id === memberId)
+        : undefined
+      onDraftChange({
+        ...draft,
+        draftAssets: (draft.draftAssets ?? []).map((asset) =>
+          asset.assetKey === assetKey
+            ? {
+                ...asset,
+                pointOfContactDraftMemberId: memberId,
+                pointOfContactUserId: pocMember?.existingUserId ?? null,
+              }
+            : asset
+        ),
+      })
+    },
+    [draft, onDraftChange]
+  )
+
+  const orgSearchEnabled = isSupabaseEnabled && Boolean(organizationId)
+
   return (
     <div className={cn('gap-4', isPageLayout ? 'flex min-h-0 flex-1 flex-col' : 'grid')}>
       <div className="grid gap-2">
@@ -471,6 +697,7 @@ export function BuildTeamRosterStep({
             canManageRoster
             onAddMember={() => {
               setMemberPositionPreset(null)
+              setAddMemberDefaultEffectiveWhen('now')
               setIsAddMemberOpen(true)
             }}
             onAddAssetToOrgChart={() => setIsAddAssetOpen(true)}
@@ -498,9 +725,9 @@ export function BuildTeamRosterStep({
             rosterById={Object.fromEntries(rosterMembers.map((member) => [member.id, member]))}
             visiblePositions={visibleRosterPositions}
             displayFilters={rosterDisplayFilters}
-            assignableByPosition={{}}
-            scheduleAssignableByPosition={{}}
-            scheduleUnassignableByPosition={{}}
+            assignableByPosition={draftAssignableByPosition}
+            scheduleAssignableByPosition={draftScheduleAssignableByPosition}
+            scheduleUnassignableByPosition={draftScheduleUnassignableByPosition}
             canManageRoster
             glassItemBorderClasses={glassItemBorderClasses}
             isUpdatingPermission={null}
@@ -510,56 +737,85 @@ export function BuildTeamRosterStep({
             orgChartTemplateSlug={draft.templateSlug}
             zoom={rosterZoomLevel}
             showOpAdvanceLabels={false}
+            rosterSchedulingPhase="pre_first_op"
             positionMetaByName={catalog.positionMetaByName}
             onToggleEditIcs201={() => undefined}
-            onAssignExistingMember={() => undefined}
-            onScheduleAssignMember={() => undefined}
+            onSearchOrgMembers={orgSearchEnabled ? searchOrganizationPeople : undefined}
+            onAssignOrgMember={orgSearchEnabled ? handleAssignOrgMember : undefined}
+            workspaceRosterMembers={rosterMembers}
+            draftMembersForOrgDedupe={draft.draftMembers}
+            onAssignExistingMember={handleAssignExistingMember}
+            onScheduleAssignMember={handleScheduleAssignMember}
             onScheduleUnassignMember={() => undefined}
-            onRemoveScheduledAssign={() => undefined}
+            onRemoveScheduledAssign={handleRemoveScheduledAssign}
             onRemoveScheduledUnassign={() => undefined}
-            onInviteToPosition={(position) => {
-              setMemberPositionPreset(position)
-              setIsAddMemberOpen(true)
-            }}
-            onUnassignMember={() => undefined}
+            onInviteToPosition={openInviteToPosition}
+            onUnassignMember={handleUnassignMember}
             onPositionTypeChange={handlePositionTypeChange}
             positionCatalog={catalog}
             onSaveCustomPosition={handleSaveCustomPosition}
             competencyOptions={draftCompetencyOptions}
             canEditCompetencyFunction
             onSingleResourceCompetencyFunctionChange={handleSingleResourceCompetencyFunctionChange}
+            showPositionAssets
+            assignableAssetsByPosition={draftAssignableAssetsByPosition}
+            scheduleAssignableAssetsByPosition={draftScheduleAssignableAssetsByPosition}
+            scheduleUnassignableAssetsByPosition={draftScheduleUnassignableAssetsByPosition}
+            pocMembers={rosterMembers}
+            onAssignAsset={handleAssignAsset}
+            onUnassignAsset={handleUnassignAsset}
+            onScheduleAssignAsset={handleScheduleAssignAsset}
+            onScheduleUnassignAsset={() => undefined}
+            onRemoveScheduledAssignAsset={handleRemoveScheduledAssignAsset}
+            onRemoveScheduledUnassignAsset={() => undefined}
+            onUpdateAssetPointOfContact={handleUpdateAssetPointOfContact}
           />
         ) : (
           <WorkspacePositionRosterTable
             entries={positionRosterEntries}
             displayFilters={rosterDisplayFilters}
             positionCatalog={catalog}
-            assignableByPosition={{}}
-            scheduleAssignableByPosition={{}}
-            scheduleUnassignableByPosition={{}}
+            assignableByPosition={draftAssignableByPosition}
+            scheduleAssignableByPosition={draftScheduleAssignableByPosition}
+            scheduleUnassignableByPosition={draftScheduleUnassignableByPosition}
             canManageRoster
             glassItemBorderClasses={glassItemBorderClasses}
             isUpdatingPermission={null}
             isAssigningPosition={null}
             showOpAdvanceLabels={false}
+            rosterSchedulingPhase="pre_first_op"
             positionMetaByName={catalog.positionMetaByName}
             onToggleEditIcs201={() => undefined}
             onPositionTypeChange={handlePositionTypeChange}
             isUpdatingPositionIdentity={null}
             onSaveCustomPosition={handleSaveCustomPosition}
-            onAssignExistingMember={() => undefined}
-            onScheduleAssignMember={() => undefined}
+            onSearchOrgMembers={orgSearchEnabled ? searchOrganizationPeople : undefined}
+            onAssignOrgMember={orgSearchEnabled ? handleAssignOrgMember : undefined}
+            workspaceRosterMembers={rosterMembers}
+            draftMembersForOrgDedupe={draft.draftMembers}
+            onAssignExistingMember={handleAssignExistingMember}
+            onScheduleAssignMember={handleScheduleAssignMember}
             onScheduleUnassignMember={() => undefined}
-            onRemoveScheduledAssign={() => undefined}
+            onRemoveScheduledAssign={handleRemoveScheduledAssign}
             onRemoveScheduledUnassign={() => undefined}
-            onInviteToPosition={(position) => {
-              setMemberPositionPreset(position)
-              setIsAddMemberOpen(true)
-            }}
-            onUnassignMember={() => undefined}
+            onInviteToPosition={openInviteToPosition}
+            onUnassignMember={handleUnassignMember}
             competencyOptions={draftCompetencyOptions}
             canEditCompetencyFunction
             onMemberCompetencyFunctionChange={handleMemberCompetencyFunctionChange}
+            showPositionAssets
+            assignableAssetsByPosition={draftAssignableAssetsByPosition}
+            scheduleAssignableAssetsByPosition={draftScheduleAssignableAssetsByPosition}
+            scheduleUnassignableAssetsByPosition={draftScheduleUnassignableAssetsByPosition}
+            pocMembers={rosterMembers}
+            assetsByKey={draftAssetsByKey}
+            onAssignAsset={handleAssignAsset}
+            onUnassignAsset={handleUnassignAsset}
+            onScheduleAssignAsset={handleScheduleAssignAsset}
+            onScheduleUnassignAsset={() => undefined}
+            onRemoveScheduledAssignAsset={handleRemoveScheduledAssignAsset}
+            onRemoveScheduledUnassignAsset={() => undefined}
+            onUpdateAssetPointOfContact={handleUpdateAssetPointOfContact}
           />
         )}
       </RosterZoomContainer>
@@ -573,6 +829,7 @@ export function BuildTeamRosterStep({
         rosterSchedulingPhase="pre_first_op"
         catalog={catalog}
         positionPreset={memberPositionPreset}
+        defaultEffectiveWhen={addMemberDefaultEffectiveWhen}
         workspaceRosterMembers={rosterMembers}
         isSubmitting={false}
         onSearchExistingPeople={searchOrganizationPeople}

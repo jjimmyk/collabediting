@@ -4,13 +4,16 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import {
+  dedupeOrgSearchResultsAgainstDraftMembers,
   dedupeOrgSearchResultsAgainstRoster,
   filterMembersBySearchQuery,
   formatMemberPositionSummary,
   isSelectableOrgMember,
+  type OrgMemberPickerMode,
 } from '@/features/roster/position-member-assign-picker'
 import { PersonPickerQualificationsLine } from '@/features/roster/PersonPickerQualificationsLine'
 import type { OrgMemberSearchResult } from '@/lib/workspace-service'
+import type { BuildTeamDraftMember } from '@/features/roster/roster-template-types'
 import type { WorkspaceRosterMember } from '@/lib/workspace-types'
 
 type PositionMemberAssignPickerProps = {
@@ -19,9 +22,11 @@ type PositionMemberAssignPickerProps = {
   position: string
   assignableMembers: WorkspaceRosterMember[]
   rosterMembersForDedupe?: WorkspaceRosterMember[]
+  draftMembersForDedupe?: BuildTeamDraftMember[]
   onSelectRosterMember: (memberId: string) => void
   onSearchOrgMembers?: (query: string, position?: string) => Promise<OrgMemberSearchResult[]>
-  onSelectOrgMember?: (userId: string) => void
+  onSelectOrgMember?: (userId: string, email: string) => void
+  orgPickerMode?: OrgMemberPickerMode
 }
 
 function MemberResultButton({
@@ -58,9 +63,11 @@ export function PositionMemberAssignPicker({
   position,
   assignableMembers,
   rosterMembersForDedupe = assignableMembers,
+  draftMembersForDedupe = [],
   onSelectRosterMember,
   onSearchOrgMembers,
   onSelectOrgMember,
+  orgPickerMode = 'assign_to_position',
 }: PositionMemberAssignPickerProps) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
@@ -85,6 +92,12 @@ export function PositionMemberAssignPicker({
       setIsSearchingOrg(true)
       void onSearchOrgMembers(trimmed, position)
         .then((results) => {
+          if (orgPickerMode === 'pre_workspace') {
+            setOrgResults(
+              dedupeOrgSearchResultsAgainstDraftMembers(results, draftMembersForDedupe, position)
+            )
+            return
+          }
           setOrgResults(dedupeOrgSearchResultsAgainstRoster(results, rosterMembersForDedupe))
         })
         .catch(() => {
@@ -98,7 +111,16 @@ export function PositionMemberAssignPicker({
     return () => {
       window.clearTimeout(timeout)
     }
-  }, [onSearchOrgMembers, open, orgSearchEnabled, position, query, rosterMembersForDedupe])
+  }, [
+    draftMembersForDedupe,
+    onSearchOrgMembers,
+    open,
+    orgPickerMode,
+    orgSearchEnabled,
+    position,
+    query,
+    rosterMembersForDedupe,
+  ])
 
   const filteredRosterMembers = useMemo(
     () => filterMembersBySearchQuery(assignableMembers, query),
@@ -108,9 +130,9 @@ export function PositionMemberAssignPicker({
   const filteredOrgResults = useMemo(
     () =>
       filterMembersBySearchQuery(orgResults, query, (result) => result.fullName).filter((result) =>
-        isSelectableOrgMember(result, 'assign_to_position')
+        isSelectableOrgMember(result, orgPickerMode)
       ),
-    [orgResults, query]
+    [orgPickerMode, orgResults, query]
   )
 
   const hasResults = filteredRosterMembers.length > 0 || filteredOrgResults.length > 0
@@ -188,7 +210,7 @@ export function PositionMemberAssignPicker({
                       qualifications={result.qualifications}
                       onClick={() => {
                         if (!result.id) return
-                        onSelectOrgMember?.(result.id)
+                        onSelectOrgMember?.(result.id, result.email)
                         setOpen(false)
                       }}
                     />

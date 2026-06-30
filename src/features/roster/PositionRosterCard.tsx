@@ -47,6 +47,8 @@ import { PositionOrgChartAssigneeSummary } from '@/features/roster/PositionOrgCh
 import type { OrgChartExportScope } from '@/features/roster/org-chart-export-scope'
 import { PositionIcs215aLocationSection } from '@/features/roster/PositionIcs215aLocationSection'
 import type { Ics215aLocationByPositionEntry } from '@/features/ics215a/types'
+import type { RosterSchedulingPhase } from '@/lib/roster-scheduling-phase'
+import type { BuildTeamDraftMember } from '@/features/roster/roster-template-types'
 
 type PositionRosterCardProps = {
   entry: PositionRosterEntry
@@ -74,8 +76,14 @@ type PositionRosterCardProps = {
   ) => void
   onAssignExistingMember: (memberId: string, position: string) => void
   onSearchOrgMembers?: (query: string, position?: string) => Promise<OrgMemberSearchResult[]>
-  onAssignOrgMember?: (userId: string, position: string) => void
+  onAssignOrgMember?: (
+    userId: string,
+    position: string,
+    mode?: RosterInviteAssignmentMode,
+    email?: string
+  ) => void
   workspaceRosterMembers?: WorkspaceRosterMember[]
+  draftMembersForOrgDedupe?: BuildTeamDraftMember[]
   onScheduleAssignMember: (memberId: string, position: string) => void
   onScheduleUnassignMember: (memberId: string, position: string) => void
   onRemoveScheduledAssign: (memberId: string, position: string) => void
@@ -133,6 +141,7 @@ type PositionRosterCardProps = {
   ics215aLocationEntries?: Ics215aLocationByPositionEntry[]
   onFocusIcs215aRowOnMap?: (rowId: number) => void
   orgChartTemplateSlug?: string | null
+  rosterSchedulingPhase?: RosterSchedulingPhase
 } & Partial<PositionRosterAssetHandlers>
 
 export function PositionRosterCard({
@@ -159,6 +168,7 @@ export function PositionRosterCard({
   onSearchOrgMembers,
   onAssignOrgMember,
   workspaceRosterMembers = [],
+  draftMembersForOrgDedupe = [],
   onScheduleAssignMember,
   onScheduleUnassignMember,
   onRemoveScheduledAssign,
@@ -212,6 +222,7 @@ export function PositionRosterCard({
   ics215aLocationEntries = [],
   onFocusIcs215aRowOnMap,
   orgChartTemplateSlug = null,
+  rosterSchedulingPhase = 'live_ops',
 }: PositionRosterCardProps) {
   const [orgModalOpen, setOrgModalOpen] = useState(false)
   const isOrg = variant === 'org'
@@ -233,6 +244,7 @@ export function PositionRosterCard({
     onSearchOrgMembers,
     onAssignOrgMember,
     workspaceRosterMembers,
+    draftMembersForOrgDedupe,
     onScheduleAssignMember,
     onScheduleUnassignMember,
     onRemoveScheduledAssign,
@@ -279,6 +291,7 @@ export function PositionRosterCard({
     haveLinkPickMode,
     ics215aLocationEntries,
     onFocusIcs215aRowOnMap,
+    rosterSchedulingPhase,
   }
 
   if (isOrg) {

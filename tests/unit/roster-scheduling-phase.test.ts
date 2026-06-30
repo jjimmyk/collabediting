@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   assetEffectiveWhenLabels,
+  assignmentSectionLabels,
   memberEffectiveWhenLabels,
   resolveRosterSchedulingPhase,
   showsRosterEffectiveWhenUi,
@@ -36,6 +37,24 @@ describe('assetEffectiveWhenLabels', () => {
     const labels = assetEffectiveWhenLabels('pre_first_op')
     expect(labels.nowTitle).toBe('Add to roster now')
     expect(labels.nextOpTitle).toBe('Add to roster on first operational period')
+  })
+})
+
+describe('assignmentSectionLabels', () => {
+  it('uses first-OP Manage modal section titles before operational period 1', () => {
+    const labels = assignmentSectionLabels('pre_first_op')
+    expect(labels.timelineNow).toBe('Add to roster now')
+    expect(labels.timelineNext).toBe('Add to roster on first operational period')
+    expect(labels.assignedNowTitle).toBe('On roster now')
+    expect(labels.scheduledAssignTitle).toBe('Scheduled for first operational period')
+  })
+
+  it('uses current/next OP section titles after operational period 1', () => {
+    const labels = assignmentSectionLabels('live_ops')
+    expect(labels.timelineNow).toBe('Current OP')
+    expect(labels.timelineNext).toBe('Next OP')
+    expect(labels.assignedNowTitle).toBe('Assigned now')
+    expect(labels.scheduledAssignTitle).toBe('Scheduled assign (next OP)')
   })
 })
 

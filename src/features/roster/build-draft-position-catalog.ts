@@ -6,10 +6,50 @@ import type { BuildTeamRosterDraft } from '@/features/roster/roster-template-typ
 import type { PositionAssetRosterEntry } from '@/lib/workspace-position-asset-types'
 import type { PositionAssetScheduleMap } from '@/lib/workspace-position-asset-types'
 import {
+  rosterMembersAssignableToPosition,
+  rosterMembersScheduleUnassignableFromPosition,
+} from '@/features/roster/workspace-position-roster'
+import {
+  assetsAssignableToPosition,
+  assetsScheduleUnassignableFromPosition,
+} from '@/lib/workspace-position-asset-roster'
+import {
   buildWorkspacePositionCatalog,
+  canAssignMembersToPositionNow,
+  canScheduleMembersForPosition,
   type WorkspaceCustomPosition,
   type WorkspacePositionCatalog,
 } from '@/features/roster/workspace-positions'
+import { getPositionMemberSchedulePolicy } from '@/lib/roster-member-schedule-policy'
+
+export type DraftMemberScheduleMap = Record<
+  string,
+  { assignMemberIds: string[]; unassignMemberIds: string[] }
+>
+
+export function buildDraftMemberSchedulesByPosition(
+  draft: BuildTeamRosterDraft
+): DraftMemberScheduleMap {
+  const schedules: DraftMemberScheduleMap = {}
+
+  for (const member of draft.draftMembers) {
+    if (member.effectiveWhen !== 'next_op_advance') {
+      continue
+    }
+
+    if (member.assignmentKind === 'ics_position') {
+      for (const position of member.icsPositions) {
+        const current = schedules[position] ?? { assignMemberIds: [], unassignMemberIds: [] }
+        schedules[position] = {
+          ...current,
+          assignMemberIds: [...current.assignMemberIds, member.id],
+        }
+      }
+    }
+  }
+
+  return schedules
+}
 
 export function buildStandardLifecycleFromDraft(
   draft: BuildTeamRosterDraft
@@ -41,28 +81,206 @@ export function buildDraftPositionCatalog(draft: BuildTeamRosterDraft): Workspac
 }
 
 export function buildDraftRosterMembers(draft: BuildTeamRosterDraft): WorkspaceRosterMember[] {
-  return draft.draftMembers.map((member) => ({
-    id: member.id,
-    userId: member.existingUserId,
-    email: member.email,
-    status: member.status ?? 'invited',
-    icsPosition: member.icsPositions[0] ?? '',
-    icsPositions: member.assignmentKind === 'ics_position' ? member.icsPositions : [],
-    assignmentKind: member.assignmentKind,
-    orgChartReportsTo:
-      member.assignmentKind === 'single_resource' ? member.orgChartReportsTo : null,
-    pendingOrgChartReportsTo: null,
-    competencyFunction:
-      member.assignmentKind === 'single_resource' ? member.competencyFunction ?? null : null,
-    competencyByPosition:
-      member.assignmentKind === 'ics_position'
-        ? Object.fromEntries(
-            member.icsPositions.map((position) => [position, member.competencyFunction ?? null])
-          )
-        : undefined,
-    checkInStatus: 'not_arrived',
-    addedAt: new Date().toISOString(),
-  }))
+  return draft.draftMembers.map((member) => {
+    const activeIcsPositions =
+      member.assignmentKind === 'ics_position' && member.effectiveWhen !== 'next_op_advance'
+        ? member.icsPositions
+        : []
+
+    return {
+      id: member.id,
+      userId: member.existingUserId,
+      email: member.email,
+      status: member.status ?? 'invited',
+      icsPosition: activeIcsPositions[0] ?? member.icsPositions[0] ?? '',
+      icsPositions: activeIcsPositions,
+      assignmentKind: member.assignmentKind,
+      orgChartReportsTo:
+        member.assignmentKind === 'single_resource' && member.effectiveWhen === 'now'
+          ? member.orgChartReportsTo
+          : null,
+      pendingOrgChartReportsTo:
+        member.assignmentKind === 'single_resource' && member.effectiveWhen === 'next_op_advance'
+          ? member.orgChartReportsTo
+          : null,
+      competencyFunction:
+        member.assignmentKind === 'single_resource' ? member.competencyFunction ?? null : null,
+      competencyByPosition:
+        member.assignmentKind === 'ics_position'
+          ? Object.fromEntries(
+              activeIcsPositions.map((position) => [position, member.competencyFunction ?? null])
+            )
+          : undefined,
+      checkInStatus: 'not_arrived',
+      addedAt: new Date().toISOString(),
+    }
+  })
+}
+
+export function buildDraftAssignableByPosition(
+  draft: BuildTeamRosterDraft,
+  catalog: WorkspacePositionCatalog
+): Record<string, WorkspaceRosterMember[]> {
+  const rosterMembers = buildDraftRosterMembers(draft)
+  const schedules = buildDraftMemberSchedulesByPosition(draft)
+  const map: Record<string, WorkspaceRosterMember[]> = {}
+
+  for (const position of catalog.rosterPositionNames) {
+    if (!canAssignMembersToPositionNow(catalog, position)) {
+      map[position] = []
+      continue
+    }
+    const schedule = schedules[position]
+    map[position] = rosterMembersAssignableToPosition(
+      rosterMembers,
+      position,
+      schedule?.assignMemberIds ?? []
+    )
+  }
+
+  return map
+}
+
+export function buildDraftScheduleAssignableByPosition(
+  draft: BuildTeamRosterDraft,
+  catalog: WorkspacePositionCatalog
+): Record<string, WorkspaceRosterMember[]> {
+  const rosterMembers = buildDraftRosterMembers(draft)
+  const schedules = buildDraftMemberSchedulesByPosition(draft)
+  const map: Record<string, WorkspaceRosterMember[]> = {}
+
+  for (const position of catalog.rosterPositionNames) {
+    if (!canScheduleMembersForPosition(catalog, position)) {
+      map[position] = []
+      continue
+    }
+    const meta = catalog.positionMetaByName[position]
+    if (!meta || !getPositionMemberSchedulePolicy(meta).allowScheduleAssign) {
+      map[position] = []
+      continue
+    }
+    const schedule = schedules[position]
+    map[position] = rosterMembersAssignableToPosition(
+      rosterMembers,
+      position,
+      schedule?.assignMemberIds ?? []
+    )
+  }
+
+  return map
+}
+
+export function buildDraftScheduleUnassignableByPosition(
+  draft: BuildTeamRosterDraft,
+  catalog: WorkspacePositionCatalog
+): Record<string, WorkspaceRosterMember[]> {
+  const rosterMembers = buildDraftRosterMembers(draft)
+  const schedules = buildDraftMemberSchedulesByPosition(draft)
+  const map: Record<string, WorkspaceRosterMember[]> = {}
+
+  for (const position of catalog.rosterPositionNames) {
+    const meta = catalog.positionMetaByName[position]
+    if (!meta || !getPositionMemberSchedulePolicy(meta).allowScheduleUnassign) {
+      map[position] = []
+      continue
+    }
+    const schedule = schedules[position]
+    map[position] = rosterMembersScheduleUnassignableFromPosition(
+      rosterMembers,
+      position,
+      schedule?.unassignMemberIds ?? []
+    )
+  }
+
+  return map
+}
+
+export function buildDraftAssignableAssetsByPosition(
+  draft: BuildTeamRosterDraft,
+  organizationAssets: ResourceListItemData[],
+  catalog: WorkspacePositionCatalog,
+  positionAssetsByPosition: Record<string, PositionAssetRosterEntry[]>,
+  assetSchedulesByPosition: PositionAssetScheduleMap
+): Record<string, ResourceListItemData[]> {
+  const assignedAssetKeys = new Set((draft.draftAssets ?? []).map((asset) => asset.assetKey))
+  const workspaceAssets = organizationAssets.filter((asset) => !assignedAssetKeys.has(asset.assetKey))
+  const map: Record<string, ResourceListItemData[]> = {}
+
+  for (const position of catalog.rosterPositionNames) {
+    const meta = catalog.positionMetaByName[position]
+    if (!meta || !getPositionMemberSchedulePolicy(meta).allowActiveAssignment) {
+      map[position] = []
+      continue
+    }
+    const schedule = assetSchedulesByPosition[position]
+    const activeAssetKeys = (positionAssetsByPosition[position] ?? []).map((asset) => asset.assetKey)
+    map[position] = assetsAssignableToPosition(
+      workspaceAssets,
+      position,
+      activeAssetKeys,
+      schedule?.assignAssetKeys ?? []
+    )
+  }
+
+  return map
+}
+
+export function buildDraftScheduleAssignableAssetsByPosition(
+  draft: BuildTeamRosterDraft,
+  organizationAssets: ResourceListItemData[],
+  catalog: WorkspacePositionCatalog,
+  positionAssetsByPosition: Record<string, PositionAssetRosterEntry[]>,
+  assetSchedulesByPosition: PositionAssetScheduleMap
+): Record<string, ResourceListItemData[]> {
+  const assignedAssetKeys = new Set((draft.draftAssets ?? []).map((asset) => asset.assetKey))
+  const workspaceAssets = organizationAssets.filter((asset) => !assignedAssetKeys.has(asset.assetKey))
+  const map: Record<string, ResourceListItemData[]> = {}
+
+  for (const position of catalog.rosterPositionNames) {
+    const meta = catalog.positionMetaByName[position]
+    if (!meta || !getPositionMemberSchedulePolicy(meta).allowScheduleAssign) {
+      map[position] = []
+      continue
+    }
+    const schedule = assetSchedulesByPosition[position]
+    const activeAssetKeys = (positionAssetsByPosition[position] ?? []).map((asset) => asset.assetKey)
+    map[position] = assetsAssignableToPosition(
+      workspaceAssets,
+      position,
+      activeAssetKeys,
+      schedule?.assignAssetKeys ?? []
+    )
+  }
+
+  return map
+}
+
+export function buildDraftScheduleUnassignableAssetsByPosition(
+  draft: BuildTeamRosterDraft,
+  organizationAssets: ResourceListItemData[],
+  catalog: WorkspacePositionCatalog,
+  positionAssetsByPosition: Record<string, PositionAssetRosterEntry[]>,
+  assetSchedulesByPosition: PositionAssetScheduleMap,
+  assetsByKey: Record<string, ResourceListItemData>
+): Record<string, ResourceListItemData[]> {
+  const map: Record<string, ResourceListItemData[]> = {}
+
+  for (const position of catalog.rosterPositionNames) {
+    const meta = catalog.positionMetaByName[position]
+    if (!meta || !getPositionMemberSchedulePolicy(meta).allowScheduleUnassign) {
+      map[position] = []
+      continue
+    }
+    const schedule = assetSchedulesByPosition[position]
+    const activeAssetKeys = (positionAssetsByPosition[position] ?? []).map((asset) => asset.assetKey)
+    map[position] = assetsScheduleUnassignableFromPosition(
+      activeAssetKeys,
+      schedule?.unassignAssetKeys ?? [],
+      assetsByKey
+    )
+  }
+
+  return map
 }
 
 export function buildDraftPositionSettings(draft: BuildTeamRosterDraft): WorkspacePositionSettingsMap {

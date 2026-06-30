@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import {
+  buildDraftAssignableByPosition,
+  buildDraftMemberSchedulesByPosition,
+  buildDraftPositionCatalog,
+  buildDraftRosterMembers,
+} from '../../src/features/roster/build-draft-position-catalog'
+import { createBuildTeamRosterDraftFromTemplate } from '../../src/features/roster/roster-draft-state'
+import {
   buildTeamCustomPositionLifecycleStatus,
   buildTeamMemberScheduleOnOpAdvance,
 } from '../../api/roster-plan-shared'
@@ -70,5 +77,87 @@ describe('dedupeOrgSearchResultsAgainstDraftMembers', () => {
     )
 
     expect(results.map((result) => result.email)).toEqual(['beta@example.com'])
+  })
+})
+
+describe('buildDraftMemberSchedulesByPosition', () => {
+  it('maps next_op_advance draft members into scheduled assign columns', () => {
+    const draft = createBuildTeamRosterDraftFromTemplate('ics-type-3')
+    const scheduledMember = {
+      id: 'draft-member-scheduled',
+      email: 'scheduled@example.com',
+      assignmentKind: 'ics_position' as const,
+      icsPositions: ['Safety Officer'],
+      orgChartReportsTo: null,
+      password: '',
+      personSource: 'add_existing' as const,
+      existingUserId: 'user-scheduled',
+      effectiveWhen: 'next_op_advance' as const,
+      competencyFunction: null,
+    }
+    const draftWithSchedule = {
+      ...draft,
+      draftMembers: [...draft.draftMembers, scheduledMember],
+    }
+
+    expect(buildDraftMemberSchedulesByPosition(draftWithSchedule)).toEqual({
+      'Safety Officer': {
+        assignMemberIds: ['draft-member-scheduled'],
+        unassignMemberIds: [],
+      },
+    })
+  })
+
+  it('omits scheduled positions from active roster projection', () => {
+    const draft = createBuildTeamRosterDraftFromTemplate('ics-type-3')
+    const scheduledMember = {
+      id: 'draft-member-scheduled',
+      email: 'scheduled@example.com',
+      assignmentKind: 'ics_position' as const,
+      icsPositions: ['Safety Officer'],
+      orgChartReportsTo: null,
+      password: '',
+      personSource: 'add_existing' as const,
+      existingUserId: 'user-scheduled',
+      effectiveWhen: 'next_op_advance' as const,
+      competencyFunction: null,
+    }
+    const draftWithSchedule = {
+      ...draft,
+      draftMembers: [...draft.draftMembers, scheduledMember],
+    }
+
+    const rosterMember = buildDraftRosterMembers(draftWithSchedule).find(
+      (member) => member.id === 'draft-member-scheduled'
+    )
+    expect(rosterMember?.icsPositions).toEqual([])
+  })
+})
+
+describe('buildDraftAssignableByPosition', () => {
+  it('includes unassigned draft roster members for a position', () => {
+    const draft = createBuildTeamRosterDraftFromTemplate('ics-type-3')
+    const extraMember = {
+      id: 'draft-member-extra',
+      email: 'extra@example.com',
+      assignmentKind: 'ics_position' as const,
+      icsPositions: ['Operations Section Chief'],
+      orgChartReportsTo: null,
+      password: '',
+      personSource: 'add_existing' as const,
+      existingUserId: 'user-extra',
+      effectiveWhen: 'now' as const,
+      competencyFunction: null,
+    }
+    const draftWithExtra = {
+      ...draft,
+      draftMembers: [...draft.draftMembers, extraMember],
+    }
+    const catalog = buildDraftPositionCatalog(draftWithExtra)
+    const assignable = buildDraftAssignableByPosition(draftWithExtra, catalog)
+
+    expect(assignable['Safety Officer']?.map((member) => member.id)).toContain(
+      'draft-member-extra'
+    )
   })
 })

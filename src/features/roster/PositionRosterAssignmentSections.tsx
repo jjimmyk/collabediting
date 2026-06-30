@@ -36,6 +36,8 @@ import {
   PositionResourceCategoryRow,
 } from '@/features/roster/PositionResourceCategoryRow'
 import { cn } from '@/lib/utils'
+import { assignmentSectionLabels, type RosterSchedulingPhase } from '@/lib/roster-scheduling-phase'
+import type { OrgMemberPickerMode } from '@/features/roster/position-member-assign-picker'
 import { PositionRosterItemActions } from '@/features/roster/PositionRosterItemActions'
 import {
   canAssetContinueToNextOp,
@@ -59,13 +61,17 @@ function PositionAssignmentSectionsLayout({
   scheduledAssign,
   scheduledOrgChart,
   scheduledUnassign,
+  rosterSchedulingPhase = 'live_ops',
 }: {
   layout: PositionAssignmentSectionsLayout
   assignedNow: ReactNode
   scheduledAssign: ReactNode
   scheduledOrgChart: ReactNode
   scheduledUnassign: ReactNode
+  rosterSchedulingPhase?: RosterSchedulingPhase
 }) {
+  const sectionLabels = assignmentSectionLabels(rosterSchedulingPhase)
+
   if (layout === 'stacked') {
     return (
       <div className="space-y-3">
@@ -80,8 +86,8 @@ function PositionAssignmentSectionsLayout({
   return (
     <div className="space-y-2">
       <div className="hidden gap-3 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground md:grid md:grid-cols-2">
-        <span>Current OP</span>
-        <span>Next OP</span>
+        <span>{sectionLabels.timelineNow}</span>
+        <span>{sectionLabels.timelineNext}</span>
       </div>
       <div className="grid gap-3 md:grid-cols-2 md:items-start">
         <div className="min-h-[12rem]">{assignedNow}</div>
@@ -317,6 +323,7 @@ export function PositionAssignmentActionBar({
   onSearchOrgMembers,
   onAssignOrgMember,
   rosterMembersForOrgDedupe,
+  draftMembersForOrgDedupe = [],
   onSelectAsset,
   onCreateResourceCategory,
   position,
@@ -325,6 +332,7 @@ export function PositionAssignmentActionBar({
   inlinePositionInvite,
   onToggleInvite,
   onInviteToPosition,
+  orgPickerMode = 'assign_to_position',
 }: {
   showAssetActions: boolean
   showNewUser: boolean
@@ -338,8 +346,9 @@ export function PositionAssignmentActionBar({
   assetEmptyMessage: string
   onSelectMember: (memberId: string) => void
   onSearchOrgMembers?: (query: string, position?: string) => Promise<OrgMemberSearchResult[]>
-  onAssignOrgMember?: (userId: string) => void
+  onAssignOrgMember?: (userId: string, email: string) => void
   rosterMembersForOrgDedupe?: WorkspaceRosterMember[]
+  draftMembersForOrgDedupe?: import('@/features/roster/roster-template-types').BuildTeamDraftMember[]
   onSelectAsset?: (assetKey: string, pointOfContactMemberId?: string) => void
   onCreateResourceCategory?: (name: string) => void
   position: string
@@ -348,6 +357,7 @@ export function PositionAssignmentActionBar({
   inlinePositionInvite?: PositionRosterInlineInviteProps
   onToggleInvite: (mode: RosterInviteAssignmentMode) => void
   onInviteToPosition?: (position: string, mode: RosterInviteAssignmentMode) => void
+  orgPickerMode?: OrgMemberPickerMode
 }) {
   const [resourceCategoryFormOpen, setResourceCategoryFormOpen] = useState(false)
 
@@ -366,9 +376,11 @@ export function PositionAssignmentActionBar({
           position={position}
           assignableMembers={assignableMembers}
           rosterMembersForDedupe={rosterMembersForOrgDedupe}
+          draftMembersForDedupe={draftMembersForOrgDedupe}
           onSelectRosterMember={onSelectMember}
           onSearchOrgMembers={onSearchOrgMembers}
           onSelectOrgMember={onAssignOrgMember}
+          orgPickerMode={orgPickerMode}
         />
         {showNewUser ? (
           <NewUserInviteControl
@@ -404,7 +416,7 @@ export function PositionAssignmentActionBar({
           onCancel={() => setResourceCategoryFormOpen(false)}
         />
       ) : null}
-      {memberEmptyMessage && !onSearchOrgMembers ? (
+      {memberEmptyMessage ? (
         <p className="px-1 text-[11px] text-muted-foreground">{memberEmptyMessage}</p>
       ) : null}
       {showAssetActions && assignableAssets.length === 0 && assetEmptyMessage ? (
@@ -455,8 +467,14 @@ export type PositionRosterUnifiedAssignmentSectionsProps = {
   }) => void
   onAssignExistingMember: (memberId: string, position: string) => void
   onSearchOrgMembers?: (query: string, position?: string) => Promise<OrgMemberSearchResult[]>
-  onAssignOrgMember?: (userId: string, position: string) => void
+  onAssignOrgMember?: (
+    userId: string,
+    position: string,
+    mode?: RosterInviteAssignmentMode,
+    email?: string
+  ) => void
   workspaceRosterMembers?: WorkspaceRosterMember[]
+  draftMembersForOrgDedupe?: import('@/features/roster/roster-template-types').BuildTeamDraftMember[]
   onScheduleAssignMember: (memberId: string, position: string) => void
   onScheduleUnassignMember: (memberId: string, position: string) => void
   onRemoveScheduledAssign: (memberId: string, position: string) => void
@@ -474,6 +492,7 @@ export type PositionRosterUnifiedAssignmentSectionsProps = {
   haveLinkIndexByRef?: Map<string, Ics215HaveLinkLocation>
   activeHaveCell?: { rowId: number; columnId: string } | null
   highlightedHaveRef?: string | null
+  rosterSchedulingPhase?: RosterSchedulingPhase
 } & PositionRosterAssetHandlers
 
 export function PositionRosterUnifiedAssignmentSections({
@@ -505,6 +524,7 @@ export function PositionRosterUnifiedAssignmentSections({
   onSearchOrgMembers,
   onAssignOrgMember,
   workspaceRosterMembers = [],
+  draftMembersForOrgDedupe = [],
   onScheduleAssignMember,
   onScheduleUnassignMember,
   onRemoveScheduledAssign,
@@ -529,11 +549,16 @@ export function PositionRosterUnifiedAssignmentSections({
   haveLinkIndexByRef,
   activeHaveCell = null,
   highlightedHaveRef = null,
+  rosterSchedulingPhase = 'live_ops',
 }: PositionRosterUnifiedAssignmentSectionsProps) {
   const [expandedAssetKey, setExpandedAssetKey] = useState<string | null>(null)
   const [expandedInviteMode, setExpandedInviteMode] = useState<RosterInviteAssignmentMode | null>(
     null
   )
+  const sectionLabels = assignmentSectionLabels(rosterSchedulingPhase)
+  const orgSearchEnabled = Boolean(onSearchOrgMembers && onAssignOrgMember)
+  const orgPickerMode: OrgMemberPickerMode =
+    rosterSchedulingPhase === 'pre_first_op' ? 'pre_workspace' : 'assign_to_position'
   const policy = entry.memberSchedulePolicy
   const canAssignNow = policy.allowActiveAssignment
   const canScheduleAssign = policy.allowScheduleAssign
@@ -726,9 +751,10 @@ export function PositionRosterUnifiedAssignmentSections({
   return (
     <PositionAssignmentSectionsLayout
       layout={assignmentSectionsLayout}
+      rosterSchedulingPhase={rosterSchedulingPhase}
       assignedNow={
       <PositionAssignmentLifecycleSection
-        title="Assigned now"
+        title={sectionLabels.assignedNowTitle}
         emptyMessage={assignNowHasRows ? '' : assignNowEmpty}
         visible
         actions={
@@ -742,7 +768,10 @@ export function PositionRosterUnifiedAssignmentSections({
               assignableAssets={assignableAssets}
               pocMembers={pocMembers}
               requireAssetPoc
-              memberEmptyMessage={assignExistingMembersEmptyMessage(entry, assignable.length)}
+              memberEmptyMessage={assignExistingMembersEmptyMessage(entry, assignable.length, {
+                rosterSchedulingPhase,
+                orgSearchEnabled,
+              })}
               assetEmptyMessage={assignableAssetsEmptyMessage(assetsEnabled)}
               onCreateResourceCategory={
                 onCreateResourceCategory
@@ -753,10 +782,11 @@ export function PositionRosterUnifiedAssignmentSections({
               onSearchOrgMembers={onSearchOrgMembers}
               onAssignOrgMember={
                 onAssignOrgMember
-                  ? (userId) => onAssignOrgMember(userId, entry.position)
+                  ? (userId, email) => onAssignOrgMember(userId, entry.position, 'assign_now', email)
                   : undefined
               }
               rosterMembersForOrgDedupe={workspaceRosterMembers}
+              draftMembersForOrgDedupe={draftMembersForOrgDedupe}
               onSelectAsset={
                 assetsEnabled
                   ? (assetKey, pointOfContactMemberId) =>
@@ -769,6 +799,7 @@ export function PositionRosterUnifiedAssignmentSections({
               inlinePositionInvite={inlinePositionInvite}
               onToggleInvite={toggleInlineInvite}
               onInviteToPosition={onInviteToPosition}
+              orgPickerMode={orgPickerMode}
             />
           ) : null
         }
@@ -830,12 +861,12 @@ export function PositionRosterUnifiedAssignmentSections({
               })
             )
           : null}
-        {renderResourceCategoryRows('active', 'Assigned now', canAssignNow, assignable, assignableAssets)}
+        {renderResourceCategoryRows('active', sectionLabels.assignedNowTitle, canAssignNow, assignable, assignableAssets)}
       </PositionAssignmentLifecycleSection>
       }
       scheduledAssign={
       <PositionAssignmentLifecycleSection
-        title="Scheduled assign (next OP)"
+        title={sectionLabels.scheduledAssignTitle}
         icon={<CalendarClock className="h-3.5 w-3.5" />}
         emptyMessage={scheduleAssignHasRows ? '' : scheduleAssignEmpty}
         visible={scheduleAssignHasRows || canScheduleAssign}
@@ -850,7 +881,9 @@ export function PositionRosterUnifiedAssignmentSections({
               assignableAssets={scheduleAssignableAssets}
               pocMembers={pocMembers}
               requireAssetPoc={false}
-              memberEmptyMessage={scheduleAssignMembersEmptyMessage(scheduleAssignable.length)}
+              memberEmptyMessage={scheduleAssignMembersEmptyMessage(scheduleAssignable.length, {
+                orgSearchEnabled,
+              })}
               assetEmptyMessage={assignableAssetsEmptyMessage(assetsEnabled)}
               onCreateResourceCategory={
                 onCreateResourceCategory
@@ -858,6 +891,15 @@ export function PositionRosterUnifiedAssignmentSections({
                   : undefined
               }
               onSelectMember={(memberId) => onScheduleAssignMember(memberId, entry.position)}
+              onSearchOrgMembers={onSearchOrgMembers}
+              onAssignOrgMember={
+                onAssignOrgMember
+                  ? (userId, email) =>
+                      onAssignOrgMember(userId, entry.position, 'schedule_on_op_advance', email)
+                  : undefined
+              }
+              rosterMembersForOrgDedupe={workspaceRosterMembers}
+              draftMembersForOrgDedupe={draftMembersForOrgDedupe}
               onSelectAsset={
                 assetsEnabled
                   ? (assetKey) => onScheduleAssignAsset(assetKey, entry.position)
@@ -869,6 +911,7 @@ export function PositionRosterUnifiedAssignmentSections({
               inlinePositionInvite={inlinePositionInvite}
               onToggleInvite={toggleInlineInvite}
               onInviteToPosition={onInviteToPosition}
+              orgPickerMode={orgPickerMode}
             />
           ) : null
         }
@@ -926,7 +969,7 @@ export function PositionRosterUnifiedAssignmentSections({
           : null}
         {renderResourceCategoryRows(
           'scheduled_assign',
-          'Scheduled assign',
+          sectionLabels.scheduledAssignTitle,
           canScheduleAssign,
           scheduleAssignable,
           scheduleAssignableAssets
@@ -935,7 +978,7 @@ export function PositionRosterUnifiedAssignmentSections({
       }
       scheduledOrgChart={
       <PositionAssignmentLifecycleSection
-        title="Scheduled org chart (next OP)"
+        title={sectionLabels.scheduledOrgChartTitle}
         icon={<CalendarClock className="h-3.5 w-3.5" />}
         emptyMessage={scheduleOrgChartHasRows ? '' : scheduleOrgChartEmpty}
         visible={scheduleOrgChartHasRows}
@@ -986,7 +1029,7 @@ export function PositionRosterUnifiedAssignmentSections({
       }
       scheduledUnassign={
       <PositionAssignmentLifecycleSection
-        title="Scheduled unassign (next OP)"
+        title={sectionLabels.scheduledUnassignTitle}
         icon={<CalendarClock className="h-3.5 w-3.5" />}
         emptyMessage={scheduleUnassignHasRows ? '' : scheduleUnassignEmpty}
         visible={scheduleUnassignHasRows || canScheduleUnassign}

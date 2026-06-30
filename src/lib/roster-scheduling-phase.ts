@@ -75,3 +75,34 @@ export function showsRosterEffectiveWhenUi(params: {
   }
   return params.rosterSchedulingPhase === 'pre_first_op' || params.operationalPeriodsEnabled
 }
+
+export type AssignmentSectionLabels = {
+  timelineNow: string
+  timelineNext: string
+  assignedNowTitle: string
+  scheduledAssignTitle: string
+  scheduledUnassignTitle: string
+  scheduledOrgChartTitle: string
+}
+
+export function assignmentSectionLabels(phase: RosterSchedulingPhase): AssignmentSectionLabels {
+  if (phase === 'pre_first_op') {
+    return {
+      timelineNow: 'Add to roster now',
+      timelineNext: 'Add to roster on first operational period',
+      assignedNowTitle: 'On roster now',
+      scheduledAssignTitle: 'Scheduled for first operational period',
+      scheduledUnassignTitle: 'Scheduled unassign (first OP)',
+      scheduledOrgChartTitle: 'Scheduled org chart (first OP)',
+    }
+  }
+
+  return {
+    timelineNow: 'Current OP',
+    timelineNext: 'Next OP',
+    assignedNowTitle: 'Assigned now',
+    scheduledAssignTitle: 'Scheduled assign (next OP)',
+    scheduledUnassignTitle: 'Scheduled unassign (next OP)',
+    scheduledOrgChartTitle: 'Scheduled org chart (next OP)',
+  }
+}

@@ -11,6 +11,7 @@ import type {
   RosterTemplateCustomPositionSeed,
   RosterTemplateEffectTiming,
 } from '@/features/roster/roster-template-types'
+import type { RosterMemberEffectiveWhen } from '@/lib/roster-member-assignment'
 import { templateCustomPositionId } from '@/features/roster/hwcg-source-control-roster-template'
 import { DEFAULT_NEW_CUSTOM_POSITION_TYPE } from '@/features/roster/workspace-position-type'
 import { inferDefaultPositionType } from '@/features/roster/workspace-position-type'
@@ -285,6 +286,161 @@ export function addDraftAsset(
     ...draft,
     draftAssets: [...draft.draftAssets, nextAsset],
   }
+}
+
+export function assignDraftMemberToPosition(
+  draft: BuildTeamRosterDraft,
+  params: {
+    memberId: string
+    position: string
+    effectiveWhen: RosterMemberEffectiveWhen
+  }
+): BuildTeamRosterDraft {
+  return {
+    ...draft,
+    draftMembers: draft.draftMembers.map((member) => {
+      if (member.id !== params.memberId) {
+        return member
+      }
+
+      const icsPositions = [...new Set([...member.icsPositions, params.position])].sort((a, b) =>
+        a.localeCompare(b)
+      )
+
+      return {
+        ...member,
+        assignmentKind: 'ics_position',
+        icsPositions,
+        orgChartReportsTo: null,
+        effectiveWhen: params.effectiveWhen,
+      }
+    }),
+  }
+}
+
+export function assignDraftOrgUserToPosition(
+  draft: BuildTeamRosterDraft,
+  params: {
+    userId: string
+    email: string
+    position: string
+    effectiveWhen: RosterMemberEffectiveWhen
+  }
+): BuildTeamRosterDraft {
+  const normalizedEmail = params.email.trim().toLowerCase()
+  const existing = draft.draftMembers.find(
+    (member) =>
+      member.existingUserId === params.userId ||
+      member.email.trim().toLowerCase() === normalizedEmail
+  )
+
+  if (existing) {
+    return assignDraftMemberToPosition(draft, {
+      memberId: existing.id,
+      position: params.position,
+      effectiveWhen: params.effectiveWhen,
+    })
+  }
+
+  return addDraftMember(draft, {
+    email: params.email.trim(),
+    assignmentKind: 'ics_position',
+    icsPositions: [params.position],
+    orgChartReportsTo: null,
+    password: '',
+    personSource: 'add_existing',
+    existingUserId: params.userId,
+    effectiveWhen: params.effectiveWhen,
+  })
+}
+
+export function unassignDraftMemberFromPosition(
+  draft: BuildTeamRosterDraft,
+  memberId: string,
+  position: string
+): BuildTeamRosterDraft {
+  const member = draft.draftMembers.find((entry) => entry.id === memberId)
+  if (!member) {
+    return draft
+  }
+
+  if (
+    isCreatorIncidentCommanderDraftMember(member) &&
+    position === INCIDENT_COMMANDER_POSITION
+  ) {
+    return draft
+  }
+
+  if (member.assignmentKind !== 'ics_position' || !member.icsPositions.includes(position)) {
+    return draft
+  }
+
+  const nextPositions = member.icsPositions.filter((entry) => entry !== position)
+  if (nextPositions.length === 0) {
+    return removeDraftMember(draft, memberId)
+  }
+
+  return {
+    ...draft,
+    draftMembers: draft.draftMembers.map((entry) =>
+      entry.id === memberId ? { ...entry, icsPositions: nextPositions } : entry
+    ),
+  }
+}
+
+export function removeScheduledDraftAssignFromPosition(
+  draft: BuildTeamRosterDraft,
+  memberId: string,
+  position: string
+): BuildTeamRosterDraft {
+  return unassignDraftMemberFromPosition(draft, memberId, position)
+}
+
+export function assignDraftAssetToPosition(
+  draft: BuildTeamRosterDraft,
+  params: {
+    assetKey: string
+    position: string
+    pointOfContactDraftMemberId?: string | null
+    pointOfContactUserId?: string | null
+    effectiveWhen: RosterMemberEffectiveWhen
+  }
+): BuildTeamRosterDraft {
+  const withoutAsset = draft.draftAssets.filter((asset) => asset.assetKey !== params.assetKey)
+
+  return addDraftAsset(
+    { ...draft, draftAssets: withoutAsset },
+    {
+      assetKey: params.assetKey,
+      assignmentKind: 'ics_position',
+      icsPosition: params.position,
+      orgChartReportsTo: '',
+      pointOfContactUserId: params.pointOfContactUserId ?? null,
+      pointOfContactDraftMemberId: params.pointOfContactDraftMemberId ?? null,
+      effectiveWhen: params.effectiveWhen,
+    }
+  )
+}
+
+export function removeDraftAssetFromPosition(
+  draft: BuildTeamRosterDraft,
+  assetKey: string,
+  position: string
+): BuildTeamRosterDraft {
+  return {
+    ...draft,
+    draftAssets: draft.draftAssets.filter(
+      (asset) => !(asset.assetKey === assetKey && asset.icsPosition === position)
+    ),
+  }
+}
+
+export function removeScheduledDraftAssetAssign(
+  draft: BuildTeamRosterDraft,
+  assetKey: string,
+  position: string
+): BuildTeamRosterDraft {
+  return removeDraftAssetFromPosition(draft, assetKey, position)
 }
 
 export function normalizeBuildTeamRosterDraftForApply(

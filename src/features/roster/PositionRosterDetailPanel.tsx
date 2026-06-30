@@ -25,6 +25,8 @@ import { HaveLinkPositionDetailPick } from '@/features/ics215/HaveLinkDetailPick
 import { PositionIdentitySection } from '@/features/roster/PositionIdentitySection'
 import { PositionIcs215aLocationSection } from '@/features/roster/PositionIcs215aLocationSection'
 import type { Ics215aLocationByPositionEntry } from '@/features/ics215a/types'
+import type { RosterSchedulingPhase } from '@/lib/roster-scheduling-phase'
+import type { BuildTeamDraftMember } from '@/features/roster/roster-template-types'
 
 type PositionRosterDetailPanelProps = {
   entry: PositionRosterEntry
@@ -49,8 +51,14 @@ type PositionRosterDetailPanelProps = {
   ) => void
   onAssignExistingMember: (memberId: string, position: string) => void
   onSearchOrgMembers?: (query: string, position?: string) => Promise<OrgMemberSearchResult[]>
-  onAssignOrgMember?: (userId: string, position: string) => void
+  onAssignOrgMember?: (
+    userId: string,
+    position: string,
+    mode?: RosterInviteAssignmentMode,
+    email?: string
+  ) => void
   workspaceRosterMembers?: WorkspaceRosterMember[]
+  draftMembersForOrgDedupe?: BuildTeamDraftMember[]
   onScheduleAssignMember: (memberId: string, position: string) => void
   onScheduleUnassignMember: (memberId: string, position: string) => void
   onRemoveScheduledAssign: (memberId: string, position: string) => void
@@ -105,6 +113,7 @@ type PositionRosterDetailPanelProps = {
   haveLinkPickMode?: HaveLinkPickMode
   ics215aLocationEntries?: Ics215aLocationByPositionEntry[]
   onFocusIcs215aRowOnMap?: (rowId: number) => void
+  rosterSchedulingPhase?: RosterSchedulingPhase
 } & Partial<PositionRosterAssetHandlers>
 
 export function PositionRosterDetailPanel({
@@ -128,6 +137,7 @@ export function PositionRosterDetailPanel({
   onSearchOrgMembers,
   onAssignOrgMember,
   workspaceRosterMembers = [],
+  draftMembersForOrgDedupe = [],
   onScheduleAssignMember,
   onScheduleUnassignMember,
   onRemoveScheduledAssign,
@@ -180,6 +190,7 @@ export function PositionRosterDetailPanel({
   haveLinkPickMode,
   ics215aLocationEntries = [],
   onFocusIcs215aRowOnMap,
+  rosterSchedulingPhase = 'live_ops',
 }: PositionRosterDetailPanelProps) {
   const assetsHandlersReady = Boolean(
     onAssignAsset &&
@@ -301,6 +312,7 @@ export function PositionRosterDetailPanel({
         onSearchOrgMembers={onSearchOrgMembers}
         onAssignOrgMember={onAssignOrgMember}
         workspaceRosterMembers={workspaceRosterMembers}
+        draftMembersForOrgDedupe={draftMembersForOrgDedupe}
         onScheduleAssignMember={onScheduleAssignMember}
         onScheduleUnassignMember={onScheduleUnassignMember}
         onRemoveScheduledAssign={onRemoveScheduledAssign}
@@ -325,6 +337,7 @@ export function PositionRosterDetailPanel({
         haveLinkIndexByRef={haveLinkIndexByRef}
         activeHaveCell={activeHaveCell}
         highlightedHaveRef={highlightedHaveRef}
+        rosterSchedulingPhase={rosterSchedulingPhase}
       />
 
       {canManageRoster && onRemoveFromRoster ? (

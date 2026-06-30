@@ -1,4 +1,5 @@
 import type { PositionRosterEntry } from '@/features/roster/workspace-position-roster'
+import type { RosterSchedulingPhase } from '@/lib/roster-scheduling-phase'
 
 export type RosterInviteAssignmentMode = 'assign_now' | 'schedule_on_op_advance'
 
@@ -20,10 +21,18 @@ export type PositionRosterInlineInviteProps = {
 
 export function assignExistingMembersEmptyMessage(
   entry: PositionRosterEntry,
-  assignableCount: number
+  assignableCount: number,
+  options?: { rosterSchedulingPhase?: RosterSchedulingPhase; orgSearchEnabled?: boolean }
 ): string {
   if (assignableCount > 0) {
     return ''
+  }
+
+  if (options?.orgSearchEnabled) {
+    if (entry.members.length > 0) {
+      return 'Use Existing Person above to search organization members.'
+    }
+    return 'Use Existing Person above to add someone from your organization.'
   }
 
   if (entry.members.length > 0) {
@@ -37,9 +46,15 @@ export function assignExistingMembersEmptyMessage(
   return 'No roster members available to assign.'
 }
 
-export function scheduleAssignMembersEmptyMessage(assignableCount: number): string {
+export function scheduleAssignMembersEmptyMessage(
+  assignableCount: number,
+  options?: { orgSearchEnabled?: boolean }
+): string {
   if (assignableCount > 0) {
     return ''
+  }
+  if (options?.orgSearchEnabled) {
+    return 'Use Existing Person above to schedule someone from your organization.'
   }
   return 'No roster members available to schedule.'
 }

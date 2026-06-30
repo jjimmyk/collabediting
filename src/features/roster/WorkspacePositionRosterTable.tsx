@@ -52,6 +52,8 @@ import type { PositionOpAdvanceLabel } from '@/lib/operational-period-roster-typ
 import type { WorkspacePositionCatalog, WorkspacePositionMeta } from '@/features/roster/workspace-positions'
 import type { WorkspacePositionType } from '@/features/roster/workspace-position-type'
 import type { Ics215aLocationByPositionIndex } from '@/features/ics215a/location-utils'
+import type { RosterSchedulingPhase } from '@/lib/roster-scheduling-phase'
+import type { BuildTeamDraftMember } from '@/features/roster/roster-template-types'
 import { cn } from '@/lib/utils'
 
 type WorkspacePositionRosterTableProps = {
@@ -79,8 +81,14 @@ type WorkspacePositionRosterTableProps = {
   ) => void
   onAssignExistingMember: (memberId: string, position: string) => void
   onSearchOrgMembers?: (query: string, position?: string) => Promise<OrgMemberSearchResult[]>
-  onAssignOrgMember?: (userId: string, position: string) => void
+  onAssignOrgMember?: (
+    userId: string,
+    position: string,
+    mode?: RosterInviteAssignmentMode,
+    email?: string
+  ) => void
   workspaceRosterMembers?: WorkspaceRosterMember[]
+  draftMembersForOrgDedupe?: BuildTeamDraftMember[]
   onScheduleAssignMember: (memberId: string, position: string) => void
   onScheduleUnassignMember: (memberId: string, position: string) => void
   onRemoveScheduledAssign: (memberId: string, position: string) => void
@@ -133,6 +141,7 @@ type WorkspacePositionRosterTableProps = {
   assignmentSectionsLayout?: import('@/features/roster/PositionRosterAssignmentSections').PositionAssignmentSectionsLayout
   ics215aLocationsByPosition?: Ics215aLocationByPositionIndex
   onFocusIcs215aRowOnMap?: (rowId: number) => void
+  rosterSchedulingPhase?: RosterSchedulingPhase
 } & Partial<PositionRosterAssetHandlers>
 
 function AssignedMembersList({
@@ -244,6 +253,7 @@ export function WorkspacePositionRosterTable({
   onSearchOrgMembers,
   onAssignOrgMember,
   workspaceRosterMembers = [],
+  draftMembersForOrgDedupe = [],
   onScheduleAssignMember,
   onScheduleUnassignMember,
   onRemoveScheduledAssign,
@@ -297,6 +307,7 @@ export function WorkspacePositionRosterTable({
   assignmentSectionsLayout = 'stacked',
   ics215aLocationsByPosition = {},
   onFocusIcs215aRowOnMap,
+  rosterSchedulingPhase = 'live_ops',
 }: WorkspacePositionRosterTableProps) {
   const tableColumnCount =
     3 +
@@ -650,6 +661,7 @@ export function WorkspacePositionRosterTable({
                   onSearchOrgMembers={onSearchOrgMembers}
                   onAssignOrgMember={onAssignOrgMember}
                   workspaceRosterMembers={workspaceRosterMembers}
+                  draftMembersForOrgDedupe={draftMembersForOrgDedupe}
                   onScheduleAssignMember={onScheduleAssignMember}
                   onScheduleUnassignMember={onScheduleUnassignMember}
                   onRemoveScheduledAssign={onRemoveScheduledAssign}
@@ -716,6 +728,7 @@ export function WorkspacePositionRosterTable({
                     ics215aLocationsByPosition[managedEntry.position] ?? []
                   }
                   onFocusIcs215aRowOnMap={onFocusIcs215aRowOnMap}
+                  rosterSchedulingPhase={rosterSchedulingPhase}
                 />
               </div>
             </>
