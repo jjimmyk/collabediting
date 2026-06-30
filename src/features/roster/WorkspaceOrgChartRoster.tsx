@@ -193,7 +193,6 @@ type WorkspaceOrgChartRosterProps = {
   onFocusIcs215aRowOnMap?: (rowId: number) => void
   assignmentSectionsLayout?: PositionAssignmentSectionsLayout
   isProjected?: boolean
-  orgChartTemplateSlug?: string | null
   rosterTimeHorizon?: OrgChartExportScope
   managementEntriesByPosition?: Record<string, PositionRosterEntry>
 } & Partial<PositionRosterAssetHandlers>
@@ -279,7 +278,6 @@ type OrgChartRenderProps = {
   onClearResourceCategoryFill?: (categoryId: string) => void
   exportMode?: boolean
   isProjected: boolean
-  orgChartTemplateSlug?: string | null
   rosterTimeHorizon: OrgChartExportScope
   managementEntriesByPosition?: Record<string, PositionRosterEntry>
   onOpenOrgChartAssetDetail: (assetKey: string) => void
