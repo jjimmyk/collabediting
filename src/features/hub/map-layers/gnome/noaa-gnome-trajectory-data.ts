@@ -19,6 +19,14 @@ export type NoaaGnomeTrajectoryParticle = {
   spillId: string
 }
 
+export type NoaaGnomeHourlyForcing = {
+  hourIndex: number
+  windSpeedKnots: number
+  windFromDirectionDeg: number
+  currentSpeedKnots: number
+  currentTowardDirectionDeg: number
+}
+
 export const NOAA_GNOME_SPILL_ID = 'demo-nola-bay-release'
 export const NOAA_GNOME_DEMO_START_ISO = '2026-06-01T12:00:00.000Z'
 export const NOAA_GNOME_STEP_COUNT = 24
@@ -48,6 +56,63 @@ function pseudoRandom(seed: number): number {
   return ((seed * 9301 + 49297) % 233280) / 233280
 }
 
+function clampHourIndex(hourIndex: number): number {
+  return Math.max(0, Math.min(NOAA_GNOME_STEP_COUNT - 1, Math.floor(hourIndex)))
+}
+
+function buildTimeStepIso(hourIndex: number): string {
+  const start = new Date(NOAA_GNOME_DEMO_START_ISO)
+  start.setUTCHours(start.getUTCHours() + hourIndex)
+  return start.toISOString()
+}
+
+export const NOAA_GNOME_TIME_STEPS: string[] = Array.from({ length: NOAA_GNOME_STEP_COUNT }, (_, hourIndex) =>
+  buildTimeStepIso(hourIndex)
+)
+
+function knotsToDegreesPerHour(knots: number, directionTowardDeg: number): { lon: number; lat: number } {
+  const radians = (directionTowardDeg * Math.PI) / 180
+  const nauticalMilesPerHour = knots
+  const degreesLat = (nauticalMilesPerHour / 60) * Math.cos(radians)
+  const degreesLon = (nauticalMilesPerHour / 60) * Math.sin(radians) / Math.cos((29 * Math.PI) / 180)
+  return { lon: degreesLon, lat: degreesLat }
+}
+
+function buildHourlyForcing(hourIndex: number): NoaaGnomeHourlyForcing {
+  const seed = hourIndex * 17 + 41
+  const windSpeedKnots = Number((12 + pseudoRandom(seed) * 8).toFixed(1))
+  const windFromDirectionDeg = Math.round(140 + pseudoRandom(seed + 3) * 20)
+  const currentSpeedKnots = Number((0.4 + pseudoRandom(seed + 7) * 0.8).toFixed(2))
+  const currentTowardDirectionDeg = Math.round(110 + pseudoRandom(seed + 11) * 20)
+
+  return {
+    hourIndex,
+    windSpeedKnots,
+    windFromDirectionDeg,
+    currentSpeedKnots,
+    currentTowardDirectionDeg,
+  }
+}
+
+export const NOAA_GNOME_HOURLY_FORCING: NoaaGnomeHourlyForcing[] = Array.from(
+  { length: NOAA_GNOME_STEP_COUNT },
+  (_, hourIndex) => buildHourlyForcing(hourIndex)
+)
+
+export function getNoaaGnomeHourlyForcing(hourIndex: number): NoaaGnomeHourlyForcing {
+  return NOAA_GNOME_HOURLY_FORCING[clampHourIndex(hourIndex)]
+}
+
+function windDriftVector(forcing: NoaaGnomeHourlyForcing): { lon: number; lat: number } {
+  const windTowardDeg = (forcing.windFromDirectionDeg + 180) % 360
+  const vector = knotsToDegreesPerHour(forcing.windSpeedKnots * 0.018, windTowardDeg)
+  return vector
+}
+
+function currentDriftVector(forcing: NoaaGnomeHourlyForcing): { lon: number; lat: number } {
+  return knotsToDegreesPerHour(forcing.currentSpeedKnots * 1.35, forcing.currentTowardDirectionDeg)
+}
+
 function polarOffset(
   seed: number,
   maxRadiusLon: number,
@@ -72,25 +137,28 @@ function statusForParticle(particleIndex: number, hourIndex: number): NoaaGnomeP
   return 'floating'
 }
 
-function buildTimeStepIso(hourIndex: number): string {
-  const start = new Date(NOAA_GNOME_DEMO_START_ISO)
-  start.setUTCHours(start.getUTCHours() + hourIndex)
-  return start.toISOString()
-}
+function cumulativeDriftThroughHour(hourIndex: number): { lon: number; lat: number } {
+  let lon = 0
+  let lat = 0
 
-export const NOAA_GNOME_TIME_STEPS: string[] = Array.from({ length: NOAA_GNOME_STEP_COUNT }, (_, hourIndex) =>
-  buildTimeStepIso(hourIndex)
-)
+  for (let step = 0; step <= hourIndex; step += 1) {
+    const forcing = getNoaaGnomeHourlyForcing(step)
+    const wind = windDriftVector(forcing)
+    const current = currentDriftVector(forcing)
+    lon += wind.lon + current.lon
+    lat += wind.lat + current.lat
+  }
+
+  return { lon, lat }
+}
 
 function buildParticleAtStep(particleIndex: number, hourIndex: number): NoaaGnomeTrajectoryParticle {
   const seed = particleIndex * 1000 + hourIndex
-  const driftScale = hourIndex + 1
-  const driftLon = driftScale * 0.012 * (0.75 + pseudoRandom(particleIndex + 3))
-  const driftLat = driftScale * -0.007 * (0.75 + pseudoRandom(particleIndex + 11))
-  const spread = polarOffset(seed, 0.018 * Math.sqrt(driftScale), 0.014 * Math.sqrt(driftScale))
+  const drift = cumulativeDriftThroughHour(hourIndex)
+  const spread = polarOffset(seed, 0.012 + hourIndex * 0.0018, 0.009 + hourIndex * 0.0012)
 
-  const longitude = NOAA_GNOME_RELEASE_POINT.longitude + driftLon + spread.longitude
-  const latitude = NOAA_GNOME_RELEASE_POINT.latitude + driftLat + spread.latitude
+  const longitude = NOAA_GNOME_RELEASE_POINT.longitude + drift.lon + spread.longitude
+  const latitude = NOAA_GNOME_RELEASE_POINT.latitude + drift.lat + spread.latitude
   const massG = Math.round(80 + pseudoRandom(seed + 5) * 420)
   const depthM =
     statusForParticle(particleIndex, hourIndex) === 'subsurface'
@@ -129,15 +197,86 @@ export function buildNoaaGnomeTrajectoryParticles(): NoaaGnomeTrajectoryParticle
   return particles
 }
 
+export function getNoaaGnomeParticlesForHour(hourIndex: number): NoaaGnomeTrajectoryParticle[] {
+  const clamped = clampHourIndex(hourIndex)
+  const timeStamp = buildTimeStepIso(clamped)
+  return buildNoaaGnomeTrajectoryParticles().filter((particle) => particle.timeStamp === timeStamp)
+}
+
+export function getNoaaGnomePlumeCentroid(hourIndex: number): { longitude: number; latitude: number } {
+  const particles = getNoaaGnomeParticlesForHour(hourIndex)
+  if (particles.length === 0) {
+    return {
+      longitude: NOAA_GNOME_RELEASE_POINT.longitude,
+      latitude: NOAA_GNOME_RELEASE_POINT.latitude,
+    }
+  }
+
+  const totals = particles.reduce(
+    (accumulator, particle) => ({
+      longitude: accumulator.longitude + particle.longitude,
+      latitude: accumulator.latitude + particle.latitude,
+    }),
+    { longitude: 0, latitude: 0 }
+  )
+
+  return {
+    longitude: totals.longitude / particles.length,
+    latitude: totals.latitude / particles.length,
+  }
+}
+
+export function getNoaaGnomeSlickRing(hourIndex: number): Array<[number, number]> {
+  const particles = getNoaaGnomeParticlesForHour(hourIndex)
+  if (particles.length === 0) {
+    return []
+  }
+
+  const sortedByDistance = [...particles].sort((left, right) => {
+    const centroid = getNoaaGnomePlumeCentroid(hourIndex)
+    const leftDistance =
+      (left.longitude - centroid.longitude) ** 2 + (left.latitude - centroid.latitude) ** 2
+    const rightDistance =
+      (right.longitude - centroid.longitude) ** 2 + (right.latitude - centroid.latitude) ** 2
+    return rightDistance - leftDistance
+  })
+
+  const outerCount = Math.max(8, Math.ceil(sortedByDistance.length * 0.25))
+  const outerParticles = sortedByDistance.slice(0, outerCount)
+
+  let minLon = Infinity
+  let maxLon = -Infinity
+  let minLat = Infinity
+  let maxLat = -Infinity
+
+  for (const particle of outerParticles) {
+    minLon = Math.min(minLon, particle.longitude)
+    maxLon = Math.max(maxLon, particle.longitude)
+    minLat = Math.min(minLat, particle.latitude)
+    maxLat = Math.max(maxLat, particle.latitude)
+  }
+
+  const padLon = 0.012 + hourIndex * 0.0015
+  const padLat = 0.009 + hourIndex * 0.001
+
+  return [
+    [minLon - padLon, minLat - padLat],
+    [maxLon + padLon, minLat - padLat],
+    [maxLon + padLon, maxLat + padLat],
+    [minLon - padLon, maxLat + padLat],
+    [minLon - padLon, minLat - padLat],
+  ]
+}
+
 export function getNoaaGnomeTimeExtentForHour(hourIndex: number): { start: Date; end: Date } {
-  const clamped = Math.max(0, Math.min(NOAA_GNOME_STEP_COUNT - 1, Math.floor(hourIndex)))
+  const clamped = clampHourIndex(hourIndex)
   const start = new Date(NOAA_GNOME_TIME_STEPS[clamped])
   const end = new Date(start.getTime() + 60 * 60 * 1000)
   return { start, end }
 }
 
 export function formatNoaaGnomeHourLabel(hourIndex: number): string {
-  const clamped = Math.max(0, Math.min(NOAA_GNOME_STEP_COUNT - 1, Math.floor(hourIndex)))
+  const clamped = clampHourIndex(hourIndex)
   const date = new Date(NOAA_GNOME_TIME_STEPS[clamped])
   return date.toLocaleString('en-US', {
     timeZone: 'UTC',
@@ -147,4 +286,24 @@ export function formatNoaaGnomeHourLabel(hourIndex: number): string {
     minute: '2-digit',
     timeZoneName: 'short',
   })
+}
+
+export function formatCardinalDirection(degrees: number): string {
+  const normalized = ((degrees % 360) + 360) % 360
+  const labels = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW']
+  const index = Math.round(normalized / 45) % labels.length
+  return labels[index]
+}
+
+export function formatWindForcing(forcing: NoaaGnomeHourlyForcing): string {
+  return `${forcing.windSpeedKnots} kn from ${forcing.windFromDirectionDeg}° (${formatCardinalDirection(forcing.windFromDirectionDeg)})`
+}
+
+export function formatCurrentForcing(forcing: NoaaGnomeHourlyForcing): string {
+  return `${forcing.currentSpeedKnots} kn toward ${forcing.currentTowardDirectionDeg}° (${formatCardinalDirection(forcing.currentTowardDirectionDeg)})`
+}
+
+/** @internal Reset cached particles for unit tests. */
+export function resetNoaaGnomeTrajectoryCacheForTests() {
+  cachedParticles = null
 }

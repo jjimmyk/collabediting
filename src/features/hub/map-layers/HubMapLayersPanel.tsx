@@ -7,7 +7,11 @@ import { Slider } from '@/components/ui/slider'
 import { cn } from '@/lib/utils'
 import { NOAA_GNOME_LAYER_DEFINITION } from '@/features/hub/map-layers/gnome/noaa-gnome-layer-catalog'
 import {
+  formatCurrentForcing,
   formatNoaaGnomeHourLabel,
+  formatWindForcing,
+  getNoaaGnomeHourlyForcing,
+  getNoaaGnomeParticlesForHour,
   NOAA_GNOME_STEP_COUNT,
 } from '@/features/hub/map-layers/gnome/noaa-gnome-trajectory-data'
 import {
@@ -227,6 +231,27 @@ export function HubMapLayersPanel({
                 <p className="text-[11px] text-muted-foreground">
                   Hour {gnomeHourIndex + 1} of {NOAA_GNOME_STEP_COUNT} since spill release
                 </p>
+                <div className="space-y-1 border-t pt-2">
+                  <p className="text-xs font-medium">Forcing conditions</p>
+                  {(() => {
+                    const forcing = getNoaaGnomeHourlyForcing(gnomeHourIndex)
+                    const particleCount = getNoaaGnomeParticlesForHour(gnomeHourIndex).length
+                    return (
+                      <>
+                        <p className="text-[11px] text-muted-foreground">
+                          Wind: {formatWindForcing(forcing)}
+                        </p>
+                        <p className="text-[11px] text-muted-foreground">
+                          Current: {formatCurrentForcing(forcing)}
+                        </p>
+                        <p className="text-[11px] text-muted-foreground">
+                          Particles this hour: {particleCount}
+                        </p>
+                        <p className="text-[11px] text-muted-foreground">Surface slick: shown</p>
+                      </>
+                    )
+                  })()}
+                </div>
               </div>
             ) : null}
           </div>

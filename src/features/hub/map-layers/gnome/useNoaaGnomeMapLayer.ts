@@ -1,19 +1,15 @@
 import { useEffect, useRef, type RefObject } from 'react'
-import FeatureLayer from '@arcgis/core/layers/FeatureLayer'
 import GraphicsLayer from '@arcgis/core/layers/GraphicsLayer'
 import Map from '@arcgis/core/Map'
 import type MapView from '@arcgis/core/views/MapView'
+import { NOAA_GNOME_MAP_EXTENT } from '@/features/hub/map-layers/gnome/noaa-gnome-trajectory-data'
 import {
-  getNoaaGnomeTimeExtentForHour,
-  NOAA_GNOME_MAP_EXTENT,
-} from '@/features/hub/map-layers/gnome/noaa-gnome-trajectory-data'
-import {
-  buildNoaaGnomeParticleGraphics,
-  buildNoaaGnomeReleaseGraphic,
-  loadNoaaGnomeParticleLayerSource,
-  NOAA_GNOME_PARTICLE_FIELDS,
+  NOAA_GNOME_FORCING_LAYER_ID,
   NOAA_GNOME_PARTICLE_LAYER_ID,
   NOAA_GNOME_RELEASE_LAYER_ID,
+  NOAA_GNOME_SLICK_LAYER_ID,
+  syncNoaaGnomeGraphicsForHour,
+  syncNoaaGnomeReleaseGraphic,
 } from '@/features/hub/map-layers/gnome/noaa-gnome-map-utils'
 
 type UseNoaaGnomeMapLayerOptions = {
@@ -22,34 +18,29 @@ type UseNoaaGnomeMapLayerOptions = {
   mapViewRef: RefObject<MapView | null>
 }
 
-const NOAA_GNOME_PARTICLE_LAYER_INSERT_INDEX = 4
-const NOAA_GNOME_RELEASE_LAYER_INSERT_INDEX = 5
-
-function buildHourDefinitionExpression(hourIndex: number): string {
-  const { start, end } = getNoaaGnomeTimeExtentForHour(hourIndex)
-  return `time_stamp >= ${start.getTime()} AND time_stamp < ${end.getTime()}`
-}
+const NOAA_GNOME_SLICK_LAYER_INSERT_INDEX = 4
+const NOAA_GNOME_PARTICLE_LAYER_INSERT_INDEX = 5
+const NOAA_GNOME_FORCING_LAYER_INSERT_INDEX = 6
+const NOAA_GNOME_RELEASE_LAYER_INSERT_INDEX = 7
 
 export function useNoaaGnomeMapLayer(options: UseNoaaGnomeMapLayerOptions) {
-  const particleLayerRef = useRef<FeatureLayer | null>(null)
+  const slickLayerRef = useRef<GraphicsLayer | null>(null)
+  const particleLayerRef = useRef<GraphicsLayer | null>(null)
+  const forcingLayerRef = useRef<GraphicsLayer | null>(null)
   const releaseLayerRef = useRef<GraphicsLayer | null>(null)
   const hasZoomedRef = useRef(false)
-  const particlesLoadedRef = useRef(false)
 
   useEffect(() => {
     hasZoomedRef.current = false
-    particlesLoadedRef.current = false
   }, [options.enabled])
 
   useEffect(() => {
     if (!options.enabled) {
-      if (particleLayerRef.current) {
-        particleLayerRef.current.visible = false
-        particleLayerRef.current.definitionExpression = '1=0'
-      }
-      if (releaseLayerRef.current) {
-        releaseLayerRef.current.visible = false
-        releaseLayerRef.current.removeAll()
+      for (const layerRef of [slickLayerRef, particleLayerRef, forcingLayerRef, releaseLayerRef]) {
+        if (layerRef.current) {
+          layerRef.current.visible = false
+          layerRef.current.removeAll()
+        }
       }
       return
     }
@@ -57,44 +48,23 @@ export function useNoaaGnomeMapLayer(options: UseNoaaGnomeMapLayerOptions) {
     let cancelled = false
     let attachRaf = 0
 
-    const ensureParticleLayer = (map: Map) => {
-      if (!particleLayerRef.current || !map.layers.includes(particleLayerRef.current)) {
-        particleLayerRef.current = new FeatureLayer({
-          id: NOAA_GNOME_PARTICLE_LAYER_ID,
-          title: 'NOAA GNOME',
-          listMode: 'hide',
-          geometryType: 'point',
-          spatialReference: { wkid: 4326 },
-          objectIdField: 'ObjectID',
-          fields: NOAA_GNOME_PARTICLE_FIELDS,
-          source: [],
-          timeInfo: {
-            startField: 'time_stamp',
-            endField: 'time_stamp',
-          },
-          popupTemplate: {
-            title: 'Oil particle · {particle_id}',
-            content:
-              '<b>Time:</b> {time_stamp}<br/><b>Mass:</b> {mass_g} g<br/><b>Depth:</b> {depth_m} m<br/><b>Status:</b> {status}<br/><b>Mover:</b> {mover_id}',
-          },
-        })
-        map.add(particleLayerRef.current, NOAA_GNOME_PARTICLE_LAYER_INSERT_INDEX)
-      }
-
-      return particleLayerRef.current
-    }
-
-    const ensureReleaseLayer = (map: Map) => {
-      if (!releaseLayerRef.current || !map.layers.includes(releaseLayerRef.current)) {
-        releaseLayerRef.current = new GraphicsLayer({
-          id: NOAA_GNOME_RELEASE_LAYER_ID,
-          title: 'NOAA GNOME release point',
+    const ensureLayer = (
+      map: Map,
+      layerRef: RefObject<GraphicsLayer | null>,
+      id: string,
+      title: string,
+      insertIndex: number
+    ) => {
+      if (!layerRef.current || !map.layers.includes(layerRef.current)) {
+        layerRef.current = new GraphicsLayer({
+          id,
+          title,
           listMode: 'hide',
         })
-        map.add(releaseLayerRef.current, NOAA_GNOME_RELEASE_LAYER_INSERT_INDEX)
+        map.add(layerRef.current, insertIndex)
       }
 
-      return releaseLayerRef.current
+      return layerRef.current
     }
 
     const attach = () => {
@@ -109,23 +79,42 @@ export function useNoaaGnomeMapLayer(options: UseNoaaGnomeMapLayerOptions) {
         return
       }
 
-      const particleLayer = ensureParticleLayer(map)
-      const releaseLayer = ensureReleaseLayer(map)
+      const slickLayer = ensureLayer(
+        map,
+        slickLayerRef,
+        NOAA_GNOME_SLICK_LAYER_ID,
+        'NOAA GNOME surface slick',
+        NOAA_GNOME_SLICK_LAYER_INSERT_INDEX
+      )
+      const particleLayer = ensureLayer(
+        map,
+        particleLayerRef,
+        NOAA_GNOME_PARTICLE_LAYER_ID,
+        'NOAA GNOME particles',
+        NOAA_GNOME_PARTICLE_LAYER_INSERT_INDEX
+      )
+      const forcingLayer = ensureLayer(
+        map,
+        forcingLayerRef,
+        NOAA_GNOME_FORCING_LAYER_ID,
+        'NOAA GNOME forcing',
+        NOAA_GNOME_FORCING_LAYER_INSERT_INDEX
+      )
+      const releaseLayer = ensureLayer(
+        map,
+        releaseLayerRef,
+        NOAA_GNOME_RELEASE_LAYER_ID,
+        'NOAA GNOME release point',
+        NOAA_GNOME_RELEASE_LAYER_INSERT_INDEX
+      )
 
+      slickLayer.visible = true
       particleLayer.visible = true
-      particleLayer.definitionExpression = buildHourDefinitionExpression(options.hourIndex)
+      forcingLayer.visible = true
       releaseLayer.visible = true
-      releaseLayer.removeAll()
-      releaseLayer.add(buildNoaaGnomeReleaseGraphic())
 
-      if (!particlesLoadedRef.current) {
-        particlesLoadedRef.current = true
-        void loadNoaaGnomeParticleLayerSource(particleLayer, buildNoaaGnomeParticleGraphics()).catch(
-          () => {
-            particlesLoadedRef.current = false
-          }
-        )
-      }
+      syncNoaaGnomeGraphicsForHour(particleLayer, slickLayer, forcingLayer, options.hourIndex)
+      syncNoaaGnomeReleaseGraphic(releaseLayer)
 
       if (!hasZoomedRef.current) {
         hasZoomedRef.current = true
@@ -150,12 +139,4 @@ export function useNoaaGnomeMapLayer(options: UseNoaaGnomeMapLayerOptions) {
       cancelAnimationFrame(attachRaf)
     }
   }, [options.enabled, options.hourIndex, options.mapViewRef])
-
-  useEffect(() => {
-    if (!options.enabled || !particleLayerRef.current) {
-      return
-    }
-
-    particleLayerRef.current.definitionExpression = buildHourDefinitionExpression(options.hourIndex)
-  }, [options.enabled, options.hourIndex])
 }
