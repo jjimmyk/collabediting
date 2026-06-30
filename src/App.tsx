@@ -3678,7 +3678,6 @@ type CreateIncidentFormSeed = {
   incidentCategory: string
   incidentWorkflow: string
   incidentTemplate: string
-  incidentSituationReport: string
   incidentAors: string[]
   incidentRelatedEventIds: number[]
   incidentStartTime: string
@@ -3882,7 +3881,6 @@ const buildCreateIncidentFormFromEvent = (
     incidentCategory: inferIncidentCategoryFromEvent(event),
     incidentWorkflow: inferIncidentWorkflowFromEvent(event),
     incidentTemplate: inferIncidentTemplateFromEvent(event),
-    incidentSituationReport: event.summary,
     incidentAors,
     incidentRelatedEventIds: [event.id],
     incidentStartTime: datetimeLocal,
@@ -6728,7 +6726,6 @@ function App() {
   const [isPlanningPStepperOpen, setIsPlanningPStepperOpen] = useState(true)
   const [incidentTemplate, setIncidentTemplate] = useState('')
   const [previewTemplateId, setPreviewTemplateId] = useState<string | null>(null)
-  const [incidentSituationReport, setIncidentSituationReport] = useState('')
   const [incidentAors, setIncidentAors] = useState<string[]>([])
   const [incidentRelatedEventIds, setIncidentRelatedEventIds] = useState<number[]>([])
   const [incidentStartTime, setIncidentStartTime] = useState('')
@@ -6902,7 +6899,6 @@ function App() {
     setIncidentComplexity(DEFAULT_INCIDENT_COMPLEXITY)
     setIncidentTemplate('')
     setPreviewTemplateId(null)
-    setIncidentSituationReport('')
     setIncidentAors([])
     setIncidentRelatedEventIds([])
     setIncidentStartTime('')
@@ -19108,7 +19104,6 @@ function App() {
     setIncidentComplexity(DEFAULT_INCIDENT_COMPLEXITY)
     setIncidentTemplate(seed.incidentTemplate)
     setPreviewTemplateId(null)
-    setIncidentSituationReport(seed.incidentSituationReport)
     setIncidentAors(seed.incidentAors)
     setIncidentRelatedEventIds(seed.incidentRelatedEventIds)
     setIncidentStartTime(seed.incidentStartTime)
@@ -27534,18 +27529,6 @@ function App() {
                   value={incidentAors}
                   onChange={setIncidentAors}
                   onUserEdit={() => setIncidentAorsUserTouched(true)}
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="incident-situation-report">
-                  Initial {isExerciseActivationWizard ? 'Exercise' : 'Situation'} Report
-                </Label>
-                <Textarea
-                  id="incident-situation-report"
-                  placeholder="Describe current conditions, risks, and immediate priorities."
-                  value={incidentSituationReport}
-                  onChange={(event) => setIncidentSituationReport(event.target.value)}
-                  className="min-h-28"
                 />
               </div>
             </div>
