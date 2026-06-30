@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Check, ChevronDown, Pencil, Sparkles, Trash2, X } from 'lucide-react'
+import { ChevronDown, Trash2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -20,10 +20,14 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
+import {
+  getIcs234MatrixItemDraftName,
+  Ics234MatrixInlineNameField,
+  Ics234MatrixItemEditControls,
+  type Ics234WorkAnalysisMatrixProps,
+} from '@/features/ics234/Ics234MatrixShared'
 import { formatIcs202SourceLabel } from '@/features/ics234/sync-ics202-objectives'
 import type {
-  Ics234MatrixItemDraft,
-  Ics234MatrixItemEditState,
   Ics234MatrixItemRef,
   Ics234ObjectiveRow,
   Ics234StrategyRow,
@@ -34,70 +38,6 @@ import { cn } from '@/lib/utils'
 
 function strategyKey(objectiveId: number, strategyId: number) {
   return `${objectiveId}-${strategyId}`
-}
-
-function displayName(name: string, fallback: string) {
-  const trimmed = name.trim()
-  return trimmed || fallback
-}
-
-type InlineNameFieldProps = {
-  name: string
-  editing: boolean
-  placeholder: string
-  readOnly?: boolean
-  onChange: (name: string) => void
-  className?: string
-}
-
-function InlineNameField({
-  name,
-  editing,
-  placeholder,
-  readOnly = false,
-  onChange,
-  className,
-}: InlineNameFieldProps) {
-  if (editing && !readOnly) {
-    return (
-      <input
-        value={name}
-        placeholder={placeholder}
-        onClick={(event) => event.stopPropagation()}
-        onChange={(event) => onChange(event.target.value)}
-        className={cn(
-          'h-8 w-full min-w-0 rounded-md border bg-transparent px-2 text-sm font-medium outline-none',
-          className
-        )}
-      />
-    )
-  }
-
-  return (
-    <span className={cn('text-sm font-medium', className)}>
-      {displayName(name, placeholder)}
-    </span>
-  )
-}
-
-type Ics234WorkAnalysisMatrixProps = {
-  objectives: Ics234ObjectiveRow[]
-  canEdit: boolean
-  formIsLocked: boolean
-  isSaving: boolean
-  glassItemBorderClasses: string
-  editingItem: Ics234MatrixItemEditState | null
-  onStartItemEdit: (ref: Ics234MatrixItemRef) => void
-  onCancelItemEdit: () => void
-  onPatchItemDraft: (draft: Ics234MatrixItemDraft) => void
-  onSaveItem: () => void
-  onGenerateItem: (ref: Ics234MatrixItemRef) => void
-  onAddObjective: () => void
-  onAddStrategy: (objectiveId: number) => void
-  onAddTactic: (objectiveId: number, strategyId: number) => void
-  onDeleteObjective: (objectiveId: number) => void
-  onDeleteStrategy: (objectiveId: number, strategyId: number) => void
-  onDeleteTactic: (objectiveId: number, strategyId: number, tacticId: number) => void
 }
 
 export function Ics234WorkAnalysisMatrix({
@@ -127,89 +67,16 @@ export function Ics234WorkAnalysisMatrix({
   const isEditingRef = (ref: Ics234MatrixItemRef) =>
     !!editingItem && ics234MatrixItemRefsMatch(editingItem.ref, ref)
 
-  const draftName = (ref: Ics234MatrixItemRef, fallback: string) => {
-    if (isEditingRef(ref) && editingItem?.draft.kind === ref.kind) {
-      return editingItem.draft.name
+  const handleEditClick = (ref: Ics234MatrixItemRef) => {
+    if (ref.kind === 'objective') {
+      setExpandedObjectiveId(ref.objectiveId)
+    } else if (ref.kind === 'strategy') {
+      setExpandedObjectiveId(ref.objectiveId)
+      setExpandedStrategyKey(strategyKey(ref.objectiveId, ref.strategyId))
+    } else {
+      setExpandedObjectiveId(ref.objectiveId)
+      setExpandedStrategyKey(strategyKey(ref.objectiveId, ref.strategyId))
     }
-    return fallback
-  }
-
-  const renderItemEditControl = (
-    ref: Ics234MatrixItemRef,
-    itemLabel: string,
-    options?: { disabled?: boolean }
-  ) => {
-    if (!canMutate || options?.disabled) {
-      return null
-    }
-
-    const editing = isEditingRef(ref)
-
-    if (editing) {
-      return (
-        <div
-          className="flex shrink-0 items-center gap-1"
-          onClick={(event) => event.stopPropagation()}
-        >
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            className="h-7 gap-1 px-2 text-xs"
-            onClick={() => onGenerateItem(ref)}
-          >
-            <Sparkles className="h-3.5 w-3.5" />
-            Generate
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            className="h-7 gap-1 px-2 text-xs"
-            disabled={isSaving}
-            onClick={onCancelItemEdit}
-          >
-            <X className="h-3.5 w-3.5" />
-            Cancel
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            className="h-7 gap-1 bg-blue-600 px-2 text-xs text-white hover:bg-blue-700"
-            disabled={isSaving}
-            onClick={onSaveItem}
-          >
-            <Check className="h-3.5 w-3.5" />
-            Save
-          </Button>
-        </div>
-      )
-    }
-
-    return (
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon"
-        className="h-8 w-8 text-muted-foreground"
-        aria-label={`Edit ${itemLabel}`}
-        onClick={(event) => {
-          event.stopPropagation()
-          onStartItemEdit(ref)
-          if (ref.kind === 'objective') {
-            setExpandedObjectiveId(ref.objectiveId)
-          } else if (ref.kind === 'strategy') {
-            setExpandedObjectiveId(ref.objectiveId)
-            setExpandedStrategyKey(strategyKey(ref.objectiveId, ref.strategyId))
-          } else {
-            setExpandedObjectiveId(ref.objectiveId)
-            setExpandedStrategyKey(strategyKey(ref.objectiveId, ref.strategyId))
-          }
-        }}
-      >
-        <Pencil className="h-4 w-4" />
-      </Button>
-    )
   }
 
   const renderTactic = (
@@ -225,7 +92,7 @@ export function Ics234WorkAnalysisMatrix({
       tacticId: tactic.id,
     }
     const editing = isEditingRef(ref)
-    const name = draftName(ref, tactic.name)
+    const name = getIcs234MatrixItemDraftName(ref, tactic.name, editingItem)
     const placeholder = `Tactic ${tacticIndex + 1}`
 
     return (
@@ -234,7 +101,7 @@ export function Ics234WorkAnalysisMatrix({
         className="flex items-center gap-2 rounded-md border px-2 py-1.5"
       >
         <div className="min-w-0 flex-1">
-          <InlineNameField
+          <Ics234MatrixInlineNameField
             name={name}
             editing={editing}
             placeholder={placeholder}
@@ -245,7 +112,18 @@ export function Ics234WorkAnalysisMatrix({
           <Badge variant="outline" className="text-xs">
             Tactic
           </Badge>
-          {renderItemEditControl(ref, 'tactic')}
+          <Ics234MatrixItemEditControls
+            ref={ref}
+            itemLabel="tactic"
+            canMutate={canMutate}
+            isSaving={isSaving}
+            editingItem={editingItem}
+            onStartItemEdit={onStartItemEdit}
+            onCancelItemEdit={onCancelItemEdit}
+            onSaveItem={onSaveItem}
+            onGenerateItem={onGenerateItem}
+            onEditClick={handleEditClick}
+          />
           {canMutate && !editing ? (
             <Button
               type="button"
@@ -279,7 +157,7 @@ export function Ics234WorkAnalysisMatrix({
     const key = strategyKey(objective.id, strategy.id)
     const isOpen = expandedStrategyKey === key
     const editing = isEditingRef(ref)
-    const name = draftName(ref, strategy.name)
+    const name = getIcs234MatrixItemDraftName(ref, strategy.name, editingItem)
     const placeholder = `Strategy ${strategyIndex + 1}`
 
     return (
@@ -296,7 +174,7 @@ export function Ics234WorkAnalysisMatrix({
               setExpandedStrategyKey((previous) => (previous === key ? null : key))
             }
           >
-            <InlineNameField
+            <Ics234MatrixInlineNameField
               name={name}
               editing={editing}
               placeholder={placeholder}
@@ -308,7 +186,18 @@ export function Ics234WorkAnalysisMatrix({
             <Badge variant="outline" className="text-xs">
               Strategy
             </Badge>
-            {renderItemEditControl(ref, 'strategy')}
+            <Ics234MatrixItemEditControls
+              ref={ref}
+              itemLabel="strategy"
+              canMutate={canMutate}
+              isSaving={isSaving}
+              editingItem={editingItem}
+              onStartItemEdit={onStartItemEdit}
+              onCancelItemEdit={onCancelItemEdit}
+              onSaveItem={onSaveItem}
+              onGenerateItem={onGenerateItem}
+              onEditClick={handleEditClick}
+            />
             {canMutate && !editing ? (
               <Button
                 type="button"
@@ -408,7 +297,7 @@ export function Ics234WorkAnalysisMatrix({
           const isOpen = expandedObjectiveId === objective.id
           const isLinkedToIcs202 = isIcs234ObjectiveLinkedToIcs202(objective)
           const editing = isEditingRef(ref) && !isLinkedToIcs202
-          const name = draftName(ref, objective.name)
+          const name = getIcs234MatrixItemDraftName(ref, objective.name, editingItem)
           const placeholder = `Objective ${objectiveIndex + 1}`
           const ics202SourceLabel =
             isLinkedToIcs202 && objective.ics202SourceKind
@@ -435,7 +324,7 @@ export function Ics234WorkAnalysisMatrix({
                     }
                   >
                     <ItemTitle className="line-clamp-none w-full font-medium">
-                      <InlineNameField
+                      <Ics234MatrixInlineNameField
                         name={name}
                         editing={editing}
                         readOnly={isLinkedToIcs202}
@@ -467,7 +356,19 @@ export function Ics234WorkAnalysisMatrix({
                         Operational
                       </Badge>
                     )}
-                    {renderItemEditControl(ref, 'objective', { disabled: isLinkedToIcs202 })}
+                    <Ics234MatrixItemEditControls
+                      ref={ref}
+                      itemLabel="objective"
+                      canMutate={canMutate}
+                      isSaving={isSaving}
+                      editingItem={editingItem}
+                      disabled={isLinkedToIcs202}
+                      onStartItemEdit={onStartItemEdit}
+                      onCancelItemEdit={onCancelItemEdit}
+                      onSaveItem={onSaveItem}
+                      onGenerateItem={onGenerateItem}
+                      onEditClick={handleEditClick}
+                    />
                     {canMutate && !editing && !isLinkedToIcs202 ? (
                       <Button
                         type="button"
@@ -552,3 +453,5 @@ export function Ics234WorkAnalysisMatrix({
     </div>
   )
 }
+
+export type { Ics234WorkAnalysisMatrixProps } from '@/features/ics234/Ics234MatrixShared'

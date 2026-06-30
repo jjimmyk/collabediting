@@ -9,11 +9,18 @@ export function validateAssetEffectiveWhen(params: {
   icsPosition: string
   orgChartReportsTo: string
   pointOfContactMemberId: string | null
+  pointOfContactUserId?: string | null
   catalog: WorkspacePositionCatalog
   operationalPeriodsEnabled: boolean
+  allowOrgPointOfContact?: boolean
 }): string | null {
-  if (params.assignmentKind === 'ics_position' && !params.pointOfContactMemberId) {
-    return 'Select a Point of Contact roster member before assigning this asset to a position.'
+  if (params.assignmentKind === 'ics_position') {
+    const hasPoc =
+      Boolean(params.pointOfContactMemberId) ||
+      (params.allowOrgPointOfContact && Boolean(params.pointOfContactUserId))
+    if (!hasPoc) {
+      return 'Select a Point of Contact before assigning this asset to a position.'
+    }
   }
 
   if (!params.operationalPeriodsEnabled) {

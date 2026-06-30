@@ -9,4 +9,5 @@ export type AddAssetToOrgChartSubmitInput = {
   icsPosition: string
   orgChartReportsTo: string
   pointOfContactMemberId: string | null
+  pointOfContactUserId?: string | null
 }

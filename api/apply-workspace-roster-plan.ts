@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js'
 import type { BuildTeamRosterDraft } from './roster-template-types.js'
 import {
   applyRosterPlanToWorkspace,
+  applyDraftAssetsToWorkspace,
   ensureCreatorAsIncidentCommander,
   loadDefaultRosterTemplate,
   loadRosterTemplateBySlug,
@@ -120,6 +121,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     await runRosterPlanStep('apply roster plan to workspace', async () => {
       await applyRosterPlanToWorkspace(admin, workspaceId, draftPlan, user.id)
+    })
+    await runRosterPlanStep('apply draft assets to workspace', async () => {
+      await applyDraftAssetsToWorkspace(admin, workspaceId, draftPlan, user.id)
     })
     await runRosterPlanStep('mark roster plan applied', async () => {
       await markRosterPlanApplied(admin, workspaceId)

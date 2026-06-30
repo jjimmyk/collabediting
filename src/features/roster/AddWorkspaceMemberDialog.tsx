@@ -34,6 +34,11 @@ import {
   effectiveWhenSummary,
   validateRosterMemberEffectiveWhen,
 } from '@/features/roster/roster-member-effective-when'
+import {
+  memberEffectiveWhenLabels,
+  showsRosterEffectiveWhenUi,
+  type RosterSchedulingPhase,
+} from '@/lib/roster-scheduling-phase'
 import { validateMemberOrgChartReportsTo } from '@/features/roster/workspace-member-org-chart'
 import { buildReportsToOptions, type WorkspacePositionCatalog } from '@/features/roster/workspace-positions'
 import type {
@@ -77,6 +82,7 @@ type AddWorkspaceMemberDialogProps = {
   assignableRosterMembers?: WorkspaceRosterMember[]
   workspaceRosterMembers?: WorkspaceRosterMember[]
   defaultEffectiveWhen?: RosterMemberEffectiveWhen
+  rosterSchedulingPhase?: RosterSchedulingPhase
   isSubmitting: boolean
   onSearchExistingPeople: (query: string, position?: string) => Promise<OrgMemberSearchResult[]>
   onSubmit: (input: AddWorkspaceMemberSubmitInput) => Promise<PositionRosterInviteSubmitResult>
@@ -97,6 +103,7 @@ export function AddWorkspaceMemberDialog({
   assignableRosterMembers = [],
   workspaceRosterMembers = [],
   defaultEffectiveWhen = 'now',
+  rosterSchedulingPhase = 'live_ops',
   isSubmitting,
   onSearchExistingPeople,
   onSubmit,
@@ -121,7 +128,19 @@ export function AddWorkspaceMemberDialog({
 
   const reportsToOptions = useMemo(() => buildReportsToOptions(catalog), [catalog])
   const lockIcsPositions = Boolean(positionPreset) && assignmentKind === 'ics_position'
-  const showEffectiveWhen = operationalPeriodsEnabled && isSupabaseEnabled
+  const showEffectiveWhen = showsRosterEffectiveWhenUi({
+    rosterSchedulingPhase,
+    operationalPeriodsEnabled,
+    isSupabaseEnabled,
+  })
+  const effectiveWhenLabels = useMemo(
+    () => memberEffectiveWhenLabels(rosterSchedulingPhase),
+    [rosterSchedulingPhase]
+  )
+  const orgPickerMode =
+    rosterSchedulingPhase === 'pre_first_op' ? 'pre_workspace' : 'assign_to_position'
+  const addToRosterPickerMode =
+    rosterSchedulingPhase === 'pre_first_op' ? 'pre_workspace' : 'add_to_roster'
   const lockEffectiveWhenToNextOp =
     showEffectiveWhen &&
     assignmentKind === 'ics_position' &&
@@ -223,7 +242,7 @@ export function AddWorkspaceMemberDialog({
     ? isPositionAssignSelectionValid(positionAssignSelection)
     : isSupabaseEnabled &&
       selectedExistingUserId !== null &&
-      isSelectableOrgMember(selectedExistingResult ?? { id: null }, 'add_to_roster')
+      isSelectableOrgMember(selectedExistingResult ?? { id: null }, addToRosterPickerMode)
 
   const canSubmit =
     !isSubmitting &&
@@ -319,7 +338,9 @@ export function AddWorkspaceMemberDialog({
       ? isSubmitting
         ? 'Adding…'
         : effectiveWhen === 'next_op_advance'
-          ? 'Add to roster (next OP)'
+          ? rosterSchedulingPhase === 'pre_first_op'
+            ? 'Add to roster (first OP)'
+            : 'Add to roster (next OP)'
           : 'Add to roster'
       : isSubmitting
         ? passwordDraft.length > 0
@@ -328,10 +349,14 @@ export function AddWorkspaceMemberDialog({
         : isSupabaseEnabled
           ? passwordDraft.length > 0
             ? effectiveWhen === 'next_op_advance'
-              ? 'Add member (next OP)'
+              ? rosterSchedulingPhase === 'pre_first_op'
+                ? 'Add member (first OP)'
+                : 'Add member (next OP)'
               : 'Add member'
             : effectiveWhen === 'next_op_advance'
-              ? 'Send invite (next OP)'
+              ? rosterSchedulingPhase === 'pre_first_op'
+                ? 'Send invite (first OP)'
+                : 'Send invite (next OP)'
               : 'Send invite'
           : 'Add to roster'
 
@@ -445,9 +470,9 @@ export function AddWorkspaceMemberDialog({
                 >
                   <RadioGroupItem value="now" disabled={lockEffectiveWhenToNextOp} className="mt-0.5" />
                   <span>
-                    <span className="font-medium">Now</span>
+                    <span className="font-medium">{effectiveWhenLabels.nowTitle}</span>
                     <span className="mt-0.5 block text-[11px] text-muted-foreground">
-                      Assignment is active in this operational period.
+                      {effectiveWhenLabels.nowDescription}
                     </span>
                   </span>
                 </label>
@@ -459,11 +484,12 @@ export function AddWorkspaceMemberDialog({
                 >
                   <RadioGroupItem value="next_op_advance" className="mt-0.5" />
                   <span>
-                    <span className="font-medium">Next operational period</span>
+                    <span className="font-medium">{effectiveWhenLabels.nextOpTitle}</span>
                     <span className="mt-0.5 block text-[11px] text-muted-foreground">
-                      {isAssignToPosition
-                        ? 'Assignment is scheduled for when the next operational period starts.'
-                        : 'Person is added to the roster now; assignment applies when the next OP starts.'}
+                      {effectiveWhenLabels.nextOpDescription({
+                        isAssignToPosition,
+                        assignmentKind,
+                      })}
                     </span>
                   </span>
                 </label>
@@ -555,7 +581,7 @@ export function AddWorkspaceMemberDialog({
                     selection={positionAssignSelection}
                     onSelectionChange={setPositionAssignSelection}
                     onSearchOrgMembers={onSearchExistingPeople}
-                    orgPickerMode="assign_to_position"
+                    orgPickerMode={orgPickerMode}
                     disabled={isSubmitting}
                   />
                 ) : isSearchingExisting ? (
@@ -568,8 +594,8 @@ export function AddWorkspaceMemberDialog({
                   </p>
                 ) : (
                   existingSearchResults.map((result) => {
-                    const selectable = isSelectableOrgMember(result, 'add_to_roster')
-                    const statusLabel = orgMemberStatusLabel(result, 'add_to_roster')
+                    const selectable = isSelectableOrgMember(result, addToRosterPickerMode)
+                    const statusLabel = orgMemberStatusLabel(result, addToRosterPickerMode)
                     return (
                       <button
                         key={result.id ?? result.email}

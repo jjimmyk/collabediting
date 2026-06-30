@@ -30,7 +30,11 @@ export type RosterTemplateRecord = {
   definition: RosterTemplateDefinition
 }
 
-import type { WorkspaceMemberPersonSource } from '@/lib/roster-member-assignment'
+import type {
+  RosterMemberEffectiveWhen,
+  WorkspaceMemberPersonSource,
+} from '@/lib/roster-member-assignment'
+import type { AssetAssignmentKind } from '@/lib/roster-asset-assignment'
 
 export type BuildTeamDraftMember = {
   id: string
@@ -42,6 +46,7 @@ export type BuildTeamDraftMember = {
   password: string
   personSource: WorkspaceMemberPersonSource
   existingUserId: string | null
+  effectiveWhen: RosterMemberEffectiveWhen
   status?: 'invited' | 'active'
 }
 
@@ -51,6 +56,18 @@ export type BuildTeamDraftCustomPosition = {
   reportsTo: string
   positionType: WorkspacePositionType
   customTypeLabel: string | null
+  createOnFirstOpPeriod: boolean
+}
+
+export type BuildTeamDraftAsset = {
+  id: string
+  assetKey: string
+  assignmentKind: AssetAssignmentKind
+  icsPosition: string
+  orgChartReportsTo: string
+  pointOfContactUserId: string | null
+  pointOfContactDraftMemberId: string | null
+  effectiveWhen: RosterMemberEffectiveWhen
 }
 
 export type BuildTeamRosterDraft = {
@@ -61,6 +78,7 @@ export type BuildTeamRosterDraft = {
   customPositions: BuildTeamDraftCustomPosition[]
   singleResourceSlots: RosterTemplateSingleResourceSlot[]
   draftMembers: BuildTeamDraftMember[]
+  draftAssets: BuildTeamDraftAsset[]
   positionSettings: Record<
     string,
     {

@@ -18,6 +18,12 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import type { ResourceListItemData } from '@/features/resources/types'
+import {
+  assetEffectiveWhenLabels,
+  showsRosterEffectiveWhenUi,
+  type RosterSchedulingPhase,
+} from '@/lib/roster-scheduling-phase'
+import type { OrgMemberSearchResult } from '@/lib/workspace-service'
 import { ICS_ORG_CHART_ROOT_POSITION } from '@/features/roster/ics-org-chart-structure'
 import { PersonPickerQualificationsLine } from '@/features/roster/PersonPickerQualificationsLine'
 import {
@@ -43,6 +49,9 @@ type AddAssetToOrgChartDialogProps = {
   positionAssetsByPosition: Record<string, { assetKey: string }[]>
   catalog: WorkspacePositionCatalog
   pocMembers: WorkspaceRosterMember[]
+  pocOrgMembers?: OrgMemberSearchResult[]
+  draftAssignedAssetKeys?: string[]
+  rosterSchedulingPhase?: RosterSchedulingPhase
   isSaving?: boolean
   onSubmit: (input: AddAssetToOrgChartSubmitInput) => Promise<void>
 }
@@ -58,6 +67,9 @@ export function AddAssetToOrgChartDialog({
   positionAssetsByPosition,
   catalog,
   pocMembers,
+  pocOrgMembers = [],
+  draftAssignedAssetKeys = [],
+  rosterSchedulingPhase = 'live_ops',
   isSaving = false,
   onSubmit,
 }: AddAssetToOrgChartDialogProps) {
@@ -68,14 +80,67 @@ export function AddAssetToOrgChartDialog({
   const [orgChartReportsToDraft, setOrgChartReportsToDraft] = useState<string>(
     ICS_ORG_CHART_ROOT_POSITION
   )
-  const [pointOfContactMemberIdDraft, setPointOfContactMemberIdDraft] = useState<string>('')
+  const [pointOfContactSelectionDraft, setPointOfContactSelectionDraft] = useState<string>('')
   const [error, setError] = useState<string | null>(null)
 
   const reportsToOptions = useMemo(() => buildReportsToOptions(catalog), [catalog])
   const positionOptions = useMemo(() => catalog.rosterPositionNames, [catalog])
-  const showEffectiveWhen = operationalPeriodsEnabled && isSupabaseEnabled
+  const showEffectiveWhen = showsRosterEffectiveWhenUi({
+    rosterSchedulingPhase,
+    operationalPeriodsEnabled,
+    isSupabaseEnabled,
+  })
+  const effectiveWhenLabels = useMemo(
+    () => assetEffectiveWhenLabels(rosterSchedulingPhase),
+    [rosterSchedulingPhase]
+  )
+  const allowOrgPointOfContact = rosterSchedulingPhase === 'pre_first_op'
+
+  const pocOptions = useMemo(() => {
+    const rosterOptions = pocMembers.map((member) => ({
+      value: `member:${member.id}`,
+      label: member.email,
+      qualifications: member.qualifications,
+    }))
+    const orgOptions = pocOrgMembers
+      .filter((member) => Boolean(member.id))
+      .map((member) => ({
+        value: `user:${member.id}`,
+        label: member.email,
+        qualifications: member.qualifications,
+      }))
+    return [...rosterOptions, ...orgOptions]
+  }, [pocMembers, pocOrgMembers])
+
+  const parsedPointOfContact = useMemo(() => {
+    if (!pointOfContactSelectionDraft) {
+      return { pointOfContactMemberId: null, pointOfContactUserId: null }
+    }
+    if (pointOfContactSelectionDraft.startsWith('user:')) {
+      return {
+        pointOfContactMemberId: null,
+        pointOfContactUserId: pointOfContactSelectionDraft.slice('user:'.length) || null,
+      }
+    }
+    if (pointOfContactSelectionDraft.startsWith('member:')) {
+      return {
+        pointOfContactMemberId: pointOfContactSelectionDraft.slice('member:'.length) || null,
+        pointOfContactUserId: null,
+      }
+    }
+    return {
+      pointOfContactMemberId: pointOfContactSelectionDraft,
+      pointOfContactUserId: null,
+    }
+  }, [pointOfContactSelectionDraft])
 
   const selectableAssets = useMemo(() => {
+    const draftAssigned = new Set(draftAssignedAssetKeys)
+
+    if (draftAssignedAssetKeys.length > 0) {
+      return assets.filter((asset) => !draftAssigned.has(asset.assetKey))
+    }
+
     if (assignmentKind === 'single_resource') {
       return assets.filter(
         (asset) => !asset.orgChartReportsTo && !asset.pendingOrgChartReportsTo
@@ -98,6 +163,7 @@ export function AddAssetToOrgChartDialog({
     assetSchedulesByPosition,
     assets,
     assignmentKind,
+    draftAssignedAssetKeys,
     icsPositionDraft,
     positionAssetsByPosition,
     workspaceAssignedAssets,
@@ -109,14 +175,20 @@ export function AddAssetToOrgChartDialog({
     setAssetKeyDraft(selectableAssets[0]?.assetKey ?? assets[0]?.assetKey ?? '')
     setIcsPositionDraft(catalog.rosterPositionNames[0] ?? 'Incident Commander')
     setOrgChartReportsToDraft(ICS_ORG_CHART_ROOT_POSITION)
-    setPointOfContactMemberIdDraft(pocMembers[0]?.id ?? '')
+    setPointOfContactSelectionDraft(pocOptions[0]?.value ?? '')
     setError(null)
   }
 
   useEffect(() => {
     if (!open) return
     resetDraft()
-  }, [open, assets, catalog.rosterPositionNames, pocMembers])
+  }, [open, assets, catalog.rosterPositionNames, pocOptions])
+
+  useEffect(() => {
+    if (!pocOptions.some((option) => option.value === pointOfContactSelectionDraft)) {
+      setPointOfContactSelectionDraft(pocOptions[0]?.value ?? '')
+    }
+  }, [pointOfContactSelectionDraft, pocOptions])
 
   useEffect(() => {
     if (!selectableAssets.some((asset) => asset.assetKey === assetKeyDraft)) {
@@ -134,9 +206,11 @@ export function AddAssetToOrgChartDialog({
     assignmentKind,
     icsPosition: icsPositionDraft,
     orgChartReportsTo: orgChartReportsToDraft,
-    pointOfContactMemberId: pointOfContactMemberIdDraft || null,
+    pointOfContactMemberId: parsedPointOfContact.pointOfContactMemberId,
+    pointOfContactUserId: parsedPointOfContact.pointOfContactUserId,
     catalog,
     operationalPeriodsEnabled: showEffectiveWhen,
+    allowOrgPointOfContact,
   })
 
   const canSubmit =
@@ -145,7 +219,10 @@ export function AddAssetToOrgChartDialog({
     !orgChartValidationError &&
     !effectiveWhenValidationError &&
     selectableAssets.length > 0 &&
-    (assignmentKind === 'single_resource' || Boolean(pointOfContactMemberIdDraft))
+    (assignmentKind === 'single_resource' ||
+      Boolean(
+        parsedPointOfContact.pointOfContactMemberId || parsedPointOfContact.pointOfContactUserId
+      ))
 
   const handleSubmit = async () => {
     if (!assetKeyDraft) {
@@ -169,8 +246,8 @@ export function AddAssetToOrgChartDialog({
         effectiveWhen,
         icsPosition: icsPositionDraft,
         orgChartReportsTo: orgChartReportsToDraft,
-        pointOfContactMemberId:
-          assignmentKind === 'ics_position' ? pointOfContactMemberIdDraft : null,
+        pointOfContactMemberId: parsedPointOfContact.pointOfContactMemberId,
+        pointOfContactUserId: parsedPointOfContact.pointOfContactUserId,
       })
       resetDraft()
       onOpenChange(false)
@@ -182,7 +259,9 @@ export function AddAssetToOrgChartDialog({
   const submitLabel = isSaving
     ? 'Adding…'
     : effectiveWhen === 'next_op_advance'
-      ? 'Add asset (next OP)'
+      ? rosterSchedulingPhase === 'pre_first_op'
+        ? 'Add asset (first OP)'
+        : 'Add asset (next OP)'
       : 'Add asset'
 
   return (
@@ -276,9 +355,9 @@ export function AddAssetToOrgChartDialog({
                   >
                     <RadioGroupItem value="now" className="mt-0.5" />
                     <span>
-                      <span className="font-medium">Now</span>
+                      <span className="font-medium">{effectiveWhenLabels.nowTitle}</span>
                       <span className="mt-0.5 block text-[11px] text-muted-foreground">
-                        Assignment is active in this operational period.
+                        {effectiveWhenLabels.nowDescription}
                       </span>
                     </span>
                   </label>
@@ -290,9 +369,12 @@ export function AddAssetToOrgChartDialog({
                   >
                     <RadioGroupItem value="next_op_advance" className="mt-0.5" />
                     <span>
-                      <span className="font-medium">Next operational period</span>
+                      <span className="font-medium">{effectiveWhenLabels.nextOpTitle}</span>
                       <span className="mt-0.5 block text-[11px] text-muted-foreground">
-                        Asset stays in the workspace; assignment applies when the next OP starts.
+                        {effectiveWhenLabels.nextOpDescription({
+                          isAssignToPosition: false,
+                          assignmentKind,
+                        })}
                       </span>
                     </span>
                   </label>
@@ -331,18 +413,18 @@ export function AddAssetToOrgChartDialog({
                 <div className="grid gap-2">
                   <Label htmlFor="asset-point-of-contact">Point of Contact</Label>
                   <Select
-                    value={pointOfContactMemberIdDraft}
-                    onValueChange={setPointOfContactMemberIdDraft}
+                    value={pointOfContactSelectionDraft}
+                    onValueChange={setPointOfContactSelectionDraft}
                   >
                     <SelectTrigger id="asset-point-of-contact">
-                      <SelectValue placeholder="Select a roster member" />
+                      <SelectValue placeholder="Select a point of contact" />
                     </SelectTrigger>
                     <SelectContent>
-                      {pocMembers.map((member) => (
-                        <SelectItem key={member.id} value={member.id} textValue={member.email}>
+                      {pocOptions.map((option) => (
+                        <SelectItem key={option.value} value={option.value} textValue={option.label}>
                           <span className="flex flex-col items-start gap-0.5 py-0.5">
-                            <span>{member.email}</span>
-                            <PersonPickerQualificationsLine qualifications={member.qualifications} />
+                            <span>{option.label}</span>
+                            <PersonPickerQualificationsLine qualifications={option.qualifications} />
                           </span>
                         </SelectItem>
                       ))}

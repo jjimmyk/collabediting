@@ -639,6 +639,45 @@ export async function searchOrgMembersForWorkspace(params: {
   }))
 }
 
+export async function searchOrgMembersForOrganization(params: {
+  accessToken: string
+  organizationId: string
+  query: string
+  position?: string
+}): Promise<OrgMemberSearchResult[]> {
+  if (!isSupabaseConfigured) {
+    return []
+  }
+
+  const searchParams = new URLSearchParams({
+    organizationId: params.organizationId,
+    q: params.query.trim(),
+  })
+  if (params.position?.trim()) {
+    searchParams.set('position', params.position.trim())
+  }
+
+  const response = await fetch(`/api/search-organization-members?${searchParams.toString()}`, {
+    headers: {
+      Authorization: `Bearer ${params.accessToken}`,
+    },
+  })
+
+  const payload = (await response.json().catch(() => ({}))) as {
+    error?: string
+    results?: OrgMemberSearchResult[]
+  }
+
+  if (!response.ok) {
+    throw new Error(payload.error ?? 'Could not search for people.')
+  }
+
+  return (payload.results ?? []).map((result) => ({
+    ...result,
+    qualifications: result.qualifications ?? [],
+  }))
+}
+
 export async function addExistingWorkspaceMember(params: {
   accessToken: string
   workspaceId: string

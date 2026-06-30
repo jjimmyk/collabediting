@@ -17,6 +17,49 @@ export function filterMembersBySearchQuery<T extends { email: string }>(
   })
 }
 
+export function dedupeOrgSearchResultsAgainstDraftMembers(
+  orgResults: OrgMemberSearchResult[],
+  draftMembers: Array<{
+    email: string
+    existingUserId: string | null
+    icsPositions: string[]
+    assignmentKind: 'ics_position' | 'single_resource'
+  }>,
+  position?: string
+): OrgMemberSearchResult[] {
+  const draftEmails = new Set(draftMembers.map((member) => member.email.toLowerCase()))
+  const draftUserIds = new Set(
+    draftMembers
+      .map((member) => member.existingUserId)
+      .filter((userId): userId is string => typeof userId === 'string' && userId.length > 0)
+  )
+
+  const positionUserIds = position
+    ? new Set(
+        draftMembers
+          .filter(
+            (member) =>
+              member.assignmentKind === 'ics_position' && member.icsPositions.includes(position)
+          )
+          .map((member) => member.existingUserId)
+          .filter((userId): userId is string => typeof userId === 'string' && userId.length > 0)
+      )
+    : null
+
+  return orgResults.filter((result) => {
+    if (draftEmails.has(result.email.toLowerCase())) {
+      return false
+    }
+    if (result.id && draftUserIds.has(result.id)) {
+      return false
+    }
+    if (position && result.id && positionUserIds?.has(result.id)) {
+      return false
+    }
+    return true
+  })
+}
+
 export function dedupeOrgSearchResultsAgainstRoster(
   orgResults: OrgMemberSearchResult[],
   rosterMembers: Array<Pick<WorkspaceRosterMember, 'email' | 'userId'>>
@@ -45,7 +88,7 @@ export function formatMemberPositionSummary(positions: string[]): string | null 
   return positions.join(', ')
 }
 
-export type OrgMemberPickerMode = 'add_to_roster' | 'assign_to_position'
+export type OrgMemberPickerMode = 'add_to_roster' | 'assign_to_position' | 'pre_workspace'
 
 export function isSelectableOrgMember(
   result: {
@@ -57,6 +100,9 @@ export function isSelectableOrgMember(
 ): boolean {
   if (!result.id) {
     return false
+  }
+  if (mode === 'pre_workspace') {
+    return result.canAdd !== false
   }
   if (mode === 'assign_to_position') {
     return result.canAdd !== false
@@ -73,6 +119,16 @@ export function orgMemberStatusLabel(
   mode: OrgMemberPickerMode = 'add_to_roster',
   position?: string
 ): string | null {
+  if (mode === 'pre_workspace') {
+    if (!result.id) {
+      return 'No sign-in account yet'
+    }
+    if (result.canAdd === false) {
+      return 'Unavailable'
+    }
+    return null
+  }
+
   if (mode === 'assign_to_position') {
     if (result.canAdd === false) {
       return position ? `Already assigned to ${position}` : 'Already assigned here'

@@ -4,6 +4,7 @@ import {
   getRosterTemplateBySlug,
 } from '@/features/roster/roster-template-catalog'
 import type {
+  BuildTeamDraftAsset,
   BuildTeamDraftCustomPosition,
   BuildTeamDraftMember,
   BuildTeamRosterDraft,
@@ -28,6 +29,7 @@ function buildDraftCustomPositionsFromTemplateSeeds(
     reportsTo: seed.reportsTo,
     positionType: seed.positionType,
     customTypeLabel: seed.customTypeLabel ?? null,
+    createOnFirstOpPeriod: false,
   }))
 }
 
@@ -61,6 +63,7 @@ export function ensureCreatorInBuildTeamDraft(
     password: '',
     personSource: creator.userId ? 'add_existing' : 'invite_new',
     existingUserId: creator.userId,
+    effectiveWhen: 'now',
     status: 'active',
   }
 
@@ -117,6 +120,7 @@ export function createBuildTeamRosterDraftFromTemplate(
     customPositions,
     singleResourceSlots: [...template.definition.singleResourceSlots],
     draftMembers: [],
+    draftAssets: [],
     positionSettings,
   }
 }
@@ -153,7 +157,10 @@ export function applyTemplateToBuildTeamDraft(
 
 export function addDraftCustomPosition(
   draft: BuildTeamRosterDraft,
-  input: Pick<BuildTeamDraftCustomPosition, 'name' | 'reportsTo' | 'positionType' | 'customTypeLabel'>
+  input: Pick<
+    BuildTeamDraftCustomPosition,
+    'name' | 'reportsTo' | 'positionType' | 'customTypeLabel' | 'createOnFirstOpPeriod'
+  >
 ): BuildTeamRosterDraft {
   const customPosition: BuildTeamDraftCustomPosition = {
     id: `draft-custom-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -161,6 +168,7 @@ export function addDraftCustomPosition(
     reportsTo: input.reportsTo,
     positionType: input.positionType,
     customTypeLabel: input.customTypeLabel,
+    createOnFirstOpPeriod: input.createOnFirstOpPeriod ?? false,
   }
 
   return {
@@ -241,6 +249,7 @@ export function addDraftMember(
 ): BuildTeamRosterDraft {
   const nextMember: BuildTeamDraftMember = {
     ...member,
+    effectiveWhen: member.effectiveWhen ?? 'now',
     id: `draft-member-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
   }
 
@@ -254,13 +263,48 @@ export function removeDraftMember(draft: BuildTeamRosterDraft, memberId: string)
   return {
     ...draft,
     draftMembers: draft.draftMembers.filter((member) => member.id !== memberId),
+    draftAssets: draft.draftAssets.map((asset) =>
+      asset.pointOfContactDraftMemberId === memberId
+        ? { ...asset, pointOfContactDraftMemberId: null }
+        : asset
+    ),
+  }
+}
+
+export function addDraftAsset(
+  draft: BuildTeamRosterDraft,
+  asset: Omit<BuildTeamDraftAsset, 'id'>
+): BuildTeamRosterDraft {
+  const nextAsset: BuildTeamDraftAsset = {
+    ...asset,
+    effectiveWhen: asset.effectiveWhen ?? 'now',
+    id: `draft-asset-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+  }
+
+  return {
+    ...draft,
+    draftAssets: [...draft.draftAssets, nextAsset],
   }
 }
 
 export function normalizeBuildTeamRosterDraftForApply(
   draft: BuildTeamRosterDraft
 ): BuildTeamRosterDraft {
-  return draft.effectTiming === 'immediate' ? draft : { ...draft, effectTiming: 'immediate' }
+  return {
+    ...draft,
+    draftAssets: (draft.draftAssets ?? []).map((asset) => ({
+      ...asset,
+      effectiveWhen: asset.effectiveWhen ?? 'now',
+    })),
+    draftMembers: draft.draftMembers.map((member) => ({
+      ...member,
+      effectiveWhen: member.effectiveWhen ?? 'now',
+    })),
+    customPositions: draft.customPositions.map((position) => ({
+      ...position,
+      createOnFirstOpPeriod: position.createOnFirstOpPeriod ?? false,
+    })),
+  }
 }
 
 export function createDraftCustomPositionDefaults(): Pick<

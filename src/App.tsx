@@ -787,6 +787,7 @@ import type {
   RosterInviteAssignmentMode,
 } from '@/features/roster/position-roster-messages'
 import type { RosterMemberEffectiveWhen } from '@/lib/roster-member-assignment'
+import { resolveRosterSchedulingPhase } from '@/lib/roster-scheduling-phase'
 import {
   buildOpAdvanceLifecycleSummary,
   canAssignMembersToPositionNow,
@@ -14169,6 +14170,7 @@ function App() {
     showPlanningPStepper &&
     (isInIncidentWorkspace || isInExerciseWorkspace) &&
     activeWorkspaceSupabaseId !== null
+  const rosterSchedulingPhase = resolveRosterSchedulingPhase(startedOperationalPeriodCount)
   const {
     periods: operationalPeriods,
     isLoadingPeriods: isLoadingOperationalPeriods,
@@ -27337,6 +27339,10 @@ function App() {
             workspaceLabel={activationWorkspaceLabel}
             draft={activationRosterDraft}
             onDraftChange={setActivationRosterDraft}
+            organizationId={activeOrganizationId}
+            organizationAssets={hubAssets}
+            isSupabaseEnabled={isSupabaseEnabled}
+            getAccessToken={getAccessToken}
             glassItemBorderClasses={glassItemBorderClasses}
           />
         )}
@@ -27345,6 +27351,10 @@ function App() {
             workspaceLabel={activationWorkspaceLabel}
             draft={activationRosterDraft}
             onDraftChange={setActivationRosterDraft}
+            organizationId={activeOrganizationId}
+            organizationAssets={hubAssets}
+            isSupabaseEnabled={isSupabaseEnabled}
+            getAccessToken={getAccessToken}
             glassItemBorderClasses={glassItemBorderClasses}
           />
         )}
@@ -39995,6 +40005,7 @@ function App() {
         workspaceLabel={activeWorkspaceRosterLabel}
         isSupabaseEnabled={isSupabaseEnabled}
         operationalPeriodsEnabled={operationalPeriodsEnabled}
+        rosterSchedulingPhase={rosterSchedulingPhase}
         catalog={workspacePositionCatalog}
         positionPreset={rosterInvitePositionPreset}
         assignableRosterMembers={
@@ -40098,6 +40109,7 @@ function App() {
         onOpenChange={setIsAddAssetToOrgChartOpen}
         isSupabaseEnabled={isSupabaseEnabled}
         operationalPeriodsEnabled={operationalPeriodsEnabled}
+        rosterSchedulingPhase={rosterSchedulingPhase}
         assets={workspaceAssetsEligibleForOrgChartDialog}
         workspaceAssignedAssets={workspaceAssignedAssetsWithPending}
         assetSchedulesByPosition={assetSchedulesByPosition}

@@ -1,9 +1,11 @@
-import type { ReactNode } from 'react'
-import { Pencil } from 'lucide-react'
+import { useState, type ReactNode } from 'react'
+import { LayoutList, Pencil, Table2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Item } from '@/components/ui/item'
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { ICS234_SECTION_LABELS } from '@/features/ics234/constants'
 import { Ics234WorkAnalysisMatrix } from '@/features/ics234/Ics234WorkAnalysisMatrix'
+import { Ics234WorkAnalysisMatrixTable } from '@/features/ics234/Ics234WorkAnalysisMatrixTable'
 import {
   Ics202FieldLabel,
   Ics202ReadOnlyField,
@@ -83,6 +85,8 @@ export function Ics234FormSections({
   onDeleteMatrixStrategy,
   onDeleteMatrixTactic,
 }: Ics234FormSectionsProps) {
+  const [matrixViewMode, setMatrixViewMode] = useState<'list' | 'table'>('list')
+
   const getDraft = <S extends Ics234SectionId>(
     section: S
   ): NonNullable<Ics234FormSectionDrafts[S]> => {
@@ -95,32 +99,82 @@ export function Ics234FormSections({
   const incidentInfo = getDraft('incident-info')
   const preparedBy = getDraft('prepared-by')
 
+  const matrixProps = {
+    objectives: form.objectives,
+    canEdit,
+    formIsLocked,
+    isSaving,
+    glassItemBorderClasses,
+    editingItem: editingMatrixItem,
+    onStartItemEdit: onStartMatrixItemEdit,
+    onCancelItemEdit: onCancelMatrixItemEdit,
+    onPatchItemDraft: onPatchMatrixItemDraft,
+    onSaveItem: onSaveMatrixItem,
+    onGenerateItem: onGenerateMatrixItem,
+    onAddObjective: onAddMatrixObjective,
+    onAddStrategy: onAddMatrixStrategy,
+    onAddTactic: onAddMatrixTactic,
+    onDeleteObjective: onDeleteMatrixObjective,
+    onDeleteStrategy: onDeleteMatrixStrategy,
+    onDeleteTactic: onDeleteMatrixTactic,
+  }
+
+  const matrixToolbar = (
+    <ToggleGroup
+      type="single"
+      value={matrixViewMode}
+      onValueChange={(next) => {
+        if (next === 'list' || next === 'table') {
+          setMatrixViewMode(next)
+        }
+      }}
+      variant="outline"
+      size="sm"
+      aria-label="Matrix view"
+    >
+      <ToggleGroupItem value="list" className="gap-1 px-2.5 text-xs">
+        <LayoutList className="h-3.5 w-3.5" />
+        List view
+      </ToggleGroupItem>
+      <ToggleGroupItem value="table" className="gap-1 px-2.5 text-xs">
+        <Table2 className="h-3.5 w-3.5" />
+        Table view
+      </ToggleGroupItem>
+    </ToggleGroup>
+  )
+
   const renderSectionShell = (
     section: Ics234SectionId,
     content: ReactNode,
-    options?: { hideSectionEdit?: boolean }
+    options?: { hideSectionEdit?: boolean; extraActions?: ReactNode }
   ) => {
     const editing = isEditing(editingSections, section)
     const hideSectionEdit = options?.hideSectionEdit ?? false
     return (
       <Item
         variant="outline"
-        className={cn('min-w-0 flex-col items-stretch p-0', glassItemBorderClasses)}
+        className={cn(
+          'min-w-0 max-w-full flex-nowrap flex-col items-stretch overflow-hidden p-0',
+          glassItemBorderClasses
+        )}
       >
-        <div className="min-w-0 space-y-2 px-3 py-2.5">
+        <div className="min-w-0 w-full max-w-full space-y-2 px-3 py-2.5">
           <div className="flex items-center justify-between gap-2">
             <p className="text-xs font-semibold">{ICS234_SECTION_LABELS[section]}</p>
-            {canEdit && !formIsLocked && !editing && !hideSectionEdit ? (
-              <Button
-                type="button"
-                size="icon"
-                variant="ghost"
-                className="h-7 w-7 text-muted-foreground"
-                onClick={() => onStartSectionEdit(section)}
-              >
-                <Pencil className="h-3.5 w-3.5" />
-              </Button>
-            ) : null}
+            <div className="flex min-w-0 shrink flex-wrap items-center justify-end gap-2">
+              {options?.extraActions}
+              {canEdit && !formIsLocked && !editing && !hideSectionEdit ? (
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="ghost"
+                  className="h-7 w-7 text-muted-foreground"
+                  onClick={() => onStartSectionEdit(section)}
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                </Button>
+              ) : null}
+            </div>
           </div>
           {content}
           {!hideSectionEdit ? (
@@ -138,7 +192,7 @@ export function Ics234FormSections({
   }
 
   return (
-    <div className="space-y-3">
+    <div className="min-w-0 w-full max-w-full space-y-3">
       {renderSectionShell(
         'incident-info',
         <div className="grid grid-cols-1 gap-2 xl:grid-cols-2">
@@ -171,26 +225,12 @@ export function Ics234FormSections({
 
       {renderSectionShell(
         'work-analysis-matrix',
-        <Ics234WorkAnalysisMatrix
-          objectives={form.objectives}
-          canEdit={canEdit}
-          formIsLocked={formIsLocked}
-          isSaving={isSaving}
-          glassItemBorderClasses={glassItemBorderClasses}
-          editingItem={editingMatrixItem}
-          onStartItemEdit={onStartMatrixItemEdit}
-          onCancelItemEdit={onCancelMatrixItemEdit}
-          onPatchItemDraft={onPatchMatrixItemDraft}
-          onSaveItem={onSaveMatrixItem}
-          onGenerateItem={onGenerateMatrixItem}
-          onAddObjective={onAddMatrixObjective}
-          onAddStrategy={onAddMatrixStrategy}
-          onAddTactic={onAddMatrixTactic}
-          onDeleteObjective={onDeleteMatrixObjective}
-          onDeleteStrategy={onDeleteMatrixStrategy}
-          onDeleteTactic={onDeleteMatrixTactic}
-        />,
-        { hideSectionEdit: true }
+        matrixViewMode === 'table' ? (
+          <Ics234WorkAnalysisMatrixTable {...matrixProps} />
+        ) : (
+          <Ics234WorkAnalysisMatrix {...matrixProps} />
+        ),
+        { hideSectionEdit: true, extraActions: matrixToolbar }
       )}
 
       {renderSectionShell(

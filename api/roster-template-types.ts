@@ -1,3 +1,5 @@
+export type RosterMemberEffectiveWhen = 'now' | 'next_op_advance'
+
 export type RosterTemplateEffectTiming = 'immediate' | 'op_period_1'
 
 export type RosterTemplateSingleResourceSlot = {
@@ -35,6 +37,10 @@ export type ApiWorkspacePositionType =
   | 'task_force'
   | 'custom_type'
 
+export type RosterMemberEffectiveWhen = 'now' | 'next_op_advance'
+
+export type AssetAssignmentKind = 'ics_position' | 'single_resource'
+
 export type BuildTeamDraftMember = {
   id: string
   email: string
@@ -43,8 +49,9 @@ export type BuildTeamDraftMember = {
   orgChartReportsTo: string | null
   competencyFunction?: string | null
   password: string
-  personSource: 'add_existing' | 'create_new'
+  personSource: 'add_existing' | 'create_new' | 'invite_new'
   existingUserId: string | null
+  effectiveWhen?: RosterMemberEffectiveWhen
   status?: 'invited' | 'active'
 }
 
@@ -54,6 +61,18 @@ export type BuildTeamDraftCustomPosition = {
   reportsTo: string
   positionType: ApiWorkspacePositionType
   customTypeLabel: string | null
+  createOnFirstOpPeriod?: boolean
+}
+
+export type BuildTeamDraftAsset = {
+  id: string
+  assetKey: string
+  assignmentKind: AssetAssignmentKind
+  icsPosition: string
+  orgChartReportsTo: string
+  pointOfContactUserId: string | null
+  pointOfContactDraftMemberId: string | null
+  effectiveWhen: RosterMemberEffectiveWhen
 }
 
 export type BuildTeamRosterDraft = {
@@ -64,6 +83,7 @@ export type BuildTeamRosterDraft = {
   customPositions: BuildTeamDraftCustomPosition[]
   singleResourceSlots: RosterTemplateSingleResourceSlot[]
   draftMembers: BuildTeamDraftMember[]
+  draftAssets?: BuildTeamDraftAsset[]
   positionSettings: Record<
     string,
     {

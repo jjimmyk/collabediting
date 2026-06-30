@@ -1,4 +1,4 @@
-import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Network, Table2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Label } from '@/components/ui/label'
@@ -10,6 +10,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
+import { AddAssetToOrgChartDialog } from '@/features/roster/AddAssetToOrgChartDialog'
 import {
   AddWorkspaceMemberDialog,
   type AddWorkspaceMemberSubmitInput,
@@ -18,14 +19,21 @@ import { AddWorkspacePositionDialog } from '@/features/roster/AddWorkspacePositi
 import {
   buildDraftPositionCatalog,
   buildDraftPositionSettings,
+  buildDraftAssetSchedulesByPosition,
+  buildDraftAssetsByKey,
+  buildDraftPositionAssetsByPosition,
   buildDraftRosterMembers,
 } from '@/features/roster/build-draft-position-catalog'
 import { defaultAllowWorkAssignment } from '@/lib/workspace-position-settings'
 import {
   applyTemplateToBuildTeamDraft,
+  addDraftAsset,
   hasNonCreatorBuildTeamDraftEdits,
   updateDraftCustomPosition,
 } from '@/features/roster/roster-draft-state'
+import {
+  dedupeOrgSearchResultsAgainstDraftMembers,
+} from '@/features/roster/position-member-assign-picker'
 import { ROSTER_TEMPLATE_CATALOG } from '@/features/roster/roster-template-catalog'
 import type { BuildTeamRosterDraft } from '@/features/roster/roster-template-types'
 import { RosterAddMemberToolbar } from '@/features/roster/RosterAddMemberToolbar'
@@ -48,7 +56,10 @@ import {
 } from '@/features/roster/workspace-position-roster'
 import type { PositionRosterInviteSubmitResult } from '@/features/roster/position-roster-messages'
 import type { WorkspacePositionType } from '@/features/roster/workspace-position-type'
+import type { ResourceListItemData } from '@/features/resources/types'
+import type { AddAssetToOrgChartSubmitInput } from '@/lib/roster-asset-assignment'
 import type { OrgMemberSearchResult } from '@/lib/workspace-service'
+import { searchOrgMembersForOrganization } from '@/lib/workspace-service'
 import { CREATE_ACTIVATION_PORTAL_Z_CLASS } from '@/lib/create-activation-navigation'
 import { cn } from '@/lib/utils'
 
@@ -56,6 +67,10 @@ type BuildTeamRosterStepProps = {
   workspaceLabel: string
   draft: BuildTeamRosterDraft
   onDraftChange: (draft: BuildTeamRosterDraft) => void
+  organizationId: string | null
+  organizationAssets: ResourceListItemData[]
+  isSupabaseEnabled: boolean
+  getAccessToken: () => Promise<string | null>
   glassItemBorderClasses?: string
   layout?: 'page' | 'compact'
 }
@@ -64,6 +79,10 @@ export function BuildTeamRosterStep({
   workspaceLabel,
   draft,
   onDraftChange,
+  organizationId,
+  organizationAssets,
+  isSupabaseEnabled,
+  getAccessToken,
   glassItemBorderClasses = 'border-border/60',
   layout = 'page',
 }: BuildTeamRosterStepProps) {
@@ -77,11 +96,29 @@ export function BuildTeamRosterStep({
   const zoomContainerRef = useRef<HTMLDivElement>(null)
   const [isAddMemberOpen, setIsAddMemberOpen] = useState(false)
   const [isAddPositionOpen, setIsAddPositionOpen] = useState(false)
+  const [isAddAssetOpen, setIsAddAssetOpen] = useState(false)
   const [memberPositionPreset, setMemberPositionPreset] = useState<string | null>(null)
   const [draftCompetencyOptions, setDraftCompetencyOptions] = useState<string[]>([])
+  const [pocOrgMembers, setPocOrgMembers] = useState<OrgMemberSearchResult[]>([])
 
   const catalog = useMemo(() => buildDraftPositionCatalog(draft), [draft])
   const rosterMembers = useMemo(() => buildDraftRosterMembers(draft), [draft])
+  const draftAssetsByKey = useMemo(
+    () => buildDraftAssetsByKey(draft, organizationAssets, rosterMembers),
+    [draft, organizationAssets, rosterMembers]
+  )
+  const draftPositionAssetsByPosition = useMemo(
+    () => buildDraftPositionAssetsByPosition(draft, organizationAssets, rosterMembers),
+    [draft, organizationAssets, rosterMembers]
+  )
+  const draftAssetSchedulesByPosition = useMemo(
+    () => buildDraftAssetSchedulesByPosition(draft),
+    [draft]
+  )
+  const draftAssignedAssetKeys = useMemo(
+    () => (draft.draftAssets ?? []).map((asset) => asset.assetKey),
+    [draft.draftAssets]
+  )
   const positionSettings = useMemo(() => buildDraftPositionSettings(draft), [draft])
   const permissions = useMemo(() => buildDefaultPositionPermissionMap(catalog), [catalog])
 
@@ -94,12 +131,12 @@ export function BuildTeamRosterStep({
         '',
         catalog,
         {},
-        {},
-        {},
-        {},
+        draftPositionAssetsByPosition,
+        draftAssetSchedulesByPosition,
+        draftAssetsByKey,
         {}
       ),
-    [catalog, permissions, positionSettings, rosterMembers]
+    [catalog, draftAssetSchedulesByPosition, draftAssetsByKey, draftPositionAssetsByPosition, permissions, positionSettings, rosterMembers]
   )
 
   const visibleRosterPositions = useMemo(
@@ -166,6 +203,61 @@ export function BuildTeamRosterStep({
     [draft, onDraftChange]
   )
 
+  const searchOrganizationPeople = useCallback(
+    async (query: string, position?: string): Promise<OrgMemberSearchResult[]> => {
+      if (!isSupabaseEnabled || !organizationId) {
+        return []
+      }
+      const accessToken = await getAccessToken()
+      if (!accessToken) {
+        return []
+      }
+      const results = await searchOrgMembersForOrganization({
+        accessToken,
+        organizationId,
+        query,
+        position,
+      })
+      return dedupeOrgSearchResultsAgainstDraftMembers(results, draft.draftMembers, position)
+    },
+    [draft.draftMembers, getAccessToken, isSupabaseEnabled, organizationId]
+  )
+
+  useEffect(() => {
+    if (!isAddAssetOpen || !isSupabaseEnabled || !organizationId) {
+      setPocOrgMembers([])
+      return
+    }
+
+    let cancelled = false
+    void (async () => {
+      const accessToken = await getAccessToken()
+      if (!accessToken || cancelled) return
+      try {
+        const results = await searchOrgMembersForOrganization({
+          accessToken,
+          organizationId,
+          query: '',
+        })
+        if (!cancelled) {
+          setPocOrgMembers(
+            dedupeOrgSearchResultsAgainstDraftMembers(results, draft.draftMembers).filter(
+              (member) => Boolean(member.id)
+            )
+          )
+        }
+      } catch {
+        if (!cancelled) {
+          setPocOrgMembers([])
+        }
+      }
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [draft.draftMembers, getAccessToken, isAddAssetOpen, isSupabaseEnabled, organizationId])
+
   const handleAddMemberSubmit = useCallback(
     async (input: AddWorkspaceMemberSubmitInput): Promise<PositionRosterInviteSubmitResult> => {
       onDraftChange({
@@ -182,6 +274,7 @@ export function BuildTeamRosterStep({
             password: input.password,
             personSource: input.personSource,
             existingUserId: input.existingUserId,
+            effectiveWhen: input.effectiveWhen,
             competencyFunction: null,
           },
         ],
@@ -191,11 +284,28 @@ export function BuildTeamRosterStep({
     [draft, onDraftChange]
   )
 
+  const handleAddAssetSubmit = useCallback(
+    async (input: AddAssetToOrgChartSubmitInput) => {
+      onDraftChange(
+        addDraftAsset(draft, {
+          assetKey: input.assetKey,
+          assignmentKind: input.assignmentKind,
+          icsPosition: input.icsPosition,
+          orgChartReportsTo: input.orgChartReportsTo,
+          pointOfContactUserId: input.pointOfContactUserId ?? null,
+          pointOfContactDraftMemberId: input.pointOfContactMemberId,
+          effectiveWhen: input.effectiveWhen,
+        })
+      )
+    },
+    [draft, onDraftChange]
+  )
+
   const handleCreateCustomPosition = useCallback(
     async (
       name: string,
       reportsTo: string,
-      _createOnOpAdvance: boolean,
+      createOnOpAdvance: boolean,
       positionType: WorkspacePositionType,
       customTypeLabel: string | null
     ) => {
@@ -212,6 +322,7 @@ export function BuildTeamRosterStep({
             reportsTo,
             positionType,
             customTypeLabel,
+            createOnFirstOpPeriod: createOnOpAdvance,
           },
         ],
         positionSettings: {
@@ -320,6 +431,9 @@ export function BuildTeamRosterStep({
       <div className="flex flex-wrap items-center justify-between gap-2">
         <Badge variant="outline" className="text-[10px] font-normal">
           {draft.draftMembers.length} draft invite{draft.draftMembers.length === 1 ? '' : 's'}
+          {(draft.draftAssets?.length ?? 0) > 0
+            ? ` · ${draft.draftAssets.length} draft asset${draft.draftAssets.length === 1 ? '' : 's'}`
+            : ''}
         </Badge>
         <div className="flex flex-wrap items-center gap-2">
           <RosterDisplayFiltersMenu
@@ -359,6 +473,7 @@ export function BuildTeamRosterStep({
               setMemberPositionPreset(null)
               setIsAddMemberOpen(true)
             }}
+            onAddAssetToOrgChart={() => setIsAddAssetOpen(true)}
             onAddPosition={() => setIsAddPositionOpen(true)}
           />
         </div>
@@ -379,7 +494,7 @@ export function BuildTeamRosterStep({
           <WorkspaceOrgChartRoster
             orgChartLayout={orgChartLayout}
             entriesByPosition={positionRosterEntriesByPosition}
-            assetsByKey={{}}
+            assetsByKey={draftAssetsByKey}
             rosterById={Object.fromEntries(rosterMembers.map((member) => [member.id, member]))}
             visiblePositions={visibleRosterPositions}
             displayFilters={rosterDisplayFilters}
@@ -453,19 +568,38 @@ export function BuildTeamRosterStep({
         open={isAddMemberOpen}
         onOpenChange={setIsAddMemberOpen}
         workspaceLabel={workspaceLabel}
-        isSupabaseEnabled={false}
+        isSupabaseEnabled={isSupabaseEnabled}
         operationalPeriodsEnabled={false}
+        rosterSchedulingPhase="pre_first_op"
         catalog={catalog}
         positionPreset={memberPositionPreset}
+        workspaceRosterMembers={rosterMembers}
         isSubmitting={false}
-        onSearchExistingPeople={async (): Promise<OrgMemberSearchResult[]> => []}
+        onSearchExistingPeople={searchOrganizationPeople}
         onSubmit={handleAddMemberSubmit}
       />
       <AddWorkspacePositionDialog
         open={isAddPositionOpen}
         onOpenChange={setIsAddPositionOpen}
         catalog={catalog}
+        showPlannedCreateOption
         onSubmit={handleCreateCustomPosition}
+      />
+      <AddAssetToOrgChartDialog
+        open={isAddAssetOpen}
+        onOpenChange={setIsAddAssetOpen}
+        isSupabaseEnabled={isSupabaseEnabled}
+        operationalPeriodsEnabled={false}
+        rosterSchedulingPhase="pre_first_op"
+        assets={organizationAssets}
+        workspaceAssignedAssets={organizationAssets}
+        assetSchedulesByPosition={draftAssetSchedulesByPosition}
+        positionAssetsByPosition={draftPositionAssetsByPosition}
+        catalog={catalog}
+        pocMembers={rosterMembers}
+        pocOrgMembers={pocOrgMembers}
+        draftAssignedAssetKeys={draftAssignedAssetKeys}
+        onSubmit={handleAddAssetSubmit}
       />
     </div>
   )

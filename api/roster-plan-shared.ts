@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { defaultAllowWorkAssignmentForApi } from './roster-operations-work-assignment.js'
-import type { BuildTeamDraftMember, BuildTeamRosterDraft } from './roster-template-types.js'
+import type { BuildTeamDraftAsset, BuildTeamDraftMember, BuildTeamRosterDraft } from './roster-template-types.js'
+import { addAssetWithEffectiveWhen } from './roster-asset-add-shared.js'
 import {
   addIcsWorkspaceMemberWithEffectiveWhen,
   addSingleResourceWorkspaceMemberWithEffectiveWhen,
@@ -134,6 +135,20 @@ async function replaceSingleResourceSlots(
   }
 }
 
+export function buildTeamMemberScheduleOnOpAdvance(
+  member: Pick<BuildTeamDraftMember, 'effectiveWhen'>
+): boolean {
+  return member.effectiveWhen === 'next_op_advance'
+}
+
+export function buildTeamCustomPositionLifecycleStatus(
+  position: Pick<BuildTeamDraftCustomPosition, 'createOnFirstOpPeriod'>
+): 'active' | 'planned_create' {
+  return position.createOnFirstOpPeriod ? 'planned_create' : 'active'
+}
+
+type BuildTeamDraftCustomPosition = BuildTeamRosterDraft['customPositions'][number]
+
 async function upsertCustomPositionsFromDraft(
   admin: SupabaseClient,
   workspaceId: string,
@@ -146,7 +161,7 @@ async function upsertCustomPositionsFromDraft(
       name: position.name,
       reports_to: position.reportsTo,
       sort_order: index,
-      lifecycle_status: 'active',
+      lifecycle_status: buildTeamCustomPositionLifecycleStatus(position),
       created_by: invitedBy,
     })
 
@@ -220,6 +235,116 @@ export async function applyRosterPlanToWorkspace(
   await upsertPositionSettingsFromDraft(admin, workspaceId, draft)
 }
 
+async function loadWorkspaceMemberLookup(
+  admin: SupabaseClient,
+  workspaceId: string
+): Promise<{
+  memberIdByUserId: Map<string, string>
+  memberIdByEmail: Map<string, string>
+}> {
+  const { data, error } = await admin
+    .from('workspace_members')
+    .select('id, user_id, email')
+    .eq('workspace_id', workspaceId)
+    .neq('status', 'removed')
+
+  if (error) {
+    throw new Error(error.message)
+  }
+
+  const memberIdByUserId = new Map<string, string>()
+  const memberIdByEmail = new Map<string, string>()
+
+  for (const row of data ?? []) {
+    const memberId = typeof row.id === 'string' ? row.id : ''
+    const userId = typeof row.user_id === 'string' ? row.user_id : ''
+    const email = typeof row.email === 'string' ? row.email.trim().toLowerCase() : ''
+    if (userId && memberId) {
+      memberIdByUserId.set(userId, memberId)
+    }
+    if (email && memberId) {
+      memberIdByEmail.set(email, memberId)
+    }
+  }
+
+  return { memberIdByUserId, memberIdByEmail }
+}
+
+function resolveDraftAssetPointOfContactMemberId(
+  asset: BuildTeamDraftAsset,
+  draft: BuildTeamRosterDraft,
+  lookup: {
+    memberIdByUserId: Map<string, string>
+    memberIdByEmail: Map<string, string>
+  }
+): string | null {
+  if (asset.pointOfContactDraftMemberId) {
+    const draftMember = draft.draftMembers.find(
+      (member) => member.id === asset.pointOfContactDraftMemberId
+    )
+    if (draftMember) {
+      if (draftMember.existingUserId) {
+        const byUserId = lookup.memberIdByUserId.get(draftMember.existingUserId)
+        if (byUserId) return byUserId
+      }
+      const byEmail = lookup.memberIdByEmail.get(draftMember.email.trim().toLowerCase())
+      if (byEmail) return byEmail
+    }
+  }
+
+  if (asset.pointOfContactUserId) {
+    return lookup.memberIdByUserId.get(asset.pointOfContactUserId) ?? null
+  }
+
+  return null
+}
+
+export async function applyDraftAssetsToWorkspace(
+  admin: SupabaseClient,
+  workspaceId: string,
+  draft: BuildTeamRosterDraft,
+  invitedBy: string
+): Promise<void> {
+  const draftAssets = draft.draftAssets ?? []
+  if (draftAssets.length === 0) {
+    return
+  }
+
+  const lookup = await loadWorkspaceMemberLookup(admin, workspaceId)
+
+  for (const asset of draftAssets) {
+    const assetKey = asset.assetKey.trim()
+    if (!assetKey) continue
+
+    const { error: assignError } = await admin.from('workspace_asset_assignments').upsert(
+      {
+        asset_key: assetKey,
+        workspace_id: workspaceId,
+        assigned_by: invitedBy,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'asset_key' }
+    )
+
+    if (assignError) {
+      throw new Error(assignError.message)
+    }
+
+    const pointOfContactMemberId = resolveDraftAssetPointOfContactMemberId(asset, draft, lookup)
+
+    await addAssetWithEffectiveWhen(admin, {
+      workspaceId,
+      assetKey,
+      assignmentKind: asset.assignmentKind,
+      scheduleOnOpAdvance: asset.effectiveWhen === 'next_op_advance',
+      icsPosition: asset.icsPosition,
+      orgChartReportsTo: asset.orgChartReportsTo,
+      pointOfContactMemberId,
+      createdBy: invitedBy,
+    })
+  }
+}
+
 async function applyDraftMemberCompetency(
   admin: SupabaseClient,
   params: {
@@ -276,13 +401,14 @@ export async function sendBuildTeamInvites(
     }
 
     if (member.personSource === 'add_existing' && member.existingUserId) {
+      const scheduleOnOpAdvance = buildTeamMemberScheduleOnOpAdvance(member)
       if (member.assignmentKind === 'single_resource') {
         if (!member.orgChartReportsTo) continue
         const added = await addSingleResourceWorkspaceMemberWithEffectiveWhen(admin, {
           workspaceId,
           email: member.email,
           orgChartReportsTo: member.orgChartReportsTo,
-          scheduleOnOpAdvance: false,
+          scheduleOnOpAdvance,
           status: 'invited',
           userId: member.existingUserId,
           invitedBy,
@@ -298,7 +424,7 @@ export async function sendBuildTeamInvites(
           workspaceId,
           email: member.email,
           icsPositions: member.icsPositions,
-          scheduleOnOpAdvance: false,
+          scheduleOnOpAdvance,
           status: 'invited',
           userId: member.existingUserId,
           invitedBy,
@@ -322,7 +448,7 @@ export async function sendBuildTeamInvites(
         password: member.password,
         invitedBy,
         confirmPasswordOverwrite: false,
-        scheduleOnOpAdvance: false,
+        scheduleOnOpAdvance: buildTeamMemberScheduleOnOpAdvance(member),
       })
       if (!result.ok) {
         throw new Error(`Could not invite ${member.email}.`)
@@ -343,7 +469,7 @@ export async function sendBuildTeamInvites(
       password: member.password,
       invitedBy,
       confirmPasswordOverwrite: false,
-      scheduleOnOpAdvance: false,
+      scheduleOnOpAdvance: buildTeamMemberScheduleOnOpAdvance(member),
     })
 
     if (!result.ok) {
@@ -456,6 +582,44 @@ function isEffectTiming(value: unknown): value is BuildTeamRosterDraft['effectTi
   return value === 'immediate' || value === 'op_period_1'
 }
 
+function isEffectiveWhen(value: unknown): value is BuildTeamDraftMember['effectiveWhen'] {
+  return value === 'now' || value === 'next_op_advance'
+}
+
+function normalizeDraftMember(member: unknown): BuildTeamDraftMember {
+  if (!member || typeof member !== 'object') {
+    throw new Error('draftPlan.draftMembers entries must be objects.')
+  }
+  const candidate = member as Partial<BuildTeamDraftMember>
+  return {
+    ...(candidate as BuildTeamDraftMember),
+    effectiveWhen: isEffectiveWhen(candidate.effectiveWhen) ? candidate.effectiveWhen : 'now',
+  }
+}
+
+function normalizeDraftAsset(asset: unknown): BuildTeamDraftAsset {
+  if (!asset || typeof asset !== 'object') {
+    throw new Error('draftPlan.draftAssets entries must be objects.')
+  }
+  const candidate = asset as Partial<BuildTeamDraftAsset>
+  return {
+    id: typeof candidate.id === 'string' ? candidate.id : '',
+    assetKey: typeof candidate.assetKey === 'string' ? candidate.assetKey : '',
+    assignmentKind:
+      candidate.assignmentKind === 'single_resource' ? 'single_resource' : 'ics_position',
+    icsPosition: typeof candidate.icsPosition === 'string' ? candidate.icsPosition : '',
+    orgChartReportsTo:
+      typeof candidate.orgChartReportsTo === 'string' ? candidate.orgChartReportsTo : '',
+    pointOfContactUserId:
+      typeof candidate.pointOfContactUserId === 'string' ? candidate.pointOfContactUserId : null,
+    pointOfContactDraftMemberId:
+      typeof candidate.pointOfContactDraftMemberId === 'string'
+        ? candidate.pointOfContactDraftMemberId
+        : null,
+    effectiveWhen: isEffectiveWhen(candidate.effectiveWhen) ? candidate.effectiveWhen : 'now',
+  }
+}
+
 export function validateBuildTeamRosterDraft(draft: unknown): BuildTeamRosterDraft {
   if (!draft || typeof draft !== 'object') {
     throw new Error('draftPlan must be an object.')
@@ -471,7 +635,9 @@ export function validateBuildTeamRosterDraft(draft: unknown): BuildTeamRosterDra
     throw new Error('draftPlan.effectTiming must be immediate or op_period_1.')
   }
 
-  const effectTiming: BuildTeamRosterDraft['effectTiming'] = 'immediate'
+  const effectTiming: BuildTeamRosterDraft['effectTiming'] = isEffectTiming(candidate.effectTiming)
+    ? candidate.effectTiming
+    : 'immediate'
 
   if (!isStringArray(candidate.visibleStandardPositions)) {
     throw new Error('draftPlan.visibleStandardPositions must be a string array.')
@@ -502,12 +668,21 @@ export function validateBuildTeamRosterDraft(draft: unknown): BuildTeamRosterDra
     effectTiming,
     visibleStandardPositions: [...candidate.visibleStandardPositions],
     archivedStandardPositions: [...candidate.archivedStandardPositions],
-    customPositions: [...candidate.customPositions],
+    customPositions: candidate.customPositions.map((position) => ({
+      ...(position as BuildTeamDraftCustomPosition),
+      createOnFirstOpPeriod:
+        typeof (position as BuildTeamDraftCustomPosition).createOnFirstOpPeriod === 'boolean'
+          ? (position as BuildTeamDraftCustomPosition).createOnFirstOpPeriod
+          : false,
+    })),
     singleResourceSlots: candidate.singleResourceSlots.map((slot) => ({
       label: typeof slot.label === 'string' ? slot.label : '',
       reportsTo: typeof slot.reportsTo === 'string' ? slot.reportsTo : '',
     })),
-    draftMembers: [...candidate.draftMembers],
+    draftMembers: candidate.draftMembers.map(normalizeDraftMember),
+    draftAssets: Array.isArray(candidate.draftAssets)
+      ? candidate.draftAssets.map(normalizeDraftAsset)
+      : [],
     positionSettings: { ...candidate.positionSettings },
   }
 }
