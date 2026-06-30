@@ -45,7 +45,8 @@ export function asWorkspaceLocationMethod(value?: string): WorkspaceLocationMeth
     value === 'draw-point' ||
     value === 'draw-polygon' ||
     value === 'enter-coordinates' ||
-    value === 'enter-address'
+    value === 'enter-address' ||
+    value === 'select-aor'
   ) {
     return value
   }

@@ -27,6 +27,97 @@ export type PersistIcs201VersionInput = {
   structureMode?: Ics201StructureMode
 }
 
+export async function seedIcs201DocumentForWorkspace(
+  workspaceId: string,
+  form: Ics201FormState,
+  options?: {
+    userId: string | null
+    authorName: string
+    authorColor: string
+    signature?: { name: string; role: string }
+  }
+): Promise<Ics201DocumentBundle | null> {
+  const supabase = getSupabaseClient()
+  if (!supabase) return null
+
+  const { data: existing, error: fetchError } = await supabase
+    .from('ics201_documents')
+    .select('*')
+    .eq('workspace_id', workspaceId)
+    .maybeSingle()
+
+  if (fetchError) {
+    throw new Error(fetchError.message)
+  }
+
+  if (existing) {
+    const document = existing as Ics201DocumentRow
+    const versions = await fetchIcs201Versions(document.id)
+    return {
+      document: {
+        ...document,
+        form_data: cloneIcs201FormState(normalizeIcs201FormState(document.form_data)),
+      },
+      versions,
+    }
+  }
+
+  const normalizedForm = cloneIcs201FormState(normalizeIcs201FormState(form))
+  const { data: created, error: createError } = await supabase
+    .from('ics201_documents')
+    .insert({
+      workspace_id: workspaceId,
+      form_data: normalizedForm,
+      structure_mode: 'flexible',
+    })
+    .select('*')
+    .single()
+
+  if (createError) {
+    throw new Error(createError.message)
+  }
+
+  const document = created as Ics201DocumentRow
+
+  if (options?.signature) {
+    const signedVersion = await persistIcs201Version({
+      documentId: document.id,
+      snapshot: normalizedForm,
+      authorId: options.userId ?? null,
+      authorName: options.authorName,
+      authorColor: options.authorColor,
+      signatures: [
+        {
+          name: options.signature.name,
+          role: options.signature.role,
+          signedAt: Date.now(),
+        },
+      ],
+    })
+
+    if (!signedVersion) {
+      throw new Error('Failed to persist signed ICS-201 version')
+    }
+
+    return {
+      document: {
+        ...document,
+        form_data: normalizedForm,
+        latest_version_id: signedVersion.id,
+      },
+      versions: [signedVersion],
+    }
+  }
+
+  return {
+    document: {
+      ...document,
+      form_data: normalizedForm,
+    },
+    versions: [],
+  }
+}
+
 export async function fetchOrCreateIcs201Document(
   workspaceId: string
 ): Promise<Ics201DocumentBundle | null> {

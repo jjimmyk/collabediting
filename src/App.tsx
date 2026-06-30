@@ -699,6 +699,9 @@ import {
   type ActivationNotificationSettings,
 } from '@/features/activation/activation-notification-types'
 import { CreateActivationPageLayout } from '@/features/activation/CreateActivationPageLayout'
+import { CreateActivationIcs201Step } from '@/features/activation/CreateActivationIcs201Step'
+import { ActivationAorMultiSelect } from '@/features/activation/ActivationAorMultiSelect'
+import { ActivationLocationFields } from '@/features/activation/ActivationLocationFields'
 import { WorkspaceAssetRequestSpendSection } from '@/features/analytics/WorkspaceAssetRequestSpendSection'
 import {
   filterSpendRowsByDateRange,
@@ -706,11 +709,28 @@ import {
 } from '@/features/analytics/workspace-asset-request-spend'
 import {
   getCreateActivationKindFromPath,
+  isActivationStep,
   isBuildTeamActivationStep,
   navigateFromCreateActivation,
   navigateToCreateActivation,
   type CreateActivationKind,
 } from '@/lib/create-activation-navigation'
+import {
+  createDefaultActivationIcs201Draft,
+  resolveActivationIcs201DraftForWorkspace,
+  type ActivationIcs201DraftState,
+} from '@/lib/activation-ics201-prefill'
+import {
+  districtNodeIdFromDistrictName,
+  formatActivationAorLabels,
+  formatAorLocationGeometrySummary,
+  resolveActivationAorRegionLabel,
+  resolveActivationLocationLabel,
+  resolveAutoFilledAors,
+  resolveAorNodeCoordinates,
+  resolveWorkspaceCoordinates,
+} from '@/lib/activation-aor-location'
+import { resolveHubAorProfileNodeLabel } from '@/features/hub/aor/hub-aor-profile-options'
 import { createDefaultBuildTeamRosterDraft, ensureCreatorInBuildTeamDraft, normalizeBuildTeamRosterDraftForApply } from '@/features/roster/roster-draft-state'
 import type { BuildTeamRosterDraft } from '@/features/roster/roster-template-types'
 import {
@@ -898,6 +918,7 @@ import {
   createLocalIcs201Version,
   createSeedIcs201Versions,
   formatIcs201ObjectiveExportLine,
+  ics201AuthorColorFromId,
   ics201ObjectivesFromStrings,
   ics201VersionAuthorLabel,
   normalizeIcs201FormState,
@@ -953,7 +974,7 @@ import { useWorkspacePermissions } from '@/hooks/useWorkspacePermissions'
 import { Ics201OperationalPeriodSnapshotPanel } from '@/features/operational-periods/Ics201OperationalPeriodSnapshotPanel'
 import { OperationalPeriodHistoricalFormShell } from '@/features/operational-periods/OperationalPeriodHistoricalFormShell'
 import { useOperationalPeriods } from '@/hooks/useOperationalPeriods'
-import { patchIcs201DocumentForm } from '@/lib/ics201-service'
+import { patchIcs201DocumentForm, seedIcs201DocumentForWorkspace } from '@/lib/ics201-service'
 import { isOperationalPeriodFormTab } from '@/lib/operational-period-form-registry'
 import {
   hasOperationalPeriodFormSnapshot,
@@ -3846,20 +3867,15 @@ const getEventReportSummary = (event: EventListItem) =>
   formatInitialIncidentReportSummary(buildInitialIncidentReportFromEvent(event))
 
 const buildCreateIncidentFormFromEvent = (
-  event: EventListItem,
-  aorNames: string[]
+  event: EventListItem
 ): CreateIncidentFormSeed => {
   const [longitude, latitude] = event.location
   const { datetimeLocal } = parseEventStartedAtParts(event.startedAt)
-  const matchingAor =
-    aorNames.find((name) => name === event.region) ??
-    aorNames.find((name) => event.region.includes(name) || name.includes(event.region))
-  const incidentAors =
-    matchingAor != null
-      ? [matchingAor]
-      : event.region.startsWith('USCG District')
-        ? [event.region]
-        : []
+  const incidentAors = (() => {
+    const exactNodeId = districtNodeIdFromDistrictName(event.region)
+    if (exactNodeId) return [exactNodeId]
+    return []
+  })()
 
   return {
     incidentName: event.name,
@@ -6730,6 +6746,9 @@ function App() {
     templateSlug: string | null
   } | null>(null)
   const [incidentGeometrySummary, setIncidentGeometrySummary] = useState('')
+  const [incidentLocationAddress, setIncidentLocationAddress] = useState('')
+  const [incidentLocationAorNodeId, setIncidentLocationAorNodeId] = useState<string | null>(null)
+  const [incidentAorsUserTouched, setIncidentAorsUserTouched] = useState(false)
   const [isCreateIncidentMapReady, setIsCreateIncidentMapReady] = useState(false)
   const [expandedMeetingItemId, setExpandedMeetingItemId] = useState<number | null>(null)
   const defaultMeetingScheduleItems: MeetingScheduleItem[] = [
@@ -6766,6 +6785,9 @@ function App() {
   )
   const [initialIncidentReport, setInitialIncidentReport] =
     useState<InitialIncidentReportState>(createDefaultInitialIncidentReport)
+  const [activationIcs201Draft, setActivationIcs201Draft] = useState<ActivationIcs201DraftState>(
+    createDefaultActivationIcs201Draft
+  )
   const [activationNotificationSettings, setActivationNotificationSettings] =
     useState<ActivationNotificationSettings>(createDefaultActivationNotificationSettings)
   const [isCreateEventOpen, setIsCreateEventOpen] = useState(false)
@@ -6797,6 +6819,7 @@ function App() {
   const createIncidentSteps = [
     'Name & Location',
     'Initial Incident Report',
+    'ICS-201',
     'Build Team',
     'Schedule Meetings',
     'Notifications',
@@ -6805,6 +6828,7 @@ function App() {
     'Name & Location',
     'Exercise Objectives',
     'Initial Exercise Report',
+    'ICS-201',
     'Build Team',
     'Schedule Meetings',
     'Notifications',
@@ -6885,11 +6909,15 @@ function App() {
     setIncidentTeamTemplate('')
     setActivationRosterDraft(createDefaultBuildTeamRosterDraft())
     setIncidentGeometrySummary('')
+    setIncidentLocationAddress('')
+    setIncidentLocationAorNodeId(null)
+    setIncidentAorsUserTouched(false)
     createIncidentSketchViewModelRef.current?.cancel()
     createIncidentDrawLayerRef.current?.removeAll()
     setExpandedMeetingItemId(null)
     setMeetingScheduleItems(defaultMeetingScheduleItems)
     setInitialIncidentReport(createDefaultInitialIncidentReport())
+    setActivationIcs201Draft(createDefaultActivationIcs201Draft())
     setActivationNotificationSettings(createDefaultActivationNotificationSettings())
     setCreateExerciseStep(0)
     setExerciseObjectives(defaultExerciseObjectives())
@@ -6978,19 +7006,99 @@ function App() {
     resetCreateEventForm()
     setActiveTab('events')
   }
-  const handleCreateExerciseSubmit = async () => {
-    const fallbackLocation: [number, number] = [-98.5795, 39.8283]
-    let location: [number, number] = fallbackLocation
-    const coordsMatch = incidentGeometrySummary.match(
-      /(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)/
-    )
-    if (coordsMatch) {
-      const lat = Number.parseFloat(coordsMatch[1])
-      const lng = Number.parseFloat(coordsMatch[2])
-      if (!Number.isNaN(lat) && !Number.isNaN(lng)) {
-        location = [lng, lat]
-      }
+  const buildActivationLocationInput = useCallback(
+    () => ({
+      locationMethod: incidentLocation,
+      geometrySummary: incidentGeometrySummary,
+      address: incidentLocationAddress,
+      aorNodeId: incidentLocationAorNodeId,
+    }),
+    [incidentGeometrySummary, incidentLocation, incidentLocationAddress, incidentLocationAorNodeId]
+  )
+  const handleActivationLocationMethodChange = useCallback((method: WorkspaceLocationMethod) => {
+    setIncidentLocation(method)
+    setIncidentAorsUserTouched(false)
+    if (method !== 'select-aor') {
+      setIncidentLocationAorNodeId(null)
     }
+    if (method !== 'enter-address') {
+      setIncidentLocationAddress('')
+    }
+  }, [])
+  const buildActivationIcs201PrefillInput = useCallback(
+    (kind: CreateActivationKind) => ({
+      kind,
+      name:
+        incidentName.trim().length > 0
+          ? incidentName.trim()
+          : kind === 'exercise'
+            ? 'New Exercise'
+            : 'New Incident',
+      region: resolveActivationAorRegionLabel(incidentAors),
+      lead: profileEmail ?? 'You',
+      geometrySummary: incidentGeometrySummary || undefined,
+      locationLabel: resolveActivationLocationLabel(buildActivationLocationInput()),
+      startTimeIso: incidentStartTime || undefined,
+      initialReport: {
+        shortDescription: initialIncidentReport.shortDescription,
+        facilityLocations: initialIncidentReport.facilityLocations,
+        facilityLocationOther: initialIncidentReport.facilityLocationOther,
+        whatHappened: initialIncidentReport.whatHappened,
+        icNotified: initialIncidentReport.icNotified,
+        icNotifiedName: initialIncidentReport.icNotifiedName,
+        rpName: initialIncidentReport.rpName,
+        materialReleased: initialIncidentReport.materialReleased,
+        enterWater: initialIncidentReport.enterWater,
+        releaseDischargeRate: initialIncidentReport.releaseDischargeRate,
+        sourceControlled: initialIncidentReport.sourceControlled,
+        scenarios: initialIncidentReport.scenarios,
+      },
+      exerciseObjectives: kind === 'exercise' ? exerciseObjectives : undefined,
+    }),
+    [
+      buildActivationLocationInput,
+      exerciseObjectives,
+      incidentAors,
+      incidentGeometrySummary,
+      incidentName,
+      incidentStartTime,
+      initialIncidentReport,
+      profileEmail,
+    ]
+  )
+  const resolveActivationIcs201ForSubmit = useCallback(
+    (kind: CreateActivationKind) =>
+      resolveActivationIcs201DraftForWorkspace(activationIcs201Draft, buildActivationIcs201PrefillInput(kind)),
+    [activationIcs201Draft, buildActivationIcs201PrefillInput]
+  )
+  const applyActivationIcs201SeedForWorkspace = useCallback(
+    async (workspaceId: string, kind: CreateActivationKind) => {
+      const resolvedDraft = resolveActivationIcs201ForSubmit(kind)
+      if (!isSupabaseEnabled) {
+        return resolvedDraft
+      }
+      const authorColor = user?.id ? ics201AuthorColorFromId(user.id) : '#16a34a'
+      try {
+        await seedIcs201DocumentForWorkspace(workspaceId, resolvedDraft.form, {
+          userId: user?.id ?? null,
+          authorName: profileEmail ?? 'You',
+          authorColor,
+          ...(resolvedDraft.signIntent ? { signature: resolvedDraft.signIntent } : {}),
+        })
+      } catch (error) {
+        toast.error(
+          error instanceof Error
+            ? `Workspace created, but ICS-201 could not be saved: ${error.message}`
+            : 'Workspace created, but ICS-201 could not be saved.'
+        )
+      }
+      return resolvedDraft
+    },
+    [isSupabaseEnabled, profileEmail, resolveActivationIcs201ForSubmit, user?.id]
+  )
+  const handleCreateExerciseSubmit = async () => {
+    const location = resolveWorkspaceCoordinates(buildActivationLocationInput())
+    const activationLocationMethod = incidentLocation as WorkspaceLocationMethod
     const trimmedName = incidentName.trim()
     const displayName = trimmedName.length > 0 ? trimmedName : 'New Exercise'
     const workflowLabel = incidentWorkflowOptions.find(
@@ -7004,8 +7112,8 @@ function App() {
       templateLabel ?? null,
     ].filter((entry): entry is string => Boolean(entry))
     const exerciseType = typeParts.length > 0 ? typeParts.join(' · ') : 'Exercise'
-    const region =
-      incidentAors.length > 0 ? incidentAors.join(', ') : 'Unassigned AOR'
+    const region = resolveActivationAorRegionLabel(incidentAors)
+    const activationAorLabels = formatActivationAorLabels(incidentAors)
     const formatTimestamp = (iso: string) => {
       if (!iso) return ''
       const parsed = new Date(iso)
@@ -7104,9 +7212,10 @@ function App() {
         const createMetadata: WorkspaceMetadataRecord = {
           category: incidentCategory.trim() || 'Special Event',
           templateId: incidentTemplate || undefined,
-          locationMethod: incidentGeometrySummary ? 'draw-point' : 'enter-coordinates',
+          locationMethod: activationLocationMethod || undefined,
           geometrySummary: incidentGeometrySummary || undefined,
-          aors: incidentAors.length > 0 ? [...incidentAors] : undefined,
+          address: incidentLocationAddress.trim() || undefined,
+          aors: activationAorLabels.length > 0 ? [...activationAorLabels] : undefined,
           location,
           exerciseMsel,
           activationNotifications: activationNotificationSettings,
@@ -7138,6 +7247,10 @@ function App() {
         setExerciseList((previous) => [persistedExercise, ...previous])
         await refreshAccess()
         setActiveWorkspaceSupabaseId(result.workspace.workspaceId)
+        const resolvedActivationIcs201 = await applyActivationIcs201SeedForWorkspace(
+          result.workspace.workspaceId,
+          'exercise'
+        )
         const rosterPlanResult = await applyWorkspaceRosterPlan({
           accessToken,
           workspaceId: result.workspace.workspaceId,
@@ -7160,7 +7273,7 @@ function App() {
           toast.error(
             `${displayName} was created, but the roster plan could not be applied: ${rosterPlanResult.message}`
           )
-          enterExerciseWorkspace(persistedExercise)
+          enterExerciseWorkspace(persistedExercise, resolvedActivationIcs201)
           return
         }
         toast.success(`${displayName} created.`, {
@@ -7169,7 +7282,7 @@ function App() {
             pratusDeliveryCount
           ),
         })
-        enterExerciseWorkspace(persistedExercise)
+        enterExerciseWorkspace(persistedExercise, resolvedActivationIcs201)
       } finally {
         setIsCreatingWorkspace(false)
       }
@@ -7214,21 +7327,11 @@ function App() {
       ),
     })
     closeCreateActivation()
-    enterExerciseWorkspace(newExercise)
+    enterExerciseWorkspace(newExercise, resolveActivationIcs201ForSubmit('exercise'))
   }
   const handleCreateIncidentSubmit = async () => {
-    const fallbackLocation: [number, number] = [-98.5795, 39.8283]
-    let location: [number, number] = fallbackLocation
-    const coordsMatch = incidentGeometrySummary.match(
-      /(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)/
-    )
-    if (coordsMatch) {
-      const lat = Number.parseFloat(coordsMatch[1])
-      const lng = Number.parseFloat(coordsMatch[2])
-      if (!Number.isNaN(lat) && !Number.isNaN(lng)) {
-        location = [lng, lat]
-      }
-    }
+    const location = resolveWorkspaceCoordinates(buildActivationLocationInput())
+    const activationLocationMethod = incidentLocation as WorkspaceLocationMethod
     const trimmedName = incidentName.trim()
     const displayName = trimmedName.length > 0 ? trimmedName : 'New Incident'
     const workflowLabel = incidentWorkflowOptions.find(
@@ -7242,8 +7345,8 @@ function App() {
       templateLabel ?? null,
     ].filter((entry): entry is string => Boolean(entry))
     const incidentType = typeParts.length > 0 ? typeParts.join(' · ') : 'New Incident'
-    const region =
-      incidentAors.length > 0 ? incidentAors.join(', ') : 'Unassigned AOR'
+    const region = resolveActivationAorRegionLabel(incidentAors)
+    const activationAorLabels = formatActivationAorLabels(incidentAors)
     const formatTimestamp = (iso: string) => {
       if (!iso) return ''
       const parsed = new Date(iso)
@@ -7343,9 +7446,10 @@ function App() {
           metadata: {
             category: incidentCategory.trim() || 'Special Event',
             templateId: incidentTemplate || undefined,
-            locationMethod: incidentGeometrySummary ? 'draw-point' : 'enter-coordinates',
+            locationMethod: activationLocationMethod || undefined,
             geometrySummary: incidentGeometrySummary || undefined,
-            aors: incidentAors.length > 0 ? [...incidentAors] : undefined,
+            address: incidentLocationAddress.trim() || undefined,
+            aors: activationAorLabels.length > 0 ? [...activationAorLabels] : undefined,
             location,
             relatedEventIds:
               incidentRelatedEventIds.length > 0 ? [...incidentRelatedEventIds] : undefined,
@@ -7371,6 +7475,10 @@ function App() {
         setIncidentList((previous) => [persistedIncident, ...previous])
         await refreshAccess()
         setActiveWorkspaceSupabaseId(result.workspace.workspaceId)
+        const resolvedActivationIcs201 = await applyActivationIcs201SeedForWorkspace(
+          result.workspace.workspaceId,
+          'incident'
+        )
         const rosterPlanResult = await applyWorkspaceRosterPlan({
           accessToken,
           workspaceId: result.workspace.workspaceId,
@@ -7393,7 +7501,7 @@ function App() {
           toast.error(
             `${displayName} was created, but the roster plan could not be applied: ${rosterPlanResult.message}`
           )
-          enterIncidentWorkspace(persistedIncident)
+          enterIncidentWorkspace(persistedIncident, resolvedActivationIcs201)
           return
         }
         toast.success(`${displayName} created.`, {
@@ -7402,7 +7510,7 @@ function App() {
             pratusDeliveryCount
           ),
         })
-        enterIncidentWorkspace(persistedIncident)
+        enterIncidentWorkspace(persistedIncident, resolvedActivationIcs201)
       } finally {
         setIsCreatingWorkspace(false)
       }
@@ -7440,7 +7548,7 @@ function App() {
       ),
     })
     closeCreateActivation()
-    enterIncidentWorkspace(newIncident)
+    enterIncidentWorkspace(newIncident, resolveActivationIcs201ForSubmit('incident'))
   }
   const restartIncidentGeometryDraw = () => {
     if (incidentLocation !== 'draw-point' && incidentLocation !== 'draw-polygon') {
@@ -10364,6 +10472,7 @@ function App() {
             setIncidentGeometrySummary(
               `Point selected at ${latitude.toFixed(5)}, ${longitude.toFixed(5)}`
             )
+            setIncidentAorsUserTouched(false)
             return
           }
 
@@ -10380,8 +10489,10 @@ function App() {
               setIncidentGeometrySummary(
                 `Polygon selected near ${latitude.toFixed(5)}, ${longitude.toFixed(5)}`
               )
+              setIncidentAorsUserTouched(false)
             } else {
               setIncidentGeometrySummary('Polygon selected')
+              setIncidentAorsUserTouched(false)
             }
           }
         })
@@ -10465,7 +10576,7 @@ function App() {
       if (preserveIncidentGeometryRef.current) {
         return
       }
-      if (incidentLocation !== 'enter-address') {
+      if (incidentLocation !== 'enter-address' && incidentLocation !== 'select-aor') {
         setIncidentGeometrySummary('')
       }
       return
@@ -10488,6 +10599,74 @@ function App() {
     createExerciseStep,
     isCreateIncidentMapReady,
   ])
+
+  useEffect(() => {
+    if (incidentLocation !== 'select-aor' || !incidentLocationAorNodeId) {
+      return
+    }
+
+    const coords = resolveAorNodeCoordinates(incidentLocationAorNodeId)
+    const label = resolveHubAorProfileNodeLabel(incidentLocationAorNodeId)
+    if (!coords || !label) {
+      return
+    }
+
+    setIncidentGeometrySummary(formatAorLocationGeometrySummary(label, coords))
+  }, [incidentLocation, incidentLocationAorNodeId])
+
+  useEffect(() => {
+    if (incidentAorsUserTouched) {
+      return
+    }
+
+    setIncidentAors(resolveAutoFilledAors(buildActivationLocationInput()))
+  }, [
+    buildActivationLocationInput,
+    incidentAorsUserTouched,
+    incidentGeometrySummary,
+    incidentLocation,
+    incidentLocationAddress,
+    incidentLocationAorNodeId,
+  ])
+
+  useEffect(() => {
+    if (
+      !isCreateIncidentMapReady ||
+      incidentLocation !== 'select-aor' ||
+      !incidentLocationAorNodeId
+    ) {
+      return
+    }
+
+    const view = createIncidentMapViewRef.current
+    const drawLayer = createIncidentDrawLayerRef.current
+    const coords = resolveAorNodeCoordinates(incidentLocationAorNodeId)
+    if (!view || !drawLayer || !coords) {
+      return
+    }
+
+    const [lng, lat] = coords
+    drawLayer.removeAll()
+    drawLayer.add(
+      new Graphic({
+        geometry: {
+          type: 'point',
+          longitude: lng,
+          latitude: lat,
+        },
+        symbol: {
+          type: 'simple-marker',
+          color: [16, 185, 129, 0.95],
+          size: 12,
+          outline: {
+            color: [255, 255, 255, 1],
+            width: 1.5,
+          },
+        },
+      })
+    )
+    void view.goTo({ center: [lng, lat], zoom: 7 })
+  }, [incidentLocation, incidentLocationAorNodeId, isCreateIncidentMapReady])
 
   useEffect(() => {
     return () => {
@@ -18473,7 +18652,10 @@ function App() {
       ),
     [allExercisesForWorkspace, exerciseWorkspaceNavQuery, isSupabaseEnabled, canAccessWorkspace]
   )
-  const enterIncidentWorkspace = (incident: IncidentListItem) => {
+  const enterIncidentWorkspace = (
+    incident: IncidentListItem,
+    activationIcs201?: ActivationIcs201DraftState | null
+  ) => {
     if (isSupabaseEnabled && !canAccessWorkspace('incident', incident.id)) {
       toast.error('You are not on the roster for this incident workspace.')
       return
@@ -18491,19 +18673,49 @@ function App() {
     setIsObjectivesOpen(true)
     setIsMapVisible(true)
     setActiveTab('sitreps')
-    setIcs201Form(
-      cloneIcs201FormState({
-        ...INITIAL_ICS201_FORM,
-        incidentName: incident.name,
-        currentSituationSummary: incident.summary,
-        preparedBy: incident.lead,
-        jurisdiction: incident.region,
-      })
-    )
+    if (activationIcs201) {
+      setIcs201Form(
+        cloneIcs201FormState(normalizeIcs201FormState(activationIcs201.form))
+      )
+      if (!isSupabaseEnabled) {
+        if (activationIcs201.signIntent) {
+          const authorColor = user?.id ? ics201AuthorColorFromId(user.id) : '#16a34a'
+          setIcs201Versions([
+            createLocalIcs201Version(
+              activationIcs201.form,
+              profileEmail ?? 'You',
+              authorColor,
+              [
+                {
+                  name: activationIcs201.signIntent.name,
+                  role: activationIcs201.signIntent.role,
+                  signedAt: Date.now(),
+                },
+              ]
+            ),
+          ])
+        } else {
+          setIcs201Versions([])
+        }
+      }
+    } else {
+      setIcs201Form(
+        cloneIcs201FormState({
+          ...INITIAL_ICS201_FORM,
+          incidentName: incident.name,
+          currentSituationSummary: incident.summary,
+          preparedBy: incident.lead,
+          jurisdiction: incident.region,
+        })
+      )
+    }
     liveIcs201FormRef.current = null
     applySitrepScope(`incident-${incident.id}`)
   }
-  const enterExerciseWorkspace = (exercise: ExerciseListItem) => {
+  const enterExerciseWorkspace = (
+    exercise: ExerciseListItem,
+    activationIcs201?: ActivationIcs201DraftState | null
+  ) => {
     if (isSupabaseEnabled && !canAccessWorkspace('exercise', exercise.id)) {
       toast.error('You are not on the roster for this exercise workspace.')
       return
@@ -18521,15 +18733,42 @@ function App() {
     setIsObjectivesOpen(true)
     setIsMapVisible(true)
     setActiveTab('sitreps')
-    setIcs201Form(
-      cloneIcs201FormState({
-        ...INITIAL_ICS201_FORM,
-        incidentName: exercise.name,
-        currentSituationSummary: exercise.summary,
-        preparedBy: exercise.lead,
-        jurisdiction: exercise.region,
-      })
-    )
+    if (activationIcs201) {
+      setIcs201Form(
+        cloneIcs201FormState(normalizeIcs201FormState(activationIcs201.form))
+      )
+      if (!isSupabaseEnabled) {
+        if (activationIcs201.signIntent) {
+          const authorColor = user?.id ? ics201AuthorColorFromId(user.id) : '#16a34a'
+          setIcs201Versions([
+            createLocalIcs201Version(
+              activationIcs201.form,
+              profileEmail ?? 'You',
+              authorColor,
+              [
+                {
+                  name: activationIcs201.signIntent.name,
+                  role: activationIcs201.signIntent.role,
+                  signedAt: Date.now(),
+                },
+              ]
+            ),
+          ])
+        } else {
+          setIcs201Versions([])
+        }
+      }
+    } else {
+      setIcs201Form(
+        cloneIcs201FormState({
+          ...INITIAL_ICS201_FORM,
+          incidentName: exercise.name,
+          currentSituationSummary: exercise.summary,
+          preparedBy: exercise.lead,
+          jurisdiction: exercise.region,
+        })
+      )
+    }
     liveIcs201FormRef.current = null
     applySitrepScope(`exercise-${exercise.id}`)
   }
@@ -18860,10 +19099,7 @@ function App() {
     )
   }
   const openCreateIncidentFromEvent = (event: EventListItem) => {
-    const seed = buildCreateIncidentFormFromEvent(
-      event,
-      femaAors.map((aor) => aor.name)
-    )
+    const seed = buildCreateIncidentFormFromEvent(event)
     setCreateIncidentStep(0)
     setCreateExerciseStep(0)
     setIncidentName(seed.incidentName)
@@ -27007,7 +27243,7 @@ function App() {
                 'flex min-h-0 flex-1 flex-col'
             )}
           >
-        {activationStep === 0 && (
+        {isActivationStep(activationKind, activationStep, 'nameLocation') && (
           <div className="grid min-h-[560px] grid-cols-2 gap-4">
             <div className="grid content-start gap-3">
               <div className="grid grid-cols-2 gap-3">
@@ -27276,86 +27512,29 @@ function App() {
                   onChange={(event) => setIncidentStartTime(event.target.value)}
                 />
               </div>
-              <div className="grid gap-2">
-                <Label htmlFor="incident-location">Location</Label>
-                <NativeSelect
-                  id="incident-location"
-                  value={incidentLocation}
-                  onChange={(event) => {
-                    setIncidentLocation(event.target.value)
-                  }}
-                  className="w-full"
-                >
-                  <NativeSelectOption value="">Select location method</NativeSelectOption>
-                  <NativeSelectOption value="draw-point">Draw Point</NativeSelectOption>
-                  <NativeSelectOption value="draw-polygon">Draw Polygon</NativeSelectOption>
-                  <NativeSelectOption value="enter-address">Enter Address</NativeSelectOption>
-                </NativeSelect>
-                {incidentGeometrySummary &&
-                  (incidentLocation === 'draw-point' ||
-                    incidentLocation === 'draw-polygon') && (
-                    <div className="flex items-center gap-2">
-                      <p className="text-xs text-muted-foreground">
-                        {incidentGeometrySummary}
-                      </p>
-                      <Button
-                        type="button"
-                        variant="link"
-                        size="sm"
-                        className="h-auto p-0 text-xs"
-                        onClick={restartIncidentGeometryDraw}
-                      >
-                        Edit location
-                      </Button>
-                    </div>
-                  )}
-              </div>
+              <ActivationLocationFields
+                locationMethod={incidentLocation}
+                onLocationMethodChange={handleActivationLocationMethodChange}
+                address={incidentLocationAddress}
+                onAddressChange={(nextAddress) => {
+                  setIncidentLocationAddress(nextAddress)
+                  setIncidentAorsUserTouched(false)
+                }}
+                aorNodeId={incidentLocationAorNodeId}
+                onAorNodeIdChange={(nodeId) => {
+                  setIncidentLocationAorNodeId(nodeId)
+                  setIncidentAorsUserTouched(false)
+                }}
+                geometrySummary={incidentGeometrySummary}
+                onRestartDraw={restartIncidentGeometryDraw}
+              />
               <div className="grid gap-2">
                 <Label htmlFor="incident-aors">AORs</Label>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      id="incident-aors"
-                      type="button"
-                      variant="outline"
-                      className="w-full justify-between font-normal"
-                    >
-                      <span className="truncate text-left">
-                        {incidentAors.length > 0
-                          ? incidentAors.join(', ')
-                          : 'Select AORs'}
-                      </span>
-                      <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="start">
-                    {femaAors.map((aor) => (
-                      <DropdownMenuItem
-                        key={aor.id}
-                        className="pr-2"
-                        onSelect={(event) => {
-                          event.preventDefault()
-                          setIncidentAors((previous) => {
-                            if (previous.includes(aor.name)) {
-                              return previous.filter((item) => item !== aor.name)
-                            }
-
-                            return [...previous, aor.name]
-                          })
-                        }}
-                      >
-                        <div className="flex items-center gap-2">
-                          <Checkbox
-                            checked={incidentAors.includes(aor.name)}
-                            className="pointer-events-none"
-                            aria-hidden="true"
-                          />
-                          <span>{aor.name}</span>
-                        </div>
-                      </DropdownMenuItem>
-                    ))}
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                <ActivationAorMultiSelect
+                  value={incidentAors}
+                  onChange={setIncidentAors}
+                  onUserEdit={() => setIncidentAorsUserTouched(true)}
+                />
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="incident-situation-report">
@@ -27380,6 +27559,13 @@ function App() {
                     : 'Click to start polygon and double-click to finish'}
                 </div>
               )}
+              {incidentLocation === 'select-aor' && (
+                <div className="pointer-events-none absolute top-2 left-2 rounded-md border bg-background/90 px-2 py-1 text-xs text-muted-foreground shadow-sm">
+                  {incidentLocationAorNodeId
+                    ? 'AOR location shown on map'
+                    : 'Select an AOR to place the incident location'}
+                </div>
+              )}
               {incidentGeometrySummary && (
                 <div className="pointer-events-none absolute right-2 bottom-2 rounded-md border bg-background/90 px-2 py-1 text-xs text-muted-foreground shadow-sm">
                   {incidentGeometrySummary}
@@ -27388,22 +27574,34 @@ function App() {
             </div>
           </div>
         )}
-        {activationStep === 1 && !isExerciseActivationWizard && (
+        {isActivationStep(activationKind, activationStep, 'initialReport') &&
+          !isExerciseActivationWizard && (
           <CcmerDutyNotificationForm
             idPrefix="initial-report"
             value={initialIncidentReport}
             onChange={setInitialIncidentReport}
           />
         )}
-        {activationStep === 1 && isExerciseActivationWizard && renderExerciseObjectivesEditor()}
-        {activationStep === 2 && isExerciseActivationWizard && (
+        {isActivationStep(activationKind, activationStep, 'objectives') &&
+          isExerciseActivationWizard &&
+          renderExerciseObjectivesEditor()}
+        {isActivationStep(activationKind, activationStep, 'initialReport') &&
+          isExerciseActivationWizard && (
           <CcmerDutyNotificationForm
             idPrefix="initial-exercise-report"
             value={initialIncidentReport}
             onChange={setInitialIncidentReport}
           />
         )}
-        {activationStep === 2 && !isExerciseActivationWizard && (
+        {isActivationStep(activationKind, activationStep, 'ics201') && (
+          <CreateActivationIcs201Step
+            value={activationIcs201Draft}
+            onChange={setActivationIcs201Draft}
+            prefillInput={buildActivationIcs201PrefillInput(activationKind)}
+            defaultSignName={profileEmail ?? 'You'}
+          />
+        )}
+        {isActivationStep(activationKind, activationStep, 'buildTeam') && (
           <BuildTeamRosterStep
             workspaceLabel={activationWorkspaceLabel}
             draft={activationRosterDraft}
@@ -27415,20 +27613,7 @@ function App() {
             glassItemBorderClasses={glassItemBorderClasses}
           />
         )}
-        {activationStep === 3 && isExerciseActivationWizard && (
-          <BuildTeamRosterStep
-            workspaceLabel={activationWorkspaceLabel}
-            draft={activationRosterDraft}
-            onDraftChange={setActivationRosterDraft}
-            organizationId={activeOrganizationId}
-            organizationAssets={hubAssets}
-            isSupabaseEnabled={isSupabaseEnabled}
-            getAccessToken={getAccessToken}
-            glassItemBorderClasses={glassItemBorderClasses}
-          />
-        )}
-        {((activationStep === 3 && !isExerciseActivationWizard) ||
-          (activationStep === 4 && isExerciseActivationWizard)) && (
+        {isActivationStep(activationKind, activationStep, 'scheduleMeetings') && (
           <div className="grid gap-3">
             <div className="space-y-2">
               <div className="flex justify-start">
@@ -27719,8 +27904,7 @@ function App() {
             </div>
           </div>
         )}
-        {((activationStep === 4 && !isExerciseActivationWizard) ||
-          (activationStep === 5 && isExerciseActivationWizard)) && (
+        {isActivationStep(activationKind, activationStep, 'notifications') && (
           <ActivationNotificationsStep
             settings={activationNotificationSettings}
             onChange={setActivationNotificationSettings}
@@ -27729,7 +27913,8 @@ function App() {
             initialReport={initialIncidentReport}
           />
         )}
-        {isExerciseActivationWizard && activationStep === 6 && renderExerciseMselInjectsEditor()}
+        {isActivationStep(activationKind, activationStep, 'msel') &&
+          renderExerciseMselInjectsEditor()}
           </div>
         </CreateActivationPageLayout>
       </>

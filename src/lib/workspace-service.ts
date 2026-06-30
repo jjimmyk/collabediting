@@ -122,7 +122,8 @@ function isWorkspaceLocationMethod(value: string): value is WorkspaceLocationMet
     value === 'draw-point' ||
     value === 'draw-polygon' ||
     value === 'enter-coordinates' ||
-    value === 'enter-address'
+    value === 'enter-address' ||
+    value === 'select-aor'
   )
 }
 

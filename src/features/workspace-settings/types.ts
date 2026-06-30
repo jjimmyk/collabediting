@@ -4,6 +4,7 @@ export type WorkspaceLocationMethod =
   | 'draw-polygon'
   | 'enter-coordinates'
   | 'enter-address'
+  | 'select-aor'
 
 export type WorkspaceMetadata = {
   category?: string
