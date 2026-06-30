@@ -1,5 +1,5 @@
 /**
- * Synthetic PyGNOME TrajectoryGeoJsonOutput-style demo data for the hub map.
+ * Synthetic PyGNOME TrajectoryGeoJsonOutput-style data for the hub map.
  * @see https://github.com/NOAA-ORR-ERD/PyGnome
  * @see https://gnome.orr.noaa.gov/doc/pygnome/index.html
  */
@@ -27,30 +27,32 @@ export type NoaaGnomeHourlyForcing = {
   currentTowardDirectionDeg: number
 }
 
-export const NOAA_GNOME_SPILL_ID = 'demo-nola-bay-release'
-export const NOAA_GNOME_DEMO_START_ISO = '2026-06-01T12:00:00.000Z'
+export const NOAA_GNOME_SPILL_ID = 'nola-offshore-release'
+export const NOAA_GNOME_START_ISO = '2026-06-01T12:00:00.000Z'
 export const NOAA_GNOME_STEP_COUNT = 24
 export const NOAA_GNOME_PARTICLES_PER_STEP = 72
 
-/** Mississippi River Delta / Venice, LA release point. */
+/** Open Gulf release south of the Mississippi River Delta. */
 export const NOAA_GNOME_RELEASE_POINT = {
-  longitude: -89.4,
-  latitude: 29.27,
-  label: 'Demo spill release · Mississippi River Delta',
+  longitude: -89.1,
+  latitude: 28.82,
+  label: 'Spill release · Mississippi River Delta offshore',
 }
 
 export const NOAA_GNOME_MAP_EXTENT = {
-  center: [-89.15, 28.95] as [number, number],
+  center: [-89.0, 28.65] as [number, number],
   scale: 450_000,
 }
 
 /** Bounding box for plausibility checks (lon min, lat min, lon max, lat max). */
 export const NOAA_GNOME_PLUME_BBOX: [number, number, number, number] = [
-  -90.2,
-  28.4,
-  -88.2,
-  29.6,
+  -90.0,
+  28.2,
+  -88.3,
+  28.95,
 ]
+
+const OFFSHORE_BUFFER_DEG = 0.06
 
 function pseudoRandom(seed: number): number {
   return ((seed * 9301 + 49297) % 233280) / 233280
@@ -61,7 +63,7 @@ function clampHourIndex(hourIndex: number): number {
 }
 
 function buildTimeStepIso(hourIndex: number): string {
-  const start = new Date(NOAA_GNOME_DEMO_START_ISO)
+  const start = new Date(NOAA_GNOME_START_ISO)
   start.setUTCHours(start.getUTCHours() + hourIndex)
   return start.toISOString()
 }
@@ -70,11 +72,46 @@ export const NOAA_GNOME_TIME_STEPS: string[] = Array.from({ length: NOAA_GNOME_S
   buildTimeStepIso(hourIndex)
 )
 
+function maxOffshoreLatitude(longitude: number): number {
+  return 28.95 + (longitude + 89.5) * 0.1 - OFFSHORE_BUFFER_DEG
+}
+
+export function isNoaaGnomeOffshorePoint(longitude: number, latitude: number): boolean {
+  const [minLon, minLat, maxLon, maxLat] = NOAA_GNOME_PLUME_BBOX
+  if (longitude < minLon || longitude > maxLon || latitude < minLat || latitude > maxLat) {
+    return false
+  }
+  return latitude <= maxOffshoreLatitude(longitude)
+}
+
+function clampNoaaGnomeParticleToOcean(
+  longitude: number,
+  latitude: number,
+  seed: number
+): { longitude: number; latitude: number } {
+  const [minLon, minLat, maxLon, maxLat] = NOAA_GNOME_PLUME_BBOX
+  let lon = Math.max(minLon, Math.min(maxLon, longitude))
+  let lat = Math.max(minLat, Math.min(maxLat, latitude))
+
+  const maxLatAtLon = maxOffshoreLatitude(lon)
+  if (lat > maxLatAtLon) {
+    lat = maxLatAtLon - pseudoRandom(seed + 101) * 0.04
+  }
+
+  if (!isNoaaGnomeOffshorePoint(lon, lat)) {
+    lat = Math.min(maxLatAtLon - 0.02, lat)
+    lon = Math.max(minLon, Math.min(maxLon, lon))
+  }
+
+  return { longitude: lon, latitude: lat }
+}
+
 function knotsToDegreesPerHour(knots: number, directionTowardDeg: number): { lon: number; lat: number } {
   const radians = (directionTowardDeg * Math.PI) / 180
   const nauticalMilesPerHour = knots
   const degreesLat = (nauticalMilesPerHour / 60) * Math.cos(radians)
-  const degreesLon = (nauticalMilesPerHour / 60) * Math.sin(radians) / Math.cos((29 * Math.PI) / 180)
+  const degreesLon =
+    (nauticalMilesPerHour / 60) * Math.sin(radians) / Math.cos((28.7 * Math.PI) / 180)
   return { lon: degreesLon, lat: degreesLat }
 }
 
@@ -113,24 +150,31 @@ function currentDriftVector(forcing: NoaaGnomeHourlyForcing): { lon: number; lat
   return knotsToDegreesPerHour(forcing.currentSpeedKnots * 1.35, forcing.currentTowardDirectionDeg)
 }
 
-function polarOffset(
-  seed: number,
-  maxRadiusLon: number,
-  maxRadiusLat: number
+function erraticSpread(
+  particleIndex: number,
+  hourIndex: number
 ): { longitude: number; latitude: number } {
-  const angle = pseudoRandom(seed) * Math.PI * 2
-  const radius = 0.25 + pseudoRandom(seed + 17) * 0.75
+  const seed = particleIndex * 1000 + hourIndex
+  const [minLon, minLat, maxLon, maxLat] = NOAA_GNOME_PLUME_BBOX
+  const envelope = 0.35 + (hourIndex / Math.max(1, NOAA_GNOME_STEP_COUNT - 1)) * 0.65
+  const halfLon = ((maxLon - minLon) / 2) * envelope
+  const halfLat = ((maxLat - minLat) / 2) * envelope
+
+  const u = pseudoRandom(seed) * 2 - 1
+  const v = pseudoRandom(seed + 23) * 2 - 1
+  const w = pseudoRandom(seed + 47) * 2 - 1
+  const x = pseudoRandom(seed + 71) * 2 - 1
+  const biasLon = (pseudoRandom(particleIndex * 13 + 5) * 2 - 1) * halfLon * 0.35
+  const biasLat = (pseudoRandom(particleIndex * 19 + 11) * 2 - 1) * halfLat * 0.35
+
   return {
-    longitude: Math.cos(angle) * maxRadiusLon * radius,
-    latitude: Math.sin(angle) * maxRadiusLat * radius,
+    longitude: (u + 0.4 * w) * halfLon + biasLon,
+    latitude: (v + 0.4 * x) * halfLat + biasLat,
   }
 }
 
 function statusForParticle(particleIndex: number, hourIndex: number): NoaaGnomeParticleStatus {
   const roll = pseudoRandom(particleIndex * 31 + hourIndex * 7)
-  if (hourIndex >= 18 && roll < 0.12) {
-    return 'beached'
-  }
   if (roll < 0.08) {
     return 'subsurface'
   }
@@ -155,10 +199,11 @@ function cumulativeDriftThroughHour(hourIndex: number): { lon: number; lat: numb
 function buildParticleAtStep(particleIndex: number, hourIndex: number): NoaaGnomeTrajectoryParticle {
   const seed = particleIndex * 1000 + hourIndex
   const drift = cumulativeDriftThroughHour(hourIndex)
-  const spread = polarOffset(seed, 0.012 + hourIndex * 0.0018, 0.009 + hourIndex * 0.0012)
+  const spread = erraticSpread(particleIndex, hourIndex)
 
-  const longitude = NOAA_GNOME_RELEASE_POINT.longitude + drift.lon + spread.longitude
-  const latitude = NOAA_GNOME_RELEASE_POINT.latitude + drift.lat + spread.latitude
+  const rawLongitude = NOAA_GNOME_RELEASE_POINT.longitude + drift.lon + spread.longitude
+  const rawLatitude = NOAA_GNOME_RELEASE_POINT.latitude + drift.lat + spread.latitude
+  const clamped = clampNoaaGnomeParticleToOcean(rawLongitude, rawLatitude, seed)
   const massG = Math.round(80 + pseudoRandom(seed + 5) * 420)
   const depthM =
     statusForParticle(particleIndex, hourIndex) === 'subsurface'
@@ -168,8 +213,8 @@ function buildParticleAtStep(particleIndex: number, hourIndex: number): NoaaGnom
   return {
     objectId: hourIndex * NOAA_GNOME_PARTICLES_PER_STEP + particleIndex + 1,
     particleId: `particle-${String(particleIndex).padStart(3, '0')}`,
-    longitude,
-    latitude,
+    longitude: clamped.longitude,
+    latitude: clamped.latitude,
     timeStamp: buildTimeStepIso(hourIndex),
     massG,
     depthM,
@@ -259,13 +304,18 @@ export function getNoaaGnomeSlickRing(hourIndex: number): Array<[number, number]
   const padLon = 0.012 + hourIndex * 0.0015
   const padLat = 0.009 + hourIndex * 0.001
 
-  return [
+  const ring: Array<[number, number]> = [
     [minLon - padLon, minLat - padLat],
     [maxLon + padLon, minLat - padLat],
     [maxLon + padLon, maxLat + padLat],
     [minLon - padLon, maxLat + padLat],
     [minLon - padLon, minLat - padLat],
   ]
+
+  return ring.map(([longitude, latitude]) => {
+    const clamped = clampNoaaGnomeParticleToOcean(longitude, latitude, hourIndex * 100 + longitude * 1000)
+    return [clamped.longitude, clamped.latitude] as [number, number]
+  })
 }
 
 export function getNoaaGnomeTimeExtentForHour(hourIndex: number): { start: Date; end: Date } {

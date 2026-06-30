@@ -184,7 +184,7 @@ export function HubMapLayersPanel({
             <div>
               <p className="text-sm font-medium">Oil spill trajectory models</p>
               <p className="text-xs text-muted-foreground">
-                NOAA GNOME particle trajectories (demo synthetic data)
+                NOAA GNOME synthetic particle trajectories
               </p>
             </div>
           </div>

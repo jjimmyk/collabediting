@@ -83,7 +83,7 @@ function createNoaaGnomeSlickGraphic(ring: Array<[number, number]>): Graphic | n
     },
     popupTemplate: {
       title: 'Surface oil slick footprint',
-      content: 'Demo GNOME surface slick polygon derived from outer particle envelope.',
+      content: 'Surface oil slick polygon derived from outer particle envelope.',
     },
   })
 }
@@ -207,7 +207,7 @@ export function buildNoaaGnomeReleaseGraphic(): Graphic {
     popupTemplate: {
       title: NOAA_GNOME_RELEASE_POINT.label,
       content:
-        '<b>Model:</b> NOAA GNOME (demo)<br/><b>Spill ID:</b> demo-nola-bay-release<br/><b>Location:</b> Mississippi River Delta',
+        `<b>Model:</b> NOAA GNOME<br/><b>Spill ID:</b> ${NOAA_GNOME_SPILL_ID}<br/><b>Location:</b> Northern Gulf of America offshore`,
     },
   })
 }
