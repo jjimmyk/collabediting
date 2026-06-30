@@ -7,6 +7,7 @@ import {
   History,
   Lock,
   Plus,
+  Users,
   X,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
@@ -74,6 +75,7 @@ type Ics203WorkspacePanelProps = {
     latestVersion: Ics203Version,
     signature: Ics201VersionSignature
   ) => void
+  onFillFromRoster?: () => void
   downloadDocx: (filename: string, blocks: ExportBlock[], options?: ExportOptions) => void
   downloadPdf: (filename: string, blocks: ExportBlock[], options?: ExportOptions) => void
 }
@@ -96,6 +98,7 @@ export function Ics203WorkspacePanel({
   onPatchSectionDraft,
   onAppendVersion,
   onSignReview,
+  onFillFromRoster,
   downloadDocx,
   downloadPdf,
 }: Ics203WorkspacePanelProps) {
@@ -409,25 +412,40 @@ export function Ics203WorkspacePanel({
             </div>
           )}
 
-          {!viewingPastVersion && !isCreatingSignedVersion && (
+          {!viewingPastVersion && (
             <div className="flex items-center justify-start gap-2">
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                className="h-7 gap-1 text-xs"
-                disabled={!canEdit || isSaving}
-                onClick={() => {
-                  if (isLatestSigned) {
-                    onAppendVersion(form, [])
-                    return
-                  }
-                  setIsCreatingSignedVersion(true)
-                }}
-              >
-                <Plus className="h-3.5 w-3.5" />
-                {isLatestSigned ? 'Create New Version' : 'Create New Signed Version'}
-              </Button>
+              {!isCreatingSignedVersion ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-7 gap-1 text-xs"
+                  disabled={!canEdit || isSaving}
+                  onClick={() => {
+                    if (isLatestSigned) {
+                      onAppendVersion(form, [])
+                      return
+                    }
+                    setIsCreatingSignedVersion(true)
+                  }}
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  {isLatestSigned ? 'Create New Version' : 'Create New Signed Version'}
+                </Button>
+              ) : null}
+              {onFillFromRoster ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-7 gap-1 text-xs"
+                  disabled={!canEdit || isSaving || formIsLocked}
+                  onClick={onFillFromRoster}
+                >
+                  <Users className="h-3.5 w-3.5" />
+                  Fill from Roster
+                </Button>
+              ) : null}
             </div>
           )}
 

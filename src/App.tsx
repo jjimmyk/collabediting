@@ -361,6 +361,7 @@ import {
 } from '@/features/iap/utils'
 import { useIapWorkspaceForm } from '@/hooks/useIapWorkspaceForm'
 import { ICS203_SECTION_PROMPTS } from '@/features/ics203/constants'
+import { buildIcs203FromNextOpRoster } from '@/features/ics203/build-ics203-from-roster'
 import { Ics203WorkspacePanel } from '@/features/ics203/Ics203WorkspacePanel'
 import type {
   Ics203FormSectionDrafts,
@@ -24248,6 +24249,41 @@ function App() {
     }
     cancelIcs203SectionEdit(section)
   }
+  const handleFillIcs203FromRoster = () => {
+    if (!canEditIcs201Form || !ics203Form) {
+      return
+    }
+    if (!workspacePositionCatalog || positionRosterEntries.length === 0) {
+      toast.warning('Roster data is not available for this workspace.')
+      return
+    }
+
+    const { form: nextForm, filledFieldCount } = buildIcs203FromNextOpRoster({
+      currentForm: ics203Form,
+      catalog: workspacePositionCatalog,
+      positionEntries: positionRosterEntries,
+      roster: activeWorkspaceRoster,
+      assets: workspaceAssignedAssetsWithPending,
+    })
+
+    if (filledFieldCount === 0) {
+      toast.warning('No next operational period roster entries to fill.')
+      return
+    }
+
+    setIcs203Form(cloneIcs203FormState(nextForm))
+    setIcs203EditingSections({})
+    setIcs203SectionDrafts({})
+
+    const latestVersion = ics203Versions[ics203Versions.length - 1]
+    if (latestVersion && latestVersion.signatures.length === 0) {
+      handleIcs203SaveDraft(nextForm, latestVersion)
+    }
+
+    toast.success(
+      `Filled ${filledFieldCount} assignment${filledFieldCount === 1 ? '' : 's'} from next OP roster.`
+    )
+  }
   const handleIcs203SaveDraft = (form: Ics203FormState, latestVersion: Ics203Version) => {
     const optimisticVersion: Ics203Version = {
       ...latestVersion,
@@ -36888,6 +36924,7 @@ function App() {
                     onPatchSectionDraft={patchIcs203SectionDraft}
                     onAppendVersion={handleIcs203AppendVersion}
                     onSignReview={handleIcs203SignReview}
+                    onFillFromRoster={handleFillIcs203FromRoster}
                     downloadDocx={downloadDocx}
                     downloadPdf={downloadPdf}
                   />
