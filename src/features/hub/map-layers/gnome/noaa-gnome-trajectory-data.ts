@@ -272,50 +272,119 @@ export function getNoaaGnomePlumeCentroid(hourIndex: number): { longitude: numbe
 }
 
 export function getNoaaGnomeSlickRing(hourIndex: number): Array<[number, number]> {
+  return getNoaaGnomePlumeHullRing(hourIndex, 1.35)
+}
+
+function crossProduct(
+  origin: [number, number],
+  a: [number, number],
+  b: [number, number]
+): number {
+  return (a[0] - origin[0]) * (b[1] - origin[1]) - (a[1] - origin[1]) * (b[0] - origin[0])
+}
+
+function buildConvexHull(points: Array<[number, number]>): Array<[number, number]> {
+  if (points.length < 3) {
+    return points
+  }
+
+  const sorted = [...points].sort((left, right) =>
+    left[0] === right[0] ? left[1] - right[1] : left[0] - right[0]
+  )
+
+  const lower: Array<[number, number]> = []
+  for (const point of sorted) {
+    while (lower.length >= 2 && crossProduct(lower[lower.length - 2], lower[lower.length - 1], point) <= 0) {
+      lower.pop()
+    }
+    lower.push(point)
+  }
+
+  const upper: Array<[number, number]> = []
+  for (let index = sorted.length - 1; index >= 0; index -= 1) {
+    const point = sorted[index]
+    while (upper.length >= 2 && crossProduct(upper[upper.length - 2], upper[upper.length - 1], point) <= 0) {
+      upper.pop()
+    }
+    upper.push(point)
+  }
+
+  lower.pop()
+  upper.pop()
+  return [...lower, ...upper]
+}
+
+function expandHullRing(
+  ring: Array<[number, number]>,
+  padFactor: number
+): Array<[number, number]> {
+  if (ring.length === 0) {
+    return ring
+  }
+
+  const centroid = ring.reduce(
+    (accumulator, [longitude, latitude]) => ({
+      longitude: accumulator.longitude + longitude / ring.length,
+      latitude: accumulator.latitude + latitude / ring.length,
+    }),
+    { longitude: 0, latitude: 0 }
+  )
+
+  const expanded = ring.map(([longitude, latitude]) => {
+    const deltaLon = longitude - centroid.longitude
+    const deltaLat = latitude - centroid.latitude
+    return [
+      centroid.longitude + deltaLon * padFactor,
+      centroid.latitude + deltaLat * padFactor,
+    ] as [number, number]
+  })
+
+  if (expanded.length === 0) {
+    return expanded
+  }
+
+  return [...expanded, expanded[0]]
+}
+
+export function getNoaaGnomePlumeHullRing(hourIndex: number, padFactor = 1.2): Array<[number, number]> {
   const particles = getNoaaGnomeParticlesForHour(hourIndex)
   if (particles.length === 0) {
     return []
   }
 
-  const sortedByDistance = [...particles].sort((left, right) => {
-    const centroid = getNoaaGnomePlumeCentroid(hourIndex)
-    const leftDistance =
-      (left.longitude - centroid.longitude) ** 2 + (left.latitude - centroid.latitude) ** 2
-    const rightDistance =
-      (right.longitude - centroid.longitude) ** 2 + (right.latitude - centroid.latitude) ** 2
-    return rightDistance - leftDistance
-  })
-
-  const outerCount = Math.max(8, Math.ceil(sortedByDistance.length * 0.25))
-  const outerParticles = sortedByDistance.slice(0, outerCount)
-
-  let minLon = Infinity
-  let maxLon = -Infinity
-  let minLat = Infinity
-  let maxLat = -Infinity
-
-  for (const particle of outerParticles) {
-    minLon = Math.min(minLon, particle.longitude)
-    maxLon = Math.max(maxLon, particle.longitude)
-    minLat = Math.min(minLat, particle.latitude)
-    maxLat = Math.max(maxLat, particle.latitude)
-  }
-
-  const padLon = 0.012 + hourIndex * 0.0015
-  const padLat = 0.009 + hourIndex * 0.001
-
-  const ring: Array<[number, number]> = [
-    [minLon - padLon, minLat - padLat],
-    [maxLon + padLon, minLat - padLat],
-    [maxLon + padLon, maxLat + padLat],
-    [minLon - padLon, maxLat + padLat],
-    [minLon - padLon, minLat - padLat],
-  ]
+  const points = particles.map(
+    (particle) => [particle.longitude, particle.latitude] as [number, number]
+  )
+  const hull =
+    points.length >= 3 ? buildConvexHull(points) : points
+  const hourPad = 1 + hourIndex * 0.025
+  const ring = expandHullRing(hull, padFactor * hourPad)
 
   return ring.map(([longitude, latitude]) => {
     const clamped = clampNoaaGnomeParticleToOcean(longitude, latitude, hourIndex * 100 + longitude * 1000)
     return [clamped.longitude, clamped.latitude] as [number, number]
   })
+}
+
+function pseudoRandomForParticle(particleId: string, salt: number): number {
+  let seed = salt
+  for (let index = 0; index < particleId.length; index += 1) {
+    seed = (seed * 31 + particleId.charCodeAt(index)) % 233280
+  }
+  return seed / 233280
+}
+
+export function getNoaaGnomeParticleSplatRadius(
+  particle: NoaaGnomeTrajectoryParticle,
+  hourIndex: number
+): { longitude: number; latitude: number } {
+  const roll = pseudoRandomForParticle(particle.particleId, hourIndex * 17 + 3)
+  const base = 0.014 + hourIndex * 0.0012
+  const stretch = 0.85 + roll * 0.35
+  return {
+    longitude: base * stretch,
+    latitude: base * (0.75 + roll * 0.25),
+  }
 }
 
 export function getNoaaGnomeTimeExtentForHour(hourIndex: number): { start: Date; end: Date } {

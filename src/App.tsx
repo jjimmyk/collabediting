@@ -247,6 +247,10 @@ import {
   inviteOrganizationMember,
 } from '@/lib/organization-service'
 import {
+  getHubOrganizationDisplayName,
+  USCG_ORGANIZATION_ID,
+} from '@/lib/organization-constants'
+import {
   isOrganizationManagedAssetKey,
   resourceToUpdateOrganizationAssetInput,
   type CreateOrganizationAssetInput,
@@ -864,6 +868,7 @@ import {
   saveNoaaGnomeLayerEnabled,
 } from '@/features/hub/map-layers/gnome/noaa-gnome-layer-storage'
 import { useNoaaGnomeMapLayer } from '@/features/hub/map-layers/gnome/useNoaaGnomeMapLayer'
+import { NoaaGnomeNotificationMapEmbed } from '@/features/hub/map-layers/gnome/NoaaGnomeNotificationMapEmbed'
 import { ProductToursMenu } from '@/components/ProductToursMenu'
 import { CreateHubNotificationDialog } from '@/components/CreateHubNotificationDialog'
 import {
@@ -6608,6 +6613,15 @@ function App() {
   } = useAuth()
   const { flags: featureFlags, setFlag: setFeatureFlag, isCisaEnabled, isOilSpillTrajectoryModelsEnabled } =
     useFeatureFlags()
+  const hubOrganizationDisplayName = useMemo(() => {
+    if (
+      activeOrganization &&
+      activeOrganization.organizationId !== USCG_ORGANIZATION_ID
+    ) {
+      return activeOrganization.name
+    }
+    return getHubOrganizationDisplayName(isOilSpillTrajectoryModelsEnabled, activeOrganizationId)
+  }, [activeOrganization, activeOrganizationId, isOilSpillTrajectoryModelsEnabled])
   const mapContainerRef = useRef<HTMLDivElement | null>(null)
   const leftPanelRef = useRef<HTMLDivElement | null>(null)
   const searchComponentRef = useRef<HTMLDivElement | null>(null)
@@ -16712,13 +16726,13 @@ function App() {
           return false
         }
 
-        toast.success(`Invited ${email} to ${activeOrganization?.name ?? 'the organization'}.`)
+        toast.success(`Invited ${email} to ${hubOrganizationDisplayName}.`)
         return true
       } finally {
         setIsInvitingOrgMember(false)
       }
     },
-    [activeOrganization?.name, activeOrganizationId, getAccessToken]
+    [hubOrganizationDisplayName, activeOrganizationId, getAccessToken]
   )
   const unassignMemberFromPosition = async (memberId: string, position: string) => {
     const member = activeWorkspaceRoster.find((entry) => entry.id === memberId)
@@ -27753,7 +27767,7 @@ function App() {
                   ? `Exercise ${activeExerciseWorkspace.name}`
                   : isInIncidentWorkspace && activeIncidentWorkspace
                     ? activeIncidentWorkspace.name
-                    : 'United States Coast Guard'}
+                    : hubOrganizationDisplayName}
               </span>
               {showPlanningPStepper ? (
                 <MyPositionBadge
@@ -28047,6 +28061,7 @@ function App() {
                       void openMyOrganizationMemberProfile()
                     }}
                     canManageMembers={isOrgAdmin}
+                    oilSpillTrajectoryModelsEnabled={isOilSpillTrajectoryModelsEnabled}
                   />
                   <DropdownMenuSeparator />
                   <DropdownMenuItem
@@ -29682,6 +29697,12 @@ function App() {
                                       )
                                     })}
                                   </div>
+                                  {isOilSpillTrajectoryModelsEnabled && item.id === 0 ? (
+                                    <NoaaGnomeNotificationMapEmbed
+                                      hourIndex={noaaGnomeHourIndex}
+                                      onHourIndexChange={handleNoaaGnomeHourIndexChange}
+                                    />
+                                  ) : null}
                                   <p className="mt-4 font-medium">Response Checklist</p>
                                   <div className="mt-2 space-y-1.5">
                                     {item.regionalThreats.responseChecklist.map((action, actionIndex) => {
@@ -40134,7 +40155,7 @@ function App() {
       <OrgMembersSheet
         open={isOrgMembersOpen}
         onOpenChange={setIsOrgMembersOpen}
-        organizationName={activeOrganization?.name ?? 'Organization'}
+        organizationName={hubOrganizationDisplayName}
         canManage={isOrgAdmin}
         members={orgMembers}
         isLoading={isLoadingOrgMembers}

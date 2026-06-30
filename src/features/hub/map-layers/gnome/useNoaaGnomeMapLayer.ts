@@ -16,12 +16,8 @@ type UseNoaaGnomeMapLayerOptions = {
   enabled: boolean
   hourIndex: number
   mapViewRef: RefObject<MapView | null>
+  layerInsertStartIndex?: number
 }
-
-const NOAA_GNOME_SLICK_LAYER_INSERT_INDEX = 4
-const NOAA_GNOME_PARTICLE_LAYER_INSERT_INDEX = 5
-const NOAA_GNOME_FORCING_LAYER_INSERT_INDEX = 6
-const NOAA_GNOME_RELEASE_LAYER_INSERT_INDEX = 7
 
 export function useNoaaGnomeMapLayer(options: UseNoaaGnomeMapLayerOptions) {
   const slickLayerRef = useRef<GraphicsLayer | null>(null)
@@ -29,6 +25,7 @@ export function useNoaaGnomeMapLayer(options: UseNoaaGnomeMapLayerOptions) {
   const forcingLayerRef = useRef<GraphicsLayer | null>(null)
   const releaseLayerRef = useRef<GraphicsLayer | null>(null)
   const hasZoomedRef = useRef(false)
+  const layerInsertStartIndex = options.layerInsertStartIndex ?? 4
 
   useEffect(() => {
     hasZoomedRef.current = false
@@ -53,13 +50,15 @@ export function useNoaaGnomeMapLayer(options: UseNoaaGnomeMapLayerOptions) {
       layerRef: RefObject<GraphicsLayer | null>,
       id: string,
       title: string,
-      insertIndex: number
+      insertIndex: number,
+      blendMode?: 'normal' | 'multiply' | 'screen' | 'overlay' | 'darken' | 'lighten'
     ) => {
       if (!layerRef.current || !map.layers.includes(layerRef.current)) {
         layerRef.current = new GraphicsLayer({
           id,
           title,
           listMode: 'hide',
+          blendMode,
         })
         map.add(layerRef.current, insertIndex)
       }
@@ -84,28 +83,30 @@ export function useNoaaGnomeMapLayer(options: UseNoaaGnomeMapLayerOptions) {
         slickLayerRef,
         NOAA_GNOME_SLICK_LAYER_ID,
         'NOAA GNOME surface slick',
-        NOAA_GNOME_SLICK_LAYER_INSERT_INDEX
+        layerInsertStartIndex,
+        'multiply'
       )
       const particleLayer = ensureLayer(
         map,
         particleLayerRef,
         NOAA_GNOME_PARTICLE_LAYER_ID,
         'NOAA GNOME particles',
-        NOAA_GNOME_PARTICLE_LAYER_INSERT_INDEX
+        layerInsertStartIndex + 1,
+        'multiply'
       )
       const forcingLayer = ensureLayer(
         map,
         forcingLayerRef,
         NOAA_GNOME_FORCING_LAYER_ID,
         'NOAA GNOME forcing',
-        NOAA_GNOME_FORCING_LAYER_INSERT_INDEX
+        layerInsertStartIndex + 2
       )
       const releaseLayer = ensureLayer(
         map,
         releaseLayerRef,
         NOAA_GNOME_RELEASE_LAYER_ID,
         'NOAA GNOME release point',
-        NOAA_GNOME_RELEASE_LAYER_INSERT_INDEX
+        layerInsertStartIndex + 3
       )
 
       slickLayer.visible = true
@@ -138,5 +139,5 @@ export function useNoaaGnomeMapLayer(options: UseNoaaGnomeMapLayerOptions) {
       cancelled = true
       cancelAnimationFrame(attachRaf)
     }
-  }, [options.enabled, options.hourIndex, options.mapViewRef])
+  }, [options.enabled, options.hourIndex, options.mapViewRef, layerInsertStartIndex])
 }

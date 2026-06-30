@@ -6,7 +6,8 @@ import {
   getNoaaGnomeHourlyForcing,
   getNoaaGnomeParticlesForHour,
   getNoaaGnomePlumeCentroid,
-  getNoaaGnomeSlickRing,
+  getNoaaGnomePlumeHullRing,
+  getNoaaGnomeParticleSplatRadius,
   NOAA_GNOME_RELEASE_POINT,
   NOAA_GNOME_SPILL_ID,
   type NoaaGnomeHourlyForcing,
@@ -18,9 +19,65 @@ export const NOAA_GNOME_PARTICLE_LAYER_ID = 'noaa-gnome-particles'
 export const NOAA_GNOME_FORCING_LAYER_ID = 'noaa-gnome-forcing'
 export const NOAA_GNOME_RELEASE_LAYER_ID = 'noaa-gnome-release'
 
+const OIL_CORE_RGBA: [number, number, number, number] = [38, 38, 38, 0.42]
+const OIL_MID_RGBA: [number, number, number, number] = [55, 45, 35, 0.24]
+const OIL_SHEEN_RGBA: [number, number, number, number] = [120, 95, 55, 0.12]
+const OIL_SPLAT_RGBA: [number, number, number, number] = [45, 38, 30, 0.09]
+const OIL_POINT_RGBA: [number, number, number, number] = [30, 25, 20, 0.18]
+const SUBSURFACE_SPLAT_RGBA: [number, number, number, number] = [25, 35, 55, 0.07]
+
+function buildCircleRing(
+  longitude: number,
+  latitude: number,
+  radiusLon: number,
+  radiusLat: number,
+  segments = 14
+): Array<[number, number]> {
+  const ring: Array<[number, number]> = []
+  for (let index = 0; index <= segments; index += 1) {
+    const angle = (index / segments) * Math.PI * 2
+    ring.push([
+      longitude + Math.cos(angle) * radiusLon,
+      latitude + Math.sin(angle) * radiusLat,
+    ])
+  }
+  return ring
+}
+
+function createNoaaGnomeDensitySplatGraphic(
+  particle: NoaaGnomeTrajectoryParticle,
+  hourIndex: number
+): Graphic {
+  const radius = getNoaaGnomeParticleSplatRadius(particle, hourIndex)
+  const isSubsurface = particle.status === 'subsurface'
+  const splatColor = isSubsurface ? SUBSURFACE_SPLAT_RGBA : OIL_SPLAT_RGBA
+
+  return new Graphic({
+    geometry: {
+      type: 'polygon',
+      rings: [
+        buildCircleRing(
+          particle.longitude,
+          particle.latitude,
+          radius.longitude,
+          radius.latitude
+        ),
+      ],
+    },
+    attributes: {
+      mapKey: `noaa-gnome-splat-${particle.particleId}`,
+      particle_id: particle.particleId,
+    },
+    symbol: {
+      type: 'simple-fill',
+      color: splatColor,
+      outline: { width: 0 },
+    },
+  })
+}
+
 function createNoaaGnomeParticleGraphic(particle: NoaaGnomeTrajectoryParticle): Graphic {
   const isSubsurface = particle.status === 'subsurface'
-  const isBeached = particle.status === 'beached'
 
   return new Graphic({
     geometry: {
@@ -40,16 +97,10 @@ function createNoaaGnomeParticleGraphic(particle: NoaaGnomeTrajectoryParticle): 
     },
     symbol: {
       type: 'simple-marker',
-      color: isBeached
-        ? ([180, 83, 9, 0.92] as [number, number, number, number])
-        : isSubsurface
-          ? ([120, 53, 15, 0.85] as [number, number, number, number])
-          : ([234, 88, 12, 0.88] as [number, number, number, number]),
-      size: isBeached ? 9 : 8,
-      outline: {
-        color: [255, 255, 255, 0.9] as [number, number, number, number],
-        width: 0.75,
-      },
+      style: 'circle',
+      color: isSubsurface ? ([25, 35, 55, 0.22] as [number, number, number, number]) : OIL_POINT_RGBA,
+      size: isSubsurface ? 1.5 : 2,
+      outline: { width: 0 },
     },
     popupTemplate: {
       title: 'Oil particle · {particle_id}',
@@ -59,33 +110,66 @@ function createNoaaGnomeParticleGraphic(particle: NoaaGnomeTrajectoryParticle): 
   })
 }
 
-function createNoaaGnomeSlickGraphic(ring: Array<[number, number]>): Graphic | null {
-  if (ring.length < 4) {
+function createNoaaGnomePlumeBlobGraphic(options: {
+  ring: Array<[number, number]>
+  mapKey: string
+  color: [number, number, number, number]
+  title: string
+}): Graphic | null {
+  if (options.ring.length < 4) {
     return null
   }
 
   return new Graphic({
     geometry: {
       type: 'polygon',
-      rings: [ring],
+      rings: [options.ring],
     },
     attributes: {
-      mapKey: 'noaa-gnome-slick',
-      title: 'Surface oil slick footprint',
+      mapKey: options.mapKey,
+      title: options.title,
     },
     symbol: {
       type: 'simple-fill',
-      color: [234, 88, 12, 0.15] as [number, number, number, number],
-      outline: {
-        color: [234, 88, 12, 0.55] as [number, number, number, number],
-        width: 1.25,
-      },
+      color: options.color,
+      outline: { width: 0 },
     },
     popupTemplate: {
-      title: 'Surface oil slick footprint',
-      content: 'Surface oil slick polygon derived from outer particle envelope.',
+      title: options.title,
+      content: 'Modeled surface oil footprint from GNOME particle envelope.',
     },
   })
+}
+
+function buildNoaaGnomePlumeBlobGraphics(hourIndex: number): Graphic[] {
+  const graphics: Graphic[] = []
+  const sheenRing = getNoaaGnomePlumeHullRing(hourIndex, 1.55)
+  const midRing = getNoaaGnomePlumeHullRing(hourIndex, 1.18)
+  const coreRing = getNoaaGnomePlumeHullRing(hourIndex, 0.82)
+
+  const sheen = createNoaaGnomePlumeBlobGraphic({
+    ring: sheenRing,
+    mapKey: 'noaa-gnome-plume-sheen',
+    color: OIL_SHEEN_RGBA,
+    title: 'Surface oil sheen',
+  })
+  const mid = createNoaaGnomePlumeBlobGraphic({
+    ring: midRing,
+    mapKey: 'noaa-gnome-plume-mid',
+    color: OIL_MID_RGBA,
+    title: 'Surface oil slick',
+  })
+  const core = createNoaaGnomePlumeBlobGraphic({
+    ring: coreRing,
+    mapKey: 'noaa-gnome-plume-core',
+    color: OIL_CORE_RGBA,
+    title: 'Surface oil core',
+  })
+
+  if (sheen) graphics.push(sheen)
+  if (mid) graphics.push(mid)
+  if (core) graphics.push(core)
+  return graphics
 }
 
 function directionToOffset(
@@ -156,7 +240,12 @@ function buildForcingArrowGraphics(hourIndex: number, forcing: NoaaGnomeHourlyFo
   const currentLength = 0.06 + forcing.currentSpeedKnots * 0.05
 
   const windStart = directionToOffset(centroid.longitude, centroid.latitude, windTowardDeg + 180, 0.02)
-  const currentStart = directionToOffset(centroid.longitude, centroid.latitude, forcing.currentTowardDirectionDeg + 180, 0.035)
+  const currentStart = directionToOffset(
+    centroid.longitude,
+    centroid.latitude,
+    forcing.currentTowardDirectionDeg + 180,
+    0.035
+  )
 
   return [
     createForcingArrowGraphic({
@@ -166,7 +255,7 @@ function buildForcingArrowGraphics(hourIndex: number, forcing: NoaaGnomeHourlyFo
       towardDirectionDeg: windTowardDeg,
       lengthNauticalMiles: windLength,
       color: [59, 130, 246, 0.95],
-      title: 'Demo wind forcing',
+      title: 'Wind forcing',
       popupContent: `<b>Wind:</b> ${formatWindForcing(forcing)}`,
     }),
     createForcingArrowGraphic({
@@ -176,7 +265,7 @@ function buildForcingArrowGraphics(hourIndex: number, forcing: NoaaGnomeHourlyFo
       towardDirectionDeg: forcing.currentTowardDirectionDeg,
       lengthNauticalMiles: currentLength,
       color: [20, 184, 166, 0.95],
-      title: 'Demo current forcing',
+      title: 'Current forcing',
       popupContent: `<b>Current:</b> ${formatCurrentForcing(forcing)}`,
     }),
   ]
@@ -228,13 +317,16 @@ export function syncNoaaGnomeGraphicsForHour(
   forcingLayer.removeAll()
 
   const particles = getNoaaGnomeParticlesForHour(hourIndex)
+
+  for (const particle of particles) {
+    particleLayer.add(createNoaaGnomeDensitySplatGraphic(particle, hourIndex))
+  }
   for (const particle of particles) {
     particleLayer.add(createNoaaGnomeParticleGraphic(particle))
   }
 
-  const slickGraphic = createNoaaGnomeSlickGraphic(getNoaaGnomeSlickRing(hourIndex))
-  if (slickGraphic) {
-    slickLayer.add(slickGraphic)
+  for (const blobGraphic of buildNoaaGnomePlumeBlobGraphics(hourIndex)) {
+    slickLayer.add(blobGraphic)
   }
 
   const forcing = getNoaaGnomeHourlyForcing(hourIndex)

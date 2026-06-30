@@ -4,6 +4,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu'
+import { getHubOrganizationDisplayName, USCG_ORGANIZATION_ID } from '@/lib/organization-constants'
 import { resolveDisplayOrganization } from '@/lib/organization-service'
 import type { UserOrganization } from '@/lib/organization-types'
 
@@ -15,6 +16,17 @@ type OrganizationProfileMenuSectionProps = {
   onManageMembers: () => void
   onOpenMyProfile?: () => void
   canManageMembers: boolean
+  oilSpillTrajectoryModelsEnabled?: boolean
+}
+
+function getOrganizationMenuLabel(
+  organization: UserOrganization,
+  oilSpillTrajectoryModelsEnabled: boolean
+): string {
+  if (organization.organizationId === USCG_ORGANIZATION_ID) {
+    return getHubOrganizationDisplayName(oilSpillTrajectoryModelsEnabled, organization.organizationId)
+  }
+  return organization.name
 }
 
 export function OrganizationProfileMenuSection({
@@ -25,6 +37,7 @@ export function OrganizationProfileMenuSection({
   onManageMembers,
   onOpenMyProfile,
   canManageMembers,
+  oilSpillTrajectoryModelsEnabled = false,
 }: OrganizationProfileMenuSectionProps) {
   const activeOrganization = resolveDisplayOrganization(
     organizations,
@@ -49,7 +62,9 @@ export function OrganizationProfileMenuSection({
             onClick={() => onSelectOrganization(organization.organizationId)}
             className="flex items-center justify-between gap-2"
           >
-            <span className="min-w-0 truncate">{organization.name}</span>
+            <span className="min-w-0 truncate">
+              {getOrganizationMenuLabel(organization, oilSpillTrajectoryModelsEnabled)}
+            </span>
             {organization.organizationId === activeOrganizationId ? (
               <Check className="h-4 w-4 shrink-0" />
             ) : null}
