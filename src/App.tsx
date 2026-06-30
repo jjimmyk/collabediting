@@ -860,14 +860,19 @@ import { CreateHubNotificationDialog } from '@/components/CreateHubNotificationD
 import {
   BASELINE_MAP_SKETCH_POLYGON,
   createInitialIcs201Form,
+  ICS201_OBJECTIVE_KIND_OPTIONS,
+  ICS201_OBJECTIVE_KIND_TOOLTIP,
   ICS201_SECTION_LABELS,
   ICS201_SECTION_PROMPTS,
   MOCK_ICS201_COLLABORATORS,
+  formatIcs201ObjectiveKindLabel,
 } from '@/features/ics201/constants'
+import { syncIcs202ObjectivesFromIcs201 } from '@/features/ics201/sync-ics202-objectives'
 import type {
   Ics201ActionRow,
   Ics201FormState,
   Ics201MapSketchVertex,
+  Ics201ObjectiveRow,
   Ics201ResourceSummaryRow,
   Ics201SafetyRow,
   Ics201SectionId,
@@ -878,7 +883,10 @@ import {
   cloneIcs201FormState,
   createLocalIcs201Version,
   createSeedIcs201Versions,
+  formatIcs201ObjectiveExportLine,
+  ics201ObjectivesFromStrings,
   ics201VersionAuthorLabel,
+  normalizeIcs201FormState,
   resolveActiveIcs201Section,
 } from '@/features/ics201/utils'
 import {
@@ -5391,9 +5399,8 @@ async function fillIcs201TemplatePdf(
   const currentSituation = clean(form.currentSituationSummary)
 
   const objectivesText = form.objectives
-    .map((objective) => clean(objective))
-    .filter((objective) => objective.length > 0)
-    .map((objective, index) => `${index + 1}. ${objective}`)
+    .filter((row) => row.objective.trim().length > 0)
+    .map((row, index) => formatIcs201ObjectiveExportLine(row, index))
     .join('\n')
 
   const safetyText = form.safetyAnalysis
@@ -5691,8 +5698,8 @@ function buildIcs201DocxBlocks(form: Ics201FormState): DocxBlock[] {
   if (form.objectives.length === 0) {
     pushParagraph('No objectives recorded.')
   } else {
-    form.objectives.forEach((objective, index) => {
-      pushBullet(objective || `Objective ${index + 1}`)
+    form.objectives.forEach((row, index) => {
+      pushBullet(formatIcs201ObjectiveExportLine(row, index).replace(/^\d+\.\s*/, ''))
     })
   }
   pushHeading('Actions')
@@ -6164,7 +6171,7 @@ type Ics201FormStateForGenerator = {
   currentSituationSummary: string
   weatherForecast: string
   projectedIncidentCourse: string
-  objectives: string[]
+  objectives: Ics201ObjectiveRow[]
   actions: Array<{
     id: number
     task: string
@@ -6238,12 +6245,12 @@ const BASELINE_WEATHER_FORECAST =
 const BASELINE_PROJECTED_COURSE =
   'Expect transition from life-safety to incident-stabilization phase by next operational period. Sustained Air Ops curfew likely after 22:00 PT due to deteriorating marine weather.'
 
-const BASELINE_OBJECTIVES: string[] = [
+const BASELINE_OBJECTIVES: Ics201ObjectiveRow[] = ics201ObjectivesFromStrings([
   'Protect life safety in evacuated Sectors A and B.',
   'Maintain access for emergency medical transport routes.',
   'Stabilize shelter operations at Treasure Island annex.',
   'Coordinate mutual-aid resources with Alameda County OES.',
-]
+])
 
 const BASELINE_ACTIONS: Ics201FormStateForGenerator['actions'] = [
   {
@@ -6375,7 +6382,9 @@ function buildIcs201BaseFromFile(
       if (risk) base.weatherForecast = risk
       if (general) base.projectedIncidentCourse = general
       if (readinessBullets.length > 0) {
-        base.objectives = readinessBullets.map((text) => text.replace(/:.*$/, ''))
+        base.objectives = ics201ObjectivesFromStrings(
+          readinessBullets.map((text) => text.replace(/:.*$/, ''))
+        )
       }
       if (rfis.length > 0) {
         base.actions = rfis.map((text, index) => ({
@@ -6392,12 +6401,12 @@ function buildIcs201BaseFromFile(
   } else if (folderId === 'iaps') {
     base.currentSituationSummary =
       'Operational Period 3 IAP carried forward. Continued focus on life-safety, structural assessment at Pier 33, and shelter stabilization. Personnel rotations on schedule.'
-    base.objectives = [
+    base.objectives = ics201ObjectivesFromStrings([
       'Execute approved IAP objectives for Operational Period 3.',
       'Maintain branch/division command structure per ICS-203 attached.',
       'Sustain joint mutual-aid coordination with Alameda County OES.',
       'Complete structural assessment at Pier 33 and adjacent berths.',
-    ]
+    ])
     base.actions = [
       {
         id: 1,
@@ -6428,12 +6437,12 @@ function buildIcs201BaseFromFile(
       'Per briefing slides: wind 15-25 kt with gusts to 30 kt, seas 4-6 ft, fog ceiling lifting after 11:00 PT.'
     base.projectedIncidentCourse =
       'Per briefing: transition from life-safety to incident-stabilization phase projected for OP4. Air Ops curfew likely after 22:00 PT.'
-    base.objectives = [
+    base.objectives = ics201ObjectivesFromStrings([
       'Execute OP3 objectives per briefing slides.',
       'Protect life safety in evacuated Sectors A and B.',
       'Maintain mutual-aid coordination with Alameda County OES.',
       'Complete structural assessment at Pier 33.',
-    ]
+    ])
   } else if (folderId === 'forms') {
     if (file.name.startsWith('ICS-204')) {
       base.actions = [
@@ -8378,6 +8387,7 @@ function App() {
   const ics234VersionsRef = useRef(ics234Versions)
   ics234VersionsRef.current = ics234Versions
   const ics202ObjectivesSyncSignatureRef = useRef<string | null>(null)
+  const ics201ObjectivesSyncSignatureRef = useRef<string | null>(null)
   const [ics215Form, setIcs215Form] = useState<Ics215FormState | null>(null)
   const [ics215Versions, setIcs215Versions] = useState<Ics215Version[]>([])
   const [ics215EditingSections, setIcs215EditingSections] = useState<
@@ -12865,7 +12875,7 @@ function App() {
       versions: Ics201Version[]
       structureMode: 'flexible' | 'paginated' | 'strict'
     }) => {
-      setIcs201Form(cloneIcs201FormState(payload.form))
+      setIcs201Form(cloneIcs201FormState(normalizeIcs201FormState(payload.form)))
       setIcs201Versions(payload.versions)
       setIcs201StructureMode(payload.structureMode)
     },
@@ -22359,6 +22369,12 @@ function App() {
               'Protect critical infrastructure and the marine transportation system from disruption.',
               'Sustain continuity of operations, including crew rest, logistics, and communications readiness for the next op period.',
             ]
+            const toRows = (texts: string[]): Ics201ObjectiveRow[] =>
+              texts.map((objective, index) => ({
+                id: index + 1,
+                kind: 'O',
+                objective,
+              }))
             if (ics201EnforcesCharLimit) {
               const selected: string[] = []
               let total = 0
@@ -22367,9 +22383,11 @@ function App() {
                 selected.push(candidate)
                 total += candidate.length
               }
-              ics201ObjectivesEditor.replaceObjectives(selected.length > 0 ? selected : [candidates[0]])
+              ics201ObjectivesEditor.replaceObjectives(
+                toRows(selected.length > 0 ? selected : [candidates[0]])
+              )
             } else {
-              ics201ObjectivesEditor.replaceObjectives(candidates)
+              ics201ObjectivesEditor.replaceObjectives(toRows(candidates))
             }
             break
           }
@@ -22547,9 +22565,18 @@ function App() {
               }
               return {
                 ...accumulator,
-                objectives: Array.from(
-                  new Set([...accumulator.objectives, ...generated.objectives])
-                ),
+                objectives: (() => {
+                  const seen = new Set<string>()
+                  const merged: Ics201ObjectiveRow[] = []
+                  let nextId = 1
+                  for (const row of [...accumulator.objectives, ...generated.objectives]) {
+                    const key = row.objective.trim()
+                    if (!key || seen.has(key)) continue
+                    seen.add(key)
+                    merged.push({ id: nextId++, kind: row.kind || 'O', objective: key })
+                  }
+                  return merged
+                })(),
                 actions: [
                   ...accumulator.actions,
                   ...generated.actions.map((action, actionIndex) => ({
@@ -22730,20 +22757,9 @@ function App() {
     const savedForm = cloneIcs201FormState(nextForm)
     setIcs201Form(savedForm)
     pushIcs201Version(savedForm, { sectionId })
-  }
-  const updateIcs201Objective = (index: number, value: string) => {
-    setIcs201Form((previous) => ({
-      ...previous,
-      objectives: previous.objectives.map((objective, objectiveIndex) =>
-        objectiveIndex === index ? value : objective
-      ),
-    }))
-  }
-  const addIcs201Objective = () => {
-    setIcs201Form((previous) => ({
-      ...previous,
-      objectives: [...previous.objectives, ''],
-    }))
+    if (sectionId === 'objectives') {
+      applyIcs201ObjectivesToIcs202(savedForm.objectives, { showLockedToast: true })
+    }
   }
   const updateIcs201Action = (actionId: number, field: keyof Ics201ActionRow, value: string) => {
     setIcs201Form((previous) => ({
@@ -24374,6 +24390,33 @@ function App() {
       handleIcs234SaveDraft(nextForm, latestVersion)
     }
   }
+  const applyIcs201ObjectivesToIcs202 = (
+    ics201Objectives: Ics201ObjectiveRow[],
+    options?: { showLockedToast?: boolean }
+  ) => {
+    if (!canEditIcs201Form || !ics202Form) {
+      return
+    }
+    const latestIcs202Version = ics202Versions[ics202Versions.length - 1]
+    if (latestIcs202Version && latestIcs202Version.signatures.length > 0) {
+      if (options?.showLockedToast) {
+        toast.message('ICS-202 is signed — ICS-201 objective changes were not applied.')
+      }
+      return
+    }
+    const { objectives, changed } = syncIcs202ObjectivesFromIcs201(
+      ics201Objectives,
+      ics202Form.objectives
+    )
+    if (changed) {
+      const nextForm = { ...ics202Form, objectives }
+      setIcs202Form(cloneIcs202FormState(nextForm))
+      if (latestIcs202Version && latestIcs202Version.signatures.length === 0) {
+        handleIcs202SaveDraft(nextForm, latestIcs202Version)
+      }
+      applyIcs202ObjectivesToIcs234(objectives)
+    }
+  }
   const applyIcs202ObjectivesToIcs234 = (
     ics202Objectives: Ics202ObjectiveRow[],
     options?: { showLockedToast?: boolean }
@@ -24396,6 +24439,47 @@ function App() {
       persistIcs234Objectives(objectives)
     }
   }
+  useEffect(() => {
+    if (!isInIncidentWorkspace && !isInExerciseWorkspace) {
+      return
+    }
+    if (!ics201Form || !ics202Form || !canEditIcs201Form) {
+      return
+    }
+
+    const signature = `${ics202Form.id}:${ics201Form.incidentName}:${ics201Form.objectives
+      .map((row) => `${row.id}|${row.kind}|${row.objective}`)
+      .join(';')}`
+    if (ics201ObjectivesSyncSignatureRef.current === signature) {
+      return
+    }
+    ics201ObjectivesSyncSignatureRef.current = signature
+
+    const latestIcs202Version = ics202Versions[ics202Versions.length - 1]
+    if (latestIcs202Version && latestIcs202Version.signatures.length > 0) {
+      return
+    }
+
+    const { objectives, changed } = syncIcs202ObjectivesFromIcs201(
+      ics201Form.objectives,
+      ics202Form.objectives
+    )
+    if (changed) {
+      const nextForm = { ...ics202Form, objectives }
+      setIcs202Form(cloneIcs202FormState(nextForm))
+      if (latestIcs202Version && latestIcs202Version.signatures.length === 0) {
+        handleIcs202SaveDraft(nextForm, latestIcs202Version)
+      }
+      applyIcs202ObjectivesToIcs234(objectives)
+    }
+  }, [
+    canEditIcs201Form,
+    ics201Form,
+    ics202Form,
+    ics202Versions,
+    isInExerciseWorkspace,
+    isInIncidentWorkspace,
+  ])
   useEffect(() => {
     if (!isInIncidentWorkspace && !isInExerciseWorkspace) {
       return
@@ -34431,7 +34515,7 @@ function App() {
                           {ics201EditingObjectives ? (
                             (() => {
                               const totalObjectivesLength = ics201ObjectivesEditor.objectives.reduce(
-                                (sum, entry) => sum + entry.length,
+                                (sum, entry) => sum + entry.objective.length,
                                 0
                               )
                               const objectivesOverLimit =
@@ -34439,19 +34523,71 @@ function App() {
                                 totalObjectivesLength > ICS201_STRICT_CHAR_LIMIT
                               return (
                                 <>
-                                  {ics201ObjectivesEditor.objectives.map((objective, index) => (
-                                    <input
-                                      key={`ics-objective-draft-${index}`}
-                                      value={objective}
-                                      onChange={(event) => {
-                                        ics201ObjectivesEditor.updateObjective(
-                                          index,
-                                          event.target.value
-                                        )
-                                      }}
-                                      placeholder={`Objective ${index + 1}`}
-                                      className="h-8 w-full rounded-md border bg-transparent px-2 text-xs outline-none"
-                                    />
+                                  <div className="grid grid-cols-[minmax(9rem,1fr)_minmax(0,2fr)_auto] gap-2 text-[11px] font-semibold text-muted-foreground">
+                                    <div className="flex items-center gap-1">
+                                      <span>Type</span>
+                                      <TooltipProvider delayDuration={150}>
+                                        <Tooltip>
+                                          <TooltipTrigger asChild>
+                                            <button
+                                              type="button"
+                                              className="inline-flex shrink-0 rounded-sm text-muted-foreground hover:text-foreground"
+                                              aria-label="Objective type help"
+                                            >
+                                              <Info className="h-3.5 w-3.5" />
+                                            </button>
+                                          </TooltipTrigger>
+                                          <TooltipContent side="top" className="max-w-xs text-xs">
+                                            {ICS201_OBJECTIVE_KIND_TOOLTIP}
+                                          </TooltipContent>
+                                        </Tooltip>
+                                      </TooltipProvider>
+                                    </div>
+                                    <span>Objective</span>
+                                    <span />
+                                  </div>
+                                  {ics201ObjectivesEditor.objectives.map((row) => (
+                                    <div
+                                      key={`ics-objective-draft-${row.id}`}
+                                      className="grid grid-cols-[minmax(9rem,1fr)_minmax(0,2fr)_auto] items-start gap-2"
+                                    >
+                                      <select
+                                        value={row.kind}
+                                        onChange={(event) => {
+                                          ics201ObjectivesEditor.updateObjectiveRow(row.id, {
+                                            kind: event.target.value as Ics201ObjectiveRow['kind'],
+                                          })
+                                        }}
+                                        className="h-8 rounded-md border bg-transparent px-2 text-xs outline-none"
+                                      >
+                                        <option value="">—</option>
+                                        {ICS201_OBJECTIVE_KIND_OPTIONS.map((option) => (
+                                          <option key={option.value} value={option.value}>
+                                            {option.label}
+                                          </option>
+                                        ))}
+                                      </select>
+                                      <input
+                                        value={row.objective}
+                                        onChange={(event) => {
+                                          ics201ObjectivesEditor.updateObjectiveRow(row.id, {
+                                            objective: event.target.value,
+                                          })
+                                        }}
+                                        placeholder="Objective statement"
+                                        className="h-8 w-full rounded-md border bg-transparent px-2 text-xs outline-none"
+                                      />
+                                      <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="icon"
+                                        aria-label="Delete objective"
+                                        className="h-8 w-8 text-destructive hover:text-destructive"
+                                        onClick={() => ics201ObjectivesEditor.deleteObjective(row.id)}
+                                      >
+                                        <Trash2 className="h-4 w-4" />
+                                      </Button>
+                                    </div>
                                   ))}
                                   <div
                                     className={cn(
@@ -34520,15 +34656,24 @@ function App() {
                               No objectives recorded.
                             </div>
                           ) : (
-                            ics201Form.objectives.map((objective, index) => (
+                            ics201Form.objectives.map((row, index) => (
                               <div
-                                key={`ics-objective-${index}`}
+                                key={`ics-objective-${row.id}`}
                                 className="rounded-md border border-dashed border-border/60 bg-muted/20 px-2.5 py-2 text-xs"
                               >
-                                <span className="text-[10px] font-medium text-muted-foreground">
-                                  {index + 1}.{' '}
-                                </span>
-                                {objective || <span className="text-muted-foreground">—</span>}
+                                <div className="flex items-start gap-2">
+                                  <span className="text-[10px] font-medium text-muted-foreground">
+                                    {index + 1}.
+                                  </span>
+                                  <div className="min-w-0 flex-1 space-y-1">
+                                    {row.kind ? (
+                                      <span className="inline-flex rounded-full bg-background px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                                        {formatIcs201ObjectiveKindLabel(row.kind)}
+                                      </span>
+                                    ) : null}
+                                    <p>{row.objective || <span className="text-muted-foreground">—</span>}</p>
+                                  </div>
+                                </div>
                               </div>
                             ))
                           )}

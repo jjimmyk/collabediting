@@ -9,7 +9,7 @@ import type {
   Ics201VersionRow,
   Ics201VersionSignature,
 } from '@/features/ics201/types'
-import { cloneIcs201FormState, mapIcs201VersionRow } from '@/features/ics201/utils'
+import { cloneIcs201FormState, mapIcs201VersionRow, normalizeIcs201FormState } from '@/features/ics201/utils'
 
 export type Ics201DocumentBundle = {
   document: Ics201DocumentRow
@@ -69,7 +69,7 @@ export async function fetchOrCreateIcs201Document(
   return {
     document: {
       ...document,
-      form_data: cloneIcs201FormState(document.form_data),
+      form_data: cloneIcs201FormState(normalizeIcs201FormState(document.form_data)),
     },
     versions,
   }
@@ -155,10 +155,10 @@ export async function patchIcs201DocumentForm(
     throw new Error(fetchError.message)
   }
 
-  const nextForm = {
-    ...cloneIcs201FormState(row.form_data),
+  const nextForm = normalizeIcs201FormState({
+    ...cloneIcs201FormState(normalizeIcs201FormState(row.form_data)),
     ...patch,
-  }
+  })
 
   const { error: updateError } = await supabase
     .from('ics201_documents')
@@ -198,7 +198,7 @@ export function subscribeToIcs201Changes(
         const row = payload.new as Ics201DocumentRow
         handlers.onDocumentUpdated?.({
           ...row,
-          form_data: cloneIcs201FormState(row.form_data),
+          form_data: cloneIcs201FormState(normalizeIcs201FormState(row.form_data)),
         })
       }
     )

@@ -55,6 +55,30 @@ export function clipText(value: string, maxLength?: number): string {
   return value.slice(0, maxLength)
 }
 
+export function clipObjectiveRows(
+  objectives: import('@/features/ics201/types').Ics201ObjectiveRow[],
+  maxLength?: number
+): import('@/features/ics201/types').Ics201ObjectiveRow[] {
+  if (maxLength === undefined) return objectives
+  let remaining = maxLength
+  const clipped: import('@/features/ics201/types').Ics201ObjectiveRow[] = []
+  for (const row of objectives) {
+    if (remaining <= 0) break
+    const nextObjective = row.objective.slice(0, remaining)
+    clipped.push({ ...row, objective: nextObjective })
+    remaining -= nextObjective.length
+  }
+  if (clipped.length > 0) {
+    return clipped
+  }
+  const first = objectives[0]
+  if (!first) {
+    return [{ id: 1, kind: 'O', objective: '' }]
+  }
+  return [{ ...first, objective: first.objective.slice(0, maxLength) }]
+}
+
+/** @deprecated Use clipObjectiveRows */
 export function clipObjectives(objectives: string[], maxLength?: number): string[] {
   if (maxLength === undefined) return objectives
   let remaining = maxLength

@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Item, ItemContent, ItemDescription, ItemTitle } from '@/components/ui/item'
 import type { Ics201FormState, Ics201Version } from '@/features/ics201/types'
+import { formatIcs201ObjectiveKindLabel } from '@/features/ics201/constants'
 import { cloneIcs201FormState, ics201VersionAuthorLabel } from '@/features/ics201/utils'
 import { formatOperationalPeriodLabel } from '@/lib/operational-period-utils'
 
@@ -252,7 +253,15 @@ export function Ics201OperationalPeriodSnapshotPanel({
             value={`${displayForm.operationalPeriodStart} – ${displayForm.operationalPeriodEnd}`}
           />
           <ReadOnlyField label="Current Situation" value={displayForm.currentSituationSummary} />
-          <ReadOnlyField label="Objectives" value={displayForm.objectives.join('\n')} />
+          <ReadOnlyField
+            label="Objectives"
+            value={displayForm.objectives
+              .map(
+                (row, index) =>
+                  `${index + 1}. ${formatIcs201ObjectiveKindLabel(row.kind) ? `[${formatIcs201ObjectiveKindLabel(row.kind)}] ` : ''}${row.objective}`
+              )
+              .join('\n')}
+          />
           <ReadOnlyField
             label="Actions"
             value={displayForm.actions.map((row) => `${row.task} (${row.owner})`).join('\n')}

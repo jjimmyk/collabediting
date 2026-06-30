@@ -37,6 +37,7 @@ import type {
 import {
   extractIcs202IncidentInfoDraft,
   extractIcs202SiteSafetyPlanDraft,
+  isIcs202ObjectiveLinkedToIcs201,
 } from '@/features/ics202/utils'
 import { cn } from '@/lib/utils'
 
@@ -165,6 +166,10 @@ export function Ics202FormSections({
   }
 
   const deleteObjectiveRow = (rowId: number) => {
+    const row = objectives.find((entry) => entry.id === rowId)
+    if (row && isIcs202ObjectiveLinkedToIcs201(row)) {
+      return
+    }
     onPatchDraft(
       'objectives',
       objectives.filter((row) => row.id !== rowId)
@@ -326,12 +331,14 @@ export function Ics202FormSections({
           {objectives.length === 0 ? (
             <p className="text-xs text-muted-foreground">No objectives recorded.</p>
           ) : (
-            objectives.map((row) => (
+            objectives.map((row) => {
+              const linkedToIcs201 = isIcs202ObjectiveLinkedToIcs201(row)
+              return (
               <div
                 key={row.id}
                 className="grid grid-cols-[4.5rem_minmax(0,1fr)_auto] items-start gap-2"
               >
-                {isSectionEditing(editingSections, 'objectives') ? (
+                {isSectionEditing(editingSections, 'objectives') && !linkedToIcs201 ? (
                   <>
                     <select
                       value={row.kind}
@@ -368,12 +375,19 @@ export function Ics202FormSections({
                 ) : (
                   <>
                     <Ics202ReadOnlyField value={row.kind} />
-                    <Ics202ReadOnlyTextBlock value={row.objective} />
+                    <div className="space-y-1">
+                      <Ics202ReadOnlyTextBlock value={row.objective} />
+                      {linkedToIcs201 ? (
+                        <span className="inline-flex rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                          From ICS-201
+                        </span>
+                      ) : null}
+                    </div>
                     <span />
                   </>
                 )}
               </div>
-            ))
+            )})
           )}
         </div>,
         isSectionEditing(editingSections, 'objectives') ? (

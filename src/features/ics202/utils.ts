@@ -123,6 +123,21 @@ export function normalizeIcs202ObjectiveKind(kind: unknown): Ics202ObjectiveKind
   return ''
 }
 
+export function normalizeIcs201SourceObjectiveId(value: unknown): number | null {
+  return typeof value === 'number' ? value : null
+}
+
+export function isIcs202ObjectiveLinkedToIcs201(objective: Ics202ObjectiveRow): boolean {
+  return normalizeIcs201SourceObjectiveId(objective.ics201SourceObjectiveId) != null
+}
+
+export function formatIcs201SourceLabel(kind: Ics202ObjectiveKind): string {
+  if (kind === 'O') return 'Operational'
+  if (kind === 'M') return 'Managerial'
+  if (kind === 'O&M') return 'Operational & Managerial'
+  return 'From ICS-201'
+}
+
 export function normalizeIcs202FormState(form: Ics202FormState): Ics202FormState {
   const lifelines = createEmptyIcs202CommunityLifelines(form.communityLifelines ?? {})
   return {
@@ -137,6 +152,8 @@ export function normalizeIcs202FormState(form: Ics202FormState): Ics202FormState
       id: typeof row.id === 'number' ? row.id : index + 1,
       kind: normalizeIcs202ObjectiveKind(row.kind),
       objective: String(row.objective ?? ''),
+      ics201SourceObjectiveId:
+        typeof row.ics201SourceObjectiveId === 'number' ? row.ics201SourceObjectiveId : null,
     })),
     commandEmphasis: String(form.commandEmphasis ?? ''),
     siteSafetyPlanRequired: Boolean(form.siteSafetyPlanRequired),

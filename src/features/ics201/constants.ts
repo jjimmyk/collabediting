@@ -1,4 +1,28 @@
-import type { Ics201FormState, Ics201MapSketchVertex, Ics201SectionId } from './types'
+import type {
+  Ics201FormState,
+  Ics201MapSketchVertex,
+  Ics201ObjectiveKind,
+  Ics201SectionId,
+} from './types'
+
+export const ICS201_OBJECTIVE_KIND_OPTIONS: ReadonlyArray<{
+  value: Ics201ObjectiveKind
+  label: string
+}> = [
+  { value: 'O', label: 'Operational' },
+  { value: 'M', label: 'Managerial' },
+  { value: 'O&M', label: 'Operational & Managerial' },
+]
+
+export const ICS201_OBJECTIVE_KIND_TOOLTIP =
+  'Indicates whether an objective is operational (O), managerial (M), or operational and managerial (O&M).'
+
+export function formatIcs201ObjectiveKindLabel(kind: Ics201ObjectiveKind): string {
+  if (kind === 'O') return 'Operational'
+  if (kind === 'M') return 'Managerial'
+  if (kind === 'O&M') return 'Operational & Managerial'
+  return ''
+}
 
 export const BASELINE_MAP_SKETCH_POLYGON: Ics201MapSketchVertex[] = [
   { longitude: -122.4115, latitude: 37.8096 },
@@ -62,9 +86,21 @@ export function createInitialIcs201Form(): Ics201FormState {
     projectedIncidentCourse:
       'Expect sustained transportation and power disruptions through next operational period with elevated public safety messaging requirements.',
     objectives: [
-      'Protect life safety in high-risk flood corridors.',
-      'Maintain access for emergency medical transport routes.',
-      'Stabilize shelter operations and staffing coverage.',
+      {
+        id: 1,
+        kind: 'O',
+        objective: 'Protect life safety in high-risk flood corridors.',
+      },
+      {
+        id: 2,
+        kind: 'O',
+        objective: 'Maintain access for emergency medical transport routes.',
+      },
+      {
+        id: 3,
+        kind: 'M',
+        objective: 'Stabilize shelter operations and staffing coverage.',
+      },
     ],
     actions: [
       {

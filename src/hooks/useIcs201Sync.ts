@@ -11,6 +11,7 @@ import {
   cloneIcs201FormState,
   ics201AuthorColorFromId,
   isIcs201EditingAnySection,
+  normalizeIcs201FormState,
 } from '@/features/ics201/utils'
 import {
   fetchOrCreateIcs201Document,
@@ -125,7 +126,7 @@ export function useIcs201Sync({
     return subscribeToIcs201Changes(documentId, {
       onDocumentUpdated: (document) => {
         if (isIcs201EditingAnySection(editingFlagsRef.current)) return
-        onRemoteFormUpdated(cloneIcs201FormState(document.form_data))
+        onRemoteFormUpdated(cloneIcs201FormState(normalizeIcs201FormState(document.form_data)))
       },
       onVersionInserted: (version) => {
         onRemoteVersionInserted(version)
@@ -133,7 +134,7 @@ export function useIcs201Sync({
           !isIcs201EditingAnySection(editingFlagsRef.current) &&
           version.authorId !== userIdRef.current
         ) {
-          onRemoteFormUpdated(cloneIcs201FormState(version.snapshot))
+          onRemoteFormUpdated(cloneIcs201FormState(normalizeIcs201FormState(version.snapshot)))
         }
       },
     })

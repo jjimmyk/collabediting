@@ -29,6 +29,14 @@ export type Ics201SafetyRow = {
   medicalPlan: string
 }
 
+export type Ics201ObjectiveKind = 'O' | 'M' | 'O&M' | ''
+
+export type Ics201ObjectiveRow = {
+  id: number
+  kind: Ics201ObjectiveKind
+  objective: string
+}
+
 export type Ics201FormState = {
   incidentName: string
   incidentNumber: string
@@ -47,7 +55,7 @@ export type Ics201FormState = {
   currentSituationSummary: string
   weatherForecast: string
   projectedIncidentCourse: string
-  objectives: string[]
+  objectives: Ics201ObjectiveRow[]
   actions: Ics201ActionRow[]
   orgChart: {
     incidentCommander: string

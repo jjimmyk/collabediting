@@ -1,5 +1,8 @@
+import { formatIcs201ObjectiveKindLabel } from './constants'
 import type {
   Ics201FormState,
+  Ics201ObjectiveKind,
+  Ics201ObjectiveRow,
   Ics201SectionId,
   Ics201Version,
   Ics201VersionRow,
@@ -16,11 +19,125 @@ const AUTHOR_COLORS = [
   '#84cc16',
 ]
 
+export function normalizeIcs201ObjectiveKind(kind: unknown): Ics201ObjectiveKind {
+  if (kind === 'O' || kind === 'M' || kind === 'O&M') {
+    return kind
+  }
+  if (kind === 'O/M') {
+    return 'O&M'
+  }
+  return ''
+}
+
+export function normalizeIcs201ObjectiveRows(raw: unknown): Ics201ObjectiveRow[] {
+  if (!Array.isArray(raw)) {
+    return []
+  }
+  if (raw.length === 0) {
+    return []
+  }
+  if (typeof raw[0] === 'string') {
+    return raw.map((entry, index) => ({
+      id: index + 1,
+      kind: 'O' as Ics201ObjectiveKind,
+      objective: String(entry ?? ''),
+    }))
+  }
+  return raw.map((row, index) => ({
+    id: typeof row?.id === 'number' ? row.id : index + 1,
+    kind: normalizeIcs201ObjectiveKind(row?.kind),
+    objective: String(row?.objective ?? ''),
+  }))
+}
+
+export function normalizeIcs201FormState(form: Ics201FormState): Ics201FormState {
+  return {
+    ...form,
+    incidentName: String(form.incidentName ?? ''),
+    incidentNumber: String(form.incidentNumber ?? ''),
+    incidentLocation: String(form.incidentLocation ?? ''),
+    dateInitiated: String(form.dateInitiated ?? ''),
+    timeInitiated: String(form.timeInitiated ?? ''),
+    preparedDateTime: String(form.preparedDateTime ?? ''),
+    operationalPeriodStart: String(form.operationalPeriodStart ?? ''),
+    operationalPeriodEnd: String(form.operationalPeriodEnd ?? ''),
+    jurisdiction: String(form.jurisdiction ?? ''),
+    preparedBy: String(form.preparedBy ?? ''),
+    preparedByName: String(form.preparedByName ?? ''),
+    preparedByPositionTitle: String(form.preparedByPositionTitle ?? ''),
+    preparedBySignature: String(form.preparedBySignature ?? ''),
+    mapSketchPolygon: Array.isArray(form.mapSketchPolygon)
+      ? form.mapSketchPolygon.map((vertex) => ({
+          longitude: Number(vertex.longitude),
+          latitude: Number(vertex.latitude),
+        }))
+      : [],
+    currentSituationSummary: String(form.currentSituationSummary ?? ''),
+    weatherForecast: String(form.weatherForecast ?? ''),
+    projectedIncidentCourse: String(form.projectedIncidentCourse ?? ''),
+    objectives: normalizeIcs201ObjectiveRows(form.objectives),
+    actions: Array.isArray(form.actions)
+      ? form.actions.map((action, index) => ({
+          id: typeof action.id === 'number' ? action.id : index + 1,
+          task: String(action.task ?? ''),
+          owner: String(action.owner ?? ''),
+          startTime: String(action.startTime ?? ''),
+          endTime: String(action.endTime ?? ''),
+          status: String(action.status ?? ''),
+        }))
+      : [],
+    orgChart: {
+      incidentCommander: String(form.orgChart?.incidentCommander ?? ''),
+      operationsSectionChief: String(form.orgChart?.operationsSectionChief ?? ''),
+      planningSectionChief: String(form.orgChart?.planningSectionChief ?? ''),
+      logisticsSectionChief: String(form.orgChart?.logisticsSectionChief ?? ''),
+      financeSectionChief: String(form.orgChart?.financeSectionChief ?? ''),
+      publicInformationOfficer: String(form.orgChart?.publicInformationOfficer ?? ''),
+      safetyOfficer: String(form.orgChart?.safetyOfficer ?? ''),
+      liaisonOfficer: String(form.orgChart?.liaisonOfficer ?? ''),
+    },
+    resources: Array.isArray(form.resources)
+      ? form.resources.map((resource, index) => ({
+          id: typeof resource.id === 'number' ? resource.id : index + 1,
+          category: String(resource.category ?? ''),
+          identifier: String(resource.identifier ?? ''),
+          quantity: String(resource.quantity ?? ''),
+          status: String(resource.status ?? ''),
+          assignment: String(resource.assignment ?? ''),
+        }))
+      : [],
+    safetyAnalysis: Array.isArray(form.safetyAnalysis)
+      ? form.safetyAnalysis.map((row, index) => ({
+          id: typeof row.id === 'number' ? row.id : index + 1,
+          hazard: String(row.hazard ?? ''),
+          mitigation: String(row.mitigation ?? ''),
+          ppe: String(row.ppe ?? ''),
+          medicalPlan: String(row.medicalPlan ?? ''),
+        }))
+      : [],
+  }
+}
+
+export function ics201ObjectivesFromStrings(texts: string[]): Ics201ObjectiveRow[] {
+  return texts.map((objective, index) => ({
+    id: index + 1,
+    kind: 'O',
+    objective,
+  }))
+}
+
+export function formatIcs201ObjectiveExportLine(row: Ics201ObjectiveRow, index: number): string {
+  const kindLabel = formatIcs201ObjectiveKindLabel(row.kind)
+  const prefix = kindLabel ? `[${kindLabel}] ` : ''
+  const text = row.objective.trim() || `Objective ${index + 1}`
+  return `${index + 1}. ${prefix}${text}`
+}
+
 export function cloneIcs201FormState(form: Ics201FormState): Ics201FormState {
   return {
     ...form,
     mapSketchPolygon: form.mapSketchPolygon.map((vertex) => ({ ...vertex })),
-    objectives: [...form.objectives],
+    objectives: form.objectives.map((row) => ({ ...row })),
     actions: form.actions.map((action) => ({ ...action })),
     orgChart: { ...form.orgChart },
     resources: form.resources.map((resource) => ({ ...resource })),
@@ -121,7 +238,7 @@ export function mapIcs201VersionRow(row: Ics201VersionRow): Ics201Version {
     authorName: row.author_name,
     authorEmail,
     authorColor: row.author_color,
-    snapshot: cloneIcs201FormState(row.snapshot),
+    snapshot: cloneIcs201FormState(normalizeIcs201FormState(row.snapshot)),
     signatures: Array.isArray(row.signatures) ? row.signatures : [],
     sectionId: (row.section_id as Ics201SectionId | null) ?? null,
   }

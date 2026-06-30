@@ -6,6 +6,7 @@ export type Ics202ObjectiveRow = {
   id: number
   kind: Ics202ObjectiveKind
   objective: string
+  ics201SourceObjectiveId?: number | null
 }
 
 export type Ics202CommunityLifelineId =
