@@ -70,7 +70,7 @@ import {
 } from '@/features/roster/workspace-position-roster'
 import type { PositionRosterInviteSubmitResult } from '@/features/roster/position-roster-messages'
 import type { RosterInviteAssignmentMode } from '@/features/roster/position-roster-messages'
-import type { RosterMemberEffectiveWhen } from '@/features/roster/roster-template-types'
+import type { RosterMemberEffectiveWhen } from '@/lib/roster-member-assignment'
 import type { WorkspacePositionType } from '@/features/roster/workspace-position-type'
 import type { ResourceListItemData } from '@/features/resources/types'
 import type { AddAssetToOrgChartSubmitInput } from '@/lib/roster-asset-assignment'

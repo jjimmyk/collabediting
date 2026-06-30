@@ -204,7 +204,6 @@ type WorkspaceOrgChartRosterProps = {
   rosterTimeHorizon?: OrgChartExportScope
   managementEntriesByPosition?: Record<string, PositionRosterEntry>
   rosterSchedulingPhase?: RosterSchedulingPhase
-  draftMembersForOrgDedupe?: BuildTeamDraftMember[]
 } & Partial<PositionRosterAssetHandlers>
 
 type OrgChartRenderProps = {
@@ -325,7 +324,6 @@ type OrgChartRenderProps = {
   ics215aLocationsByPosition?: import('@/features/ics215a/location-utils').Ics215aLocationByPositionIndex
   onFocusIcs215aRowOnMap?: (rowId: number) => void
   rosterSchedulingPhase?: RosterSchedulingPhase
-  draftMembersForOrgDedupe?: BuildTeamDraftMember[]
 }
 
 function isSubordinateRowChild(node: OrgChartNode): boolean {
