@@ -124,7 +124,7 @@ export function buildDraftAssetsByKey(
     assetsByKey[draftAsset.assetKey] = {
       ...catalogAsset,
       pointOfContactMemberId: draftAsset.pointOfContactDraftMemberId,
-      pointOfContactEmail: pocMember?.email ?? null,
+      pointOfContact: pocMember?.email ?? catalogAsset.pointOfContact,
     }
   }
 
