@@ -1,6 +1,7 @@
 import { getHubAorBoundaryDefinition, HUB_AOR_BOUNDARY_CATALOG } from '@/features/hub/aor/hub-aor-boundary-geometries'
 import type { HubAorBoundaryLevel } from '@/features/hub/aor/hub-aor-boundary-types'
 import { GEOSPATIAL_COP_AIS_LAYER } from '@/features/hub/cisa-dashboards/geospatial-cop-dashboard-data'
+import { NOAA_GNOME_LAYER_DEFINITION } from '@/features/hub/map-layers/gnome/noaa-gnome-layer-catalog'
 import {
   getWeatherLayerDefinition,
   HUB_WEATHER_LAYER_CATALOG,
@@ -9,7 +10,7 @@ import {
 } from '@/features/hub/map-layers/weather-layer-catalog'
 import type { WeatherLayerStatus } from '@/features/hub/map-layers/useHubWeatherMapLayers'
 
-export type HubMapVisibleItemSource = 'weather' | 'aor' | 'geospatial-cop'
+export type HubMapVisibleItemSource = 'weather' | 'aor' | 'geospatial-cop' | 'gnome'
 
 export type HubMapVisibleItemKind =
   | 'map-layer'
@@ -98,7 +99,8 @@ export function buildHubMapVisibleItems(
   enabledWeatherLayerIds: Set<string>,
   enabledAorBoundaryIds: Set<string>,
   weatherLayerStatuses: Record<string, WeatherLayerStatus> = {},
-  geospatialCopAisLayerEnabled = false
+  geospatialCopAisLayerEnabled = false,
+  noaaGnomeLayerEnabled = false
 ): HubMapVisibleItem[] {
   const items: HubMapVisibleItem[] = []
 
@@ -147,6 +149,17 @@ export function buildHubMapVisibleItems(
       typeLabel: 'Map Layer',
       groupLabel: 'National Geospatial COP',
       source: 'geospatial-cop',
+    })
+  }
+
+  if (noaaGnomeLayerEnabled) {
+    items.push({
+      id: NOAA_GNOME_LAYER_DEFINITION.id,
+      label: NOAA_GNOME_LAYER_DEFINITION.label,
+      kind: 'map-layer',
+      typeLabel: 'Map Layer',
+      groupLabel: 'Oil spill trajectory',
+      source: 'gnome',
     })
   }
 

@@ -54,6 +54,18 @@ describe('hub-map-visible-items', () => {
     })
   })
 
+  it('includes NOAA GNOME layer when enabled', () => {
+    const items = buildHubMapVisibleItems(new Set(), new Set(), {}, false, true)
+
+    expect(items).toHaveLength(1)
+    expect(items[0]).toMatchObject({
+      id: 'noaa-gnome',
+      label: 'NOAA GNOME',
+      kind: 'map-layer',
+      source: 'gnome',
+    })
+  })
+
   it('removes a single aor boundary without cascading', () => {
     const districtId = hubAorDistrictBoundaryId(4)
     const sectorId = hubAorSectorBoundaryId('sector-miami')

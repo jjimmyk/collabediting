@@ -1,9 +1,15 @@
 import { useMemo } from 'react'
-import { AlertCircle, CloudRain, Loader2, MapPin, Radio } from 'lucide-react'
+import { AlertCircle, CloudRain, Droplets, Loader2, MapPin, Radio } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
+import { Slider } from '@/components/ui/slider'
 import { cn } from '@/lib/utils'
+import { NOAA_GNOME_LAYER_DEFINITION } from '@/features/hub/map-layers/gnome/noaa-gnome-layer-catalog'
+import {
+  formatNoaaGnomeHourLabel,
+  NOAA_GNOME_STEP_COUNT,
+} from '@/features/hub/map-layers/gnome/noaa-gnome-trajectory-data'
 import {
   groupWeatherLayersByCategory,
   type WeatherLayerDefinition,
@@ -16,6 +22,11 @@ type HubMapLayersPanelProps = {
   glassItemBorderClasses?: string
   onToggleLayer: (layerId: string) => void
   onHideAll: () => void
+  oilSpillTrajectoryModelsEnabled?: boolean
+  gnomeLayerEnabled?: boolean
+  gnomeHourIndex?: number
+  onToggleGnomeLayer?: () => void
+  onGnomeHourIndexChange?: (hourIndex: number) => void
 }
 
 function LayerStatusHint({
@@ -68,9 +79,15 @@ export function HubMapLayersPanel({
   glassItemBorderClasses = '',
   onToggleLayer,
   onHideAll,
+  oilSpillTrajectoryModelsEnabled = false,
+  gnomeLayerEnabled = false,
+  gnomeHourIndex = 0,
+  onToggleGnomeLayer,
+  onGnomeHourIndexChange,
 }: HubMapLayersPanelProps) {
   const groupedLayers = useMemo(() => groupWeatherLayersByCategory(), [])
-  const visibleLayerCount = enabledLayerIds.size
+  const visibleLayerCount =
+    enabledLayerIds.size + (oilSpillTrajectoryModelsEnabled && gnomeLayerEnabled ? 1 : 0)
 
   return (
     <div className="flex min-w-0 flex-col gap-4 pb-2">
@@ -92,7 +109,7 @@ export function HubMapLayersPanel({
           <div className="flex min-w-0 items-center gap-2">
             <MapPin className="h-4 w-4 shrink-0 text-primary" />
             <p className="text-xs">
-              {visibleLayerCount} weather {visibleLayerCount === 1 ? 'layer' : 'layers'} visible
+              {visibleLayerCount} {visibleLayerCount === 1 ? 'layer' : 'layers'} visible on map
             </p>
           </div>
           <Button type="button" size="sm" variant="ghost" onClick={onHideAll}>
@@ -153,6 +170,68 @@ export function HubMapLayersPanel({
           </div>
         </section>
       ))}
+
+      {oilSpillTrajectoryModelsEnabled ? (
+        <section
+          className={cn('w-full min-w-0 overflow-hidden rounded-lg border', glassItemBorderClasses)}
+        >
+          <div className="flex items-center gap-2 border-b px-3 py-2.5">
+            <Droplets className="h-4 w-4 text-primary" />
+            <div>
+              <p className="text-sm font-medium">Oil spill trajectory models</p>
+              <p className="text-xs text-muted-foreground">
+                NOAA GNOME particle trajectories (demo synthetic data)
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-col gap-3 px-3 py-3">
+            <div className="flex items-start gap-2">
+              <Checkbox
+                id="noaa-gnome-layer"
+                checked={gnomeLayerEnabled}
+                onCheckedChange={() => onToggleGnomeLayer?.()}
+                className="mt-0.5"
+              />
+              <div className="min-w-0 flex-1">
+                <Label htmlFor="noaa-gnome-layer" className="cursor-pointer font-normal leading-snug">
+                  {NOAA_GNOME_LAYER_DEFINITION.label}
+                </Label>
+                <p className="text-xs text-muted-foreground">{NOAA_GNOME_LAYER_DEFINITION.description}</p>
+              </div>
+            </div>
+
+            {gnomeLayerEnabled ? (
+              <div className="space-y-2 rounded-md border bg-muted/20 px-3 py-2.5">
+                <div className="flex items-center justify-between gap-2">
+                  <Label htmlFor="noaa-gnome-hour-slider" className="text-xs font-medium">
+                    Trajectory hour
+                  </Label>
+                  <span className="text-[11px] text-muted-foreground">
+                    {formatNoaaGnomeHourLabel(gnomeHourIndex)}
+                  </span>
+                </div>
+                <Slider
+                  id="noaa-gnome-hour-slider"
+                  min={0}
+                  max={NOAA_GNOME_STEP_COUNT - 1}
+                  step={1}
+                  value={[gnomeHourIndex]}
+                  onValueChange={(value) => {
+                    const next = value[0]
+                    if (typeof next === 'number') {
+                      onGnomeHourIndexChange?.(next)
+                    }
+                  }}
+                  aria-label="NOAA GNOME trajectory hour"
+                />
+                <p className="text-[11px] text-muted-foreground">
+                  Hour {gnomeHourIndex + 1} of {NOAA_GNOME_STEP_COUNT} since spill release
+                </p>
+              </div>
+            ) : null}
+          </div>
+        </section>
+      ) : null}
     </div>
   )
 }

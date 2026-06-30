@@ -29,12 +29,14 @@ describe('feature-flag storage', () => {
   it('defaults cisa to false when storage is empty', () => {
     expect(loadFeatureFlags()).toEqual(DEFAULT_FEATURE_FLAG_STATE)
     expect(loadFeatureFlags().cisa).toBe(false)
+    expect(loadFeatureFlags().oilSpillTrajectoryModels).toBe(false)
   })
 
   it('persists and reloads feature flag state', () => {
-    saveFeatureFlags({ cisa: true })
+    saveFeatureFlags({ cisa: true, oilSpillTrajectoryModels: true })
     expect(window.localStorage.getItem(HUB_FEATURE_FLAG_STORAGE_KEY)).toBeTruthy()
     expect(loadFeatureFlags().cisa).toBe(true)
+    expect(loadFeatureFlags().oilSpillTrajectoryModels).toBe(true)
   })
 
   it('ignores unknown keys in storage', () => {
@@ -42,7 +44,7 @@ describe('feature-flag storage', () => {
       HUB_FEATURE_FLAG_STORAGE_KEY,
       JSON.stringify({ cisa: true, unknown: true })
     )
-    expect(loadFeatureFlags()).toEqual({ cisa: true })
+    expect(loadFeatureFlags()).toEqual({ cisa: true, oilSpillTrajectoryModels: false })
   })
 })
 

@@ -857,6 +857,13 @@ import {
   WEATHER_LAYER_GROUP_LABELS,
 } from '@/features/hub/map-layers/weather-layer-catalog'
 import { useHubWeatherMapLayers } from '@/features/hub/map-layers/useHubWeatherMapLayers'
+import {
+  loadNoaaGnomeHourIndex,
+  loadNoaaGnomeLayerEnabled,
+  saveNoaaGnomeHourIndex,
+  saveNoaaGnomeLayerEnabled,
+} from '@/features/hub/map-layers/gnome/noaa-gnome-layer-storage'
+import { useNoaaGnomeMapLayer } from '@/features/hub/map-layers/gnome/useNoaaGnomeMapLayer'
 import { ProductToursMenu } from '@/components/ProductToursMenu'
 import { CreateHubNotificationDialog } from '@/components/CreateHubNotificationDialog'
 import {
@@ -6599,7 +6606,8 @@ function App() {
     setActiveOrganizationId,
     signOut,
   } = useAuth()
-  const { flags: featureFlags, setFlag: setFeatureFlag, isCisaEnabled } = useFeatureFlags()
+  const { flags: featureFlags, setFlag: setFeatureFlag, isCisaEnabled, isOilSpillTrajectoryModelsEnabled } =
+    useFeatureFlags()
   const mapContainerRef = useRef<HTMLDivElement | null>(null)
   const leftPanelRef = useRef<HTMLDivElement | null>(null)
   const searchComponentRef = useRef<HTMLDivElement | null>(null)
@@ -6766,6 +6774,8 @@ function App() {
   const [enabledAorBoundaryIds, setEnabledAorBoundaryIds] = useState<Set<string>>(() =>
     loadEnabledHubAorBoundaryIds()
   )
+  const [noaaGnomeLayerEnabled, setNoaaGnomeLayerEnabled] = useState(() => loadNoaaGnomeLayerEnabled())
+  const [noaaGnomeHourIndex, setNoaaGnomeHourIndex] = useState(() => loadNoaaGnomeHourIndex())
   const [analyticsResolutionKindFilter, setAnalyticsResolutionKindFilter] =
     useState<AnalyticsResolutionKindFilter>('incidents')
   const [analyticsSpendKindFilter, setAnalyticsSpendKindFilter] =
@@ -12197,6 +12207,11 @@ function App() {
     !isInWorkspaceContext &&
     activeTab === 'cisa-national-geospatial-cop' &&
     isMapVisible
+  const showNoaaGnomeMapLayer =
+    isOilSpillTrajectoryModelsEnabled &&
+    noaaGnomeLayerEnabled &&
+    !isInWorkspaceContext &&
+    isMapVisible
   useEffect(() => {
     if (!isCisaEnabled && isHubCisaDashboardTab(activeTab)) {
       setActiveTab('incident-list')
@@ -12207,6 +12222,12 @@ function App() {
       setGeospatialCopAisLayerEnabled(false)
     }
   }, [isCisaEnabled])
+  useEffect(() => {
+    if (!isOilSpillTrajectoryModelsEnabled) {
+      setNoaaGnomeLayerEnabled(false)
+      saveNoaaGnomeLayerEnabled(false)
+    }
+  }, [isOilSpillTrajectoryModelsEnabled])
   useEffect(() => {
     if (!isInWorkspaceContext && activeTab === 'cisa-national-geospatial-cop') {
       setIsMapVisible(true)
@@ -12369,6 +12390,8 @@ function App() {
       saveEnabledWeatherLayerIds(next)
       return next
     })
+    setNoaaGnomeLayerEnabled(false)
+    saveNoaaGnomeLayerEnabled(false)
   }, [])
   useHubAorBoundaryMapLayers({
     enabled: !isInWorkspaceContext && isMapVisible,
@@ -12382,6 +12405,24 @@ function App() {
     mapViewRef,
     graphicsRef: geospatialCopGraphicsRef,
   })
+  useNoaaGnomeMapLayer({
+    enabled: showNoaaGnomeMapLayer,
+    hourIndex: noaaGnomeHourIndex,
+    mapViewRef,
+  })
+  const toggleNoaaGnomeLayer = useCallback(() => {
+    setNoaaGnomeLayerEnabled((previous) => {
+      const next = !previous
+      saveNoaaGnomeLayerEnabled(next)
+      return next
+    })
+    setIsMapVisible(true)
+  }, [])
+  const handleNoaaGnomeHourIndexChange = useCallback((hourIndex: number) => {
+    setNoaaGnomeHourIndex(hourIndex)
+    saveNoaaGnomeHourIndex(hourIndex)
+    setIsMapVisible(true)
+  }, [])
   const toggleAorBoundary = useCallback((boundaryId: string, checked: boolean) => {
     setEnabledAorBoundaryIds((previous) => {
       const next = applyHubAorBoundaryToggle(previous, boundaryId, checked)
@@ -12403,13 +12444,27 @@ function App() {
         enabledWeatherLayerIds,
         enabledAorBoundaryIds,
         weatherLayerStatuses,
-        geospatialCopAisLayerEnabled
+        geospatialCopAisLayerEnabled,
+        isOilSpillTrajectoryModelsEnabled && noaaGnomeLayerEnabled
       ),
-    [enabledWeatherLayerIds, enabledAorBoundaryIds, weatherLayerStatuses, geospatialCopAisLayerEnabled]
+    [
+      enabledWeatherLayerIds,
+      enabledAorBoundaryIds,
+      weatherLayerStatuses,
+      geospatialCopAisLayerEnabled,
+      isOilSpillTrajectoryModelsEnabled,
+      noaaGnomeLayerEnabled,
+    ]
   )
   const handleRemoveHubMapVisibleItem = useCallback((item: HubMapVisibleItem) => {
     if (item.source === 'geospatial-cop') {
       setGeospatialCopAisLayerEnabled(false)
+      return
+    }
+
+    if (item.source === 'gnome') {
+      setNoaaGnomeLayerEnabled(false)
+      saveNoaaGnomeLayerEnabled(false)
       return
     }
 
@@ -33263,6 +33318,11 @@ function App() {
                     glassItemBorderClasses={glassItemBorderClasses}
                     onToggleLayer={toggleWeatherMapLayer}
                     onHideAll={hideAllWeatherMapLayers}
+                    oilSpillTrajectoryModelsEnabled={isOilSpillTrajectoryModelsEnabled}
+                    gnomeLayerEnabled={noaaGnomeLayerEnabled}
+                    gnomeHourIndex={noaaGnomeHourIndex}
+                    onToggleGnomeLayer={toggleNoaaGnomeLayer}
+                    onGnomeHourIndexChange={handleNoaaGnomeHourIndexChange}
                   />
                 )}
 
