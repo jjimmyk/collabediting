@@ -8,10 +8,10 @@ import {
   ORG_CHART_CONNECTOR_LINE_WIDTH,
   ORG_CHART_CONNECTOR_STEM_HEIGHT,
   ORG_CHART_FORK_BRANCH_COLUMN_MIN_WIDTH,
-  ORG_CHART_LOGISTICS_FORK_MIN_WIDTH,
   ORG_CHART_SUBORDINATE_ARM_CHANNEL_WIDTH,
   ORG_CHART_SUBORDINATE_ROW_GAP,
   orgChartCrossbarBarInsetClassName,
+  orgChartForkLayoutTokens,
 } from '@/features/roster/org-chart-layout-tokens'
 
 export function OrgChartVerticalLine({
@@ -148,12 +148,14 @@ export function OrgChartCrossbarColumns({
   barInsetClassName,
   columnClassName,
   showInboundStem = true,
+  expandToParent = true,
 }: {
   columns: ReactNode[]
   className?: string
   barInsetClassName?: string
   columnClassName?: string
   showInboundStem?: boolean
+  expandToParent?: boolean
 }) {
   if (columns.length === 0) return null
 
@@ -169,7 +171,13 @@ export function OrgChartCrossbarColumns({
         <OrgChartHorizontalLine
           className={cn('absolute top-0 -translate-y-1/2', resolvedBarInset)}
         />
-        <div className={cn('grid w-max min-w-full gap-x-4', columnClassName)}>
+        <div
+          className={cn(
+            'grid w-max gap-x-4',
+            expandToParent && 'min-w-full',
+            columnClassName
+          )}
+        >
           {columns.map((column, index) => (
             <div key={index} className="flex min-w-0 flex-col items-center">
               <OrgChartVerticalLine
@@ -256,9 +264,11 @@ export function OrgChartRightIndentStack({
 export function OrgChartFork({
   children,
   layout = 'horizontal',
+  forkVariant = 'default',
 }: {
   children: ReactNode[]
   layout?: 'horizontal' | 'vertical'
+  forkVariant?: 'default' | 'hwcg_ops' | 'hwcg_source_control'
 }) {
   if (children.length === 0) return null
 
@@ -271,6 +281,8 @@ export function OrgChartFork({
       </div>
     )
   }
+
+  const forkLayout = orgChartForkLayoutTokens(forkVariant)
 
   return (
     <OrgChartCrossbarColumns
@@ -285,8 +297,9 @@ export function OrgChartFork({
           {child}
         </div>
       ))}
-      className={cn('w-full', ORG_CHART_LOGISTICS_FORK_MIN_WIDTH)}
-      columnClassName="grid-cols-2 gap-x-8"
+      className={cn(forkLayout.expandToParent ? 'w-full' : 'w-max', forkLayout.minWidthClassName)}
+      columnClassName={forkLayout.columnClassName}
+      expandToParent={forkLayout.expandToParent}
       showInboundStem
     />
   )

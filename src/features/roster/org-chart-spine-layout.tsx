@@ -28,18 +28,23 @@ export function useOrgChartCardWidthVar(ref: RefObject<HTMLElement | null>): voi
 export function OrgChartSpineRegister({
   parentId,
   childIds,
+  dashed = false,
+  layout,
 }: {
   parentId: string
   childIds: string[]
+  dashed?: boolean
+  layout?: 'stack' | 'crossbar'
 }) {
   const { registerSpine, unregisterSpine } = useOrgChartConnectors()
   const childKey = childIds.join('\0')
 
   useLayoutEffect(() => {
     if (childIds.length === 0) return
-    registerSpine({ parentId, childIds })
-    return () => unregisterSpine(parentId)
-  }, [parentId, childKey, childIds, registerSpine, unregisterSpine])
+    const link = { parentId, childIds, dashed, layout }
+    registerSpine(link)
+    return () => unregisterSpine(link)
+  }, [parentId, childKey, childIds, dashed, layout, registerSpine, unregisterSpine])
 
   return null
 }
@@ -47,17 +52,19 @@ export function OrgChartSpineRegister({
 export function OrgChartSpineChildren({
   parentId,
   childIds,
+  dashed = false,
   children,
   className,
 }: {
   parentId: string
   childIds: string[]
+  dashed?: boolean
   children: ReactNode
   className?: string
 }) {
   return (
     <>
-      <OrgChartSpineRegister parentId={parentId} childIds={childIds} />
+      <OrgChartSpineRegister parentId={parentId} childIds={childIds} dashed={dashed} />
       <div
         data-org-chart-spine-children
         className={cn('flex flex-col', ORG_CHART_SUBORDINATE_ROW_GAP, className)}

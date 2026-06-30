@@ -25,7 +25,7 @@ function assert(condition: unknown, message: string): asserts condition {
   }
 }
 
-assert(ROSTER_TEMPLATE_CATALOG.length === 3, 'three roster templates should be seeded in catalog')
+assert(ROSTER_TEMPLATE_CATALOG.length === 4, 'four roster templates should be seeded in catalog')
 assert(
   getDefaultRosterTemplate().slug === 'full-ics-roster',
   'default roster template should be Full ICS Roster'
@@ -58,6 +58,22 @@ const commandDraft = createBuildTeamRosterDraftFromTemplate('command-and-general
 assert(
   commandDraft.singleResourceSlots.some((slot) => slot.label === 'Agency Representative'),
   'Command & General Staff should include Agency Representative slot'
+)
+
+const hwcgDraft = createBuildTeamRosterDraftFromTemplate('hwcg-source-control')
+assert(
+  hwcgDraft.visibleStandardPositions.includes('Incident Commander') &&
+    hwcgDraft.visibleStandardPositions.includes('Operations Section Chief'),
+  'HWCG Source Control should include Incident Commander and Operations Section Chief'
+)
+assert(
+  hwcgDraft.customPositions.some((position) => position.name === 'Source Control Branch') &&
+    hwcgDraft.customPositions.some((position) => position.name === 'Relief Well Group'),
+  'HWCG Source Control should seed Source Control Branch and Relief Well Group custom positions'
+)
+assert(
+  hwcgDraft.customPositions.length === 40,
+  'HWCG Source Control should seed 40 custom positions'
 )
 
 const simpleCatalog = buildDraftPositionCatalog(simpleDraft)

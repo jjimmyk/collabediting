@@ -5,6 +5,28 @@ export type RosterTemplateSingleResourceSlot = {
   reportsTo: string
 }
 
+export type RosterTemplateCustomPositionSeed = {
+  name: string
+  reportsTo: string
+  positionType: ApiWorkspacePositionType
+  customTypeLabel?: string | null
+}
+
+export type RosterTemplateDefinition = {
+  positions: string[]
+  singleResourceSlots: RosterTemplateSingleResourceSlot[]
+  customPositions?: RosterTemplateCustomPositionSeed[]
+}
+
+export type RosterTemplateRecord = {
+  slug: string
+  name: string
+  description: string | null
+  isDefault: boolean
+  sortOrder: number
+  definition: RosterTemplateDefinition
+}
+
 export type ApiWorkspacePositionType =
   | 'branch'
   | 'division'

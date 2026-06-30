@@ -1,3 +1,4 @@
+import { HWCG_SOURCE_CONTROL_DEFINITION } from '@/features/roster/hwcg-source-control-roster-template'
 import { ICS_ORG_CHART_POSITIONS } from '@/features/roster/ics-org-chart-structure'
 import type {
   RosterTemplateDefinition,
@@ -62,6 +63,16 @@ export const ROSTER_TEMPLATE_CATALOG: RosterTemplateRecord[] = [
     isDefault: false,
     sortOrder: 2,
     definition: COMMAND_AND_GENERAL_STAFF_DEFINITION,
+  },
+  {
+    id: 'builtin-hwcg-source-control',
+    slug: 'hwcg-source-control',
+    name: 'HWCG Source Control',
+    description:
+      'HWCG ICS 2.0 incident management organogram focused on Source Control operations.',
+    isDefault: false,
+    sortOrder: 3,
+    definition: HWCG_SOURCE_CONTROL_DEFINITION,
   },
 ]
 

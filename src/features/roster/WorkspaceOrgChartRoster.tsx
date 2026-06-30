@@ -45,10 +45,16 @@ import {
   positionNodeIsVisible,
 } from '@/features/roster/org-chart-visibility'
 import {
+  isHwcgSourceControlOrgChartTemplate,
+  getOrgChartCommandStaffPositions,
+  resolveOrgChartRootColor,
+} from '@/features/roster/build-dynamic-org-chart'
+import {
   ORG_CHART_CANVAS_MIN_WIDTH,
   ORG_CHART_ASSET_DETAIL_MODAL_CLASS,
   ORG_CHART_CARD_TO_CHILDREN_GAP,
   ORG_CHART_CONNECTOR_STEM_HEIGHT,
+  ORG_CHART_HWCG_POSITION_CARD_WIDTH_FIXED,
   ORG_CHART_POSITION_CARD_MAX_WIDTH,
   ORG_CHART_POSITION_CARD_WIDTH,
   ORG_CHART_SUBORDINATE_ROW_GAP,
@@ -71,7 +77,6 @@ import {
   type RosterPanelLayoutMode,
 } from '@/features/roster/roster-layout'
 import {
-  ICS_ORG_CHART_COMMAND_STAFF_POSITIONS,
   type OrgChartColor,
   type OrgChartNode,
 } from '@/features/roster/ics-org-chart-structure'
@@ -93,6 +98,7 @@ type WorkspaceOrgChartRosterProps = {
   isUpdatingOpAdvanceLabel?: string | null
   workspaceLabel: string
   layoutMode?: RosterPanelLayoutMode
+  orgChartTemplateSlug?: string | null
   zoom?: number
   showOpAdvanceLabels?: boolean
   positionMetaByName?: Record<string, WorkspacePositionMeta>
@@ -187,12 +193,14 @@ type WorkspaceOrgChartRosterProps = {
   onFocusIcs215aRowOnMap?: (rowId: number) => void
   assignmentSectionsLayout?: PositionAssignmentSectionsLayout
   isProjected?: boolean
+  orgChartTemplateSlug?: string | null
   rosterTimeHorizon?: OrgChartExportScope
   managementEntriesByPosition?: Record<string, PositionRosterEntry>
 } & Partial<PositionRosterAssetHandlers>
 
 type OrgChartRenderProps = {
   layoutMode: RosterPanelLayoutMode
+  orgChartTemplateSlug?: string | null
   entriesByPosition: Record<string, PositionRosterEntry>
   assetsByKey: Record<string, ResourceListItemData>
   rosterById: Record<string, WorkspaceRosterMember>
@@ -271,6 +279,7 @@ type OrgChartRenderProps = {
   onClearResourceCategoryFill?: (categoryId: string) => void
   exportMode?: boolean
   isProjected: boolean
+  orgChartTemplateSlug?: string | null
   rosterTimeHorizon: OrgChartExportScope
   managementEntriesByPosition?: Record<string, PositionRosterEntry>
   onOpenOrgChartAssetDetail: (assetKey: string) => void
@@ -349,7 +358,10 @@ function OrgChartLayoutNode({
     )
     if (visibleChildren.length === 0) return null
     return (
-      <OrgChartFork layout={renderProps.layoutMode === 'wide' ? 'horizontal' : 'vertical'}>
+      <OrgChartFork
+        layout={renderProps.layoutMode === 'wide' ? 'horizontal' : 'vertical'}
+        forkVariant={node.forkVariant}
+      >
         {visibleChildren.map((child, index) => (
           <OrgChartLayoutNode
             key={orgChartNodeKey(child, index)}
@@ -635,6 +647,7 @@ function PositionNode({
   haveLinkPickMode,
   isProjected = false,
   rosterTimeHorizon = 'current_op',
+  orgChartTemplateSlug = null,
   managementEntriesByPosition,
   ics215aLocationsByPosition = {},
   onFocusIcs215aRowOnMap,
@@ -663,6 +676,7 @@ function PositionNode({
     displayFilters,
     isProjected,
     rosterTimeHorizon,
+    orgChartTemplateSlug,
     managementEntriesByPosition,
     assignableByPosition,
     scheduleAssignableByPosition,
@@ -738,6 +752,12 @@ function PositionNode({
     !suppressChildren &&
     filterVisibleOrgChartChildren(children, visiblePositions, displayFilters, isProjected).length >
       0
+  const useHwcgCards = isHwcgSourceControlOrgChartTemplate(orgChartTemplateSlug)
+  const cardWidthClass = useHwcgCards
+    ? ORG_CHART_HWCG_POSITION_CARD_WIDTH_FIXED
+    : layoutMode === 'wide'
+      ? ORG_CHART_POSITION_CARD_MAX_WIDTH
+      : undefined
 
   return (
     <div
@@ -746,7 +766,7 @@ function PositionNode({
         hasVisibleChildren
           ? ['items-start', ORG_CHART_CARD_TO_CHILDREN_GAP]
           : 'items-center',
-        layoutMode === 'wide' && ORG_CHART_POSITION_CARD_MAX_WIDTH
+        cardWidthClass
       )}
     >
       {connectorAnchorId ? (
@@ -765,6 +785,7 @@ function PositionNode({
             variant="org"
             color={color}
             layoutMode={layoutMode}
+            orgChartTemplateSlug={orgChartTemplateSlug}
             showOpAdvanceLabels={showOpAdvanceLabels}
             positionMeta={positionMetaByName[position]}
             isUpdatingOpAdvanceLabel={isUpdatingOpAdvanceLabel === position}
@@ -981,9 +1002,11 @@ function getVisibleCommandStaffPositions(
   commandStaffBranch: Extract<OrgChartNode, { kind: 'group' }>,
   visiblePositions: Set<string>,
   displayFilters: RosterDisplayFilters,
+  templateSlug?: string | null,
   isProjected = false
 ): string[] {
-  return ICS_ORG_CHART_COMMAND_STAFF_POSITIONS.filter((position) => {
+  const positions = getOrgChartCommandStaffPositions(templateSlug)
+  return positions.filter((position) => {
     const node = getCommandStaffPositionNode(commandStaffBranch, position)
     if (!node) return false
     return positionBranchIsVisible(node, visiblePositions, displayFilters, isProjected)
@@ -1005,7 +1028,7 @@ function CommandStaffPositionNode({
   return (
     <PositionNode
       position={position}
-      color="neutral"
+      color={node.color ?? 'neutral'}
       children={node.children ?? []}
       {...renderProps}
     />
@@ -1034,7 +1057,7 @@ function SectionBranchesCrossbar({
             key={branch.label}
             className={cn(
               'flex flex-col items-start',
-              orgChartSectionColumnClassName(branch.label)
+              orgChartSectionColumnClassName(branch.label, renderProps.orgChartTemplateSlug)
             )}
           >
             <GroupBranch node={branch} renderProps={renderProps} />
@@ -1061,7 +1084,7 @@ function SectionBranchesCrossbar({
             key={branch.label}
             className={cn(
               'flex flex-col items-start',
-              orgChartSectionColumnClassName(branch.label)
+              orgChartSectionColumnClassName(branch.label, renderProps.orgChartTemplateSlug)
             )}
           >
             <GroupBranch node={branch} renderProps={renderProps} />
@@ -1230,6 +1253,7 @@ export function WorkspaceOrgChartRoster({
   isUpdatingOpAdvanceLabel = null,
   workspaceLabel,
   layoutMode = 'wide',
+  orgChartTemplateSlug = null,
   zoom = 1,
   showOpAdvanceLabels = false,
   positionMetaByName = {},
@@ -1328,6 +1352,7 @@ export function WorkspaceOrgChartRoster({
         orgChartLayout.commandStaffBranch,
         visiblePositions,
         displayFilters,
+        orgChartTemplateSlug,
         isProjected
       )
     : []
@@ -1353,6 +1378,7 @@ export function WorkspaceOrgChartRoster({
 
   const renderProps: OrgChartRenderProps = {
     layoutMode,
+    orgChartTemplateSlug,
     entriesByPosition,
     assetsByKey,
     rosterById,
@@ -1467,7 +1493,9 @@ export function WorkspaceOrgChartRoster({
         <div
           className={cn(
             'inline-flex w-max min-w-full flex-col items-center px-4 pb-2',
-            layoutMode === 'wide' && ORG_CHART_CANVAS_MIN_WIDTH
+            layoutMode === 'wide' &&
+              !isHwcgSourceControlOrgChartTemplate(orgChartTemplateSlug) &&
+              ORG_CHART_CANVAS_MIN_WIDTH
           )}
         >
           {showIcCard ? (
@@ -1520,7 +1548,7 @@ export function WorkspaceOrgChartRoster({
                     key={branch.label}
                     className={cn(
                       'flex flex-col items-center',
-                      orgChartSectionColumnClassName(branch.label)
+                      orgChartSectionColumnClassName(branch.label, orgChartTemplateSlug)
                     )}
                   >
                     <GroupBranch node={branch} renderProps={renderProps} />

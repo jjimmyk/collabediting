@@ -6694,6 +6694,7 @@ function App() {
     effectTiming: 'immediate' | 'op_period_1'
     appliedAt: string | null
     templateName: string
+    templateSlug: string | null
   } | null>(null)
   const [incidentGeometrySummary, setIncidentGeometrySummary] = useState('')
   const [isCreateIncidentMapReady, setIsCreateIncidentMapReady] = useState(false)
@@ -14958,6 +14959,7 @@ function App() {
         entries: positionRosterEntries,
         roster: activeWorkspaceRoster,
         assets: workspaceAssignedAssetsWithPending,
+        templateSlug: workspaceRosterPlanSummary?.templateSlug ?? undefined,
       }),
     [
       effectiveRosterTimeHorizon,
@@ -14965,6 +14967,7 @@ function App() {
       positionRosterEntries,
       activeWorkspaceRoster,
       workspaceAssignedAssetsWithPending,
+      workspaceRosterPlanSummary?.templateSlug,
     ]
   )
   const displayPositionRosterEntries = displayRosterProjection.entries
@@ -31628,6 +31631,7 @@ function App() {
                       isAssigningPosition={rosterAssigningPosition}
                       workspaceLabel={activeWorkspaceRosterLabel}
                       layoutMode={rosterPanelLayoutMode}
+                      orgChartTemplateSlug={workspaceRosterPlanSummary?.templateSlug ?? undefined}
                       zoom={rosterZoomLevel}
                       showOpAdvanceLabels={showPositionOpAdvanceLabels}
                       positionMetaByName={workspacePositionCatalog.positionMetaByName}

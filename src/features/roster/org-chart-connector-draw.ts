@@ -10,6 +10,7 @@ export type OrgChartSvgLine = {
   x2: number
   y2: number
   thick?: boolean
+  dashed?: boolean
 }
 
 export type OrgChartLayoutRect = {
@@ -117,6 +118,36 @@ export function spineConnectLines(
       y1: child.cy,
       x2: child.left,
       y2: child.cy,
+    })),
+  ]
+}
+
+export function crossbarConnectLines(
+  chart: HTMLElement,
+  parentEl: HTMLElement,
+  childEls: HTMLElement[],
+  zoom?: number
+): OrgChartSvgLine[] {
+  if (childEls.length === 0) return []
+
+  const resolvedZoom = zoom ?? readOrgChartZoom(chart)
+  const parent = measureOrgChartCardRect(chart, parentEl, resolvedZoom)
+  const childRects = childEls.map((child) => measureOrgChartCardRect(chart, child, resolvedZoom))
+  const busY = parent.bottom + ORG_CHART_CARD_TO_CHILDREN_GAP_PX
+
+  return [
+    { x1: parent.cx, y1: parent.bottom, x2: parent.cx, y2: busY },
+    {
+      x1: childRects[0].cx,
+      y1: busY,
+      x2: childRects[childRects.length - 1].cx,
+      y2: busY,
+    },
+    ...childRects.map((child) => ({
+      x1: child.cx,
+      y1: busY,
+      x2: child.cx,
+      y2: child.top,
     })),
   ]
 }

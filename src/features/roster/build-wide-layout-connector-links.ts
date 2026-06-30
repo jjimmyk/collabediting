@@ -1,15 +1,14 @@
+import { getOrgChartCommandStaffPositions } from '@/features/roster/build-dynamic-org-chart'
 import type {
   OrgChartIcBusLink,
   OrgChartSpineLink,
 } from '@/features/roster/org-chart-connector-context.types'
 import type { OrgChartNode } from '@/features/roster/ics-org-chart-structure'
 import {
-  ICS_ORG_CHART_COMMAND_STAFF_POSITIONS,
-} from '@/features/roster/ics-org-chart-structure'
-import {
   ORG_CHART_IC_CONNECTOR_ID,
   orgChartPositionConnectorId,
 } from '@/features/roster/org-chart-node-id'
+import { resolveForkCrossbarLayout } from '@/features/roster/org-chart-hwcg-source-control-groups-fork'
 import {
   orgChartBranchSectionKey,
   orgChartSectionFilterEnabled,
@@ -25,6 +24,9 @@ import {
 import type { ResourceListItemData } from '@/features/resources/types'
 import type { WorkspaceRosterMember } from '@/lib/workspace-types'
 import type { PositionRosterEntry } from '@/features/roster/workspace-position-roster'
+import {
+  partitionWideSpineConnectorIds,
+} from '@/features/roster/org-chart-wide-spine-partition'
 import type { WorkspaceOrgChartLayout } from '@/features/roster/workspace-positions'
 
 export type OrgChartConnectorLinkContext = {
@@ -33,6 +35,7 @@ export type OrgChartConnectorLinkContext = {
   rosterById: Record<string, WorkspaceRosterMember>
   visiblePositions: Set<string>
   displayFilters: RosterDisplayFilters
+  orgChartTemplateSlug?: string | null
 }
 
 export type WideLayoutVisibility = {
@@ -81,7 +84,8 @@ function getVisibleCommandStaffPositions(
   commandStaffBranch: Extract<OrgChartNode, { kind: 'group' }>,
   context: OrgChartConnectorLinkContext
 ): string[] {
-  return ICS_ORG_CHART_COMMAND_STAFF_POSITIONS.filter((position) => {
+  const positions = getOrgChartCommandStaffPositions(context.orgChartTemplateSlug)
+  return positions.filter((position) => {
     const node = getCommandStaffPositionNode(commandStaffBranch, position)
     if (!node) return false
     return positionBranchIsVisible(node, context.visiblePositions, context.displayFilters)
@@ -152,69 +156,84 @@ export function resolveWideLayoutVisibility(
   }
 }
 
-function flattenWideSpineNodes(
-  nodes: OrgChartNode[],
-  context: OrgChartConnectorLinkContext
-): OrgChartNode[] {
-  const flattened: OrgChartNode[] = []
-  for (const node of nodes) {
-    if (node.kind === 'stack' || node.kind === 'fork') {
-      flattened.push(
-        ...flattenWideSpineNodes(
-          filterVisibleOrgChartChildren(
-            node.children,
-            context.visiblePositions,
-            context.displayFilters
-          ),
-          context
-        )
-      )
-      continue
-    }
-    flattened.push(node)
-  }
-  return flattened
-}
-
-function collectSpineChildIds(
-  nodes: OrgChartNode[],
-  context: OrgChartConnectorLinkContext
-): string[] {
-  const ids: string[] = []
-  for (const node of nodes) {
-    const id = resolveOrgChartNodeConnectorId(node, context)
-    if (id) ids.push(id)
-  }
-  return ids
-}
-
 function collectSpineLinksFromNodes(
   parentId: string,
   nodes: OrgChartNode[],
   context: OrgChartConnectorLinkContext
 ): OrgChartSpineLink[] {
-  const visibleNodes = flattenWideSpineNodes(nodes, context)
+  const visibleNodes = filterVisibleOrgChartChildren(
+    nodes,
+    context.visiblePositions,
+    context.displayFilters
+  )
   if (visibleNodes.length === 0) return []
 
-  const childIds = collectSpineChildIds(visibleNodes, context)
-  if (childIds.length === 0) return []
-
-  const links: OrgChartSpineLink[] = [{ parentId, childIds }]
+  const { solid, dashed } = partitionWideSpineConnectorIds(visibleNodes, context)
+  const crossbarLayout = resolveForkCrossbarLayout(visibleNodes)
+  const links: OrgChartSpineLink[] = []
+  if (solid.length > 0) {
+    links.push({
+      parentId,
+      childIds: solid,
+      ...(crossbarLayout ? { layout: crossbarLayout } : {}),
+    })
+  }
+  if (dashed.length > 0) {
+    links.push({
+      parentId,
+      childIds: dashed,
+      dashed: true,
+      ...(crossbarLayout ? { layout: crossbarLayout } : {}),
+    })
+  }
 
   for (const node of visibleNodes) {
-    if (node.kind !== 'position') continue
-    const connectorId = resolveOrgChartNodeConnectorId(node, context)
-    if (!connectorId) continue
-    const nestedNodes = filterVisibleOrgChartChildren(
-      node.children ?? [],
-      context.visiblePositions,
-      context.displayFilters
-    )
-    if (nestedNodes.length === 0) continue
-    links.push(...collectSpineLinksFromNodes(connectorId, nestedNodes, context))
+    if (node.kind === 'fork') {
+      const visibleChildren = filterVisibleOrgChartChildren(
+        node.children,
+        context.visiblePositions,
+        context.displayFilters
+      )
+      for (const child of visibleChildren) {
+        links.push(...collectSpineLinksFromSubtree(child, context))
+      }
+      continue
+    }
+    if (node.kind === 'stack') {
+      links.push(...collectSpineLinksFromSubtree(node, context))
+      continue
+    }
+    links.push(...collectSpineLinksFromSubtree(node, context))
   }
 
   return links
+}
+
+function collectSpineLinksFromSubtree(
+  node: OrgChartNode,
+  context: OrgChartConnectorLinkContext
+): OrgChartSpineLink[] {
+  if (node.kind === 'fork' || node.kind === 'stack') {
+    const connectorId = resolveOrgChartNodeConnectorId(node, context)
+    if (connectorId) {
+      return collectSpineLinksFromNodes(connectorId, node.children, context)
+    }
+    return collectSpineLinksFromNodes('unused', node.children, context)
+  }
+
+  if (node.kind !== 'position') return []
+
+  const connectorId = resolveOrgChartNodeConnectorId(node, context)
+  if (!connectorId) return []
+
+  const nestedNodes = filterVisibleOrgChartChildren(
+    node.children ?? [],
+    context.visiblePositions,
+    context.displayFilters
+  )
+  if (nestedNodes.length === 0) return []
+
+  return collectSpineLinksFromNodes(connectorId, nestedNodes, context)
 }
 
 function collectIcDirectReportSpineLinks(
@@ -223,17 +242,29 @@ function collectIcDirectReportSpineLinks(
 ): OrgChartSpineLink[] {
   const links: OrgChartSpineLink[] = []
   for (const node of nodes) {
-    const connectorId = resolveOrgChartNodeConnectorId(node, context)
-    if (!connectorId || node.kind !== 'position') continue
-    const nestedNodes = filterVisibleOrgChartChildren(
-      node.children ?? [],
-      context.visiblePositions,
-      context.displayFilters
-    )
-    if (nestedNodes.length === 0) continue
-    links.push(...collectSpineLinksFromNodes(connectorId, nestedNodes, context))
+    links.push(...collectSpineLinksFromSubtree(node, context))
   }
   return links
+}
+
+function resolveIcDirectReportConnectorIds(
+  nodes: OrgChartNode[],
+  context: OrgChartConnectorLinkContext
+): { solid: string[]; dashed: string[] } {
+  const solid: string[] = []
+  const dashed: string[] = []
+
+  for (const node of nodes) {
+    const connectorId = resolveOrgChartNodeConnectorId(node, context)
+    if (!connectorId) continue
+    if (node.kind === 'position' && node.connectorStyle === 'dashed') {
+      dashed.push(connectorId)
+    } else {
+      solid.push(connectorId)
+    }
+  }
+
+  return { solid, dashed }
 }
 
 export function buildWideLayoutConnectorLinks(
@@ -247,31 +278,37 @@ export function buildWideLayoutConnectorLinks(
 
   for (const { chief } of visibility.sectionChiefs) {
     const chiefId = orgChartPositionConnectorId(chief.position)
-    spineLinks.push(
-      ...collectSpineLinksFromNodes(chiefId, chief.children ?? [], context)
-    )
+    spineLinks.push(...collectSpineLinksFromNodes(chiefId, chief.children ?? [], context))
   }
 
-  const icDirectReportConnectorIds = visibility.icDirectReportNodes
-    .map((node) => resolveOrgChartNodeConnectorId(node, context))
-    .filter((id): id is string => id !== null)
+  const icDirectReportConnectorGroups = resolveIcDirectReportConnectorIds(
+    visibility.icDirectReportNodes,
+    context
+  )
 
-  const sectionChiefConnectorIds = visibility.sectionChiefs.map(({ chief }) =>
+  const sectionConnectorIds = visibility.sectionChiefs.map(({ chief }) =>
     orgChartPositionConnectorId(chief.position)
   )
 
   const icBusLinks: OrgChartIcBusLink[] = []
   if (visibility.icVisible) {
-    if (icDirectReportConnectorIds.length > 0) {
+    if (icDirectReportConnectorGroups.dashed.length > 0) {
       icBusLinks.push({
         commanderId: ORG_CHART_IC_CONNECTOR_ID,
-        headerIds: icDirectReportConnectorIds,
+        headerIds: icDirectReportConnectorGroups.dashed,
+        dashed: true,
       })
     }
-    if (sectionChiefConnectorIds.length > 0) {
+    if (icDirectReportConnectorGroups.solid.length > 0) {
       icBusLinks.push({
         commanderId: ORG_CHART_IC_CONNECTOR_ID,
-        headerIds: sectionChiefConnectorIds,
+        headerIds: icDirectReportConnectorGroups.solid,
+      })
+    }
+    if (sectionConnectorIds.length > 0) {
+      icBusLinks.push({
+        commanderId: ORG_CHART_IC_CONNECTOR_ID,
+        headerIds: sectionConnectorIds,
       })
     }
   }

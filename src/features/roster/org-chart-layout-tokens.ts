@@ -67,6 +67,68 @@ export const ORG_CHART_ASSET_CARD_MAX_WIDTH = ORG_CHART_POSITION_CARD_MAX_WIDTH
 export const ORG_CHART_ASSET_CARD_WIDTH =
   `${ORG_CHART_ASSET_CARD_MIN_WIDTH} ${ORG_CHART_ASSET_CARD_MAX_WIDTH}`
 
+export const ORG_CHART_HWCG_POSITION_CARD_MIN_WIDTH = 'min-w-[8rem]'
+export const ORG_CHART_HWCG_POSITION_CARD_MAX_WIDTH = 'max-w-[9.5rem]'
+export const ORG_CHART_HWCG_POSITION_CARD_WIDTH =
+  `${ORG_CHART_HWCG_POSITION_CARD_MIN_WIDTH} ${ORG_CHART_HWCG_POSITION_CARD_MAX_WIDTH}`
+
+export const ORG_CHART_HWCG_POSITION_CARD_WIDTH_FIXED = 'w-[9.5rem]'
+export const ORG_CHART_HWCG_POSITION_CARD_HEIGHT_FIXED = 'h-[5.5rem]'
+export const ORG_CHART_HWCG_POSITION_CARD_SIZE =
+  `${ORG_CHART_HWCG_POSITION_CARD_WIDTH_FIXED} ${ORG_CHART_HWCG_POSITION_CARD_HEIGHT_FIXED}`
+
+export function orgChartHwcgPositionCardSizeClasses(): string {
+  return ORG_CHART_HWCG_POSITION_CARD_SIZE
+}
+
+export function orgChartHwcgSectionChiefRowTokens(): {
+  columnClassName: string
+  columnMinWidthClassName: string
+  gridTemplateColumnsClassName: string
+} {
+  return {
+    columnClassName: 'grid-cols-4 gap-x-4',
+    columnMinWidthClassName: ORG_CHART_FORK_BRANCH_COLUMN_MIN_WIDTH,
+    gridTemplateColumnsClassName: 'grid-cols-[repeat(4,12rem)]',
+  }
+}
+
+export function orgChartPositionCardWidthClasses(templateSlug?: string | null): string {
+  if (templateSlug === 'hwcg-source-control') {
+    return orgChartHwcgPositionCardSizeClasses()
+  }
+  return ORG_CHART_POSITION_CARD_WIDTH
+}
+
+export function orgChartForkLayoutTokens(
+  forkVariant?: 'default' | 'hwcg_ops' | 'hwcg_source_control'
+): {
+  minWidthClassName: string
+  columnClassName: string
+  expandToParent: boolean
+} {
+  switch (forkVariant) {
+    case 'hwcg_ops':
+      return {
+        minWidthClassName: 'w-max',
+        columnClassName: 'grid-cols-3 gap-x-3',
+        expandToParent: false,
+      }
+    case 'hwcg_source_control':
+      return {
+        minWidthClassName: 'w-max',
+        columnClassName: 'grid-cols-5 gap-x-2',
+        expandToParent: false,
+      }
+    default:
+      return {
+        minWidthClassName: ORG_CHART_LOGISTICS_FORK_MIN_WIDTH,
+        columnClassName: 'grid-cols-2 gap-x-8',
+        expandToParent: true,
+      }
+  }
+}
+
 /** Asset detail modal in org chart — 2× default dialog width (42rem → 84rem). */
 export const ORG_CHART_ASSET_DETAIL_MODAL_CLASS = 'sm:max-w-[84rem]'
 
@@ -97,7 +159,13 @@ export function orgChartNestedSpineIndentPaddingStyle(): {
   }
 }
 
-export function orgChartSectionColumnClassName(sectionLabel: string): string {
+export function orgChartSectionColumnClassName(
+  sectionLabel: string,
+  templateSlug?: string | null
+): string {
+  if (templateSlug === 'hwcg-source-control') {
+    return ''
+  }
   return sectionLabel === LOGISTICS_SECTION_LABEL
     ? ORG_CHART_LOGISTICS_COLUMN_MIN_WIDTH
     : ORG_CHART_SECTION_COLUMN_MIN_WIDTH

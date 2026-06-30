@@ -7,14 +7,29 @@ import type {
   BuildTeamDraftCustomPosition,
   BuildTeamDraftMember,
   BuildTeamRosterDraft,
+  RosterTemplateCustomPositionSeed,
   RosterTemplateEffectTiming,
 } from '@/features/roster/roster-template-types'
+import { templateCustomPositionId } from '@/features/roster/hwcg-source-control-roster-template'
 import { DEFAULT_NEW_CUSTOM_POSITION_TYPE } from '@/features/roster/workspace-position-type'
 import { inferDefaultPositionType } from '@/features/roster/workspace-position-type'
 import { emptyWorkspacePositionCatalog } from '@/features/roster/workspace-positions'
 import { defaultAllowWorkAssignment } from '@/lib/workspace-position-settings'
 
 const INCIDENT_COMMANDER_POSITION = 'Incident Commander'
+
+function buildDraftCustomPositionsFromTemplateSeeds(
+  templateSlug: string,
+  seeds: RosterTemplateCustomPositionSeed[] = []
+): BuildTeamDraftCustomPosition[] {
+  return seeds.map((seed) => ({
+    id: templateCustomPositionId(templateSlug, seed.name),
+    name: seed.name,
+    reportsTo: seed.reportsTo,
+    positionType: seed.positionType,
+    customTypeLabel: seed.customTypeLabel ?? null,
+  }))
+}
 
 export function isCreatorIncidentCommanderDraftMember(member: BuildTeamDraftMember): boolean {
   return (
@@ -79,12 +94,27 @@ export function createBuildTeamRosterDraftFromTemplate(
     }
   }
 
+  const customPositions = buildDraftCustomPositionsFromTemplateSeeds(
+    template.slug,
+    template.definition.customPositions
+  )
+
+  for (const custom of customPositions) {
+    positionSettings[custom.name] = {
+      positionType: custom.positionType,
+      customTypeLabel: custom.customTypeLabel,
+      allowWorkAssignment: defaultAllowWorkAssignment(custom.name, catalog, {
+        reportsTo: custom.reportsTo,
+      }),
+    }
+  }
+
   return {
     templateSlug: template.slug,
     effectTiming,
     visibleStandardPositions: [...template.definition.positions],
     archivedStandardPositions,
-    customPositions: [],
+    customPositions,
     singleResourceSlots: [...template.definition.singleResourceSlots],
     draftMembers: [],
     positionSettings,

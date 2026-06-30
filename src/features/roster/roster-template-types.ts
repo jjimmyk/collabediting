@@ -7,9 +7,17 @@ export type RosterTemplateSingleResourceSlot = {
   reportsTo: string
 }
 
+export type RosterTemplateCustomPositionSeed = {
+  name: string
+  reportsTo: string
+  positionType: WorkspacePositionType
+  customTypeLabel?: string | null
+}
+
 export type RosterTemplateDefinition = {
   positions: string[]
   singleResourceSlots: RosterTemplateSingleResourceSlot[]
+  customPositions?: RosterTemplateCustomPositionSeed[]
 }
 
 export type RosterTemplateRecord = {

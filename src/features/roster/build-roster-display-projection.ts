@@ -28,7 +28,10 @@ export function buildRosterDisplayProjection(input: {
   entries: PositionRosterEntry[]
   roster: WorkspaceRosterMember[]
   assets: ResourceListItemData[]
+  templateSlug?: string
 }): RosterDisplayProjection {
+  const orgChartOptions = { templateSlug: input.templateSlug }
+
   if (input.horizon === 'next_op') {
     const projected = buildProjectedOrgChartExportData({
       catalog: input.catalog,
@@ -50,7 +53,8 @@ export function buildRosterDisplayProjection(input: {
         projected.catalog,
         projected.assets,
         projected.roster,
-        'next_op'
+        'next_op',
+        orgChartOptions
       ),
       isProjected: true,
       horizon: 'next_op',
@@ -69,7 +73,12 @@ export function buildRosterDisplayProjection(input: {
     rosterById: Object.fromEntries(input.roster.map((member) => [member.id, member])),
     assets: input.assets,
     assetsByKey: Object.fromEntries(input.assets.map((asset) => [asset.assetKey, asset])),
-    orgChartLayout: buildDynamicOrgChart(input.catalog, input.assets, input.roster),
+    orgChartLayout: buildDynamicOrgChart(
+      input.catalog,
+      input.assets,
+      input.roster,
+      orgChartOptions
+    ),
     isProjected: false,
     horizon: 'current_op',
   }

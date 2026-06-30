@@ -97,6 +97,7 @@ export type OrgChartWideRenderProps = {
     value: string | null,
     scheduled: boolean
   ) => void
+  orgChartTemplateSlug?: string | null
   renderLeafNode: (
     node: OrgChartNode,
     options: {

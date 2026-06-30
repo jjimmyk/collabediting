@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Network, Table2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Label } from '@/components/ui/label'
@@ -37,7 +37,8 @@ import {
   resolveVisibleRosterPositions,
   type RosterDisplayFilters,
 } from '@/features/roster/roster-display-filters'
-import { DEFAULT_ROSTER_ZOOM } from '@/features/roster/roster-zoom'
+import { DEFAULT_ROSTER_ZOOM, computeFitToScreenZoom } from '@/features/roster/roster-zoom'
+import { HWCG_SOURCE_CONTROL_TEMPLATE_SLUG } from '@/features/roster/hwcg-source-control-roster-template'
 import { buildDynamicOrgChart } from '@/features/roster/build-dynamic-org-chart'
 import { WorkspaceOrgChartRoster } from '@/features/roster/WorkspaceOrgChartRoster'
 import { WorkspacePositionRosterTable } from '@/features/roster/WorkspacePositionRosterTable'
@@ -73,6 +74,7 @@ export function BuildTeamRosterStep({
   )
   const [rosterZoomLevel, setRosterZoomLevel] = useState(DEFAULT_ROSTER_ZOOM)
   const [rosterRecenterToken, setRosterRecenterToken] = useState(0)
+  const zoomContainerRef = useRef<HTMLDivElement>(null)
   const [isAddMemberOpen, setIsAddMemberOpen] = useState(false)
   const [isAddPositionOpen, setIsAddPositionOpen] = useState(false)
   const [memberPositionPreset, setMemberPositionPreset] = useState<string | null>(null)
@@ -111,9 +113,42 @@ export function BuildTeamRosterStep({
   )
 
   const orgChartLayout = useMemo(
-    () => buildDynamicOrgChart(catalog, [], rosterMembers),
-    [catalog, rosterMembers]
+    () => buildDynamicOrgChart(catalog, [], rosterMembers, { templateSlug: draft.templateSlug }),
+    [catalog, rosterMembers, draft.templateSlug]
   )
+
+  const fitOrgChartToScreen = useCallback(() => {
+    const container = zoomContainerRef.current
+    if (!container) return
+
+    const content =
+      container.querySelector<HTMLElement>('[data-org-chart-wide-root]') ??
+      container.querySelector<HTMLElement>('[data-roster-zoom-content]')
+    if (!content) return
+
+    setRosterZoomLevel(computeFitToScreenZoom(container, content))
+    setRosterRecenterToken((token) => token + 1)
+  }, [])
+
+  const showHwcgOrgChartFit =
+    rosterViewMode === 'org-chart' && draft.templateSlug === HWCG_SOURCE_CONTROL_TEMPLATE_SLUG
+
+  useLayoutEffect(() => {
+    if (!showHwcgOrgChartFit) return
+
+    let cancelled = false
+    const runFit = () => {
+      if (!cancelled) fitOrgChartToScreen()
+    }
+    const frame = requestAnimationFrame(() => {
+      requestAnimationFrame(runFit)
+    })
+
+    return () => {
+      cancelled = true
+      cancelAnimationFrame(frame)
+    }
+  }, [showHwcgOrgChartFit, fitOrgChartToScreen, orgChartLayout])
 
   const handleTemplateChange = useCallback(
     (templateSlug: string) => {
@@ -292,7 +327,11 @@ export function BuildTeamRosterStep({
             onChange={setRosterDisplayFilters}
             operationalPeriodsEnabled={false}
           />
-          <RosterZoomControls zoom={rosterZoomLevel} onZoomChange={setRosterZoomLevel} />
+          <RosterZoomControls
+            zoom={rosterZoomLevel}
+            onZoomChange={setRosterZoomLevel}
+            onFit={rosterViewMode === 'org-chart' ? fitOrgChartToScreen : undefined}
+          />
           <ToggleGroup
             type="single"
             value={rosterViewMode}
@@ -326,6 +365,7 @@ export function BuildTeamRosterStep({
       </div>
 
       <RosterZoomContainer
+        ref={zoomContainerRef}
         zoom={rosterZoomLevel}
         onZoomChange={setRosterZoomLevel}
         centerScroll={rosterViewMode === 'org-chart'}
@@ -352,6 +392,7 @@ export function BuildTeamRosterStep({
             isAssigningPosition={null}
             workspaceLabel={workspaceLabel}
             layoutMode={isPageLayout ? 'wide' : 'compact'}
+            orgChartTemplateSlug={draft.templateSlug}
             zoom={rosterZoomLevel}
             showOpAdvanceLabels={false}
             positionMetaByName={catalog.positionMetaByName}

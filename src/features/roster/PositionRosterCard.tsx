@@ -33,13 +33,14 @@ import type { PositionRosterAssetHandlers } from '@/features/roster/PositionRost
 import type { WorkspacePositionMeta, WorkspacePositionCatalog } from '@/features/roster/workspace-positions'
 import {
   ORG_CHART_CARD_LAYER_CLASS,
-  ORG_CHART_POSITION_CARD_MAX_WIDTH,
-  ORG_CHART_POSITION_CARD_MIN_WIDTH,
+  orgChartPositionCardWidthClasses,
 } from '@/features/roster/org-chart-layout-tokens'
 import {
   orgChartColorClasses,
+  orgChartHwcgSecondaryTextClasses,
   type OrgChartColor,
 } from '@/features/roster/ics-org-chart-structure'
+import { isHwcgSourceControlOrgChartTemplate } from '@/features/roster/build-dynamic-org-chart'
 import type { RosterPanelLayoutMode } from '@/features/roster/roster-layout'
 import type { WorkspacePositionType } from '@/features/roster/workspace-position-type'
 import { PositionOrgChartAssigneeSummary } from '@/features/roster/PositionOrgChartAssigneeSummary'
@@ -131,6 +132,7 @@ type PositionRosterCardProps = {
   haveLinkPickMode?: import('@/features/ics215/have-link-pick-mode').HaveLinkPickMode
   ics215aLocationEntries?: Ics215aLocationByPositionEntry[]
   onFocusIcs215aRowOnMap?: (rowId: number) => void
+  orgChartTemplateSlug?: string | null
 } & Partial<PositionRosterAssetHandlers>
 
 export function PositionRosterCard({
@@ -209,6 +211,7 @@ export function PositionRosterCard({
   haveLinkPickMode,
   ics215aLocationEntries = [],
   onFocusIcs215aRowOnMap,
+  orgChartTemplateSlug = null,
 }: PositionRosterCardProps) {
   const [orgModalOpen, setOrgModalOpen] = useState(false)
   const isOrg = variant === 'org'
@@ -279,6 +282,11 @@ export function PositionRosterCard({
   }
 
   if (isOrg) {
+    const useHwcgOrgCard = isHwcgSourceControlOrgChartTemplate(orgChartTemplateSlug)
+    const secondaryTextClassName = useHwcgOrgCard
+      ? orgChartHwcgSecondaryTextClasses(color)
+      : 'text-muted-foreground'
+
     return (
       <>
         <button
@@ -291,30 +299,62 @@ export function PositionRosterCard({
             ORG_CHART_CARD_LAYER_CLASS,
             'flex min-w-0 flex-col items-stretch rounded-lg border p-0 text-left shadow-sm outline-none transition',
             'hover:ring-2 hover:ring-ring/40 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50',
-            'w-full max-w-full min-w-0 overflow-hidden',
-            layoutMode === 'wide'
-              ? cn(ORG_CHART_POSITION_CARD_MIN_WIDTH, ORG_CHART_POSITION_CARD_MAX_WIDTH)
-              : 'min-w-0',
+            'overflow-hidden',
+            useHwcgOrgCard
+              ? orgChartPositionCardWidthClasses(orgChartTemplateSlug)
+              : cn('w-full max-w-full min-w-0', layoutMode === 'wide' ? orgChartPositionCardWidthClasses(orgChartTemplateSlug) : 'min-w-0'),
             orgChartColorClasses(color)
           )}
         >
-          <div className="space-y-2 overflow-hidden px-2 py-2">
-            <div className="space-y-1">
-              <ItemTitle className="text-xs leading-snug">{entry.position}</ItemTitle>
-              <PositionLifecycleBadges entry={entry} size="org" />
-              <PositionOrgChartAssigneeSummary entry={entry} horizon={rosterTimeHorizon} />
-              {entry.positionTypeLabel ? (
-                <p className="truncate text-[10px] text-muted-foreground">
-                  Type: {entry.positionTypeLabel}
-                </p>
-              ) : null}
-              {ics215aLocationEntries.length > 0 ? (
-                <PositionIcs215aLocationSection
-                  entries={ics215aLocationEntries}
-                  variant="compact"
+          <div
+            className={cn(
+              'overflow-hidden px-2 py-2',
+              useHwcgOrgCard
+                ? 'flex h-full min-h-0 flex-col justify-between'
+                : 'space-y-2'
+            )}
+          >
+            {useHwcgOrgCard ? (
+              <>
+                <div className="min-h-0">
+                  <ItemTitle className="line-clamp-2 text-xs leading-snug">{entry.position}</ItemTitle>
+                  <PositionLifecycleBadges entry={entry} size="org" />
+                </div>
+                <div className="space-y-1">
+                  <PositionOrgChartAssigneeSummary
+                    entry={entry}
+                    horizon={rosterTimeHorizon}
+                    secondaryTextClassName={secondaryTextClassName}
+                  />
+                  {entry.positionTypeLabel ? (
+                    <p className={cn('truncate text-[10px]', secondaryTextClassName)}>
+                      Type: {entry.positionTypeLabel}
+                    </p>
+                  ) : null}
+                </div>
+              </>
+            ) : (
+              <div className="space-y-1">
+                <ItemTitle className="text-xs leading-snug">{entry.position}</ItemTitle>
+                <PositionLifecycleBadges entry={entry} size="org" />
+                <PositionOrgChartAssigneeSummary
+                  entry={entry}
+                  horizon={rosterTimeHorizon}
+                  secondaryTextClassName={secondaryTextClassName}
                 />
-              ) : null}
-            </div>
+                {entry.positionTypeLabel ? (
+                  <p className={cn('truncate text-[10px]', secondaryTextClassName)}>
+                    Type: {entry.positionTypeLabel}
+                  </p>
+                ) : null}
+              </div>
+            )}
+            {ics215aLocationEntries.length > 0 ? (
+              <PositionIcs215aLocationSection
+                entries={ics215aLocationEntries}
+                variant="compact"
+              />
+            ) : null}
           </div>
         </button>
         <Dialog open={orgModalOpen} onOpenChange={setOrgModalOpen}>

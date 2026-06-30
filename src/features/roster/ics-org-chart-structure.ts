@@ -6,12 +6,22 @@ export type OrgChartColor =
   | 'neutral'
   | 'tan'
   | 'yellow'
+  | 'hwcg_ic'
+  | 'hwcg_section'
+  | 'hwcg_ops_branch'
+  | 'hwcg_group'
+  | 'hwcg_task_force'
+  | 'hwcg_unit'
+  | 'hwcg_advisory'
+
+export type OrgChartConnectorStyle = 'solid' | 'dashed'
 
 export type OrgChartNode =
   | {
       kind: 'position'
       position: string
       color?: OrgChartColor
+      connectorStyle?: OrgChartConnectorStyle
       children?: OrgChartNode[]
     }
   | {
@@ -22,6 +32,7 @@ export type OrgChartNode =
   | {
       kind: 'fork'
       color?: OrgChartColor
+      forkVariant?: 'default' | 'hwcg_ops' | 'hwcg_source_control'
       children: OrgChartNode[]
     }
   | {
@@ -324,6 +335,22 @@ export function resolveStandardPositionReportsTo(positionName: string): string |
   return getStandardPositionParentMap().get(normalized) ?? null
 }
 
+export function orgChartColorUsesLightText(color: OrgChartColor | undefined): boolean {
+  switch (color) {
+    case 'hwcg_ic':
+    case 'hwcg_section':
+    case 'hwcg_ops_branch':
+    case 'hwcg_group':
+      return true
+    default:
+      return false
+  }
+}
+
+export function orgChartHwcgSecondaryTextClasses(color: OrgChartColor | undefined): string {
+  return orgChartColorUsesLightText(color) ? '!text-white' : '!text-slate-900'
+}
+
 export function orgChartColorClasses(color: OrgChartColor | undefined): string {
   switch (color) {
     case 'red':
@@ -340,6 +367,20 @@ export function orgChartColorClasses(color: OrgChartColor | undefined): string {
       return 'border-amber-700/60 bg-amber-100/30'
     case 'yellow':
       return 'border-yellow-500/70 bg-yellow-500/5'
+    case 'hwcg_ic':
+      return 'border-slate-900 bg-slate-900 text-white'
+    case 'hwcg_section':
+      return 'border-blue-900 bg-blue-900 text-white'
+    case 'hwcg_ops_branch':
+      return 'border-blue-800 bg-blue-800 text-white'
+    case 'hwcg_group':
+      return 'border-blue-600 bg-blue-600 text-white'
+    case 'hwcg_task_force':
+      return 'border-blue-400 bg-blue-300 text-slate-900'
+    case 'hwcg_unit':
+      return 'border-blue-500 bg-white text-slate-900'
+    case 'hwcg_advisory':
+      return 'border-dashed border-slate-400 bg-white text-slate-900'
     default:
       return 'border-primary/50 bg-primary/5'
   }

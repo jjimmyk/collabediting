@@ -1,4 +1,5 @@
 import { Badge } from '@/components/ui/badge'
+import { cn } from '@/lib/utils'
 import {
   buildPositionOrgChartAssigneeGroups,
   positionOrgChartAssigneeSummaryIsEmpty,
@@ -11,6 +12,7 @@ type PositionOrgChartAssigneeSummaryProps = {
   entry: PositionRosterEntry
   horizon?: OrgChartExportScope
   maxVisiblePerGroup?: number
+  secondaryTextClassName?: string
 }
 
 function groupLabel(kind: PositionCardAssigneeGroup['kind']): string | null {
@@ -22,9 +24,11 @@ function groupLabel(kind: PositionCardAssigneeGroup['kind']): string | null {
 function MemberLines({
   group,
   maxVisible,
+  secondaryTextClassName,
 }: {
   group: PositionCardAssigneeGroup
   maxVisible: number
+  secondaryTextClassName: string
 }) {
   const label = groupLabel(group.kind)
   const visible = group.members.slice(0, maxVisible)
@@ -34,7 +38,12 @@ function MemberLines({
     <div className="space-y-0.5">
       {label ? (
         <div className="flex items-center gap-1">
-          <p className="text-[9px] font-medium uppercase tracking-wide text-muted-foreground">
+          <p
+            className={cn(
+              'text-[9px] font-medium uppercase tracking-wide',
+              secondaryTextClassName
+            )}
+          >
             {label}
           </p>
           {group.kind === 'scheduled_next_op' ? (
@@ -47,18 +56,18 @@ function MemberLines({
       {visible.map((member) => (
         <p
           key={`${group.kind}-${member.id}`}
-          className={
-            group.kind === 'leaving_next_op'
-              ? 'truncate text-[10px] text-muted-foreground line-through'
-              : 'truncate text-[10px] text-foreground'
-          }
+          className={cn(
+            'truncate text-[10px]',
+            group.kind === 'leaving_next_op' ? 'line-through' : undefined,
+            secondaryTextClassName
+          )}
           title={member.email}
         >
           {member.email}
         </p>
       ))}
       {overflow > 0 ? (
-        <p className="text-[9px] text-muted-foreground">+{overflow} more</p>
+        <p className={cn('text-[9px]', secondaryTextClassName)}>+{overflow} more</p>
       ) : null}
     </div>
   )
@@ -68,17 +77,23 @@ export function PositionOrgChartAssigneeSummary({
   entry,
   horizon = 'current_op',
   maxVisiblePerGroup = 3,
+  secondaryTextClassName = 'text-muted-foreground',
 }: PositionOrgChartAssigneeSummaryProps) {
   const groups = buildPositionOrgChartAssigneeGroups(entry, horizon)
 
   if (positionOrgChartAssigneeSummaryIsEmpty(groups)) {
-    return <p className="text-[10px] text-muted-foreground">Unassigned</p>
+    return <p className={cn('text-[10px]', secondaryTextClassName)}>Unassigned</p>
   }
 
   return (
     <div className="space-y-1">
       {groups.map((group) => (
-        <MemberLines key={group.kind} group={group} maxVisible={maxVisiblePerGroup} />
+        <MemberLines
+          key={group.kind}
+          group={group}
+          maxVisible={maxVisiblePerGroup}
+          secondaryTextClassName={secondaryTextClassName}
+        />
       ))}
     </div>
   )

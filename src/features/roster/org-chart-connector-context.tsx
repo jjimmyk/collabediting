@@ -20,7 +20,7 @@ type OrgChartConnectorContextValue = {
   registerCard: (id: string, element: HTMLElement | null) => void
   getCardElement: (id: string) => HTMLElement | null
   registerSpine: (link: OrgChartSpineLink) => void
-  unregisterSpine: (parentId: string) => void
+  unregisterSpine: (link: OrgChartSpineLink) => void
   setIcBusLinks: (links: OrgChartIcBusLink[]) => void
   subscribeRedraw: (listener: RedrawListener) => () => void
 }
@@ -30,9 +30,15 @@ const OrgChartConnectorContext = createContext<OrgChartConnectorContextValue | n
 function spineLinksEqual(a: OrgChartSpineLink, b: OrgChartSpineLink): boolean {
   return (
     a.parentId === b.parentId &&
+    a.dashed === b.dashed &&
+    a.layout === b.layout &&
     a.childIds.length === b.childIds.length &&
     a.childIds.every((id, index) => id === b.childIds[index])
   )
+}
+
+function spineLinkRegistryKey(link: OrgChartSpineLink): string {
+  return `${link.parentId}:${link.dashed ? 'dashed' : 'solid'}:${link.layout ?? 'stack'}`
 }
 
 function icBusEqual(a: OrgChartIcBusLink | null, b: OrgChartIcBusLink | null): boolean {
@@ -40,6 +46,7 @@ function icBusEqual(a: OrgChartIcBusLink | null, b: OrgChartIcBusLink | null): b
   if (!a || !b) return false
   return (
     a.commanderId === b.commanderId &&
+    a.dashed === b.dashed &&
     a.headerIds.length === b.headerIds.length &&
     a.headerIds.every((id, index) => id === b.headerIds[index])
   )
@@ -91,7 +98,10 @@ export function OrgChartConnectorProvider({ children }: { children: ReactNode })
 
   const registerSpine = useCallback(
     (link: OrgChartSpineLink) => {
-      const index = spineLinksRef.current.findIndex((entry) => entry.parentId === link.parentId)
+      const registryKey = spineLinkRegistryKey(link)
+      const index = spineLinksRef.current.findIndex(
+        (entry) => spineLinkRegistryKey(entry) === registryKey
+      )
       if (index >= 0) {
         if (spineLinksEqual(spineLinksRef.current[index], link)) return
         spineLinksRef.current[index] = link
@@ -104,8 +114,11 @@ export function OrgChartConnectorProvider({ children }: { children: ReactNode })
   )
 
   const unregisterSpine = useCallback(
-    (parentId: string) => {
-      const next = spineLinksRef.current.filter((entry) => entry.parentId !== parentId)
+    (link: OrgChartSpineLink) => {
+      const registryKey = spineLinkRegistryKey(link)
+      const next = spineLinksRef.current.filter(
+        (entry) => spineLinkRegistryKey(entry) !== registryKey
+      )
       if (next.length === spineLinksRef.current.length) return
       spineLinksRef.current = next
       notifyRedraw()

@@ -83,8 +83,8 @@ export const RosterZoomContainer = forwardRef<HTMLDivElement, RosterZoomContaine
         }}
         className={cn('min-w-0 w-full max-w-full overflow-auto scroll-smooth', className)}
       >
-        <div className="flex min-w-full justify-center">
-          <div style={{ zoom }} className="w-max">
+        <div className="flex min-h-min min-w-full items-start justify-center">
+          <div data-roster-zoom-content style={{ zoom }} className="w-max">
             {children}
           </div>
         </div>

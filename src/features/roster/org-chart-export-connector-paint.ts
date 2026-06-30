@@ -112,7 +112,7 @@ function computeConnectorLines(
         childEls,
         ORG_CHART_SPINE_ANCHOR_RATIO,
         chartZoom
-      )
+      ).map((segment) => ({ ...segment, dashed: link.dashed }))
     )
   }
 
@@ -122,7 +122,12 @@ function computeConnectorLines(
       .map((id) => resolveOrgChartCardElement(chart, id))
       .filter((el): el is HTMLElement => el !== null)
     if (commanderEl && headerEls.length > 0) {
-      lines.push(...icBusConnectLines(chart, commanderEl, headerEls, undefined, chartZoom))
+      lines.push(
+        ...icBusConnectLines(chart, commanderEl, headerEls, undefined, chartZoom).map((segment) => ({
+          ...segment,
+          dashed: icBus.dashed,
+        }))
+      )
     }
   }
 

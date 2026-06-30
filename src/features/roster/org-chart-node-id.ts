@@ -2,6 +2,10 @@ import type { OrgChartNode } from '@/features/roster/ics-org-chart-structure'
 
 export const ORG_CHART_IC_CONNECTOR_ID = 'header:incident-commander'
 
+export function orgChartSectionHeaderConnectorId(sectionLabel: string): string {
+  return `section:${sectionLabel}`
+}
+
 export function orgChartPositionConnectorId(position: string): string {
   return `pos:${position}`
 }

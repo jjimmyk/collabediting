@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Minus, Plus } from 'lucide-react'
+import { Minus, Plus, Scan } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   DEFAULT_ROSTER_ZOOM,
@@ -14,9 +14,10 @@ import {
 type RosterZoomControlsProps = {
   zoom: number
   onZoomChange: (zoom: number) => void
+  onFit?: () => void
 }
 
-export function RosterZoomControls({ zoom, onZoomChange }: RosterZoomControlsProps) {
+export function RosterZoomControls({ zoom, onZoomChange, onFit }: RosterZoomControlsProps) {
   const [isEditing, setIsEditing] = useState(false)
   const [draft, setDraft] = useState('')
   const atMin = rosterZoomAtMin(zoom)
@@ -37,11 +38,25 @@ export function RosterZoomControls({ zoom, onZoomChange }: RosterZoomControlsPro
   }
 
   return (
-    <div
-      className="flex items-center rounded-md border"
-      role="group"
-      aria-label="Roster zoom"
-    >
+    <div className="flex items-center gap-2">
+      {onFit ? (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-8 gap-1.5 px-2.5 text-xs"
+          aria-label="Fit org chart to screen"
+          onClick={onFit}
+        >
+          <Scan className="h-3.5 w-3.5" />
+          Fit
+        </Button>
+      ) : null}
+      <div
+        className="flex items-center rounded-md border"
+        role="group"
+        aria-label="Roster zoom"
+      >
       <Button
         type="button"
         variant="ghost"
@@ -62,7 +77,7 @@ export function RosterZoomControls({ zoom, onZoomChange }: RosterZoomControlsPro
           aria-valuenow={percentValue}
           aria-valuemin={ROSTER_ZOOM_MIN * 100}
           aria-valuemax={ROSTER_ZOOM_MAX * 100}
-          title="Enter a zoom percent (50–200). Double-click to reset to 100%."
+          title="Enter a zoom percent (20–200). Double-click to reset to 100%."
           className="w-9 bg-transparent text-center text-xs tabular-nums text-muted-foreground outline-none hover:text-foreground focus:text-foreground"
           onFocus={() => {
             setIsEditing(true)
@@ -95,6 +110,7 @@ export function RosterZoomControls({ zoom, onZoomChange }: RosterZoomControlsPro
       >
         <Plus className="h-3.5 w-3.5" />
       </Button>
+      </div>
     </div>
   )
 }

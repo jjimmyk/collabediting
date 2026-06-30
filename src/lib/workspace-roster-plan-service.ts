@@ -40,6 +40,7 @@ export async function fetchWorkspaceRosterPlan(
   effectTiming: 'immediate' | 'op_period_1'
   appliedAt: string | null
   templateName: string
+  templateSlug: string | null
 } | null> {
   if (!isSupabaseConfigured) {
     return null
@@ -51,20 +52,23 @@ export async function fetchWorkspaceRosterPlan(
 
   const { data, error } = await supabase
     .from('workspace_roster_plans')
-    .select('effect_timing, applied_at, roster_templates(name)')
+    .select('effect_timing, applied_at, draft_plan, roster_templates(name, slug)')
     .eq('workspace_id', workspaceId)
     .maybeSingle()
 
   if (error || !data) return null
 
-  const template = data.roster_templates as { name?: string } | { name?: string }[] | null
-  const templateName = Array.isArray(template)
-    ? template[0]?.name
-    : template?.name
+  const template = data.roster_templates as
+    | { name?: string; slug?: string }
+    | { name?: string; slug?: string }[]
+    | null
+  const templateRow = Array.isArray(template) ? template[0] : template
+  const draftPlan = data.draft_plan as { templateSlug?: string } | null
 
   return {
     effectTiming: data.effect_timing as 'immediate' | 'op_period_1',
     appliedAt: data.applied_at,
-    templateName: templateName ?? 'Roster template',
+    templateName: templateRow?.name ?? 'Roster template',
+    templateSlug: templateRow?.slug ?? draftPlan?.templateSlug ?? null,
   }
 }

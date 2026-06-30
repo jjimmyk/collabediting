@@ -1,5 +1,9 @@
 import { useLayoutEffect, useRef } from 'react'
 import { cn } from '@/lib/utils'
+import {
+  isHwcgSourceControlOrgChartTemplate,
+  resolveOrgChartRootColor,
+} from '@/features/roster/build-dynamic-org-chart'
 import { OrgChartConnectorOverlay } from '@/features/roster/org-chart-connector-overlay'
 import {
   OrgChartConnectorProvider,
@@ -16,9 +20,8 @@ import {
   ORG_CHART_WIDE_GROUPS_ROW_MARGIN_TOP,
   orgChartSectionColumnClassName,
 } from '@/features/roster/org-chart-layout-tokens'
-import {
-  OrgChartSectionSubHierarchy,
-} from '@/features/roster/org-chart-spine-layout'
+import { OrgChartHwcgSectionLayout } from '@/features/roster/org-chart-hwcg-section-layout'
+import { OrgChartSectionSubHierarchy } from '@/features/roster/org-chart-spine-layout'
 import { OrgChartWideSpineTree } from '@/features/roster/org-chart-wide-spine-tree'
 import type { OrgChartWideRenderProps } from '@/features/roster/org-chart-wide-layout.types'
 import {
@@ -28,13 +31,16 @@ import {
   positionNodeIsVisible,
   resolveOrgChartNodeConnectorId,
 } from '@/features/roster/org-chart-visibility'
-import type { OrgChartNode } from '@/features/roster/ics-org-chart-structure'
+import {
+  type OrgChartColor,
+  type OrgChartNode,
+} from '@/features/roster/ics-org-chart-structure'
 import type { WorkspaceOrgChartLayout } from '@/features/roster/workspace-positions'
 
 function OrgChartIcBusesRegistrar({ links }: { links: OrgChartIcBusLink[] }) {
   const { setIcBusLinks } = useOrgChartConnectors()
   const linksKey = links
-    .map((link) => `${link.commanderId}:${link.headerIds.join('\0')}`)
+    .map((link) => `${link.commanderId}:${link.dashed ? 'd' : 's'}:${link.headerIds.join('\0')}`)
     .join('|')
 
   useLayoutEffect(() => {
@@ -90,26 +96,57 @@ function OrgChartSectionColumn({
       ref={columnRef}
       className={cn(
         'flex flex-col items-start',
-        orgChartSectionColumnClassName(branch.label)
+        orgChartSectionColumnClassName(branch.label, renderProps.orgChartTemplateSlug)
       )}
     >
-      <div ref={chiefCardRef} className="w-full" data-org-chart-section-chief>
-        {renderProps.renderLeafNode(chief, {
-          parentColor: chief.color ?? branch.color,
-          suppressChildren: true,
-          connectorAnchorId: chiefId,
-        })}
+      <div className="flex w-full flex-col items-center">
+        <div ref={chiefCardRef} className="w-full" data-org-chart-section-chief>
+          {renderProps.renderLeafNode(chief, {
+            parentColor: chief.color ?? branch.color,
+            suppressChildren: true,
+            connectorAnchorId: chiefId,
+          })}
+        </div>
+        <OrgChartSectionSubHierarchy headerId={chiefId}>
+          <OrgChartWideSpineTree
+            parentId={chiefId}
+            nodes={chief.children ?? []}
+            parentColor={chief.color ?? branch.color}
+            renderProps={renderProps}
+          />
+        </OrgChartSectionSubHierarchy>
       </div>
-      <OrgChartSectionSubHierarchy headerId={chiefId}>
-        <OrgChartWideSpineTree
-          parentId={chiefId}
-          nodes={chief.children ?? []}
-          parentColor={chief.color ?? branch.color}
-          renderProps={renderProps}
-        />
-      </OrgChartSectionSubHierarchy>
     </div>
   )
+}
+
+function resolveIcDirectReportConnectorIds(
+  nodes: OrgChartNode[],
+  renderProps: OrgChartWideRenderProps
+): { solid: string[]; dashed: string[] } {
+  const solid: string[] = []
+  const dashed: string[] = []
+
+  for (const node of nodes) {
+    const connectorId = resolveOrgChartNodeConnectorId(node, renderProps)
+    if (!connectorId) continue
+    if (node.kind === 'position' && node.connectorStyle === 'dashed') {
+      dashed.push(connectorId)
+    } else {
+      solid.push(connectorId)
+    }
+  }
+
+  return { solid, dashed }
+}
+
+function resolveSectionConnectorIds(
+  sectionChiefs: {
+    branch: Extract<OrgChartNode, { kind: 'group' }>
+    chief: Extract<OrgChartNode, { kind: 'position' }>
+  }[]
+): string[] {
+  return sectionChiefs.map(({ chief }) => orgChartPositionConnectorId(chief.position))
 }
 
 type OrgChartWideLayoutProps = {
@@ -167,29 +204,37 @@ export function OrgChartWideLayout({
     : []
 
   const icDirectReportNodes = buildIcDirectReportNodes(commandStaffNodes, visibleRootChildren)
-  const icDirectReportConnectorIds = icDirectReportNodes
-    .map((node) => resolveOrgChartNodeConnectorId(node, renderProps))
-    .filter((id): id is string => id !== null)
-
-  const sectionChiefConnectorIds = sectionChiefs.map(({ chief }) =>
-    orgChartPositionConnectorId(chief.position)
+  const icDirectReportConnectorGroups = resolveIcDirectReportConnectorIds(
+    icDirectReportNodes,
+    renderProps
   )
+
+  const sectionConnectorIds = resolveSectionConnectorIds(sectionChiefs)
 
   const icBusLinks: OrgChartIcBusLink[] = []
   if (icVisible) {
-    if (icDirectReportConnectorIds.length > 0) {
+    if (icDirectReportConnectorGroups.dashed.length > 0) {
       icBusLinks.push({
         commanderId: ORG_CHART_IC_CONNECTOR_ID,
-        headerIds: icDirectReportConnectorIds,
+        headerIds: icDirectReportConnectorGroups.dashed,
+        dashed: true,
       })
     }
-    if (sectionChiefConnectorIds.length > 0) {
+    if (icDirectReportConnectorGroups.solid.length > 0) {
       icBusLinks.push({
         commanderId: ORG_CHART_IC_CONNECTOR_ID,
-        headerIds: sectionChiefConnectorIds,
+        headerIds: icDirectReportConnectorGroups.solid,
+      })
+    }
+    if (sectionConnectorIds.length > 0) {
+      icBusLinks.push({
+        commanderId: ORG_CHART_IC_CONNECTOR_ID,
+        headerIds: sectionConnectorIds,
       })
     }
   }
+
+  const rootColor = resolveOrgChartRootColor(renderProps.orgChartTemplateSlug)
 
   return (
     <OrgChartConnectorProvider>
@@ -200,6 +245,7 @@ export function OrgChartWideLayout({
         icDirectReportNodes={icDirectReportNodes}
         sectionChiefs={sectionChiefs}
         icBusLinks={icBusLinks}
+        rootColor={rootColor}
         zoom={zoom}
         useExportConnectors={useExportConnectors}
       />
@@ -214,6 +260,7 @@ function OrgChartWideLayoutBody({
   icDirectReportNodes,
   sectionChiefs,
   icBusLinks,
+  rootColor,
   zoom,
   useExportConnectors,
 }: {
@@ -226,10 +273,12 @@ function OrgChartWideLayoutBody({
     chief: Extract<OrgChartNode, { kind: 'position' }>
   }[]
   icBusLinks: OrgChartIcBusLink[]
+  rootColor?: OrgChartColor
   zoom: number
   useExportConnectors: boolean
 }) {
   const { chartRef } = useOrgChartConnectors()
+  const useHwcgLayout = isHwcgSourceControlOrgChartTemplate(renderProps.orgChartTemplateSlug)
 
   const sectionChiefsMarginClass =
     icDirectReportNodes.length > 0
@@ -251,6 +300,7 @@ function OrgChartWideLayoutBody({
             {
               kind: 'position',
               position: orgChartLayout.rootPosition,
+              ...(rootColor ? { color: rootColor } : {}),
             },
             { suppressChildren: true, connectorAnchorId: ORG_CHART_IC_CONNECTOR_ID }
           )}
@@ -268,18 +318,23 @@ function OrgChartWideLayoutBody({
       {sectionChiefs.length > 0 ? (
         <div
           className={cn(
-            'flex w-full items-start justify-center gap-10',
+            'flex items-start justify-center',
+            useHwcgLayout ? 'mx-auto w-max' : 'w-full gap-10',
             sectionChiefsMarginClass
           )}
         >
-          {sectionChiefs.map(({ branch, chief }) => (
-            <OrgChartSectionColumn
-              key={branch.label}
-              branch={branch}
-              chief={chief}
-              renderProps={renderProps}
-            />
-          ))}
+          {useHwcgLayout ? (
+            <OrgChartHwcgSectionLayout sectionChiefs={sectionChiefs} renderProps={renderProps} />
+          ) : (
+            sectionChiefs.map(({ branch, chief }) => (
+              <OrgChartSectionColumn
+                key={branch.label}
+                branch={branch}
+                chief={chief}
+                renderProps={renderProps}
+              />
+            ))
+          )}
         </div>
       ) : null}
 

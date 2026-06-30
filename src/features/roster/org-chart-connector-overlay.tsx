@@ -3,6 +3,7 @@ import { ORG_CHART_PAINT_COMPLETE_ATTR } from '@/features/roster/org-chart-expor
 import { useOrgChartConnectors } from '@/features/roster/org-chart-connector-context'
 import {
   icBusConnectLines,
+  crossbarConnectLines,
   readOrgChartZoom,
   spineConnectLines,
 } from '@/features/roster/org-chart-connector-draw'
@@ -27,6 +28,9 @@ function appendSvgLines(
       segment.thick ? 'rgb(107 114 128)' : 'rgb(156 163 175)'
     )
     el.setAttribute('stroke-width', segment.thick ? '2' : '1.5')
+    if (segment.dashed) {
+      el.setAttribute('stroke-dasharray', '5 4')
+    }
     svg.appendChild(el)
   }
 }
@@ -71,15 +75,17 @@ export function OrgChartConnectorOverlay({ zoom = 1 }: { zoom?: number }) {
           .map((id) => resolveCardElement(id))
           .filter((el): el is HTMLElement => el !== null)
         if (childEls.length === 0) continue
-        lines.push(
-          ...spineConnectLines(
-            chart,
-            parentEl,
-            childEls,
-            ORG_CHART_SPINE_ANCHOR_RATIO,
-            chartZoom
-          )
-        )
+        const segments =
+          link.layout === 'crossbar'
+            ? crossbarConnectLines(chart, parentEl, childEls, chartZoom)
+            : spineConnectLines(
+                chart,
+                parentEl,
+                childEls,
+                ORG_CHART_SPINE_ANCHOR_RATIO,
+                chartZoom
+              )
+        lines.push(...segments.map((segment) => ({ ...segment, dashed: link.dashed })))
       }
 
       for (const icBus of icBusLinksRef.current) {
@@ -88,7 +94,11 @@ export function OrgChartConnectorOverlay({ zoom = 1 }: { zoom?: number }) {
           .map((id) => resolveCardElement(id))
           .filter((el): el is HTMLElement => el !== null)
         if (commanderEl && headerEls.length > 0) {
-          lines.push(...icBusConnectLines(chart, commanderEl, headerEls, undefined, chartZoom))
+          lines.push(
+            ...icBusConnectLines(chart, commanderEl, headerEls, undefined, chartZoom).map(
+              (segment) => ({ ...segment, dashed: icBus.dashed })
+            )
+          )
         }
       }
 
