@@ -58,6 +58,26 @@ describe('activation-ics201-prefill', () => {
     expect(form.preparedBy).toBe('planner@example.com')
     expect(form.currentSituationSummary).toBe('Sheen reported near dock')
     expect(form.objectives).toEqual([{ id: 1, kind: 'O', objective: '' }])
+    expect(form.operationalPeriodStart).toBeTruthy()
+    expect(form.operationalPeriodEnd).toBeTruthy()
+  })
+
+  it('prefills operational period dates from configured duration settings', () => {
+    const form = buildActivationIcs201Prefill({
+      kind: 'incident',
+      name: 'Duration Test',
+      region: 'Region 1',
+      lead: 'lead@example.com',
+      startTimeIso: '2026-04-01T06:00',
+      operationalPeriodSettings: {
+        plannedDurationValue: 1,
+        plannedDurationUnit: 'days',
+      },
+      initialReport: emptyReport,
+    })
+
+    expect(form.operationalPeriodStart).toBe('2026-04-01T06:00')
+    expect(form.operationalPeriodEnd).toBe('2026-04-02T06:00')
   })
 
   it('maps exercise objectives into ICS-201 objectives rows', () => {

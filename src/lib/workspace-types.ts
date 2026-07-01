@@ -48,6 +48,8 @@ export type WorkspaceMetadataRecord = {
   location?: [number, number]
   exerciseMsel?: import('@/features/exercise-msel/types').ExerciseMselState
   activationNotifications?: import('@/features/activation/activation-notification-types').ActivationNotificationSettings
+  activationMeetingSchedule?: import('@/features/activation/activation-meeting-schedule-types').ActivationMeetingScheduleSettings
+  meetingOccurrences?: import('@/features/activation/activation-meeting-schedule-types').ActivationMeetingOccurrence[]
 }
 
 export type AccessibleWorkspace = {

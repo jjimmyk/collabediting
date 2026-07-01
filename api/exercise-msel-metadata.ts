@@ -112,5 +112,110 @@ export function normalizeWorkspaceMetadata(
       delete next.exerciseMsel
     }
   }
+
+  if ('activationMeetingSchedule' in next) {
+    next.activationMeetingSchedule = normalizeActivationMeetingScheduleMetadata(
+      next.activationMeetingSchedule
+    )
+  }
+
+  if ('meetingOccurrences' in next) {
+    next.meetingOccurrences = normalizeMeetingOccurrencesMetadata(next.meetingOccurrences)
+  }
+
   return next
+}
+
+function normalizeActivationMeetingScheduleMetadata(raw: unknown): Record<string, unknown> {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    return {
+      plannedDurationValue: 12,
+      plannedDurationUnit: 'hours',
+      repeatMeetingsEachOperationalPeriod: true,
+      meetings: [],
+    }
+  }
+
+  const record = raw as Record<string, unknown>
+  const unit = record.plannedDurationUnit === 'days' ? 'days' : 'hours'
+  const max = unit === 'days' ? 7 : 168
+  const valueRaw =
+    typeof record.plannedDurationValue === 'number' ? record.plannedDurationValue : 12
+  const plannedDurationValue = Math.min(max, Math.max(1, Math.round(valueRaw)))
+
+  const meetings = Array.isArray(record.meetings)
+    ? record.meetings
+        .map((entry) => {
+          if (!entry || typeof entry !== 'object') return null
+          const meeting = entry as Record<string, unknown>
+          if (typeof meeting.id !== 'number') return null
+          return {
+            id: meeting.id,
+            start: typeof meeting.start === 'string' ? meeting.start : '',
+            end: typeof meeting.end === 'string' ? meeting.end : '',
+            meeting: typeof meeting.meeting === 'string' ? meeting.meeting : '',
+            attendees: typeof meeting.attendees === 'string' ? meeting.attendees : '',
+            agendaItems: Array.isArray(meeting.agendaItems)
+              ? meeting.agendaItems.filter((item): item is string => typeof item === 'string')
+              : [],
+            createTeamsMeeting: meeting.createTeamsMeeting === true,
+          }
+        })
+        .filter((entry): entry is NonNullable<typeof entry> => entry !== null)
+    : []
+
+  return {
+    plannedDurationValue,
+    plannedDurationUnit: unit,
+    repeatMeetingsEachOperationalPeriod:
+      typeof record.repeatMeetingsEachOperationalPeriod === 'boolean'
+        ? record.repeatMeetingsEachOperationalPeriod
+        : true,
+    meetings,
+  }
+}
+
+function normalizeMeetingOccurrencesMetadata(raw: unknown): Array<Record<string, unknown>> {
+  if (!Array.isArray(raw)) {
+    return []
+  }
+
+  return raw
+    .map((entry) => {
+      if (!entry || typeof entry !== 'object') return null
+      const occurrence = entry as Record<string, unknown>
+      if (typeof occurrence.periodNumber !== 'number') return null
+      if (typeof occurrence.opStartIso !== 'string' || typeof occurrence.opEndIso !== 'string') {
+        return null
+      }
+
+      const meetings = Array.isArray(occurrence.meetings)
+        ? occurrence.meetings
+            .map((meetingEntry) => {
+              if (!meetingEntry || typeof meetingEntry !== 'object') return null
+              const meeting = meetingEntry as Record<string, unknown>
+              if (typeof meeting.id !== 'number') return null
+              return {
+                id: meeting.id,
+                start: typeof meeting.start === 'string' ? meeting.start : '',
+                end: typeof meeting.end === 'string' ? meeting.end : '',
+                meeting: typeof meeting.meeting === 'string' ? meeting.meeting : '',
+                attendees: typeof meeting.attendees === 'string' ? meeting.attendees : '',
+                agendaItems: Array.isArray(meeting.agendaItems)
+                  ? meeting.agendaItems.filter((item): item is string => typeof item === 'string')
+                  : [],
+                createTeamsMeeting: meeting.createTeamsMeeting === true,
+              }
+            })
+            .filter((item): item is NonNullable<typeof item> => item !== null)
+        : []
+
+      return {
+        periodNumber: occurrence.periodNumber,
+        opStartIso: occurrence.opStartIso,
+        opEndIso: occurrence.opEndIso,
+        meetings,
+      }
+    })
+    .filter((entry): entry is NonNullable<typeof entry> => entry !== null)
 }

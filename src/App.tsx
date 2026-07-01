@@ -676,6 +676,12 @@ import {
 import { AddWorkspacePositionDialog } from '@/features/roster/AddWorkspacePositionDialog'
 import { BuildTeamRosterStep } from '@/features/roster/BuildTeamRosterStep'
 import { ActivationNotificationsStep } from '@/features/activation/ActivationNotificationsStep'
+import { ActivationScheduleMeetingsStep } from '@/features/activation/ActivationScheduleMeetingsStep'
+import {
+  createDefaultActivationMeetingScheduleSettings,
+  type ActivationMeetingScheduleSettings,
+} from '@/features/activation/activation-meeting-schedule-types'
+import { buildActivationMeetingMetadata } from '@/features/activation/activation-meeting-schedule-utils'
 import {
   buildActivationNotificationBaseMessage,
   buildActivationNotificationBody,
@@ -4254,16 +4260,6 @@ function CcmerDutyNotificationForm({
   )
 }
 
-type MeetingScheduleItem = {
-  id: number
-  start: string
-  end: string
-  meeting: string
-  attendees: string
-  agendaItems: string[]
-  createTeamsMeeting: boolean
-}
-
 type ExerciseObjectiveRow = {
   id: number
   name: string
@@ -6200,39 +6196,8 @@ function App() {
   const [incidentLocationAorNodeId, setIncidentLocationAorNodeId] = useState<string | null>(null)
   const [incidentAorsUserTouched, setIncidentAorsUserTouched] = useState(false)
   const [isCreateIncidentMapReady, setIsCreateIncidentMapReady] = useState(false)
-  const [expandedMeetingItemId, setExpandedMeetingItemId] = useState<number | null>(null)
-  const defaultMeetingScheduleItems: MeetingScheduleItem[] = [
-    {
-      id: 1,
-      start: '2026-04-01T09:00',
-      end: '2026-04-01T09:30',
-      meeting: 'Operational Briefing',
-      attendees: 'IC, Ops, Logistics',
-      agendaItems: ['Safety briefing', 'Incident objectives', 'Resource assignments'],
-      createTeamsMeeting: true,
-    },
-    {
-      id: 2,
-      start: '2026-04-01T12:00',
-      end: '2026-04-01T12:45',
-      meeting: 'Planning Sync',
-      attendees: 'Planning Section',
-      agendaItems: ['Status update', 'Projected needs', 'Planning assumptions'],
-      createTeamsMeeting: false,
-    },
-    {
-      id: 3,
-      start: '2026-04-01T16:00',
-      end: '2026-04-01T16:30',
-      meeting: 'Command Update',
-      attendees: 'Unified Command',
-      agendaItems: ['Key decisions', 'Priority alignment', 'Communication plan'],
-      createTeamsMeeting: true,
-    },
-  ]
-  const [meetingScheduleItems, setMeetingScheduleItems] = useState<MeetingScheduleItem[]>(
-    defaultMeetingScheduleItems
-  )
+  const [activationMeetingScheduleSettings, setActivationMeetingScheduleSettings] =
+    useState<ActivationMeetingScheduleSettings>(createDefaultActivationMeetingScheduleSettings)
   const [initialIncidentReport, setInitialIncidentReport] =
     useState<InitialIncidentReportState>(createDefaultInitialIncidentReport)
   const [activationIcs201Draft, setActivationIcs201Draft] = useState<ActivationIcs201DraftState>(
@@ -6363,8 +6328,7 @@ function App() {
     setIncidentAorsUserTouched(false)
     createIncidentSketchViewModelRef.current?.cancel()
     createIncidentDrawLayerRef.current?.removeAll()
-    setExpandedMeetingItemId(null)
-    setMeetingScheduleItems(defaultMeetingScheduleItems)
+    setActivationMeetingScheduleSettings(createDefaultActivationMeetingScheduleSettings())
     setInitialIncidentReport(createDefaultInitialIncidentReport())
     setActivationIcs201Draft(createDefaultActivationIcs201Draft())
     setActivationNotificationSettings(createDefaultActivationNotificationSettings())
@@ -6488,6 +6452,10 @@ function App() {
       geometrySummary: incidentGeometrySummary || undefined,
       locationLabel: resolveActivationLocationLabel(buildActivationLocationInput()),
       startTimeIso: incidentStartTime || undefined,
+      operationalPeriodSettings: {
+        plannedDurationValue: activationMeetingScheduleSettings.plannedDurationValue,
+        plannedDurationUnit: activationMeetingScheduleSettings.plannedDurationUnit,
+      },
       initialReport: {
         shortDescription: initialIncidentReport.shortDescription,
         facilityLocations: initialIncidentReport.facilityLocations,
@@ -6511,6 +6479,8 @@ function App() {
       incidentGeometrySummary,
       incidentName,
       incidentStartTime,
+      activationMeetingScheduleSettings.plannedDurationUnit,
+      activationMeetingScheduleSettings.plannedDurationValue,
       initialIncidentReport,
       profileEmail,
     ]
@@ -6583,7 +6553,7 @@ function App() {
       minute: '2-digit',
     })
     const startedAt = formatTimestamp(incidentStartTime) || nowLabel
-    const meetingsScheduled = meetingScheduleItems.length
+    const meetingsScheduled = activationMeetingScheduleSettings.meetings.length
     const mselCount = exerciseMselInjects.filter(
       (row) => row.inject.trim().length > 0 || row.expectedAction.trim().length > 0
     ).length
@@ -6658,6 +6628,10 @@ function App() {
           objectives: exerciseObjectives,
           injects: exerciseMselInjects,
         })
+        const activationMeetingMetadata = buildActivationMeetingMetadata({
+          settings: activationMeetingScheduleSettings,
+          incidentStartTime,
+        })
         const createMetadata: WorkspaceMetadataRecord = {
           category: incidentCategory.trim() || 'Special Event',
           templateId: incidentTemplate || undefined,
@@ -6668,6 +6642,7 @@ function App() {
           location,
           exerciseMsel,
           activationNotifications: activationNotificationSettings,
+          ...activationMeetingMetadata,
         }
 
         const result = await createWorkspace({
@@ -6816,7 +6791,7 @@ function App() {
       minute: '2-digit',
     })
     const startedAt = formatTimestamp(incidentStartTime) || nowLabel
-    const meetingsScheduled = meetingScheduleItems.length
+    const meetingsScheduled = activationMeetingScheduleSettings.meetings.length
     const summaryParts: string[] = []
     if (initialIncidentReport.shortDescription.trim()) {
       summaryParts.push(initialIncidentReport.shortDescription.trim())
@@ -6883,6 +6858,11 @@ function App() {
           return
         }
 
+        const activationMeetingMetadata = buildActivationMeetingMetadata({
+          settings: activationMeetingScheduleSettings,
+          incidentStartTime,
+        })
+
         const result = await createWorkspace({
           accessToken,
           kind: 'incident',
@@ -6903,6 +6883,7 @@ function App() {
             relatedEventIds:
               incidentRelatedEventIds.length > 0 ? [...incidentRelatedEventIds] : undefined,
             activationNotifications: activationNotificationSettings,
+            ...activationMeetingMetadata,
           },
         })
 
@@ -18618,8 +18599,7 @@ function App() {
     createIncidentSketchViewModelRef.current?.cancel()
     createIncidentDrawLayerRef.current?.removeAll()
     preserveIncidentGeometryRef.current = Boolean(seed.incidentGeometrySummary)
-    setExpandedMeetingItemId(null)
-    setMeetingScheduleItems(defaultMeetingScheduleItems)
+    setActivationMeetingScheduleSettings(createDefaultActivationMeetingScheduleSettings())
     setViewingEventModalId(null)
     navigateToCreateActivation('incident')
     setIsCreateExerciseOpen(false)
@@ -27101,295 +27081,11 @@ function App() {
           />
         )}
         {isActivationStep(activationKind, activationStep, 'scheduleMeetings') && (
-          <div className="grid gap-3">
-            <div className="space-y-2">
-              <div className="flex justify-start">
-                <Button
-                  type="button"
-                  size="sm"
-                  onClick={() => {
-                    const nextId =
-                      meetingScheduleItems.length > 0
-                        ? Math.max(...meetingScheduleItems.map((meeting) => meeting.id)) + 1
-                        : 1
-
-                    setMeetingScheduleItems((previous) => [
-                      {
-                        id: nextId,
-                        start: '',
-                        end: '',
-                        meeting: 'New Meeting',
-                        attendees: '',
-                        agendaItems: ['New agenda item'],
-                        createTeamsMeeting: false,
-                      },
-                      ...previous,
-                    ])
-                    setExpandedMeetingItemId(nextId)
-                  }}
-                >
-                  <Plus className="mr-1 h-4 w-4" /> Create Meeting
-                </Button>
-              </div>
-              <div className="hidden grid-cols-[2.25rem_repeat(4,minmax(0,1fr))_minmax(0,1fr)] items-center gap-3 px-3 text-xs text-black dark:text-black md:grid">
-                <p className="invisible select-none" aria-hidden="true">
-                  Expand
-                </p>
-                <p className="pl-1">Start</p>
-                <p className="pl-1">End</p>
-                <p>Meeting</p>
-                <p>Attendees</p>
-                <div className="-ml-1 flex items-center gap-1">
-                  <p>Create Microsoft Teams Meeting</p>
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="h-5 w-5"
-                          aria-label="Microsoft Teams meeting info"
-                        >
-                          <Info className="h-3.5 w-3.5" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent side="top" className="max-w-sm">
-                        If enabled, a Microsoft Teams calendar event will be created and all
-                        attendees will be emailed an invitation.
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                </div>
-              </div>
-              {meetingScheduleItems.length === 0 && (
-                <div className="rounded-md border border-dashed bg-muted/20 p-4 text-sm text-muted-foreground">
-                  No scheduled meetings.
-                </div>
-              )}
-              {meetingScheduleItems.map((item) => {
-                const isMeetingOpen = expandedMeetingItemId === item.id
-                return (
-                  <Item key={item.id} variant="outline" className="flex-col items-stretch">
-                    <Collapsible
-                      open={isMeetingOpen}
-                      onOpenChange={(open) =>
-                        setExpandedMeetingItemId(open ? item.id : null)
-                      }
-                    >
-                      <div className="grid gap-3 p-3 md:grid-cols-[2.25rem_repeat(4,minmax(0,1fr))_minmax(0,1fr)]">
-                        <div className="flex items-center">
-                          <CollapsibleTrigger asChild>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon"
-                              aria-label={`Toggle agenda for meeting row ${item.id}`}
-                            >
-                              <ChevronDown
-                                className={cn(
-                                  'h-4 w-4 transition-transform',
-                                  isMeetingOpen && 'rotate-180'
-                                )}
-                              />
-                            </Button>
-                          </CollapsibleTrigger>
-                        </div>
-                        <div>
-                          <Input
-                            type="datetime-local"
-                            value={item.start}
-                            onChange={(event) => {
-                              const value = event.target.value
-                              setMeetingScheduleItems((previous) =>
-                                previous.map((meetingItem) =>
-                                  meetingItem.id === item.id
-                                    ? { ...meetingItem, start: value }
-                                    : meetingItem
-                                )
-                              )
-                            }}
-                          />
-                        </div>
-                        <div>
-                          <Input
-                            type="datetime-local"
-                            value={item.end}
-                            onChange={(event) => {
-                              const value = event.target.value
-                              setMeetingScheduleItems((previous) =>
-                                previous.map((meetingItem) =>
-                                  meetingItem.id === item.id
-                                    ? { ...meetingItem, end: value }
-                                    : meetingItem
-                                )
-                              )
-                            }}
-                          />
-                        </div>
-                        <div>
-                          <Input
-                            value={item.meeting}
-                            onChange={(event) => {
-                              const value = event.target.value
-                              setMeetingScheduleItems((previous) =>
-                                previous.map((meetingItem) =>
-                                  meetingItem.id === item.id
-                                    ? { ...meetingItem, meeting: value }
-                                    : meetingItem
-                                )
-                              )
-                            }}
-                          />
-                        </div>
-                        <div>
-                          <Input
-                            value={item.attendees}
-                            onChange={(event) => {
-                              const value = event.target.value
-                              setMeetingScheduleItems((previous) =>
-                                previous.map((meetingItem) =>
-                                  meetingItem.id === item.id
-                                    ? { ...meetingItem, attendees: value }
-                                    : meetingItem
-                                )
-                              )
-                            }}
-                          />
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Switch
-                            id={`teams-meeting-${item.id}`}
-                            aria-label={`Create Microsoft Teams Meeting for row ${item.id}`}
-                            checked={item.createTeamsMeeting}
-                            onCheckedChange={(checked) => {
-                              setMeetingScheduleItems((previous) =>
-                                previous.map((meetingItem) =>
-                                  meetingItem.id === item.id
-                                    ? { ...meetingItem, createTeamsMeeting: checked }
-                                    : meetingItem
-                                )
-                              )
-                            }}
-                          />
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="ml-auto"
-                            aria-label={`Delete meeting row ${item.id}`}
-                            onClick={() => {
-                              setMeetingScheduleItems((previous) =>
-                                previous.filter((meetingItem) => meetingItem.id !== item.id)
-                              )
-                              setExpandedMeetingItemId((previous) =>
-                                previous === item.id ? null : previous
-                              )
-                            }}
-                          >
-                            <X className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </div>
-                      <CollapsibleContent>
-                        <div className="border-t px-3 py-3">
-                          <div className="mb-2 flex items-center justify-between">
-                            <Label className="text-xs text-muted-foreground">Agenda</Label>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              onClick={() => {
-                                setMeetingScheduleItems((previous) =>
-                                  previous.map((meetingItem) =>
-                                    meetingItem.id === item.id
-                                      ? {
-                                          ...meetingItem,
-                                          agendaItems: [
-                                            ...meetingItem.agendaItems,
-                                            'New agenda item',
-                                          ],
-                                        }
-                                      : meetingItem
-                                  )
-                                )
-                              }}
-                            >
-                              <Plus className="mr-1 h-4 w-4" />
-                              Create Agenda Item
-                            </Button>
-                          </div>
-                          <div className="space-y-2">
-                            {item.agendaItems.length === 0 && (
-                              <div className="rounded-md border border-dashed bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
-                                No agenda items yet.
-                              </div>
-                            )}
-                            {item.agendaItems.map((agendaItem, agendaIndex) => (
-                              <Item
-                                key={`${item.id}-agenda-${agendaIndex}`}
-                                variant="muted"
-                                size="sm"
-                                className="flex-nowrap"
-                              >
-                                <Input
-                                  className="min-w-0 flex-1"
-                                  value={agendaItem}
-                                  onChange={(event) => {
-                                    const value = event.target.value
-                                    setMeetingScheduleItems((previous) =>
-                                      previous.map((meetingItem) => {
-                                        if (meetingItem.id !== item.id) {
-                                          return meetingItem
-                                        }
-
-                                        return {
-                                          ...meetingItem,
-                                          agendaItems: meetingItem.agendaItems.map(
-                                            (entry, entryIndex) =>
-                                              entryIndex === agendaIndex ? value : entry
-                                          ),
-                                        }
-                                      })
-                                    )
-                                  }}
-                                />
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="icon"
-                                  className="ml-auto"
-                                  aria-label={`Delete agenda item ${agendaIndex + 1} for meeting row ${item.id}`}
-                                  onClick={() => {
-                                    setMeetingScheduleItems((previous) =>
-                                      previous.map((meetingItem) => {
-                                        if (meetingItem.id !== item.id) {
-                                          return meetingItem
-                                        }
-
-                                        return {
-                                          ...meetingItem,
-                                          agendaItems: meetingItem.agendaItems.filter(
-                                            (_, entryIndex) => entryIndex !== agendaIndex
-                                          ),
-                                        }
-                                      })
-                                    )
-                                  }}
-                                >
-                                  <X className="h-4 w-4" />
-                                </Button>
-                              </Item>
-                            ))}
-                          </div>
-                        </div>
-                      </CollapsibleContent>
-                    </Collapsible>
-                  </Item>
-                )
-              })}
-            </div>
-          </div>
+          <ActivationScheduleMeetingsStep
+            settings={activationMeetingScheduleSettings}
+            onChange={setActivationMeetingScheduleSettings}
+            incidentStartTime={incidentStartTime}
+          />
         )}
         {isActivationStep(activationKind, activationStep, 'notifications') && (
           <ActivationNotificationsStep

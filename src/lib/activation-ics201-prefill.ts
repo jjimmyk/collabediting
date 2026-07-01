@@ -1,6 +1,12 @@
 import { createInitialIcs201Form } from '@/features/ics201/constants'
 import type { Ics201FormState, Ics201ObjectiveRow } from '@/features/ics201/types'
 import { cloneIcs201FormState } from '@/features/ics201/utils'
+import type { OperationalPeriodDurationUnit } from '@/features/activation/activation-meeting-schedule-types'
+import {
+  computeOperationalPeriodWindow,
+  parseAnchorStartIso,
+} from '@/features/activation/activation-meeting-schedule-utils'
+import { formatOperationalPeriodDatetimeLocal } from '@/lib/operational-period-timestamps'
 import type { CreateActivationKind } from '@/lib/create-activation-navigation'
 
 export type ActivationIcs201InitialReportInput = {
@@ -138,10 +144,19 @@ export function buildActivationIcs201Prefill(input: {
   geometrySummary?: string
   locationLabel?: string
   startTimeIso?: string
+  operationalPeriodSettings?: {
+    plannedDurationValue: number
+    plannedDurationUnit: OperationalPeriodDurationUnit
+  }
   initialReport: ActivationIcs201InitialReportInput
   exerciseObjectives?: Array<{ name: string }>
 }): Ics201FormState {
   const { date, time } = parseStartTimeIso(input.startTimeIso)
+  const opAnchor = parseAnchorStartIso(input.startTimeIso)
+  const opWindow = computeOperationalPeriodWindow(opAnchor, {
+    plannedDurationValue: input.operationalPeriodSettings?.plannedDurationValue ?? 12,
+    plannedDurationUnit: input.operationalPeriodSettings?.plannedDurationUnit ?? 'hours',
+  })
   const incidentLocation =
     input.geometrySummary?.trim() ||
     input.locationLabel?.trim() ||
@@ -158,6 +173,8 @@ export function buildActivationIcs201Prefill(input: {
     incidentLocation,
     dateInitiated: date,
     timeInitiated: time,
+    operationalPeriodStart: formatOperationalPeriodDatetimeLocal(opWindow.from),
+    operationalPeriodEnd: formatOperationalPeriodDatetimeLocal(opWindow.to),
     jurisdiction: input.region.trim() || createInitialIcs201Form().jurisdiction,
     preparedBy: input.lead.trim() || createInitialIcs201Form().preparedBy,
     preparedByName: input.lead.trim() || createInitialIcs201Form().preparedByName,

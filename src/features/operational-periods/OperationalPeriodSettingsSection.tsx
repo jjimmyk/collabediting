@@ -143,7 +143,7 @@ export function OperationalPeriodSettingsSection({
             <DialogDescription>
               This will snapshot all workspace forms for{' '}
               {formatOperationalPeriodLabel(nextPeriodNumber)}, capture the current roster, apply any
-              retire/create position labels, apply default 12-hour operational period timestamps to
+              apply default configured operational period timestamps to
               eligible forms, and begin{' '}
               {formatWorkingOperationalPeriodLabel(nextPeriodNumber + 1)} as the editable working
               set. Started periods cannot be edited.

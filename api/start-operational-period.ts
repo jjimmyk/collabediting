@@ -1,5 +1,18 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import {
+  buildWorkingPeriodMeetingOccurrence,
+  extractAnchorStartIsoFromOccurrences,
+  operationalPeriodDurationMsFromSettings,
+  resolveActivationMeetingScheduleSettings,
+  resolveMeetingOccurrences,
+} from '../src/features/activation/activation-meeting-schedule-utils.js'
+import {
+  applyOperationalPeriodTimestampsToSnapshot,
+  computeOperationalPeriodWindows,
+  formatOperationalPeriodDatetimeLocal,
+} from '../src/lib/operational-period-timestamps.js'
+import { normalizeWorkspaceMetadata } from './exercise-msel-metadata.js'
 import { snapshotAndApplyRosterLifecycleOnOperationalPeriodAdvance } from './roster-operational-period-lifecycle.js'
 
 type OperationalPeriodFormKey =
@@ -148,88 +161,6 @@ type StandardDocumentRow = {
 type RowsDocumentRow = {
   id: string
   rows_data: unknown
-}
-
-const DEFAULT_OPERATIONAL_PERIOD_DURATION_MS = 12 * 60 * 60 * 1000
-
-type OperationalPeriodWindow = {
-  from: Date
-  to: Date
-}
-
-function computeOperationalPeriodWindows(startedAt: Date): {
-  frozen: OperationalPeriodWindow
-  working: OperationalPeriodWindow
-} {
-  const frozenFrom = startedAt
-  const frozenTo = new Date(startedAt.getTime() + DEFAULT_OPERATIONAL_PERIOD_DURATION_MS)
-  const workingFrom = frozenTo
-  const workingTo = new Date(startedAt.getTime() + DEFAULT_OPERATIONAL_PERIOD_DURATION_MS * 2)
-
-  return {
-    frozen: { from: frozenFrom, to: frozenTo },
-    working: { from: workingFrom, to: workingTo },
-  }
-}
-
-function formatOperationalPeriodDatetimeLocal(value: Date): string {
-  const pad = (part: number) => String(part).padStart(2, '0')
-  return `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())}T${pad(value.getHours())}:${pad(value.getMinutes())}`
-}
-
-function formatOperationalPeriodDate(value: Date): string {
-  return value.toISOString().slice(0, 10)
-}
-
-function formatOperationalPeriodTime(value: Date): string {
-  return value.toTimeString().slice(0, 5)
-}
-
-function applyOperationalPeriodTimestampsToSnapshot(
-  snapshot: unknown,
-  formKey: OperationalPeriodFormKey,
-  window: OperationalPeriodWindow
-): unknown {
-  if (!snapshot || typeof snapshot !== 'object' || Array.isArray(snapshot)) {
-    return snapshot
-  }
-
-  const data = JSON.parse(JSON.stringify(snapshot)) as Record<string, unknown>
-
-  switch (formKey) {
-    case 'ics201':
-      data.operationalPeriodStart = formatOperationalPeriodDatetimeLocal(window.from)
-      data.operationalPeriodEnd = formatOperationalPeriodDatetimeLocal(window.to)
-      break
-    case 'iap':
-    case 'ics202':
-    case 'ics203':
-    case 'ics234':
-    case 'ics214':
-      data.operationalPeriodFrom = formatOperationalPeriodDatetimeLocal(window.from)
-      data.operationalPeriodTo = formatOperationalPeriodDatetimeLocal(window.to)
-      if (formKey === 'ics214') {
-        data.dateOfActivity = formatOperationalPeriodDate(window.from)
-      }
-      break
-    case 'ics215':
-    case 'ics215a':
-    case 'ics205':
-    case 'ics205a':
-    case 'ics206':
-    case 'ics208':
-    case 'ics208hm':
-    case 'ics209':
-      data.operationalPeriodDateFrom = formatOperationalPeriodDate(window.from)
-      data.operationalPeriodDateTo = formatOperationalPeriodDate(window.to)
-      data.operationalPeriodTimeFrom = formatOperationalPeriodTime(window.from)
-      data.operationalPeriodTimeTo = formatOperationalPeriodTime(window.to)
-      break
-    default:
-      break
-  }
-
-  return data
 }
 
 function parseBody(req: VercelRequest): StartOperationalPeriodBody {
@@ -563,7 +494,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const { data: workspace, error: workspaceError } = await admin
       .from('workspaces')
       .select(
-        'id, kind, workspace_format, incident_complexity, started_operational_period_count, working_operational_period_number'
+        'id, kind, workspace_format, incident_complexity, started_operational_period_count, working_operational_period_number, metadata'
       )
       .eq('id', workspaceId)
       .maybeSingle()
@@ -586,6 +517,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const periodNumber = startedCount + 1
     const nextWorkingPeriodNumber = periodNumber + 1
     const authorName = profile?.email ?? user.email ?? 'System'
+    const workspaceMetadata =
+      workspace.metadata && typeof workspace.metadata === 'object' && !Array.isArray(workspace.metadata)
+        ? (workspace.metadata as Record<string, unknown>)
+        : {}
+    const scheduleSettings = resolveActivationMeetingScheduleSettings(
+      workspaceMetadata.activationMeetingSchedule
+    )
+    const durationMs = operationalPeriodDurationMsFromSettings(scheduleSettings)
 
     await admin
       .from('workspace_operational_periods')
@@ -610,7 +549,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     try {
-      const periodWindows = computeOperationalPeriodWindows(new Date(periodRow.started_at))
+      const periodWindows = computeOperationalPeriodWindows(
+        new Date(periodRow.started_at),
+        durationMs
+      )
       await snapshotAndApplyRosterLifecycleOnOperationalPeriodAdvance(
         admin,
         workspaceId,
@@ -633,11 +575,39 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       throw formError
     }
 
+    let nextMetadata: Record<string, unknown> = { ...workspaceMetadata }
+    if (scheduleSettings.repeatMeetingsEachOperationalPeriod) {
+      const existingOccurrences = resolveMeetingOccurrences(workspaceMetadata.meetingOccurrences)
+      const anchorStartIso =
+        extractAnchorStartIsoFromOccurrences(existingOccurrences) ??
+        formatOperationalPeriodDatetimeLocal(new Date(periodRow.started_at))
+      const workingOpStart = new Date(new Date(periodRow.started_at).getTime() + durationMs)
+      const alreadyHasOccurrence = existingOccurrences.some(
+        (occurrence) => occurrence.periodNumber === nextWorkingPeriodNumber
+      )
+
+      if (!alreadyHasOccurrence) {
+        nextMetadata = {
+          ...nextMetadata,
+          meetingOccurrences: [
+            ...existingOccurrences,
+            buildWorkingPeriodMeetingOccurrence({
+              periodNumber: nextWorkingPeriodNumber,
+              opStart: workingOpStart,
+              settings: scheduleSettings,
+              anchorStartIso,
+            }),
+          ],
+        }
+      }
+    }
+
     const { error: updateWorkspaceError } = await admin
       .from('workspaces')
       .update({
         started_operational_period_count: periodNumber,
         working_operational_period_number: nextWorkingPeriodNumber,
+        metadata: normalizeWorkspaceMetadata(nextMetadata),
       })
       .eq('id', workspaceId)
 
