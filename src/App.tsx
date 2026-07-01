@@ -28,15 +28,6 @@ import {
   voidArcGisMapLoads,
   voidArcGisWhen,
 } from '@/lib/arcgis-load-abort'
-import {
-  PDFBool,
-  PDFDocument,
-  PDFName,
-  type PDFFont,
-  type PDFPage,
-  rgb,
-  StandardFonts,
-} from 'pdf-lib'
 import Zoom from '@arcgis/core/widgets/Zoom'
 import {
   AlertTriangle,
@@ -914,10 +905,19 @@ import type {
   Ics201VersionSignature,
 } from '@/features/ics201/types'
 import {
+  buildIcs201DocxBlocks,
+  buildIcs201ExportOptions,
+  downloadIcs201FlexiblePdf,
+  downloadIcs201TemplatePdf,
+  ICS201_PAGE_CHAR_LIMIT,
+} from '@/features/ics201/export-download'
+import { captureMapSketchPngForForm } from '@/features/ics201/capture-map-sketch-image'
+import { pngBytesToDataUrl } from '@/features/ics201/map-sketch-geometry'
+import type { DocxBlock, DocxOptions } from '@/lib/docx-blocks'
+import {
   cloneIcs201FormState,
   createLocalIcs201Version,
   createSeedIcs201Versions,
-  formatIcs201ObjectiveExportLine,
   ics201AuthorColorFromId,
   ics201ObjectivesFromStrings,
   ics201VersionAuthorLabel,
@@ -4497,14 +4497,15 @@ function computeCrc32(bytes: Uint8Array): number {
   return (crc ^ 0xffffffff) >>> 0
 }
 
-function buildStoredZip(files: Array<{ name: string; content: string }>): Uint8Array {
+function buildStoredZip(files: Array<{ name: string; content: string | Uint8Array }>): Uint8Array {
   const encoder = new TextEncoder()
   const parts: Uint8Array[] = []
   const central: Uint8Array[] = []
   let offset = 0
   for (const file of files) {
     const nameBytes = encoder.encode(file.name)
-    const contentBytes = encoder.encode(file.content)
+    const contentBytes =
+      typeof file.content === 'string' ? encoder.encode(file.content) : file.content
     const crc = computeCrc32(contentBytes)
     const header = new Uint8Array(30 + nameBytes.length)
     const headerView = new DataView(header.buffer)
@@ -4584,13 +4585,6 @@ function escapeXml(text: string): string {
     .replace(/'/g, '&apos;')
 }
 
-type DocxBlock =
-  | { kind: 'title'; text: string }
-  | { kind: 'subtitle'; text: string }
-  | { kind: 'heading'; text: string }
-  | { kind: 'paragraph'; text: string }
-  | { kind: 'bullet'; text: string }
-
 type DocxHeaderFooterCell = {
   label: string
   value?: string
@@ -4601,14 +4595,49 @@ type DocxHeaderFooter = {
   topLines?: string[]
 }
 
-type DocxOptions = {
-  header?: DocxHeaderFooter
-  footer?: DocxHeaderFooter
+function docxImageRelId(index: number): string {
+  return `rIdImg${index + 1}`
+}
+
+function docxImageExtentEmu(widthPx: number, heightPx: number): { cx: number; cy: number } {
+  const emuPerPixel = 9525
+  return {
+    cx: Math.max(1, Math.round(widthPx * emuPerPixel)),
+    cy: Math.max(1, Math.round(heightPx * emuPerPixel)),
+  }
+}
+
+function buildDocxImageParagraph(block: Extract<DocxBlock, { kind: 'image' }>, relId: string): string {
+  const widthPx = block.widthPx ?? 520
+  const heightPx = block.heightPx ?? 390
+  const { cx, cy } = docxImageExtentEmu(widthPx, heightPx)
+  return (
+    `<w:p><w:pPr><w:spacing w:after="120"/></w:pPr>` +
+    `<w:r><w:drawing>` +
+    `<wp:inline distT="0" distB="0" distL="0" distR="0" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing">` +
+    `<wp:extent cx="${cx}" cy="${cy}"/>` +
+    `<wp:docPr id="1" name="Map Sketch"/>` +
+    `<a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">` +
+    `<a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">` +
+    `<pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">` +
+    `<pic:nvPicPr><pic:cNvPr id="0" name="Map Sketch"/><pic:cNvPicPr/></pic:nvPicPr>` +
+    `<pic:blipFill><a:blip r:embed="${relId}"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill>` +
+    `<pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm>` +
+    `<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr>` +
+    `</pic:pic></a:graphicData></a:graphic></wp:inline>` +
+    `</w:drawing></w:r></w:p>`
+  )
 }
 
 function buildDocxXml(blocks: DocxBlock[], options: DocxOptions = {}): string {
   const paragraphs: string[] = []
+  let imageIndex = 0
   for (const block of blocks) {
+    if (block.kind === 'image') {
+      paragraphs.push(buildDocxImageParagraph(block, docxImageRelId(imageIndex)))
+      imageIndex += 1
+      continue
+    }
     if (block.kind === 'title') {
       paragraphs.push(
         `<w:p><w:pPr><w:spacing w:before="0" w:after="120"/><w:jc w:val="left"/></w:pPr>` +
@@ -4735,12 +4764,15 @@ function buildDocxNumberingXml(): string {
   )
 }
 
-function buildContentTypesXml(options: { header?: boolean; footer?: boolean } = {}): string {
+function buildContentTypesXml(
+  options: { header?: boolean; footer?: boolean; imageCount?: number } = {}
+): string {
   let xml =
     `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
     `<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">` +
     `<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>` +
     `<Default Extension="xml" ContentType="application/xml"/>` +
+    `<Default Extension="png" ContentType="image/png"/>` +
     `<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>` +
     `<Override PartName="/word/numbering.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml"/>`
   if (options.header) {
@@ -4748,6 +4780,10 @@ function buildContentTypesXml(options: { header?: boolean; footer?: boolean } = 
   }
   if (options.footer) {
     xml += `<Override PartName="/word/footer1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/>`
+  }
+  const imageCount = options.imageCount ?? 0
+  for (let index = 0; index < imageCount; index += 1) {
+    xml += `<Override PartName="/word/media/image${index + 1}.png" ContentType="image/png"/>`
   }
   xml += `</Types>`
   return xml
@@ -4762,7 +4798,9 @@ function buildPackageRelsXml(): string {
   )
 }
 
-function buildDocumentRelsXml(options: { header?: boolean; footer?: boolean } = {}): string {
+function buildDocumentRelsXml(
+  options: { header?: boolean; footer?: boolean; imageCount?: number } = {}
+): string {
   let xml =
     `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
     `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
@@ -4772,6 +4810,10 @@ function buildDocumentRelsXml(options: { header?: boolean; footer?: boolean } = 
   }
   if (options.footer) {
     xml += `<Relationship Id="rIdFtr" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer1.xml"/>`
+  }
+  const imageCount = options.imageCount ?? 0
+  for (let index = 0; index < imageCount; index += 1) {
+    xml += `<Relationship Id="${docxImageRelId(index)}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/image${index + 1}.png"/>`
   }
   xml += `</Relationships>`
   return xml
@@ -4784,19 +4826,29 @@ function downloadDocx(
 ): void {
   const hasHeader = !!options.header
   const hasFooter = !!options.footer
-  const files: Array<{ name: string; content: string }> = [
+  const imageBlocks = blocks.filter(
+    (block): block is Extract<DocxBlock, { kind: 'image' }> => block.kind === 'image'
+  )
+  const imageCount = imageBlocks.length
+  const files: Array<{ name: string; content: string | Uint8Array }> = [
     {
       name: '[Content_Types].xml',
-      content: buildContentTypesXml({ header: hasHeader, footer: hasFooter }),
+      content: buildContentTypesXml({ header: hasHeader, footer: hasFooter, imageCount }),
     },
     { name: '_rels/.rels', content: buildPackageRelsXml() },
     {
       name: 'word/_rels/document.xml.rels',
-      content: buildDocumentRelsXml({ header: hasHeader, footer: hasFooter }),
+      content: buildDocumentRelsXml({ header: hasHeader, footer: hasFooter, imageCount }),
     },
     { name: 'word/numbering.xml', content: buildDocxNumberingXml() },
     { name: 'word/document.xml', content: buildDocxXml(blocks, options) },
   ]
+  imageBlocks.forEach((block, index) => {
+    files.push({
+      name: `word/media/image${index + 1}.png`,
+      content: block.png,
+    })
+  })
   if (options.header) {
     files.push({ name: 'word/header1.xml', content: buildDocxHeaderXml(options.header) })
   }
@@ -4929,7 +4981,7 @@ type PdfBlockStyle = {
   prefix: string
 }
 
-const PDF_BLOCK_STYLES: Record<DocxBlock['kind'], PdfBlockStyle> = {
+const PDF_BLOCK_STYLES: Record<Exclude<DocxBlock['kind'], 'image'>, PdfBlockStyle> = {
   title: {
     font: 'F2',
     size: 20,
@@ -5101,6 +5153,9 @@ function buildPdfBytes(blocks: DocxBlock[], options: DocxOptions = {}): Uint8Arr
   let cursorY = contentTop
 
   for (const block of blocks) {
+    if (block.kind === 'image') {
+      continue
+    }
     const style = PDF_BLOCK_STYLES[block.kind]
     const sanitized = sanitizeForPdf(block.text)
     const wrapped = wrapPdfText(
@@ -5235,608 +5290,6 @@ function downloadPdf(
   const blob = new Blob([bytes.buffer as ArrayBuffer], { type: 'application/pdf' })
   triggerBlobDownload(blob, filename)
 }
-
-const ICS201_TEMPLATE_URL = `${import.meta.env.BASE_URL}ics-201-incident-briefing.pdf`
-const ICS201_PAGE_CHAR_LIMIT = 300
-const ICS201_TEMPLATE_PAGE_COUNT = 4
-const ICS201_MAP_SKETCH_FIELD =
-  '3 MapSketch include sketch showing the total area of operations the incident sitearea overflight results trajectories impacted shorelines or other graphics depicting situational and response statusRow1'
-const ICS201_CURRENT_SITUATION_FIELD = '4 Current SituationRow1'
-const ICS201_OBJECTIVES_FIELD = 'RESPONSE OBJECTIVESRow1_2'
-const ICS201_SAFETY_FIELD = 'SAFETY MESSAGERow1_2'
-const ICS201_CURRENT_ACTIONS_FIELD = 'CURRENT ACTIONS STRATEGIES and TACTICSRow1_2'
-
-type Ics201TemplatePaginatedSection = {
-  sourcePageIndex: number
-  fieldName: string
-  text: string
-}
-
-function splitIcs201TextIntoPageChunks(text: string, limit = ICS201_PAGE_CHAR_LIMIT): string[] {
-  const trimmed = text.trim()
-  if (trimmed.length === 0) return ['']
-  if (trimmed.length <= limit) return [trimmed]
-
-  const chunks: string[] = []
-  let start = 0
-  while (start < trimmed.length) {
-    let end = Math.min(start + limit, trimmed.length)
-    if (end < trimmed.length) {
-      const slice = trimmed.slice(start, end)
-      const newlineAt = slice.lastIndexOf('\n')
-      if (newlineAt >= limit - 120) {
-        end = start + newlineAt + 1
-      }
-    }
-    chunks.push(trimmed.slice(start, end))
-    start = end
-  }
-  return chunks
-}
-
-function wrapPdfLinesForWidth(
-  text: string,
-  font: PDFFont,
-  fontSize: number,
-  maxWidth: number
-): string[] {
-  const lines: string[] = []
-  const paragraphs = text.split('\n')
-  for (const paragraph of paragraphs) {
-    const words = paragraph.split(/\s+/).filter(Boolean)
-    if (words.length === 0) {
-      lines.push('')
-      continue
-    }
-    let current = ''
-    for (const word of words) {
-      const candidate = current ? `${current} ${word}` : word
-      if (font.widthOfTextAtSize(candidate, fontSize) <= maxWidth) {
-        current = candidate
-        continue
-      }
-      if (current) {
-        lines.push(current)
-        current = ''
-      }
-      if (font.widthOfTextAtSize(word, fontSize) <= maxWidth) {
-        current = word
-        continue
-      }
-      let remaining = word
-      while (remaining.length > 0) {
-        let cut = remaining.length
-        while (
-          cut > 1 &&
-          font.widthOfTextAtSize(remaining.slice(0, cut), fontSize) > maxWidth
-        ) {
-          cut -= 1
-        }
-        lines.push(remaining.slice(0, cut))
-        remaining = remaining.slice(cut)
-      }
-    }
-    if (current) {
-      lines.push(current)
-    }
-  }
-  return lines
-}
-
-function drawTextInWidgetRect(
-  page: PDFPage,
-  font: PDFFont,
-  rect: { x: number; y: number; width: number; height: number },
-  text: string,
-  options: { fontSize?: number; lineHeight?: number; maskBackground?: boolean } = {}
-): void {
-  const fontSize = options.fontSize ?? 9
-  const lineHeight = options.lineHeight ?? 11
-  const padding = 4
-
-  if (options.maskBackground) {
-    page.drawRectangle({
-      x: rect.x,
-      y: rect.y,
-      width: rect.width,
-      height: rect.height,
-      color: rgb(1, 1, 1),
-      borderWidth: 0,
-    })
-  }
-
-  const maxWidth = Math.max(1, rect.width - padding * 2)
-  const lines = wrapPdfLinesForWidth(text, font, fontSize, maxWidth)
-  let y = rect.y + rect.height - padding - fontSize
-  const minY = rect.y + padding
-  for (const line of lines) {
-    if (y < minY) break
-    page.drawText(line, {
-      x: rect.x + padding,
-      y,
-      size: fontSize,
-      font,
-      color: rgb(0, 0, 0),
-    })
-    y -= lineHeight
-  }
-}
-
-function getPdfTextFieldWidgetRect(
-  pdfForm: ReturnType<PDFDocument['getForm']>,
-  fieldName: string
-): { x: number; y: number; width: number; height: number } | null {
-  try {
-    const widget = pdfForm.getTextField(fieldName).acroField.getWidgets()[0]
-    return widget.getRectangle()
-  } catch {
-    return null
-  }
-}
-
-async function fillIcs201TemplatePdf(
-  form: Ics201FormState,
-  paginated: boolean
-): Promise<Uint8Array> {
-  const response = await fetch(ICS201_TEMPLATE_URL)
-  if (!response.ok) {
-    throw new Error(`Unable to load ICS-201 template (${response.status})`)
-  }
-  const templateBytes = await response.arrayBuffer()
-  const blankTemplate = paginated ? await PDFDocument.load(templateBytes) : null
-  const pdfDoc = await PDFDocument.load(templateBytes)
-  const pdfForm = pdfDoc.getForm()
-  const fieldNames = new Set(pdfForm.getFields().map((field) => field.getName()))
-
-  const setText = (name: string, value: string) => {
-    if (!fieldNames.has(name)) return
-    try {
-      const field = pdfForm.getTextField(name)
-      // Most fields in this template are rich-text; disabling rich formatting
-      // lets us write plain values and avoids pdf-lib's rich-text read errors.
-      field.disableRichFormatting()
-      field.setText(value ?? '')
-    } catch {
-      // Field exists but is not a writable text field — skip rather than fail.
-    }
-  }
-
-  const clean = (value: string | undefined | null) => (value ?? '').trim()
-  const joinNonEmpty = (parts: Array<string | undefined | null>, separator: string) =>
-    parts.map((part) => clean(part)).filter((part) => part.length > 0).join(separator)
-
-  const operationalPeriod = joinNonEmpty(
-    [
-      form.operationalPeriodStart.replace('T', ' '),
-      form.operationalPeriodEnd ? `To: ${form.operationalPeriodEnd.replace('T', ' ')}` : '',
-    ],
-    '   '
-  )
-
-  const mapSketchText =
-    form.mapSketchPolygon.length > 0
-      ? 'Polygon vertices (lat, lon):\n' +
-        form.mapSketchPolygon
-          .map(
-            (vertex, index) =>
-              `${index + 1}. ${vertex.latitude.toFixed(5)}, ${vertex.longitude.toFixed(5)}`
-          )
-          .join('\n')
-      : ''
-
-  const currentSituation = clean(form.currentSituationSummary)
-
-  const objectivesText = form.objectives
-    .filter((row) => row.objective.trim().length > 0)
-    .map((row, index) => formatIcs201ObjectiveExportLine(row, index))
-    .join('\n')
-
-  const safetyText = form.safetyAnalysis
-    .map((row, index) => {
-      const parts = joinNonEmpty(
-        [
-          row.hazard ? `Hazard: ${row.hazard}` : '',
-          row.mitigation ? `Mitigation: ${row.mitigation}` : '',
-          row.ppe ? `PPE: ${row.ppe}` : '',
-          row.medicalPlan ? `Medical: ${row.medicalPlan}` : '',
-        ],
-        ' | '
-      )
-      return parts.length > 0 ? `${index + 1}. ${parts}` : ''
-    })
-    .filter((line) => line.length > 0)
-    .join('\n')
-
-  const formatAction = (action: Ics201ActionRow) => {
-    const meta = joinNonEmpty(
-      [
-        action.owner ? `Owner: ${action.owner}` : '',
-        action.startTime ? `Start: ${action.startTime}` : '',
-        action.endTime ? `End: ${action.endTime}` : '',
-        action.status ? `Status: ${action.status}` : '',
-      ],
-      ' · '
-    )
-    const task = clean(action.task)
-    if (task.length === 0 && meta.length === 0) return ''
-    return meta.length > 0 ? `${task} (${meta})` : task
-  }
-
-  const currentActionsText = form.actions
-    .filter((action) => action.status !== 'Planned')
-    .map(formatAction)
-    .filter((line) => line.length > 0)
-    .join('\n')
-  const plannedActionsText = form.actions
-    .filter((action) => action.status === 'Planned')
-    .map(formatAction)
-    .filter((line) => line.length > 0)
-    .join('\n')
-
-  const templateSections: Ics201TemplatePaginatedSection[] = paginated
-    ? [
-        { sourcePageIndex: 0, fieldName: ICS201_MAP_SKETCH_FIELD, text: mapSketchText },
-        { sourcePageIndex: 1, fieldName: ICS201_OBJECTIVES_FIELD, text: objectivesText },
-        { sourcePageIndex: 1, fieldName: ICS201_SAFETY_FIELD, text: safetyText },
-      ]
-    : []
-
-  const writeSectionText = (fieldName: string, text: string) => {
-    if (!paginated) {
-      setText(fieldName, text)
-      return
-    }
-    const isPaginatedSection = templateSections.some(
-      (section) => section.fieldName === fieldName
-    )
-    if (!isPaginatedSection) {
-      setText(fieldName, text)
-      return
-    }
-    const chunks = splitIcs201TextIntoPageChunks(text)
-    setText(fieldName, chunks[0] ?? '')
-  }
-
-  const helvetica = await pdfDoc.embedFont(StandardFonts.Helvetica)
-  const situationRect = getPdfTextFieldWidgetRect(pdfForm, ICS201_CURRENT_SITUATION_FIELD)
-  const situationChunks = paginated
-    ? splitIcs201TextIntoPageChunks(currentSituation)
-    : [currentSituation]
-
-  // Draw Current Situation directly so stale rich-text appearances never leak demo/legacy text.
-  setText(ICS201_CURRENT_SITUATION_FIELD, '')
-  try {
-    const situationField = pdfForm.getTextField(ICS201_CURRENT_SITUATION_FIELD)
-    situationField.disableRichFormatting()
-    situationField.updateAppearances(helvetica)
-  } catch {
-    // Field may not support appearance refresh; drawn text below is authoritative.
-  }
-  if (situationRect) {
-    const page0 = pdfDoc.getPage(0)
-    const firstChunk = situationChunks[0] ?? ''
-    if (firstChunk.length > 0) {
-      drawTextInWidgetRect(page0, helvetica, situationRect, firstChunk, {
-        maskBackground: true,
-      })
-    } else {
-      drawTextInWidgetRect(page0, helvetica, situationRect, '', { maskBackground: true })
-    }
-  }
-
-  setText('1 Incident NameRow1', form.incidentName)
-  setText('From', operationalPeriod)
-  writeSectionText(ICS201_MAP_SKETCH_FIELD, mapSketchText)
-
-  writeSectionText(ICS201_OBJECTIVES_FIELD, objectivesText)
-  writeSectionText(ICS201_SAFETY_FIELD, safetyText)
-  const actionsBlock = joinNonEmpty(
-    [
-      currentActionsText ? `CURRENT ACTIONS, STRATEGIES, and TACTICS:\n${currentActionsText}` : '',
-      plannedActionsText ? `PLANNED ACTIONS:\n${plannedActionsText}` : '',
-    ],
-    '\n\n'
-  )
-  if (paginated) {
-    templateSections.push({
-      sourcePageIndex: 1,
-      fieldName: ICS201_CURRENT_ACTIONS_FIELD,
-      text: actionsBlock,
-    })
-  }
-  writeSectionText(ICS201_CURRENT_ACTIONS_FIELD, actionsBlock)
-  setText('Text1', plannedActionsText)
-
-  const actionRowNumbers = [1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23]
-  form.actions.forEach((action, index) => {
-    if (index >= actionRowNumbers.length) return
-    const rowNumber = actionRowNumbers[index]
-    setText(`TIMERow${rowNumber}`, clean(action.startTime))
-    setText(`ACTIONSRow${rowNumber}`, formatAction(action))
-  })
-
-  setText('Incident Commander', form.orgChart.incidentCommander)
-  setText('Safety Officer', form.orgChart.safetyOfficer)
-  setText('Liaison Officer', form.orgChart.liaisonOfficer)
-  setText('Public Information Officer', form.orgChart.publicInformationOfficer)
-  setText('Operations SectionRow1', form.orgChart.operationsSectionChief)
-  setText('Planning SectionRow1', form.orgChart.planningSectionChief)
-  setText('Logistics SectionRow1', form.orgChart.logisticsSectionChief)
-  setText('Finance SectionRow1', form.orgChart.financeSectionChief)
-
-  form.resources.forEach((resource, index) => {
-    const rowNumber = index + 1
-    if (rowNumber > 13) return
-    setText(
-      `Resource OrderedRow${rowNumber}`,
-      joinNonEmpty([resource.quantity, resource.category], ' ')
-    )
-    setText(`DescriptionIdentificationRow${rowNumber}`, resource.identifier)
-    setText(
-      `LocationAssignmentStatusRow${rowNumber}`,
-      joinNonEmpty(
-        [resource.assignment, resource.status ? `(${resource.status})` : ''],
-        ' '
-      )
-    )
-  })
-
-  setText(
-    'NamePosition',
-    joinNonEmpty([form.preparedByName || form.preparedBy, form.preparedByPositionTitle], ' / ')
-  )
-  setText(
-    'Date  TimeSignature',
-    joinNonEmpty(
-      [
-        form.preparedBySignature,
-        form.preparedDateTime ? `(${form.preparedDateTime})` : '',
-      ],
-      '  '
-    )
-  )
-
-  if (paginated && blankTemplate) {
-    const insertsAfterOriginalPage = Array.from(
-      { length: ICS201_TEMPLATE_PAGE_COUNT },
-      () => 0
-    )
-
-    if (situationChunks.length > 1 && situationRect) {
-      for (let chunkIndex = 1; chunkIndex < situationChunks.length; chunkIndex += 1) {
-        const [copiedPage] = await pdfDoc.copyPages(blankTemplate, [0])
-        const insertIndex = insertsAfterOriginalPage[0] + 1
-        pdfDoc.insertPage(insertIndex, copiedPage)
-        insertsAfterOriginalPage[0] += 1
-        for (let pageIndex = 1; pageIndex < insertsAfterOriginalPage.length; pageIndex += 1) {
-          insertsAfterOriginalPage[pageIndex] += 1
-        }
-        drawTextInWidgetRect(copiedPage, helvetica, situationRect, situationChunks[chunkIndex] ?? '', {
-          maskBackground: true,
-        })
-      }
-    }
-
-    for (const section of templateSections) {
-      const chunks = splitIcs201TextIntoPageChunks(section.text)
-      if (chunks.length <= 1) continue
-
-      const rect = getPdfTextFieldWidgetRect(pdfForm, section.fieldName)
-      if (!rect) continue
-
-      for (let chunkIndex = 1; chunkIndex < chunks.length; chunkIndex += 1) {
-        const [copiedPage] = await pdfDoc.copyPages(blankTemplate, [section.sourcePageIndex])
-        const insertIndex =
-          section.sourcePageIndex + insertsAfterOriginalPage[section.sourcePageIndex] + 1
-        pdfDoc.insertPage(insertIndex, copiedPage)
-        insertsAfterOriginalPage[section.sourcePageIndex] += 1
-        for (
-          let pageIndex = section.sourcePageIndex + 1;
-          pageIndex < insertsAfterOriginalPage.length;
-          pageIndex += 1
-        ) {
-          insertsAfterOriginalPage[pageIndex] += 1
-        }
-        drawTextInWidgetRect(copiedPage, helvetica, rect, chunks[chunkIndex] ?? '', {
-          maskBackground: true,
-        })
-      }
-    }
-  }
-
-  // Tell viewers to (re)generate field appearances from the written values.
-  // This template uses rich-text fields, so we skip pdf-lib's own appearance
-  // pass (which throws on rich-text) and rely on NeedAppearances instead.
-  pdfForm.acroForm.dict.set(PDFName.of('NeedAppearances'), PDFBool.True)
-
-  return pdfDoc.save({ updateFieldAppearances: false })
-}
-
-async function downloadIcs201TemplatePdf(
-  filename: string,
-  form: Ics201FormState,
-  paginated: boolean
-): Promise<void> {
-  const bytes = await fillIcs201TemplatePdf(form, paginated)
-  const blob = new Blob([bytes.buffer as ArrayBuffer], { type: 'application/pdf' })
-  triggerBlobDownload(blob, filename)
-}
-
-function buildIcs201DocxBlocks(form: Ics201FormState): DocxBlock[] {
-  const blocks: DocxBlock[] = []
-  const pushHeading = (text: string) => blocks.push({ kind: 'heading', text })
-  const pushParagraph = (text: string | undefined | null) => {
-    const trimmed = (text ?? '').trim()
-    if (trimmed.length === 0) return
-    blocks.push({ kind: 'paragraph', text: trimmed })
-  }
-  const pushBullet = (text: string | undefined | null) => {
-    const trimmed = (text ?? '').trim()
-    if (trimmed.length === 0) return
-    blocks.push({ kind: 'bullet', text: trimmed })
-  }
-  blocks.push({ kind: 'title', text: 'Incident Briefing (ICS-201)' })
-  const subtitleParts: string[] = []
-  if (form.incidentName.trim()) subtitleParts.push(form.incidentName.trim())
-  if (form.incidentNumber.trim()) subtitleParts.push(`Incident #${form.incidentNumber.trim()}`)
-  if (subtitleParts.length > 0) {
-    blocks.push({ kind: 'subtitle', text: subtitleParts.join(' • ') })
-  }
-  pushHeading('Header')
-  pushParagraph(form.incidentName && `Incident Name: ${form.incidentName}`)
-  pushParagraph(form.incidentNumber && `Incident Number: ${form.incidentNumber}`)
-  pushParagraph(form.incidentLocation && `Incident Location: ${form.incidentLocation}`)
-  if (form.dateInitiated.trim() || form.timeInitiated.trim()) {
-    pushParagraph(
-      `Date/Time Initiated: ${form.dateInitiated.trim() || '—'} ${form.timeInitiated.trim()}`.trim()
-    )
-  }
-  pushParagraph(form.preparedDateTime && `Date / Time Prepared: ${form.preparedDateTime}`)
-  pushParagraph(form.preparedBy && `Prepared By: ${form.preparedBy}`)
-  if (form.operationalPeriodStart.trim() || form.operationalPeriodEnd.trim()) {
-    const opStart = form.operationalPeriodStart.trim().replace('T', ' ') || '—'
-    const opEnd = form.operationalPeriodEnd.trim().replace('T', ' ') || '—'
-    pushParagraph(`Operational Period: ${opStart} → ${opEnd}`)
-  }
-  pushParagraph(form.jurisdiction && `Jurisdiction / Agency: ${form.jurisdiction}`)
-  pushHeading('Map Sketch')
-  if (form.mapSketchPolygon.length === 0) {
-    pushParagraph('No incident perimeter drawn yet.')
-  } else {
-    pushParagraph(
-      `Incident perimeter polygon — ${form.mapSketchPolygon.length} vertices (WGS84):`
-    )
-    form.mapSketchPolygon.forEach((vertex, index) => {
-      pushBullet(
-        `Vertex ${index + 1}: ${vertex.latitude.toFixed(6)}, ${vertex.longitude.toFixed(6)}`
-      )
-    })
-  }
-  pushHeading('Current Situation')
-  pushParagraph(form.currentSituationSummary)
-  if (form.weatherForecast.trim()) {
-    pushHeading('Weather Forecast')
-    pushParagraph(form.weatherForecast)
-  }
-  if (form.projectedIncidentCourse.trim()) {
-    pushHeading('Projected Incident Course')
-    pushParagraph(form.projectedIncidentCourse)
-  }
-  pushHeading('Objectives')
-  if (form.objectives.length === 0) {
-    pushParagraph('No objectives recorded.')
-  } else {
-    form.objectives.forEach((row, index) => {
-      pushBullet(formatIcs201ObjectiveExportLine(row, index).replace(/^\d+\.\s*/, ''))
-    })
-  }
-  pushHeading('Actions')
-  if (form.actions.length === 0) {
-    pushParagraph('No actions recorded.')
-  } else {
-    form.actions.forEach((action) => {
-      const meta: string[] = []
-      if (action.owner.trim()) meta.push(`Owner: ${action.owner.trim()}`)
-      if (action.startTime.trim()) meta.push(`Start: ${action.startTime.trim()}`)
-      if (action.endTime.trim()) meta.push(`End: ${action.endTime.trim()}`)
-      if (action.status.trim()) meta.push(`Status: ${action.status.trim()}`)
-      const text =
-        (action.task.trim() || 'Untitled action') +
-        (meta.length > 0 ? ` — ${meta.join(' · ')}` : '')
-      pushBullet(text)
-    })
-  }
-  pushHeading('Organization Chart')
-  const orgEntries: Array<[string, string]> = [
-    ['Incident Commander', form.orgChart.incidentCommander],
-    ['Operations Section Chief', form.orgChart.operationsSectionChief],
-    ['Planning Section Chief', form.orgChart.planningSectionChief],
-    ['Logistics Section Chief', form.orgChart.logisticsSectionChief],
-    ['Finance Section Chief', form.orgChart.financeSectionChief],
-    ['Public Information Officer', form.orgChart.publicInformationOfficer],
-    ['Safety Officer', form.orgChart.safetyOfficer],
-    ['Liaison Officer', form.orgChart.liaisonOfficer],
-  ]
-  const populatedOrg = orgEntries.filter(([, name]) => name.trim().length > 0)
-  if (populatedOrg.length === 0) {
-    pushParagraph('No organization chart entries recorded.')
-  } else {
-    populatedOrg.forEach(([role, name]) => pushBullet(`${role}: ${name.trim()}`))
-  }
-  pushHeading('Resources Summary')
-  if (form.resources.length === 0) {
-    pushParagraph('No resources recorded.')
-  } else {
-    form.resources.forEach((resource) => {
-      const head: string[] = []
-      if (resource.category.trim()) head.push(resource.category.trim())
-      if (resource.identifier.trim()) head.push(resource.identifier.trim())
-      const meta: string[] = []
-      if (resource.quantity.trim()) meta.push(`Qty: ${resource.quantity.trim()}`)
-      if (resource.status.trim()) meta.push(`Status: ${resource.status.trim()}`)
-      if (resource.assignment.trim()) meta.push(`Assignment: ${resource.assignment.trim()}`)
-      const text =
-        (head.join(' — ') || 'Resource') +
-        (meta.length > 0 ? ` (${meta.join(' · ')})` : '')
-      pushBullet(text)
-    })
-  }
-  pushHeading('Safety Analysis')
-  if (form.safetyAnalysis.length === 0) {
-    pushParagraph('No safety analysis recorded.')
-  } else {
-    form.safetyAnalysis.forEach((safety, index) => {
-      pushParagraph(`Row ${index + 1}`)
-      pushParagraph(safety.hazard && `Hazard: ${safety.hazard}`)
-      pushParagraph(safety.mitigation && `Mitigation: ${safety.mitigation}`)
-      pushParagraph(safety.ppe && `PPE: ${safety.ppe}`)
-      pushParagraph(safety.medicalPlan && `Medical Plan: ${safety.medicalPlan}`)
-    })
-  }
-  return blocks
-}
-
-function buildIcs201ExportOptions(form: Ics201FormState): DocxOptions {
-  const dateTimeInitiated = [form.dateInitiated.trim(), form.timeInitiated.trim()]
-    .filter(Boolean)
-    .join(' ')
-  return {
-    header: {
-      topLines: [
-        'DEPARTMENT OF HOMELAND SECURITY',
-        'MARATHON',
-        'INCIDENT BRIEFING (ICS 201-CG)',
-      ],
-      cells: [
-        { label: '1. Incident Name:', value: form.incidentName },
-        { label: '2. Incident Location:', value: form.incidentLocation },
-        { label: '3. Date / Time Initiated:', value: dateTimeInitiated },
-      ],
-    },
-    footer: {
-      topLines: ['Prepared by:'],
-      cells: [
-        {
-          label: 'Name:',
-          value: form.preparedByName || form.preparedBy,
-        },
-        {
-          label: 'Position/Title:',
-          value: form.preparedByPositionTitle,
-        },
-        {
-          label: 'Signature:',
-          value: form.preparedBySignature,
-        },
-        {
-          label: 'Date/Time:',
-          value: form.preparedDateTime,
-        },
-      ],
-    },
-  }
-}
-
 
 type SitrepDocxCollaborator = {
   name: string
@@ -7587,7 +7040,9 @@ function App() {
     if (edited.length !== original.length) return true
     return edited.some((block, index) => {
       const originalBlock = original[index]
-      return !originalBlock || originalBlock.kind !== block.kind || originalBlock.text !== block.text
+      if (!originalBlock || originalBlock.kind !== block.kind) return true
+      if (block.kind === 'image' || originalBlock.kind === 'image') return false
+      return originalBlock.text !== block.text
     })
   }
   const mutateDocBlocks = (
@@ -7804,31 +7259,71 @@ function App() {
     ics201StructureMode === 'strict' || ics201StructureMode === 'paginated'
   const [isIcs201PreviewOpen, setIsIcs201PreviewOpen] = useState(false)
   const [ics201PreviewBlocks, setIcs201PreviewBlocks] = useState<DocxBlock[]>([])
+  const [ics201PreviewMapSketchDataUrl, setIcs201PreviewMapSketchDataUrl] = useState<string | null>(
+    null
+  )
   const [ics201PreviewTitle, setIcs201PreviewTitle] = useState('ICS-201 Preview')
-  const exportIcs201Pdf = (filename: string, form: Ics201FormState) => {
+  const captureIcs201MapSketchForExport = useCallback(
+    async (form: Ics201FormState): Promise<Uint8Array | null> => {
+      const toastId = toast.loading('Capturing map sketch…')
+      try {
+        const png = await captureMapSketchPngForForm(form)
+        if (!png && form.mapSketchPolygon.length >= 3) {
+          toast.warning('Map sketch image could not be captured. Export will use a fallback.', {
+            id: toastId,
+          })
+          return null
+        }
+        toast.dismiss(toastId)
+        return png
+      } catch {
+        toast.warning('Map sketch image could not be captured. Export will use a fallback.', {
+          id: toastId,
+        })
+        return null
+      }
+    },
+    []
+  )
+  const exportIcs201Pdf = async (filename: string, form: Ics201FormState) => {
     const exportForm = cloneIcs201FormState(form)
+    const mapSketchPng = await captureIcs201MapSketchForExport(exportForm)
     if (ics201UsesOfficialTemplatePdf) {
-      void downloadIcs201TemplatePdf(
-        filename,
-        exportForm,
-        ics201StructureMode === 'paginated'
-      ).catch(() => {
+      try {
+        await downloadIcs201TemplatePdf(
+          filename,
+          exportForm,
+          ics201StructureMode === 'paginated',
+          mapSketchPng
+        )
+      } catch {
         toast.error(
           'Could not write to the official ICS-201 form. Exported the standard PDF layout instead.'
         )
-        downloadPdf(
-          filename,
-          buildIcs201DocxBlocks(exportForm),
-          buildIcs201ExportOptions(exportForm)
-        )
-      })
+        await downloadIcs201FlexiblePdf(filename, exportForm, mapSketchPng)
+      }
       return
     }
-    downloadPdf(
+    await downloadIcs201FlexiblePdf(filename, exportForm, mapSketchPng)
+  }
+  const exportIcs201Docx = async (filename: string, form: Ics201FormState) => {
+    const exportForm = cloneIcs201FormState(form)
+    const mapSketchPng = await captureIcs201MapSketchForExport(exportForm)
+    downloadDocx(
       filename,
-      buildIcs201DocxBlocks(exportForm),
+      buildIcs201DocxBlocks(exportForm, mapSketchPng),
       buildIcs201ExportOptions(exportForm)
     )
+  }
+  const openIcs201Preview = async (form: Ics201FormState) => {
+    const exportForm = cloneIcs201FormState(form)
+    const mapSketchPng = await captureIcs201MapSketchForExport(exportForm)
+    setIcs201PreviewBlocks(buildIcs201DocxBlocks(exportForm, mapSketchPng))
+    setIcs201PreviewMapSketchDataUrl(
+      mapSketchPng && mapSketchPng.byteLength > 0 ? pngBytesToDataUrl(mapSketchPng) : null
+    )
+    setIcs201PreviewTitle(`ICS-201 Preview — ${exportForm.incidentName.trim() || 'Incident'}`)
+    setIsIcs201PreviewOpen(true)
   }
   const [ics201EditingObjectives, setIcs201EditingObjectives] = useState(false)
   const [ics201EditingActions, setIcs201EditingActions] = useState(false)
@@ -15818,8 +15313,17 @@ function App() {
     if (ics201CurrentSituationEditor.isLiveConnected) {
       form.currentSituationSummary = ics201CurrentSituationEditor.value
     }
+    if (ics201EditingMapSketch) {
+      form.mapSketchPolygon = ics201MapSketchDraft.map((vertex) => ({ ...vertex }))
+    }
     return form
-  }, [ics201CurrentSituationEditor.isLiveConnected, ics201CurrentSituationEditor.value, ics201Form])
+  }, [
+    ics201CurrentSituationEditor.isLiveConnected,
+    ics201CurrentSituationEditor.value,
+    ics201EditingMapSketch,
+    ics201Form,
+    ics201MapSketchDraft,
+  ])
   const ics201ObjectivesEditor = useIcs201ObjectivesSectionEditor({
     enabled: isSupabaseEnabled,
     active: ics201EditingObjectives && canEditIcs201Form,
@@ -29488,12 +28992,10 @@ function App() {
                         <DropdownMenuSeparator />
                         <DropdownMenuItem
                           onSelect={() => {
-                            const exportForm = getIcs201FormWithLiveSections()
-                            setIcs201PreviewBlocks(buildIcs201DocxBlocks(exportForm))
-                            setIcs201PreviewTitle(
-                              `ICS-201 Preview — ${exportForm.incidentName.trim() || 'Incident'}`
-                            )
-                            setIsIcs201PreviewOpen(true)
+                            void (async () => {
+                              await ics201CurrentSituationEditor.persistNow()
+                              await openIcs201Preview(getIcs201FormWithLiveSections())
+                            })()
                           }}
                         >
                           <Eye className="mr-2 h-4 w-4" />
@@ -29502,19 +29004,21 @@ function App() {
                         <DropdownMenuSeparator />
                         <DropdownMenuItem
                           onSelect={() => {
-                            const exportForm = getIcs201FormWithLiveSections()
-                            const safeIncident =
-                              exportForm.incidentName.trim().replace(/[^a-zA-Z0-9-_]+/g, '_') ||
-                              'Incident'
-                            const stamp = new Date()
-                              .toISOString()
-                              .slice(0, 16)
-                              .replace(/[:T]/g, '-')
-                            downloadDocx(
-                              `ICS-201_${safeIncident}_${stamp}.docx`,
-                              buildIcs201DocxBlocks(exportForm),
-                              buildIcs201ExportOptions(exportForm)
-                            )
+                            void (async () => {
+                              await ics201CurrentSituationEditor.persistNow()
+                              const exportForm = getIcs201FormWithLiveSections()
+                              const safeIncident =
+                                exportForm.incidentName.trim().replace(/[^a-zA-Z0-9-_]+/g, '_') ||
+                                'Incident'
+                              const stamp = new Date()
+                                .toISOString()
+                                .slice(0, 16)
+                                .replace(/[:T]/g, '-')
+                              await exportIcs201Docx(
+                                `ICS-201_${safeIncident}_${stamp}.docx`,
+                                exportForm
+                              )
+                            })()
                           }}
                         >
                           <FileText className="mr-2 h-4 w-4" />
@@ -29522,19 +29026,21 @@ function App() {
                         </DropdownMenuItem>
                         <DropdownMenuItem
                           onSelect={() => {
-                            void ics201CurrentSituationEditor.persistNow()
-                            const exportForm = getIcs201FormWithLiveSections()
-                            const safeIncident =
-                              exportForm.incidentName.trim().replace(/[^a-zA-Z0-9-_]+/g, '_') ||
-                              'Incident'
-                            const stamp = new Date()
-                              .toISOString()
-                              .slice(0, 16)
-                              .replace(/[:T]/g, '-')
-                            exportIcs201Pdf(
-                              `ICS-201_${safeIncident}_${stamp}.pdf`,
-                              exportForm
-                            )
+                            void (async () => {
+                              await ics201CurrentSituationEditor.persistNow()
+                              const exportForm = getIcs201FormWithLiveSections()
+                              const safeIncident =
+                                exportForm.incidentName.trim().replace(/[^a-zA-Z0-9-_]+/g, '_') ||
+                                'Incident'
+                              const stamp = new Date()
+                                .toISOString()
+                                .slice(0, 16)
+                                .replace(/[:T]/g, '-')
+                              await exportIcs201Pdf(
+                                `ICS-201_${safeIncident}_${stamp}.pdf`,
+                                exportForm
+                              )
+                            })()
                           }}
                         >
                           <FileText className="mr-2 h-4 w-4" />
@@ -33537,19 +33043,15 @@ function App() {
                         periodNumber={formsOperationalPeriodView as number}
                         glassItemBorderClasses={glassItemBorderClasses}
                         onExportWord={(exportForm) => {
-                          const stamp = new Date().toISOString().slice(0, 10)
-                          downloadDocx(
-                            `ICS-201_${exportForm.incidentName.trim().replace(/[^a-zA-Z0-9-_]+/g, '_') || 'Incident'}_${stamp}.docx`,
-                            buildIcs201DocxBlocks(exportForm),
-                            buildIcs201ExportOptions(exportForm)
+                          void exportIcs201Docx(
+                            `ICS-201_${exportForm.incidentName.trim().replace(/[^a-zA-Z0-9-_]+/g, '_') || 'Incident'}_${new Date().toISOString().slice(0, 10)}.docx`,
+                            exportForm
                           )
                         }}
                         onExportPdf={(exportForm) => {
-                          const stamp = new Date().toISOString().slice(0, 10)
-                          downloadPdf(
-                            `ICS-201_${exportForm.incidentName.trim().replace(/[^a-zA-Z0-9-_]+/g, '_') || 'Incident'}_${stamp}.pdf`,
-                            buildIcs201DocxBlocks(exportForm),
-                            buildIcs201ExportOptions(exportForm)
+                          void exportIcs201Pdf(
+                            `ICS-201_${exportForm.incidentName.trim().replace(/[^a-zA-Z0-9-_]+/g, '_') || 'Incident'}_${new Date().toISOString().slice(0, 10)}.pdf`,
+                            exportForm
                           )
                         }}
                       />
@@ -39786,7 +39288,15 @@ function App() {
           exportIcs204aPdf(ics204aDialog.formId, ics204aDialog.rowId, nextForm, blocks)
         }}
       />
-      <Dialog open={isIcs201PreviewOpen} onOpenChange={setIsIcs201PreviewOpen}>
+      <Dialog
+        open={isIcs201PreviewOpen}
+        onOpenChange={(open) => {
+          setIsIcs201PreviewOpen(open)
+          if (!open) {
+            setIcs201PreviewMapSketchDataUrl(null)
+          }
+        }}
+      >
         <DialogContent className="!w-[70vw] !max-w-[70vw] sm:!max-w-[70vw]">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-sm font-semibold">
@@ -39838,13 +39348,22 @@ function App() {
                     }
                     if (block.kind === 'heading') {
                       return (
-                        <h2
-                          key={`preview-${index}`}
-                          className="mt-5 border-b border-zinc-200 pb-1 text-sm font-semibold uppercase tracking-wide text-zinc-700"
-                        >
-                          {block.text}
-                        </h2>
+                        <div key={`preview-${index}`}>
+                          <h2 className="mt-5 border-b border-zinc-200 pb-1 text-sm font-semibold uppercase tracking-wide text-zinc-700">
+                            {block.text}
+                          </h2>
+                          {block.text === 'Map Sketch' && ics201PreviewMapSketchDataUrl ? (
+                            <img
+                              src={ics201PreviewMapSketchDataUrl}
+                              alt="ICS-201 map sketch preview"
+                              className="mt-2 max-h-80 w-full rounded border object-contain"
+                            />
+                          ) : null}
+                        </div>
                       )
+                    }
+                    if (block.kind === 'image') {
+                      return null
                     }
                     if (block.kind === 'bullet') {
                       return (
@@ -39890,18 +39409,20 @@ function App() {
               variant="outline"
               className="h-8 gap-1 text-xs"
               onClick={() => {
-                void ics201CurrentSituationEditor.persistNow()
-                const exportForm = getIcs201FormWithLiveSections()
-                const safeIncident =
-                  exportForm.incidentName.trim().replace(/[^a-zA-Z0-9-_]+/g, '_') || 'Incident'
-                const stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-')
-                downloadDocx(
-                  `ICS-201_${safeIncident}_${stamp}.docx`,
-                  ics201PreviewBlocks.length > 0
-                    ? ics201PreviewBlocks
-                    : buildIcs201DocxBlocks(exportForm),
-                  buildIcs201ExportOptions(exportForm)
-                )
+                void (async () => {
+                  await ics201CurrentSituationEditor.persistNow()
+                  const exportForm = getIcs201FormWithLiveSections()
+                  const safeIncident =
+                    exportForm.incidentName.trim().replace(/[^a-zA-Z0-9-_]+/g, '_') || 'Incident'
+                  const stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-')
+                  downloadDocx(
+                    `ICS-201_${safeIncident}_${stamp}.docx`,
+                    ics201PreviewBlocks.length > 0
+                      ? ics201PreviewBlocks
+                      : buildIcs201DocxBlocks(exportForm),
+                    buildIcs201ExportOptions(exportForm)
+                  )
+                })()
               }}
             >
               <FileText className="h-3.5 w-3.5" />
@@ -39912,15 +39433,14 @@ function App() {
               size="sm"
               className="h-8 gap-1 bg-blue-600 text-xs text-white hover:bg-blue-700"
               onClick={() => {
-                void ics201CurrentSituationEditor.persistNow()
-                const exportForm = getIcs201FormWithLiveSections()
-                const safeIncident =
-                  exportForm.incidentName.trim().replace(/[^a-zA-Z0-9-_]+/g, '_') || 'Incident'
-                const stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-')
-                exportIcs201Pdf(
-                  `ICS-201_${safeIncident}_${stamp}.pdf`,
-                  exportForm
-                )
+                void (async () => {
+                  await ics201CurrentSituationEditor.persistNow()
+                  const exportForm = getIcs201FormWithLiveSections()
+                  const safeIncident =
+                    exportForm.incidentName.trim().replace(/[^a-zA-Z0-9-_]+/g, '_') || 'Incident'
+                  const stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-')
+                  await exportIcs201Pdf(`ICS-201_${safeIncident}_${stamp}.pdf`, exportForm)
+                })()
               }}
             >
               <FileText className="h-3.5 w-3.5" />
@@ -41510,6 +41030,9 @@ function App() {
                       </p>
                     )}
                     {blocks.map((block, index) => {
+                      if (block.kind === 'image') {
+                        return null
+                      }
                       const blockStyles =
                         block.kind === 'title'
                           ? 'text-2xl font-bold leading-tight text-foreground'
