@@ -1,6 +1,14 @@
 import type { Ics201SectionId } from '@/features/ics201/types'
 import { getIcs201SyncTransport } from '@/lib/ics201-sync-transport-supabase'
 
+/**
+ * Field key conventions (see ics201-cursor-bindings.ts):
+ * content | objective:{id} | reportInfo.{field} | incidentBriefing.{field}
+ * actions:{id}.{task|owner|startTime|endTime} | orgChart.{field}
+ * resources:{id}.{field} | safetyAnalysis:{id}.{field}
+ * mapSketch:{index}.lat|lng | map:draw (anchor=lat×1e6, head=lng×1e6)
+ */
+
 export type Ics201CursorState = {
   userId: string
   userColor: string

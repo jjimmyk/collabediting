@@ -24,13 +24,39 @@ export function createSupabaseIcs201Transport(): Ics201SyncTransport | null {
         })
       })
 
-      void channel.subscribe()
+      let isSubscribed = false
+      const pendingSends: Array<{ event: string; payload: Record<string, unknown> }> = []
+
+      const flushPending = () => {
+        if (!isSubscribed) return
+        while (pendingSends.length > 0) {
+          const next = pendingSends.shift()
+          if (!next) break
+          void channel.send({ type: 'broadcast', event: next.event, payload: next.payload })
+        }
+      }
+
+      void channel.subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          isSubscribed = true
+          flushPending()
+        }
+        if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
+          isSubscribed = false
+        }
+      })
 
       return {
         send(event, payload) {
+          if (!isSubscribed) {
+            pendingSends.push({ event, payload })
+            return
+          }
           void channel.send({ type: 'broadcast', event, payload })
         },
         unsubscribe() {
+          isSubscribed = false
+          pendingSends.length = 0
           void supabase.removeChannel(channel)
         },
       }

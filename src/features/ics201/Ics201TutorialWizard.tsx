@@ -78,7 +78,7 @@ function buildTutorialSteps(
       popover: {
         title: 'Edit sections',
         description:
-          'Use the pencil icon or click a section to edit. Current Situation and Objectives support live co-editing with teammate cursors. Changes autosave continuously; checkpoint versions are created when you pause or leave a section.',
+          'Use the pencil icon or click a section to edit. All sections show teammate cursors in near realtime while you co-edit—like Google Docs. Current Situation and Objectives also merge live text. Changes autosave continuously; checkpoint versions are created when you pause or leave a section.',
         side: 'right',
         align: 'start',
       },

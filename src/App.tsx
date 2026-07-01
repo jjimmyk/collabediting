@@ -837,6 +837,17 @@ import { EventsSettingsPage } from '@/components/EventsSettingsPage'
 import { NotificationSettingsPage } from '@/components/NotificationSettingsPage'
 import pratusLogo from '@/assets/pratus-logo.png'
 import { Ics201FieldFocusIndicators } from '@/features/ics201/Ics201FieldFocusIndicators'
+import {
+  encodeIcs201MapPointer,
+  Ics201MapSketchRemotePointers,
+  MAP_DRAW_FIELD_KEY,
+} from '@/features/ics201/Ics201MapSketchRemotePointers'
+import { Ics201RemoteCaretsOverlay } from '@/features/ics201/Ics201RemoteCaretsOverlay'
+import {
+  Ics201RemoteFieldCarets,
+  Ics201RemoteFieldCaretsView,
+  Ics201RemoteTextareaCarets,
+} from '@/features/ics201/Ics201RemoteFieldCarets'
 import { Ics201RemoteTextCursors } from '@/features/ics201/Ics201RemoteTextCursors'
 import { Ics201SaveStatusIndicator } from '@/features/ics201/Ics201SaveStatusIndicator'
 import { Ics201SectionEditorBadges } from '@/features/ics201/Ics201SectionEditorBadges'
@@ -974,7 +985,7 @@ import {
 import { useSitrepSync } from '@/hooks/useSitrepSync'
 import { fetchSitrepLiveSummaryForAor } from '@/lib/sitrep-service'
 import { useIcs201AggressiveAutosave } from '@/hooks/useIcs201AggressiveAutosave'
-import { useIcs201CursorSync } from '@/hooks/useIcs201CursorSync'
+import { useIcs201AllSectionCursors } from '@/hooks/useIcs201AllSectionCursors'
 import { useIcs201ObjectivesSectionEditor } from '@/hooks/useIcs201ObjectivesSectionEditor'
 import { useIcs201Presence } from '@/hooks/useIcs201Presence'
 import { useIcs201Sync } from '@/hooks/useIcs201Sync'
@@ -9827,6 +9838,24 @@ function App() {
           setIsDrawingIcs201Polygon(false)
           return
         }
+        if (event.state === 'active' && event.graphic?.geometry?.type === 'polygon') {
+          const geometry = event.graphic.geometry as Polygon
+          const projected = geometry.spatialReference?.isWebMercator
+            ? (webMercatorUtils.webMercatorToGeographic(geometry) as Polygon)
+            : geometry
+          const ring = projected.rings[0] ?? []
+          const last = ring[ring.length - 1]
+          if (last) {
+            const lng = last[0] ?? 0
+            const lat = last[1] ?? 0
+            const encoded = encodeIcs201MapPointer(lat, lng)
+            ics201MapSketchCursorPublishRef.current(
+              MAP_DRAW_FIELD_KEY,
+              encoded.anchor,
+              encoded.head
+            )
+          }
+        }
         if (event.state !== 'complete' || !event.graphic?.geometry) {
           return
         }
@@ -15266,41 +15295,28 @@ function App() {
     [profileEmail]
   )
   const ics201LastEditedSectionRef = useRef<Ics201SectionId | null>(null)
-  const ics201CurrentSituationCursor = useIcs201CursorSync({
-    enabled:
-      isSupabaseEnabled &&
-      ics201DocumentId !== null &&
-      (ics201EditingCurrentSituation || activeTab === 'briefing'),
+  const ics201SectionCursors = useIcs201AllSectionCursors({
+    baseEnabled: isSupabaseEnabled && ics201DocumentId !== null,
     documentId: ics201DocumentId,
-    sectionId: 'current-situation',
+    activeTab,
+    editingFlags: ics201EditingFlags,
     selfUserId: user?.id ?? null,
     selfColor: ics201SelfColor,
     selfInitials: ics201SelfInitials,
   })
-  const ics201ObjectivesCursor = useIcs201CursorSync({
-    enabled:
-      isSupabaseEnabled &&
-      ics201DocumentId !== null &&
-      (ics201EditingObjectives || activeTab === 'briefing'),
-    documentId: ics201DocumentId,
-    sectionId: 'objectives',
-    selfUserId: user?.id ?? null,
-    selfColor: ics201SelfColor,
-    selfInitials: ics201SelfInitials,
-  })
-  const ics201DraftSectionCursor = useIcs201CursorSync({
-    enabled:
-      isSupabaseEnabled &&
-      ics201DocumentId !== null &&
-      activeIcs201Section !== null &&
-      activeIcs201Section !== 'current-situation' &&
-      activeIcs201Section !== 'objectives',
-    documentId: ics201DocumentId,
-    sectionId: activeIcs201Section ?? 'report-info',
-    selfUserId: user?.id ?? null,
-    selfColor: ics201SelfColor,
-    selfInitials: ics201SelfInitials,
-  })
+  const {
+    'report-info': ics201ReportInfoCursor,
+    'incident-briefing': ics201IncidentBriefingCursor,
+    'map-sketch': ics201MapSketchCursor,
+    'current-situation': ics201CurrentSituationCursor,
+    objectives: ics201ObjectivesCursor,
+    actions: ics201ActionsCursor,
+    'org-chart': ics201OrgChartCursor,
+    resources: ics201ResourcesCursor,
+    'safety-analysis': ics201SafetyAnalysisCursor,
+  } = ics201SectionCursors
+  const ics201MapSketchCursorPublishRef = useRef(ics201MapSketchCursor.publishCursor)
+  ics201MapSketchCursorPublishRef.current = ics201MapSketchCursor.publishCursor
   const ics201VersionAuthorDisplay = useCallback(
     (version: Ics201Version) =>
       ics201VersionAuthorLabel(version, {
@@ -15535,18 +15551,10 @@ function App() {
   useEffect(() => {
     if (previousActiveIcs201SectionRef.current && !activeIcs201Section) {
       ics201AggressiveAutosave.onSectionBlur()
-      ics201CurrentSituationCursor.clearCursor()
-      ics201ObjectivesCursor.clearCursor()
-      ics201DraftSectionCursor.clearCursor()
+      Object.values(ics201SectionCursors).forEach((cursor) => cursor.clearCursor())
     }
     previousActiveIcs201SectionRef.current = activeIcs201Section
-  }, [
-    activeIcs201Section,
-    ics201AggressiveAutosave,
-    ics201CurrentSituationCursor,
-    ics201DraftSectionCursor,
-    ics201ObjectivesCursor,
-  ])
+  }, [activeIcs201Section, ics201AggressiveAutosave, ics201SectionCursors])
   useEffect(() => {
     if (ics201SyncError) {
       toast.error(ics201SyncError)
@@ -33338,9 +33346,14 @@ function App() {
                               1. Incident Name
                             </Label>
                             {ics201EditingReportInfo ? (
-                              <input
+                              <Ics201RemoteFieldCarets
+                                fieldKey="reportInfo.incidentName"
                                 autoFocus
                                 value={ics201ReportInfoDraft.incidentName}
+                                cursors={ics201ReportInfoCursor.remoteCursors}
+                                publish={ics201ReportInfoCursor.publishCursor}
+                                clear={ics201ReportInfoCursor.clearCursor}
+                                inputClassName="h-7"
                                 onChange={(event) =>
                                   setIcs201ReportInfoDraft((draft) => ({
                                     ...draft,
@@ -33348,14 +33361,13 @@ function App() {
                                   }))
                                 }
                                 placeholder="Incident name"
-                                className="h-7 w-full rounded-md border bg-transparent px-2 text-xs outline-none"
                               />
                             ) : (
-                              <div className="rounded-md border border-dashed border-border/60 bg-muted/20 px-2.5 py-2 text-xs">
-                                {ics201Form.incidentName || (
-                                  <span className="text-muted-foreground">—</span>
-                                )}
-                              </div>
+                              <Ics201RemoteFieldCaretsView
+                                fieldKey="reportInfo.incidentName"
+                                value={ics201Form.incidentName}
+                                cursors={ics201ReportInfoCursor.remoteCursors}
+                              />
                             )}
                           </div>
                           <div className="space-y-1">
@@ -33363,8 +33375,13 @@ function App() {
                               2. Incident Location
                             </Label>
                             {ics201EditingReportInfo ? (
-                              <input
+                              <Ics201RemoteFieldCarets
+                                fieldKey="reportInfo.incidentLocation"
                                 value={ics201ReportInfoDraft.incidentLocation}
+                                cursors={ics201ReportInfoCursor.remoteCursors}
+                                publish={ics201ReportInfoCursor.publishCursor}
+                                clear={ics201ReportInfoCursor.clearCursor}
+                                inputClassName="h-7"
                                 onChange={(event) =>
                                   setIcs201ReportInfoDraft((draft) => ({
                                     ...draft,
@@ -33372,14 +33389,13 @@ function App() {
                                   }))
                                 }
                                 placeholder="Incident location"
-                                className="h-7 w-full rounded-md border bg-transparent px-2 text-xs outline-none"
                               />
                             ) : (
-                              <div className="rounded-md border border-dashed border-border/60 bg-muted/20 px-2.5 py-2 text-xs">
-                                {ics201Form.incidentLocation || (
-                                  <span className="text-muted-foreground">—</span>
-                                )}
-                              </div>
+                              <Ics201RemoteFieldCaretsView
+                                fieldKey="reportInfo.incidentLocation"
+                                value={ics201Form.incidentLocation}
+                                cursors={ics201ReportInfoCursor.remoteCursors}
+                              />
                             )}
                           </div>
                           <div className="space-y-1">
@@ -33388,37 +33404,47 @@ function App() {
                             </Label>
                             {ics201EditingReportInfo ? (
                               <div className="flex items-center gap-1.5">
-                                <input
-                                  type="date"
+                                <Ics201RemoteFieldCarets
+                                  fieldKey="reportInfo.dateInitiated"
                                   value={ics201ReportInfoDraft.dateInitiated}
+                                  cursors={ics201ReportInfoCursor.remoteCursors}
+                                  publish={ics201ReportInfoCursor.publishCursor}
+                                  clear={ics201ReportInfoCursor.clearCursor}
+                                  inputClassName="h-7"
+                                  type="date"
                                   onChange={(event) =>
                                     setIcs201ReportInfoDraft((draft) => ({
                                       ...draft,
                                       dateInitiated: event.target.value,
                                     }))
                                   }
-                                  className="h-7 w-full rounded-md border bg-transparent px-2 text-xs outline-none"
                                 />
-                                <input
-                                  type="time"
+                                <Ics201RemoteFieldCarets
+                                  fieldKey="reportInfo.timeInitiated"
                                   value={ics201ReportInfoDraft.timeInitiated}
+                                  cursors={ics201ReportInfoCursor.remoteCursors}
+                                  publish={ics201ReportInfoCursor.publishCursor}
+                                  clear={ics201ReportInfoCursor.clearCursor}
+                                  inputClassName="h-7"
+                                  type="time"
                                   onChange={(event) =>
                                     setIcs201ReportInfoDraft((draft) => ({
                                       ...draft,
                                       timeInitiated: event.target.value,
                                     }))
                                   }
-                                  className="h-7 w-full rounded-md border bg-transparent px-2 text-xs outline-none"
                                 />
                               </div>
                             ) : (
-                              <div className="rounded-md border border-dashed border-border/60 bg-muted/20 px-2.5 py-2 text-xs">
-                                {ics201Form.dateInitiated || ics201Form.timeInitiated ? (
-                                  `${ics201Form.dateInitiated || '—'} ${ics201Form.timeInitiated || ''}`.trim()
-                                ) : (
-                                  <span className="text-muted-foreground">—</span>
-                                )}
-                              </div>
+                              <Ics201RemoteFieldCaretsView
+                                fieldKey="reportInfo.dateInitiated"
+                                value={
+                                  ics201Form.dateInitiated || ics201Form.timeInitiated
+                                    ? `${ics201Form.dateInitiated || '—'} ${ics201Form.timeInitiated || ''}`.trim()
+                                    : ''
+                                }
+                                cursors={ics201ReportInfoCursor.remoteCursors}
+                              />
                             )}
                           </div>
                         </div>
@@ -33459,8 +33485,13 @@ function App() {
                                 {field.label}
                               </Label>
                               {ics201EditingReportInfo ? (
-                                <input
+                                <Ics201RemoteFieldCarets
+                                  fieldKey={`reportInfo.${field.key}`}
                                   value={ics201ReportInfoDraft[field.key]}
+                                  cursors={ics201ReportInfoCursor.remoteCursors}
+                                  publish={ics201ReportInfoCursor.publishCursor}
+                                  clear={ics201ReportInfoCursor.clearCursor}
+                                  inputClassName="h-7"
                                   onChange={(event) =>
                                     setIcs201ReportInfoDraft((draft) => ({
                                       ...draft,
@@ -33468,14 +33499,13 @@ function App() {
                                     }))
                                   }
                                   placeholder={field.placeholder}
-                                  className="h-7 w-full rounded-md border bg-transparent px-2 text-xs outline-none"
                                 />
                               ) : (
-                                <div className="rounded-md border border-dashed border-border/60 bg-muted/20 px-2.5 py-2 text-xs">
-                                  {field.display || (
-                                    <span className="text-muted-foreground">—</span>
-                                  )}
-                                </div>
+                                <Ics201RemoteFieldCaretsView
+                                  fieldKey={`reportInfo.${field.key}`}
+                                  value={field.display}
+                                  cursors={ics201ReportInfoCursor.remoteCursors}
+                                />
                               )}
                             </div>
                           ))}
@@ -33560,9 +33590,13 @@ function App() {
                           >
                           {ics201EditingIncidentBriefing ? (
                             <div className="grid grid-cols-2 gap-2">
-                              <input
+                              <Ics201RemoteFieldCarets
+                                fieldKey="incidentBriefing.incidentName"
                                 autoFocus
                                 value={ics201IncidentBriefingDraft.incidentName}
+                                cursors={ics201IncidentBriefingCursor.remoteCursors}
+                                publish={ics201IncidentBriefingCursor.publishCursor}
+                                clear={ics201IncidentBriefingCursor.clearCursor}
                                 onChange={(event) =>
                                   setIcs201IncidentBriefingDraft((draft) => ({
                                     ...draft,
@@ -33570,10 +33604,13 @@ function App() {
                                   }))
                                 }
                                 placeholder="Incident Name"
-                                className="h-8 rounded-md border bg-transparent px-2 text-xs outline-none"
                               />
-                              <input
+                              <Ics201RemoteFieldCarets
+                                fieldKey="incidentBriefing.incidentNumber"
                                 value={ics201IncidentBriefingDraft.incidentNumber}
+                                cursors={ics201IncidentBriefingCursor.remoteCursors}
+                                publish={ics201IncidentBriefingCursor.publishCursor}
+                                clear={ics201IncidentBriefingCursor.clearCursor}
                                 onChange={(event) =>
                                   setIcs201IncidentBriefingDraft((draft) => ({
                                     ...draft,
@@ -33581,10 +33618,13 @@ function App() {
                                   }))
                                 }
                                 placeholder="Incident Number"
-                                className="h-8 rounded-md border bg-transparent px-2 text-xs outline-none"
                               />
-                              <input
+                              <Ics201RemoteFieldCarets
+                                fieldKey="incidentBriefing.preparedDateTime"
                                 value={ics201IncidentBriefingDraft.preparedDateTime}
+                                cursors={ics201IncidentBriefingCursor.remoteCursors}
+                                publish={ics201IncidentBriefingCursor.publishCursor}
+                                clear={ics201IncidentBriefingCursor.clearCursor}
                                 onChange={(event) =>
                                   setIcs201IncidentBriefingDraft((draft) => ({
                                     ...draft,
@@ -33592,10 +33632,13 @@ function App() {
                                   }))
                                 }
                                 placeholder="Date / Time Prepared"
-                                className="h-8 rounded-md border bg-transparent px-2 text-xs outline-none"
                               />
-                              <input
+                              <Ics201RemoteFieldCarets
+                                fieldKey="incidentBriefing.preparedBy"
                                 value={ics201IncidentBriefingDraft.preparedBy}
+                                cursors={ics201IncidentBriefingCursor.remoteCursors}
+                                publish={ics201IncidentBriefingCursor.publishCursor}
+                                clear={ics201IncidentBriefingCursor.clearCursor}
                                 onChange={(event) =>
                                   setIcs201IncidentBriefingDraft((draft) => ({
                                     ...draft,
@@ -33603,11 +33646,14 @@ function App() {
                                   }))
                                 }
                                 placeholder="Prepared By"
-                                className="h-8 rounded-md border bg-transparent px-2 text-xs outline-none"
                               />
-                              <input
+                              <Ics201RemoteFieldCarets
+                                fieldKey="incidentBriefing.operationalPeriodStart"
                                 type="datetime-local"
                                 value={ics201IncidentBriefingDraft.operationalPeriodStart}
+                                cursors={ics201IncidentBriefingCursor.remoteCursors}
+                                publish={ics201IncidentBriefingCursor.publishCursor}
+                                clear={ics201IncidentBriefingCursor.clearCursor}
                                 onChange={(event) =>
                                   setIcs201IncidentBriefingDraft((draft) => ({
                                     ...draft,
@@ -33615,11 +33661,14 @@ function App() {
                                   }))
                                 }
                                 placeholder="Operational Period Start"
-                                className="h-8 rounded-md border bg-transparent px-2 text-xs outline-none"
                               />
-                              <input
+                              <Ics201RemoteFieldCarets
+                                fieldKey="incidentBriefing.operationalPeriodEnd"
                                 type="datetime-local"
                                 value={ics201IncidentBriefingDraft.operationalPeriodEnd}
+                                cursors={ics201IncidentBriefingCursor.remoteCursors}
+                                publish={ics201IncidentBriefingCursor.publishCursor}
+                                clear={ics201IncidentBriefingCursor.clearCursor}
                                 onChange={(event) =>
                                   setIcs201IncidentBriefingDraft((draft) => ({
                                     ...draft,
@@ -33627,10 +33676,14 @@ function App() {
                                   }))
                                 }
                                 placeholder="Operational Period End"
-                                className="h-8 rounded-md border bg-transparent px-2 text-xs outline-none"
                               />
-                              <input
+                              <Ics201RemoteFieldCarets
+                                fieldKey="incidentBriefing.jurisdiction"
+                                className="col-span-2"
                                 value={ics201IncidentBriefingDraft.jurisdiction}
+                                cursors={ics201IncidentBriefingCursor.remoteCursors}
+                                publish={ics201IncidentBriefingCursor.publishCursor}
+                                clear={ics201IncidentBriefingCursor.clearCursor}
                                 onChange={(event) =>
                                   setIcs201IncidentBriefingDraft((draft) => ({
                                     ...draft,
@@ -33638,38 +33691,60 @@ function App() {
                                   }))
                                 }
                                 placeholder="Jurisdiction / Agency"
-                                className="col-span-2 h-8 rounded-md border bg-transparent px-2 text-xs outline-none"
                               />
                             </div>
                           ) : (
                             <div className="grid grid-cols-2 gap-2">
                               {[
-                                { label: 'Incident Name', value: ics201Form.incidentName },
-                                { label: 'Incident Number', value: ics201Form.incidentNumber },
-                                { label: 'Date / Time Prepared', value: ics201Form.preparedDateTime },
-                                { label: 'Prepared By', value: ics201Form.preparedBy },
                                 {
+                                  key: 'incidentBriefing.incidentName',
+                                  label: 'Incident Name',
+                                  value: ics201Form.incidentName,
+                                },
+                                {
+                                  key: 'incidentBriefing.incidentNumber',
+                                  label: 'Incident Number',
+                                  value: ics201Form.incidentNumber,
+                                },
+                                {
+                                  key: 'incidentBriefing.preparedDateTime',
+                                  label: 'Date / Time Prepared',
+                                  value: ics201Form.preparedDateTime,
+                                },
+                                {
+                                  key: 'incidentBriefing.preparedBy',
+                                  label: 'Prepared By',
+                                  value: ics201Form.preparedBy,
+                                },
+                                {
+                                  key: 'incidentBriefing.operationalPeriodStart',
                                   label: 'Operational Period Start',
                                   value: ics201Form.operationalPeriodStart.replace('T', ' '),
                                 },
                                 {
+                                  key: 'incidentBriefing.operationalPeriodEnd',
                                   label: 'Operational Period End',
                                   value: ics201Form.operationalPeriodEnd.replace('T', ' '),
                                 },
-                                { label: 'Jurisdiction / Agency', value: ics201Form.jurisdiction, span: 2 },
+                                {
+                                  key: 'incidentBriefing.jurisdiction',
+                                  label: 'Jurisdiction / Agency',
+                                  value: ics201Form.jurisdiction,
+                                  span: 2,
+                                },
                               ].map((field) => (
                                 <div
-                                  key={field.label}
+                                  key={field.key}
                                   className={field.span === 2 ? 'col-span-2 space-y-1' : 'space-y-1'}
                                 >
                                   <Label className="text-[11px] font-medium text-muted-foreground">
                                     {field.label}
                                   </Label>
-                                  <div className="rounded-md border border-dashed border-border/60 bg-muted/20 px-2.5 py-2 text-xs">
-                                    {field.value || (
-                                      <span className="text-muted-foreground">—</span>
-                                    )}
-                                  </div>
+                                  <Ics201RemoteFieldCaretsView
+                                    fieldKey={field.key}
+                                    value={field.value}
+                                    cursors={ics201IncidentBriefingCursor.remoteCursors}
+                                  />
                                 </div>
                               ))}
                             </div>
@@ -33804,8 +33879,14 @@ function App() {
                           <ItemDescription>
                             Draw the incident perimeter on the ArcGIS map to the right or enter coordinates manually.
                           </ItemDescription>
+                          <Ics201MapSketchRemotePointers
+                            cursors={ics201MapSketchCursor.remoteCursors}
+                            layerRef={ics201SketchLayerRef}
+                            refreshKey={activeTab}
+                          />
                           {ics201EditingMapSketch ? (
                             <>
+                              <Ics201FieldFocusIndicators cursors={ics201MapSketchCursor.remoteCursors} />
                               <div className="flex flex-wrap items-center gap-2 pt-1">
                                 <Button
                                   type="button"
@@ -33866,12 +33947,18 @@ function App() {
                                       <span className="text-[10px] font-medium text-muted-foreground">
                                         {index + 1}
                                       </span>
-                                      <input
+                                      <Ics201RemoteFieldCarets
+                                        fieldKey={`mapSketch:${index}.lat`}
                                         type="number"
                                         step="any"
                                         value={
-                                          Number.isFinite(vertex.latitude) ? vertex.latitude : ''
+                                          Number.isFinite(vertex.latitude) ? String(vertex.latitude) : ''
                                         }
+                                        cursors={ics201MapSketchCursor.remoteCursors}
+                                        publish={ics201MapSketchCursor.publishCursor}
+                                        clear={ics201MapSketchCursor.clearCursor}
+                                        aria-label={`Latitude for vertex ${index + 1}`}
+                                        placeholder="Latitude"
                                         onChange={(event) => {
                                           const raw = event.target.value
                                           const parsed = raw === '' ? 0 : Number(raw)
@@ -33888,16 +33975,21 @@ function App() {
                                             )
                                           )
                                         }}
-                                        aria-label={`Latitude for vertex ${index + 1}`}
-                                        placeholder="Latitude"
-                                        className="h-8 rounded-md border bg-transparent px-2 text-xs outline-none focus:ring-1 focus:ring-primary/40"
                                       />
-                                      <input
+                                      <Ics201RemoteFieldCarets
+                                        fieldKey={`mapSketch:${index}.lng`}
                                         type="number"
                                         step="any"
                                         value={
-                                          Number.isFinite(vertex.longitude) ? vertex.longitude : ''
+                                          Number.isFinite(vertex.longitude)
+                                            ? String(vertex.longitude)
+                                            : ''
                                         }
+                                        cursors={ics201MapSketchCursor.remoteCursors}
+                                        publish={ics201MapSketchCursor.publishCursor}
+                                        clear={ics201MapSketchCursor.clearCursor}
+                                        aria-label={`Longitude for vertex ${index + 1}`}
+                                        placeholder="Longitude"
                                         onChange={(event) => {
                                           const raw = event.target.value
                                           const parsed = raw === '' ? 0 : Number(raw)
@@ -33914,9 +34006,6 @@ function App() {
                                             )
                                           )
                                         }}
-                                        aria-label={`Longitude for vertex ${index + 1}`}
-                                        placeholder="Longitude"
-                                        className="h-8 rounded-md border bg-transparent px-2 text-xs outline-none focus:ring-1 focus:ring-primary/40"
                                       />
                                       <Button
                                         type="button"
@@ -34081,6 +34170,9 @@ function App() {
                                     ics201CurrentSituationEditor.reportSelection(event.currentTarget)
                                   }}
                                   onKeyUp={(event) => {
+                                    ics201CurrentSituationEditor.reportSelection(event.currentTarget)
+                                  }}
+                                  onInput={(event) => {
                                     ics201CurrentSituationEditor.reportSelection(event.currentTarget)
                                   }}
                                   onClick={(event) => {
@@ -34259,6 +34351,7 @@ function App() {
                                     <span>Objective</span>
                                     <span />
                                   </div>
+                                  <Ics201FieldFocusIndicators cursors={ics201ObjectivesCursor.remoteCursors} />
                                   {ics201ObjectivesEditor.objectives.map((row) => (
                                     <div
                                       key={`ics-objective-draft-${row.id}`}
@@ -34280,30 +34373,18 @@ function App() {
                                           </option>
                                         ))}
                                       </select>
-                                      <input
+                                      <Ics201RemoteFieldCarets
+                                        fieldKey={`objective:${row.id}`}
                                         value={row.objective}
+                                        cursors={ics201ObjectivesCursor.remoteCursors}
+                                        publish={ics201ObjectivesCursor.publishCursor}
+                                        clear={ics201ObjectivesCursor.clearCursor}
                                         onChange={(event) => {
                                           ics201ObjectivesEditor.updateObjectiveRow(row.id, {
                                             objective: event.target.value,
                                           })
                                         }}
-                                        onFocus={(event) => {
-                                          ics201ObjectivesCursor.publishCursor(
-                                            `objective:${row.id}`,
-                                            event.currentTarget.selectionStart ?? 0,
-                                            event.currentTarget.selectionEnd ?? 0
-                                          )
-                                        }}
-                                        onSelect={(event) => {
-                                          ics201ObjectivesCursor.publishCursor(
-                                            `objective:${row.id}`,
-                                            event.currentTarget.selectionStart ?? 0,
-                                            event.currentTarget.selectionEnd ?? 0
-                                          )
-                                        }}
-                                        onBlur={() => ics201ObjectivesCursor.clearCursor()}
                                         placeholder="Objective statement"
-                                        className="h-8 w-full rounded-md border bg-transparent px-2 text-xs outline-none"
                                       />
                                       <Button
                                         type="button"
@@ -34401,7 +34482,7 @@ function App() {
                             ).map((row, index) => (
                               <div
                                 key={`ics-objective-${row.id}`}
-                                className="rounded-md border border-dashed border-border/60 bg-muted/20 px-2.5 py-2 text-xs"
+                                className="relative rounded-md border border-dashed border-border/60 bg-muted/20 px-2.5 py-2 text-xs"
                               >
                                 <div className="flex items-start gap-2">
                                   <span className="text-[10px] font-medium text-muted-foreground">
@@ -34416,6 +34497,13 @@ function App() {
                                     <p>{row.objective || <span className="text-muted-foreground">—</span>}</p>
                                   </div>
                                 </div>
+                                <Ics201RemoteCaretsOverlay
+                                  value={row.objective}
+                                  cursors={ics201ObjectivesCursor.remoteCursors}
+                                  fieldKey={`objective:${row.id}`}
+                                  variant="singleline"
+                                  className="px-2.5 py-2 text-xs"
+                                />
                               </div>
                             ))
                           )}
@@ -34472,10 +34560,17 @@ function App() {
                           </div>
                           {ics201EditingActions ? (
                             <>
+                              <Ics201FieldFocusIndicators cursors={ics201ActionsCursor.remoteCursors} />
                               {ics201ActionsDraft.map((action) => (
                                 <div key={action.id} className="grid grid-cols-5 gap-2">
-                                  <input
+                                  <Ics201RemoteFieldCarets
+                                    fieldKey={`actions:${action.id}.task`}
+                                    className="col-span-2"
                                     value={action.task}
+                                    cursors={ics201ActionsCursor.remoteCursors}
+                                    publish={ics201ActionsCursor.publishCursor}
+                                    clear={ics201ActionsCursor.clearCursor}
+                                    placeholder="Action"
                                     onChange={(event) =>
                                       setIcs201ActionsDraft((draft) =>
                                         draft.map((entry) =>
@@ -34485,11 +34580,14 @@ function App() {
                                         )
                                       )
                                     }
-                                    placeholder="Action"
-                                    className="col-span-2 h-8 rounded-md border bg-transparent px-2 text-xs outline-none"
                                   />
-                                  <input
+                                  <Ics201RemoteFieldCarets
+                                    fieldKey={`actions:${action.id}.owner`}
                                     value={action.owner}
+                                    cursors={ics201ActionsCursor.remoteCursors}
+                                    publish={ics201ActionsCursor.publishCursor}
+                                    clear={ics201ActionsCursor.clearCursor}
+                                    placeholder="Owner"
                                     onChange={(event) =>
                                       setIcs201ActionsDraft((draft) =>
                                         draft.map((entry) =>
@@ -34499,11 +34597,14 @@ function App() {
                                         )
                                       )
                                     }
-                                    placeholder="Owner"
-                                    className="h-8 rounded-md border bg-transparent px-2 text-xs outline-none"
                                   />
-                                  <input
+                                  <Ics201RemoteFieldCarets
+                                    fieldKey={`actions:${action.id}.startTime`}
                                     value={action.startTime}
+                                    cursors={ics201ActionsCursor.remoteCursors}
+                                    publish={ics201ActionsCursor.publishCursor}
+                                    clear={ics201ActionsCursor.clearCursor}
+                                    placeholder="Start"
                                     onChange={(event) =>
                                       setIcs201ActionsDraft((draft) =>
                                         draft.map((entry) =>
@@ -34513,11 +34614,14 @@ function App() {
                                         )
                                       )
                                     }
-                                    placeholder="Start"
-                                    className="h-8 rounded-md border bg-transparent px-2 text-xs outline-none"
                                   />
-                                  <input
+                                  <Ics201RemoteFieldCarets
+                                    fieldKey={`actions:${action.id}.endTime`}
                                     value={action.endTime}
+                                    cursors={ics201ActionsCursor.remoteCursors}
+                                    publish={ics201ActionsCursor.publishCursor}
+                                    clear={ics201ActionsCursor.clearCursor}
+                                    placeholder="End"
                                     onChange={(event) =>
                                       setIcs201ActionsDraft((draft) =>
                                         draft.map((entry) =>
@@ -34527,8 +34631,6 @@ function App() {
                                         )
                                       )
                                     }
-                                    placeholder="End"
-                                    className="h-8 rounded-md border bg-transparent px-2 text-xs outline-none"
                                   />
                                 </div>
                               ))}
@@ -34623,6 +34725,7 @@ function App() {
                           </div>
                           {ics201EditingOrgChart ? (
                             <>
+                              <Ics201FieldFocusIndicators cursors={ics201OrgChartCursor.remoteCursors} />
                               <div className="grid grid-cols-2 gap-2">
                                 {(
                                   [
@@ -34636,17 +34739,20 @@ function App() {
                                     ['liaisonOfficer', 'Liaison Officer'],
                                   ] as const
                                 ).map(([field, placeholder]) => (
-                                  <input
+                                  <Ics201RemoteFieldCarets
                                     key={field}
+                                    fieldKey={`orgChart.${field}`}
                                     value={ics201OrgChartDraft[field]}
+                                    cursors={ics201OrgChartCursor.remoteCursors}
+                                    publish={ics201OrgChartCursor.publishCursor}
+                                    clear={ics201OrgChartCursor.clearCursor}
+                                    placeholder={placeholder}
                                     onChange={(event) =>
                                       setIcs201OrgChartDraft((draft) => ({
                                         ...draft,
                                         [field]: event.target.value,
                                       }))
                                     }
-                                    placeholder={placeholder}
-                                    className="h-8 rounded-md border bg-transparent px-2 text-xs outline-none"
                                   />
                                 ))}
                               </div>
@@ -34785,78 +34891,37 @@ function App() {
                           </div>
                           {ics201EditingResources ? (
                             <>
+                              <Ics201FieldFocusIndicators cursors={ics201ResourcesCursor.remoteCursors} />
                               {ics201ResourcesDraft.map((resource) => (
                                 <div key={resource.id} className="grid grid-cols-5 gap-2">
-                                  <input
-                                    value={resource.category}
-                                    onChange={(event) =>
-                                      setIcs201ResourcesDraft((draft) =>
-                                        draft.map((entry) =>
-                                          entry.id === resource.id
-                                            ? { ...entry, category: event.target.value }
-                                            : entry
+                                  {(
+                                    [
+                                      ['category', 'Category'],
+                                      ['identifier', 'Identifier'],
+                                      ['quantity', 'Qty'],
+                                      ['status', 'Status'],
+                                      ['assignment', 'Assignment'],
+                                    ] as const
+                                  ).map(([field, placeholder]) => (
+                                    <Ics201RemoteFieldCarets
+                                      key={`${resource.id}-${field}`}
+                                      fieldKey={`resources:${resource.id}.${field}`}
+                                      value={resource[field]}
+                                      cursors={ics201ResourcesCursor.remoteCursors}
+                                      publish={ics201ResourcesCursor.publishCursor}
+                                      clear={ics201ResourcesCursor.clearCursor}
+                                      placeholder={placeholder}
+                                      onChange={(event) =>
+                                        setIcs201ResourcesDraft((draft) =>
+                                          draft.map((entry) =>
+                                            entry.id === resource.id
+                                              ? { ...entry, [field]: event.target.value }
+                                              : entry
+                                          )
                                         )
-                                      )
-                                    }
-                                    placeholder="Category"
-                                    className="h-8 rounded-md border bg-transparent px-2 text-xs outline-none"
-                                  />
-                                  <input
-                                    value={resource.identifier}
-                                    onChange={(event) =>
-                                      setIcs201ResourcesDraft((draft) =>
-                                        draft.map((entry) =>
-                                          entry.id === resource.id
-                                            ? { ...entry, identifier: event.target.value }
-                                            : entry
-                                        )
-                                      )
-                                    }
-                                    placeholder="Identifier"
-                                    className="h-8 rounded-md border bg-transparent px-2 text-xs outline-none"
-                                  />
-                                  <input
-                                    value={resource.quantity}
-                                    onChange={(event) =>
-                                      setIcs201ResourcesDraft((draft) =>
-                                        draft.map((entry) =>
-                                          entry.id === resource.id
-                                            ? { ...entry, quantity: event.target.value }
-                                            : entry
-                                        )
-                                      )
-                                    }
-                                    placeholder="Qty"
-                                    className="h-8 rounded-md border bg-transparent px-2 text-xs outline-none"
-                                  />
-                                  <input
-                                    value={resource.status}
-                                    onChange={(event) =>
-                                      setIcs201ResourcesDraft((draft) =>
-                                        draft.map((entry) =>
-                                          entry.id === resource.id
-                                            ? { ...entry, status: event.target.value }
-                                            : entry
-                                        )
-                                      )
-                                    }
-                                    placeholder="Status"
-                                    className="h-8 rounded-md border bg-transparent px-2 text-xs outline-none"
-                                  />
-                                  <input
-                                    value={resource.assignment}
-                                    onChange={(event) =>
-                                      setIcs201ResourcesDraft((draft) =>
-                                        draft.map((entry) =>
-                                          entry.id === resource.id
-                                            ? { ...entry, assignment: event.target.value }
-                                            : entry
-                                        )
-                                      )
-                                    }
-                                    placeholder="Assignment"
-                                    className="h-8 rounded-md border bg-transparent px-2 text-xs outline-none"
-                                  />
+                                      }
+                                    />
+                                  ))}
                                 </div>
                               ))}
                               <div className="flex items-center justify-end gap-1.5">
@@ -34981,10 +35046,16 @@ function App() {
                           </div>
                           {ics201EditingSafetyAnalysis ? (
                             <>
+                              <Ics201FieldFocusIndicators cursors={ics201SafetyAnalysisCursor.remoteCursors} />
                               {ics201SafetyAnalysisDraft.map((safetyRow) => (
                                 <div key={safetyRow.id} className="grid grid-cols-2 gap-2">
-                                  <Textarea
+                                  <Ics201RemoteTextareaCarets
+                                    fieldKey={`safetyAnalysis:${safetyRow.id}.hazard`}
                                     value={safetyRow.hazard}
+                                    cursors={ics201SafetyAnalysisCursor.remoteCursors}
+                                    publish={ics201SafetyAnalysisCursor.publishCursor}
+                                    clear={ics201SafetyAnalysisCursor.clearCursor}
+                                    placeholder="Hazard"
                                     onChange={(event) =>
                                       setIcs201SafetyAnalysisDraft((draft) =>
                                         draft.map((entry) =>
@@ -34994,11 +35065,14 @@ function App() {
                                         )
                                       )
                                     }
-                                    className="min-h-16 text-xs"
-                                    placeholder="Hazard"
                                   />
-                                  <Textarea
+                                  <Ics201RemoteTextareaCarets
+                                    fieldKey={`safetyAnalysis:${safetyRow.id}.mitigation`}
                                     value={safetyRow.mitigation}
+                                    cursors={ics201SafetyAnalysisCursor.remoteCursors}
+                                    publish={ics201SafetyAnalysisCursor.publishCursor}
+                                    clear={ics201SafetyAnalysisCursor.clearCursor}
+                                    placeholder="Mitigation"
                                     onChange={(event) =>
                                       setIcs201SafetyAnalysisDraft((draft) =>
                                         draft.map((entry) =>
@@ -35008,11 +35082,14 @@ function App() {
                                         )
                                       )
                                     }
-                                    className="min-h-16 text-xs"
-                                    placeholder="Mitigation"
                                   />
-                                  <input
+                                  <Ics201RemoteFieldCarets
+                                    fieldKey={`safetyAnalysis:${safetyRow.id}.ppe`}
                                     value={safetyRow.ppe}
+                                    cursors={ics201SafetyAnalysisCursor.remoteCursors}
+                                    publish={ics201SafetyAnalysisCursor.publishCursor}
+                                    clear={ics201SafetyAnalysisCursor.clearCursor}
+                                    placeholder="PPE"
                                     onChange={(event) =>
                                       setIcs201SafetyAnalysisDraft((draft) =>
                                         draft.map((entry) =>
@@ -35022,11 +35099,14 @@ function App() {
                                         )
                                       )
                                     }
-                                    className="h-8 rounded-md border bg-transparent px-2 text-xs outline-none"
-                                    placeholder="PPE"
                                   />
-                                  <input
+                                  <Ics201RemoteFieldCarets
+                                    fieldKey={`safetyAnalysis:${safetyRow.id}.medicalPlan`}
                                     value={safetyRow.medicalPlan}
+                                    cursors={ics201SafetyAnalysisCursor.remoteCursors}
+                                    publish={ics201SafetyAnalysisCursor.publishCursor}
+                                    clear={ics201SafetyAnalysisCursor.clearCursor}
+                                    placeholder="Medical Plan"
                                     onChange={(event) =>
                                       setIcs201SafetyAnalysisDraft((draft) =>
                                         draft.map((entry) =>
@@ -35036,8 +35116,6 @@ function App() {
                                         )
                                       )
                                     }
-                                    className="h-8 rounded-md border bg-transparent px-2 text-xs outline-none"
-                                    placeholder="Medical Plan"
                                   />
                                 </div>
                               ))}
