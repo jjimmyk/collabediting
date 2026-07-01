@@ -847,7 +847,10 @@ import {
   Ics201RemoteFieldCarets,
   Ics201RemoteFieldCaretsView,
   Ics201RemoteTextareaCarets,
+  Ics201RemoteTextareaCaretsView,
 } from '@/features/ics201/Ics201RemoteFieldCarets'
+import { Ics201DraftLiveContext } from '@/features/ics201/Ics201DraftLiveContext'
+import { mergeRemoteIcs201FormUpdate } from '@/features/ics201/merge-remote-form-update'
 import { Ics201RemoteTextCursors } from '@/features/ics201/Ics201RemoteTextCursors'
 import { Ics201SaveStatusIndicator } from '@/features/ics201/Ics201SaveStatusIndicator'
 import { Ics201SectionEditorBadges } from '@/features/ics201/Ics201SectionEditorBadges'
@@ -986,6 +989,8 @@ import { useSitrepSync } from '@/hooks/useSitrepSync'
 import { fetchSitrepLiveSummaryForAor } from '@/lib/sitrep-service'
 import { useIcs201AggressiveAutosave } from '@/hooks/useIcs201AggressiveAutosave'
 import { useIcs201AllSectionCursors } from '@/hooks/useIcs201AllSectionCursors'
+import { useIcs201DraftLiveSync } from '@/hooks/useIcs201DraftLiveSync'
+import { applyIcs201DraftFieldPatch } from '@/lib/ics201-draft-live-sync'
 import { useIcs201ObjectivesSectionEditor } from '@/hooks/useIcs201ObjectivesSectionEditor'
 import { useIcs201Presence } from '@/hooks/useIcs201Presence'
 import { useIcs201Sync } from '@/hooks/useIcs201Sync'
@@ -12629,6 +12634,9 @@ function App() {
     () => resolveActiveIcs201Section(ics201EditingFlags),
     [ics201EditingFlags]
   )
+  useEffect(() => {
+    ics201EditingFlagsRef.current = ics201EditingFlags
+  }, [ics201EditingFlags])
   const handleIcs201Loaded = useCallback(
     (payload: {
       documentId: string
@@ -12644,6 +12652,9 @@ function App() {
   )
   const ics201LiveConnectedRef = useRef(false)
   const ics201LiveCurrentSituationRef = useRef('')
+  const ics201LiveObjectivesConnectedRef = useRef(false)
+  const ics201LiveObjectivesRef = useRef<Ics201ObjectiveRow[]>([])
+  const ics201EditingFlagsRef = useRef(ics201EditingFlags)
   const handleIcs204Loaded = useCallback(
     (payload: {
       forms: Ics204FormState[]
@@ -12819,16 +12830,22 @@ function App() {
     },
     []
   )
-  const handleIcs201RemoteFormUpdated = useCallback((form: Ics201FormState) => {
-    setIcs201Form((previous) => {
-      const next = cloneIcs201FormState(form)
-      if (ics201LiveConnectedRef.current) {
-        next.currentSituationSummary =
-          ics201LiveCurrentSituationRef.current || previous.currentSituationSummary
-      }
-      return next
-    })
+  const handleIcs201RemoteFormUpdated = useCallback((remote: Ics201FormState) => {
+    setIcs201Form((local) =>
+      mergeRemoteIcs201FormUpdate(local, remote, ics201EditingFlagsRef.current, {
+        currentSituationConnected: ics201LiveConnectedRef.current,
+        currentSituation: ics201LiveCurrentSituationRef.current,
+        objectivesConnected: ics201LiveObjectivesConnectedRef.current,
+        objectives: ics201LiveObjectivesRef.current,
+      })
+    )
   }, [])
+  const handleIcs201DraftLivePatch = useCallback(
+    (patch: { fieldKey: string; value: string }) => {
+      setIcs201Form((previous) => applyIcs201DraftFieldPatch(previous, patch))
+    },
+    []
+  )
   const handleIcs201RemoteVersionInserted = useCallback((version: Ics201Version) => {
     setIcs201Versions((previous) => {
       if (previous.some((entry) => entry.id === version.id)) {
@@ -15317,6 +15334,18 @@ function App() {
   } = ics201SectionCursors
   const ics201MapSketchCursorPublishRef = useRef(ics201MapSketchCursor.publishCursor)
   ics201MapSketchCursorPublishRef.current = ics201MapSketchCursor.publishCursor
+  const { publishFieldPatch: publishIcs201DraftLive } = useIcs201DraftLiveSync({
+    enabled:
+      isSupabaseEnabled &&
+      ics201DocumentId !== null &&
+      activeTab === 'briefing' &&
+      (isInIncidentWorkspace || isInExerciseWorkspace) &&
+      !isViewingHistoricalOperationalPeriod,
+    documentId: ics201DocumentId,
+    selfUserId: user?.id ?? null,
+    editingFlags: ics201EditingFlags,
+    onRemotePatch: handleIcs201DraftLivePatch,
+  })
   const ics201VersionAuthorDisplay = useCallback(
     (version: Ics201Version) =>
       ics201VersionAuthorLabel(version, {
@@ -15352,6 +15381,10 @@ function App() {
     maxLength: ics201EnforcesCharLimit ? ICS201_STRICT_CHAR_LIMIT : undefined,
     persistDebounceMs: ICS201_CRDT_PERSIST_MS,
   })
+  ics201LiveObjectivesConnectedRef.current = ics201ObjectivesEditor.isLiveConnected
+  ics201LiveObjectivesRef.current = ics201ObjectivesEditor.isLiveConnected
+    ? ics201ObjectivesEditor.objectives.map((row) => ({ ...row }))
+    : []
   const getIcs201LiveFormSnapshot = useCallback(
     () =>
       buildIcs201LiveFormSnapshot({
@@ -32961,6 +32994,7 @@ function App() {
                       </Item>
                     )
                   ) : (
+                  <Ics201DraftLiveContext.Provider value={publishIcs201DraftLive}>
                   <div className="space-y-3" data-ics201-tutorial="ics201-panel">
                     {ics201GeneratingFromFile && (
                       <div className="flex items-center gap-2 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-800 dark:border-blue-800/60 dark:bg-blue-500/10 dark:text-blue-200">
@@ -34103,6 +34137,7 @@ function App() {
                               className="space-y-1.5"
                             >
                             <div className="space-y-1.5">
+                              <Ics201FieldFocusIndicators cursors={ics201MapSketchCursor.remoteCursors} />
                               <span className="text-[11px] text-muted-foreground">
                                 {ics201Form.mapSketchPolygon.length}{' '}
                                 {ics201Form.mapSketchPolygon.length === 1 ? 'vertex' : 'vertices'}
@@ -34115,12 +34150,21 @@ function App() {
                                 ics201Form.mapSketchPolygon.map((vertex, index) => (
                                   <div
                                     key={index}
-                                    className="rounded-md border border-dashed border-border/60 bg-muted/20 px-2.5 py-2 text-xs"
+                                    className="grid grid-cols-[1.5rem_1fr_1fr] items-center gap-2"
                                   >
                                     <span className="text-[10px] font-medium text-muted-foreground">
-                                      Vertex {index + 1}:{' '}
+                                      {index + 1}
                                     </span>
-                                    {vertex.latitude}, {vertex.longitude}
+                                    <Ics201RemoteFieldCaretsView
+                                      fieldKey={`mapSketch:${index}.lat`}
+                                      value={String(vertex.latitude)}
+                                      cursors={ics201MapSketchCursor.remoteCursors}
+                                    />
+                                    <Ics201RemoteFieldCaretsView
+                                      fieldKey={`mapSketch:${index}.lng`}
+                                      value={String(vertex.longitude)}
+                                      cursors={ics201MapSketchCursor.remoteCursors}
+                                    />
                                   </div>
                                 ))
                               )}
@@ -34679,21 +34723,35 @@ function App() {
                               onStartEdit={() => beginIcs201SectionEdit('actions')}
                               className="space-y-3"
                             >
+                          <Ics201FieldFocusIndicators cursors={ics201ActionsCursor.remoteCursors} />
                           {ics201Form.actions.length === 0 ? (
                             <div className="rounded-md border border-dashed border-border/60 bg-muted/20 px-2.5 py-2 text-xs text-muted-foreground">
                               No actions recorded.
                             </div>
                           ) : (
                             ics201Form.actions.map((action) => (
-                              <div
-                                key={action.id}
-                                className="rounded-md border border-dashed border-border/60 bg-muted/20 px-2.5 py-2 text-xs"
-                              >
-                                <div className="font-medium">{action.task || '—'}</div>
-                                <div className="mt-1 text-[11px] text-muted-foreground">
-                                  Owner: {action.owner || '—'} · Start: {action.startTime || '—'} ·
-                                  End: {action.endTime || '—'}
-                                </div>
+                              <div key={action.id} className="grid grid-cols-5 gap-2">
+                                <Ics201RemoteFieldCaretsView
+                                  fieldKey={`actions:${action.id}.task`}
+                                  className="col-span-2"
+                                  value={action.task}
+                                  cursors={ics201ActionsCursor.remoteCursors}
+                                />
+                                <Ics201RemoteFieldCaretsView
+                                  fieldKey={`actions:${action.id}.owner`}
+                                  value={action.owner}
+                                  cursors={ics201ActionsCursor.remoteCursors}
+                                />
+                                <Ics201RemoteFieldCaretsView
+                                  fieldKey={`actions:${action.id}.startTime`}
+                                  value={action.startTime}
+                                  cursors={ics201ActionsCursor.remoteCursors}
+                                />
+                                <Ics201RemoteFieldCaretsView
+                                  fieldKey={`actions:${action.id}.endTime`}
+                                  value={action.endTime}
+                                  cursors={ics201ActionsCursor.remoteCursors}
+                                />
                               </div>
                             ))
                           )}
@@ -34800,41 +34858,29 @@ function App() {
                               ariaLabel={`Edit ${ICS201_SECTION_LABELS['org-chart']} section`}
                               onStartEdit={() => beginIcs201SectionEdit('org-chart')}
                             >
+                            <Ics201FieldFocusIndicators cursors={ics201OrgChartCursor.remoteCursors} />
                             <div className="grid grid-cols-2 gap-2">
                               {(
                                 [
-                                  ['Incident Commander', ics201Form.orgChart.incidentCommander],
-                                  [
-                                    'Operations Section Chief',
-                                    ics201Form.orgChart.operationsSectionChief,
-                                  ],
-                                  [
-                                    'Planning Section Chief',
-                                    ics201Form.orgChart.planningSectionChief,
-                                  ],
-                                  [
-                                    'Logistics Section Chief',
-                                    ics201Form.orgChart.logisticsSectionChief,
-                                  ],
-                                  [
-                                    'Finance Section Chief',
-                                    ics201Form.orgChart.financeSectionChief,
-                                  ],
-                                  [
-                                    'Public Information Officer',
-                                    ics201Form.orgChart.publicInformationOfficer,
-                                  ],
-                                  ['Safety Officer', ics201Form.orgChart.safetyOfficer],
-                                  ['Liaison Officer', ics201Form.orgChart.liaisonOfficer],
+                                  ['incidentCommander', 'Incident Commander'],
+                                  ['operationsSectionChief', 'Operations Section Chief'],
+                                  ['planningSectionChief', 'Planning Section Chief'],
+                                  ['logisticsSectionChief', 'Logistics Section Chief'],
+                                  ['financeSectionChief', 'Finance Section Chief'],
+                                  ['publicInformationOfficer', 'Public Information Officer'],
+                                  ['safetyOfficer', 'Safety Officer'],
+                                  ['liaisonOfficer', 'Liaison Officer'],
                                 ] as const
-                              ).map(([label, value]) => (
-                                <div key={label} className="space-y-1">
+                              ).map(([field, label]) => (
+                                <div key={field} className="space-y-1">
                                   <Label className="text-[11px] font-medium text-muted-foreground">
                                     {label}
                                   </Label>
-                                  <div className="rounded-md border border-dashed border-border/60 bg-muted/20 px-2.5 py-2 text-xs">
-                                    {value || <span className="text-muted-foreground">—</span>}
-                                  </div>
+                                  <Ics201RemoteFieldCaretsView
+                                    fieldKey={`orgChart.${field}`}
+                                    value={ics201Form.orgChart[field]}
+                                    cursors={ics201OrgChartCursor.remoteCursors}
+                                  />
                                 </div>
                               ))}
                             </div>
@@ -34971,24 +35017,30 @@ function App() {
                               onStartEdit={() => beginIcs201SectionEdit('resources')}
                               className="space-y-3"
                             >
+                          <Ics201FieldFocusIndicators cursors={ics201ResourcesCursor.remoteCursors} />
                           {ics201Form.resources.length === 0 ? (
                             <div className="rounded-md border border-dashed border-border/60 bg-muted/20 px-2.5 py-2 text-xs text-muted-foreground">
                               No resources recorded.
                             </div>
                           ) : (
                             ics201Form.resources.map((resource) => (
-                              <div
-                                key={resource.id}
-                                className="rounded-md border border-dashed border-border/60 bg-muted/20 px-2.5 py-2 text-xs"
-                              >
-                                <div className="font-medium">
-                                  {resource.category || '—'} · {resource.identifier || '—'}
-                                </div>
-                                <div className="mt-1 text-[11px] text-muted-foreground">
-                                  Qty: {resource.quantity || '—'} · Status:{' '}
-                                  {resource.status || '—'} · Assignment:{' '}
-                                  {resource.assignment || '—'}
-                                </div>
+                              <div key={resource.id} className="grid grid-cols-5 gap-2">
+                                {(
+                                  [
+                                    ['category', resource.category],
+                                    ['identifier', resource.identifier],
+                                    ['quantity', resource.quantity],
+                                    ['status', resource.status],
+                                    ['assignment', resource.assignment],
+                                  ] as const
+                                ).map(([field, value]) => (
+                                  <Ics201RemoteFieldCaretsView
+                                    key={`${resource.id}-${field}`}
+                                    fieldKey={`resources:${resource.id}.${field}`}
+                                    value={value}
+                                    cursors={ics201ResourcesCursor.remoteCursors}
+                                  />
+                                ))}
                               </div>
                             ))
                           )}
@@ -35166,22 +35218,34 @@ function App() {
                               onStartEdit={() => beginIcs201SectionEdit('safety-analysis')}
                               className="space-y-3"
                             >
+                          <Ics201FieldFocusIndicators cursors={ics201SafetyAnalysisCursor.remoteCursors} />
                           {ics201Form.safetyAnalysis.length === 0 ? (
                             <div className="rounded-md border border-dashed border-border/60 bg-muted/20 px-2.5 py-2 text-xs text-muted-foreground">
                               No safety items recorded.
                             </div>
                           ) : (
                             ics201Form.safetyAnalysis.map((safetyRow) => (
-                              <div
-                                key={safetyRow.id}
-                                className="rounded-md border border-dashed border-border/60 bg-muted/20 px-2.5 py-2 text-xs"
-                              >
-                                <div className="font-medium">Hazard: {safetyRow.hazard || '—'}</div>
-                                <div className="mt-1">Mitigation: {safetyRow.mitigation || '—'}</div>
-                                <div className="mt-1 text-[11px] text-muted-foreground">
-                                  PPE: {safetyRow.ppe || '—'} · Medical Plan:{' '}
-                                  {safetyRow.medicalPlan || '—'}
-                                </div>
+                              <div key={safetyRow.id} className="grid grid-cols-2 gap-2">
+                                <Ics201RemoteTextareaCaretsView
+                                  fieldKey={`safetyAnalysis:${safetyRow.id}.hazard`}
+                                  value={safetyRow.hazard}
+                                  cursors={ics201SafetyAnalysisCursor.remoteCursors}
+                                />
+                                <Ics201RemoteTextareaCaretsView
+                                  fieldKey={`safetyAnalysis:${safetyRow.id}.mitigation`}
+                                  value={safetyRow.mitigation}
+                                  cursors={ics201SafetyAnalysisCursor.remoteCursors}
+                                />
+                                <Ics201RemoteFieldCaretsView
+                                  fieldKey={`safetyAnalysis:${safetyRow.id}.ppe`}
+                                  value={safetyRow.ppe}
+                                  cursors={ics201SafetyAnalysisCursor.remoteCursors}
+                                />
+                                <Ics201RemoteFieldCaretsView
+                                  fieldKey={`safetyAnalysis:${safetyRow.id}.medicalPlan`}
+                                  value={safetyRow.medicalPlan}
+                                  cursors={ics201SafetyAnalysisCursor.remoteCursors}
+                                />
                               </div>
                             ))
                           )}
@@ -35266,6 +35330,7 @@ function App() {
                       </div>
                     )}
                   </div>
+                  </Ics201DraftLiveContext.Provider>
                   )
                 )}
 

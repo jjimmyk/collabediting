@@ -10,7 +10,7 @@ export type Ics201YjsProvider = {
   persistNow: () => Promise<void>
 }
 
-const DEFAULT_BROADCAST_FLUSH_MS = 75
+const DEFAULT_BROADCAST_FLUSH_MS = 50
 const DEFAULT_PERSIST_DEBOUNCE_MS = 1500
 
 export function mergeYjsBroadcastUpdates(updates: Uint8Array[]): Uint8Array | null {

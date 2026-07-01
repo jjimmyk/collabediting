@@ -1,7 +1,7 @@
-export const ICS201_TIER1_IDLE_MS = 800
-export const ICS201_TIER1_MAX_WAIT_MS = 1500
+export const ICS201_TIER1_IDLE_MS = 400
+export const ICS201_TIER1_MAX_WAIT_MS = 800
 export const ICS201_TIER2_CHECKPOINT_PAUSE_MS = 60_000
-export const ICS201_CRDT_PERSIST_MS = 1500
+export const ICS201_CRDT_PERSIST_MS = 800
 
 export type Ics201AutosaveSchedulerOptions = {
   idleMs?: number

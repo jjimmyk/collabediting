@@ -10,7 +10,6 @@ import type {
 import {
   cloneIcs201FormState,
   ics201AuthorColorFromId,
-  isIcs201EditingAnySection,
   normalizeIcs201FormState,
 } from '@/features/ics201/utils'
 import {
@@ -63,12 +62,7 @@ export function useIcs201Sync({
   const [loading, setLoading] = useState(false)
   const [syncError, setSyncError] = useState<string | null>(null)
   const [isSaving, setIsSaving] = useState(false)
-  const editingFlagsRef = useRef(editingFlags)
   const userIdRef = useRef(userId)
-
-  useEffect(() => {
-    editingFlagsRef.current = editingFlags
-  }, [editingFlags])
 
   useEffect(() => {
     userIdRef.current = userId
@@ -125,15 +119,11 @@ export function useIcs201Sync({
 
     return subscribeToIcs201Changes(documentId, {
       onDocumentUpdated: (document) => {
-        if (isIcs201EditingAnySection(editingFlagsRef.current)) return
         onRemoteFormUpdated(cloneIcs201FormState(normalizeIcs201FormState(document.form_data)))
       },
       onVersionInserted: (version) => {
         onRemoteVersionInserted(version)
-        if (
-          !isIcs201EditingAnySection(editingFlagsRef.current) &&
-          version.authorId !== userIdRef.current
-        ) {
+        if (version.authorId !== userIdRef.current) {
           onRemoteFormUpdated(cloneIcs201FormState(normalizeIcs201FormState(version.snapshot)))
         }
       },

@@ -1,0 +1,77 @@
+import type {
+  Ics201FormState,
+  Ics201ObjectiveRow,
+} from '@/features/ics201/types'
+import { cloneIcs201FormState } from '@/features/ics201/utils'
+import type { Ics201SectionEditingFlags } from '@/hooks/useIcs201AllSectionCursors'
+
+export type Ics201LiveYjsOverrides = {
+  currentSituationConnected?: boolean
+  currentSituation?: string
+  objectivesConnected?: boolean
+  objectives?: Ics201ObjectiveRow[]
+}
+
+export function mergeRemoteIcs201FormUpdate(
+  local: Ics201FormState,
+  remote: Ics201FormState,
+  editingFlags: Ics201SectionEditingFlags,
+  liveYjs: Ics201LiveYjsOverrides = {}
+): Ics201FormState {
+  const next = cloneIcs201FormState(remote)
+
+  if (editingFlags.reportInfo) {
+    next.incidentName = local.incidentName
+    next.incidentLocation = local.incidentLocation
+    next.dateInitiated = local.dateInitiated
+    next.timeInitiated = local.timeInitiated
+    next.preparedByName = local.preparedByName
+    next.preparedByPositionTitle = local.preparedByPositionTitle
+    next.preparedBySignature = local.preparedBySignature
+    next.preparedDateTime = local.preparedDateTime
+  }
+
+  if (editingFlags.incidentBriefing) {
+    next.incidentName = local.incidentName
+    next.incidentNumber = local.incidentNumber
+    next.preparedDateTime = local.preparedDateTime
+    next.preparedBy = local.preparedBy
+    next.operationalPeriodStart = local.operationalPeriodStart
+    next.operationalPeriodEnd = local.operationalPeriodEnd
+    next.jurisdiction = local.jurisdiction
+  }
+
+  if (editingFlags.mapSketch) {
+    next.mapSketchPolygon = local.mapSketchPolygon.map((vertex) => ({ ...vertex }))
+  }
+
+  if (editingFlags.currentSituation) {
+    next.currentSituationSummary = local.currentSituationSummary
+  } else if (liveYjs.currentSituationConnected && liveYjs.currentSituation !== undefined) {
+    next.currentSituationSummary = liveYjs.currentSituation
+  }
+
+  if (editingFlags.objectives) {
+    next.objectives = local.objectives.map((row) => ({ ...row }))
+  } else if (liveYjs.objectivesConnected && liveYjs.objectives !== undefined) {
+    next.objectives = liveYjs.objectives.map((row) => ({ ...row }))
+  }
+
+  if (editingFlags.actions) {
+    next.actions = local.actions.map((action) => ({ ...action }))
+  }
+
+  if (editingFlags.orgChart) {
+    next.orgChart = { ...local.orgChart }
+  }
+
+  if (editingFlags.resources) {
+    next.resources = local.resources.map((resource) => ({ ...resource }))
+  }
+
+  if (editingFlags.safetyAnalysis) {
+    next.safetyAnalysis = local.safetyAnalysis.map((row) => ({ ...row }))
+  }
+
+  return next
+}
