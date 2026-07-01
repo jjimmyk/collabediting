@@ -1,6 +1,7 @@
 import { getHubAorBoundaryDefinition, HUB_AOR_BOUNDARY_CATALOG } from '@/features/hub/aor/hub-aor-boundary-geometries'
 import type { HubAorBoundaryLevel } from '@/features/hub/aor/hub-aor-boundary-types'
 import { GEOSPATIAL_COP_AIS_LAYER } from '@/features/hub/cisa-dashboards/geospatial-cop-dashboard-data'
+import { FUSION_CASCADE_LAYER_DEFINITION } from '@/features/hub/fusion-centers/fusion-cascade-scenario-data'
 import { NOAA_GNOME_LAYER_DEFINITION } from '@/features/hub/map-layers/gnome/noaa-gnome-layer-catalog'
 import {
   getWeatherLayerDefinition,
@@ -10,7 +11,12 @@ import {
 } from '@/features/hub/map-layers/weather-layer-catalog'
 import type { WeatherLayerStatus } from '@/features/hub/map-layers/useHubWeatherMapLayers'
 
-export type HubMapVisibleItemSource = 'weather' | 'aor' | 'geospatial-cop' | 'gnome'
+export type HubMapVisibleItemSource =
+  | 'weather'
+  | 'aor'
+  | 'geospatial-cop'
+  | 'gnome'
+  | 'fusion-cascade'
 
 export type HubMapVisibleItemKind =
   | 'map-layer'
@@ -100,7 +106,8 @@ export function buildHubMapVisibleItems(
   enabledAorBoundaryIds: Set<string>,
   weatherLayerStatuses: Record<string, WeatherLayerStatus> = {},
   geospatialCopAisLayerEnabled = false,
-  noaaGnomeLayerEnabled = false
+  noaaGnomeLayerEnabled = false,
+  fusionCascadeLayerEnabled = false
 ): HubMapVisibleItem[] {
   const items: HubMapVisibleItem[] = []
 
@@ -160,6 +167,17 @@ export function buildHubMapVisibleItems(
       typeLabel: 'Map Layer',
       groupLabel: 'Oil spill trajectory',
       source: 'gnome',
+    })
+  }
+
+  if (fusionCascadeLayerEnabled) {
+    items.push({
+      id: FUSION_CASCADE_LAYER_DEFINITION.id,
+      label: FUSION_CASCADE_LAYER_DEFINITION.label,
+      kind: 'map-layer',
+      typeLabel: 'Map Layer',
+      groupLabel: 'Fusion Centers',
+      source: 'fusion-cascade',
     })
   }
 

@@ -66,6 +66,18 @@ describe('hub-map-visible-items', () => {
     })
   })
 
+  it('includes fusion cascade layer when enabled', () => {
+    const items = buildHubMapVisibleItems(new Set(), new Set(), {}, false, false, true)
+
+    expect(items).toHaveLength(1)
+    expect(items[0]).toMatchObject({
+      id: 'fusion-cascade-impacts',
+      kind: 'map-layer',
+      source: 'fusion-cascade',
+      groupLabel: 'Fusion Centers',
+    })
+  })
+
   it('removes a single aor boundary without cascading', () => {
     const districtId = hubAorDistrictBoundaryId(4)
     const sectorId = hubAorSectorBoundaryId('sector-miami')

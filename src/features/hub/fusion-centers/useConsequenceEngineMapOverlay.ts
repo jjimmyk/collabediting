@@ -24,6 +24,7 @@ type UseConsequenceEngineMapOverlayOptions = {
   svgRef: RefObject<SVGSVGElement | null>
   onHubMarkerChange: (position: ConsequenceHubMarkerPosition) => void
   onSectorLabelsChange: (labels: ConsequenceSectorLabelPosition[]) => void
+  fitExtentOnAttach?: boolean
 }
 
 function prefersReducedMotion(): boolean {
@@ -40,11 +41,14 @@ export function useConsequenceEngineMapOverlay({
   svgRef,
   onHubMarkerChange,
   onSectorLabelsChange,
+  fitExtentOnAttach = true,
 }: UseConsequenceEngineMapOverlayOptions) {
   const animationPhaseRef = useRef(0)
   const rafRef = useRef(0)
+  const attachRafRef = useRef(0)
   const handlesRef = useRef<unknown[]>([])
   const resizeObserverRef = useRef<ResizeObserver | null>(null)
+  const boundViewRef = useRef<MapView | null>(null)
 
   useEffect(() => {
     if (!enabled) {
@@ -90,22 +94,23 @@ export function useConsequenceEngineMapOverlay({
       })
       onHubMarkerChange(result.hubMarker)
       onSectorLabelsChange(
-        result.sectorLabels.map((label) => {
-          const sector = projected.sectors.find((entry) => entry.id === label.id)
-          if (!sector) {
-            return null
-          }
-          return {
-            ...sector,
-            visible: label.visible,
-          }
-        }).filter((label): label is ConsequenceSectorLabelPosition => label !== null)
+        result.sectorLabels
+          .map((label) => {
+            const sector = projected.sectors.find((entry) => entry.id === label.id)
+            if (!sector) {
+              return null
+            }
+            return {
+              ...sector,
+              visible: label.visible,
+            }
+          })
+          .filter((label): label is ConsequenceSectorLabelPosition => label !== null)
       )
     }
 
-    const fitExtent = async () => {
-      const view = mapViewRef.current
-      if (!view || view.destroyed) {
+    const fitExtent = async (view: MapView) => {
+      if (!fitExtentOnAttach || view.destroyed) {
         return
       }
       const extent = getConsequenceMapExtent()
@@ -123,12 +128,16 @@ export function useConsequenceEngineMapOverlay({
     }
 
     const bindViewSync = (view: MapView) => {
+      if (boundViewRef.current === view) {
+        return
+      }
       handlesRef.current.forEach((handle) => {
         if (handle && typeof handle === 'object' && 'remove' in handle) {
           ;(handle as { remove: () => void }).remove()
         }
       })
       handlesRef.current = []
+      boundViewRef.current = view
 
       handlesRef.current.push(
         view.watch('size', () => {
@@ -169,8 +178,7 @@ export function useConsequenceEngineMapOverlay({
         if (svg) {
           const packetsGroup = svg.querySelector('.consequence-packets')
           if (packetsGroup instanceof SVGGElement) {
-            const circles = packetsGroup.querySelectorAll('circle')
-            circles.forEach((circle, index) => {
+            packetsGroup.querySelectorAll('circle').forEach((circle, index) => {
               const offset = Number(circle.dataset.offset ?? 0)
               circle.dataset.offset = String(offset + 1.5 + index * 0.2)
             })
@@ -179,10 +187,7 @@ export function useConsequenceEngineMapOverlay({
           const linksGroup = svg.querySelector('.consequence-links')
           if (linksGroup) {
             linksGroup.querySelectorAll('path').forEach((path) => {
-              path.setAttribute(
-                'stroke-dashoffset',
-                String(-animationPhaseRef.current % 20)
-              )
+              path.setAttribute('stroke-dashoffset', String(-animationPhaseRef.current % 20))
             })
           }
         }
@@ -191,26 +196,31 @@ export function useConsequenceEngineMapOverlay({
       rafRef.current = requestAnimationFrame(tick)
     }
 
-    const attachWhenReady = () => {
-      const view = mapViewRef.current
-      if (!view || view.destroyed || cancelled) {
+    const attach = () => {
+      if (cancelled) {
         return
       }
-      void view.when().then(() => {
-        if (cancelled) {
+      const view = mapViewRef.current
+      if (!view || view.destroyed) {
+        attachRafRef.current = requestAnimationFrame(attach)
+        return
+      }
+
+      void view.when().then(async () => {
+        if (cancelled || !mapViewRef.current || mapViewRef.current.destroyed) {
           return
         }
         bindViewSync(view)
-        void fitExtent().then(() => {
-          if (!cancelled) {
-            updateOverlay()
-            startAnimationLoop()
-          }
-        })
+        await fitExtent(view)
+        if (cancelled) {
+          return
+        }
+        updateOverlay()
+        startAnimationLoop()
       })
     }
 
-    attachWhenReady()
+    attachRafRef.current = requestAnimationFrame(attach)
 
     const container = mapContainerRef.current
     if (container && typeof ResizeObserver !== 'undefined') {
@@ -223,12 +233,14 @@ export function useConsequenceEngineMapOverlay({
     return () => {
       cancelled = true
       cancelAnimationFrame(rafRef.current)
+      cancelAnimationFrame(attachRafRef.current)
       handlesRef.current.forEach((handle) => {
         if (handle && typeof handle === 'object' && 'remove' in handle) {
           ;(handle as { remove: () => void }).remove()
         }
       })
       handlesRef.current = []
+      boundViewRef.current = null
       resizeObserverRef.current?.disconnect()
       resizeObserverRef.current = null
       const svg = svgRef.current
@@ -240,6 +252,7 @@ export function useConsequenceEngineMapOverlay({
     }
   }, [
     enabled,
+    fitExtentOnAttach,
     mapContainerRef,
     mapViewRef,
     onHubMarkerChange,

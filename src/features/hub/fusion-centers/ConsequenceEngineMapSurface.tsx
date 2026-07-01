@@ -1,6 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
-import Map from '@arcgis/core/Map'
-import MapView from '@arcgis/core/views/MapView'
+import { useCallback, useRef, useState, type RefObject } from 'react'
+import type MapView from '@arcgis/core/views/MapView'
 import {
   FUSION_CASCADE_SCENARIO,
   statusToTailwindClass,
@@ -10,12 +9,23 @@ import type {
   ConsequenceHubMarkerPosition,
   ConsequenceSectorLabelPosition,
 } from '@/features/hub/fusion-centers/consequence-engine-types'
-import { safeDestroyMapView } from '@/lib/arcgis-load-abort'
 import { cn } from '@/lib/utils'
 
-export function ConsequenceEngineMapOverlay() {
-  const mapContainerRef = useRef<HTMLDivElement | null>(null)
-  const mapViewRef = useRef<MapView | null>(null)
+type ConsequenceEngineMapSurfaceProps = {
+  enabled: boolean
+  mapViewRef: RefObject<MapView | null>
+  mapContainerRef: RefObject<HTMLDivElement | null>
+  className?: string
+  fitExtentOnAttach?: boolean
+}
+
+export function ConsequenceEngineMapSurface({
+  enabled,
+  mapViewRef,
+  mapContainerRef,
+  className,
+  fitExtentOnAttach = true,
+}: ConsequenceEngineMapSurfaceProps) {
   const svgRef = useRef<SVGSVGElement | null>(null)
   const [hubMarker, setHubMarker] = useState<ConsequenceHubMarkerPosition>({
     x: 0,
@@ -32,61 +42,18 @@ export function ConsequenceEngineMapOverlay() {
     setSectorLabels(labels)
   }, [])
 
-  useEffect(() => {
-    let cancelled = false
-    let attachRaf = 0
-
-    const attach = () => {
-      if (cancelled) {
-        return
-      }
-      const container = mapContainerRef.current
-      if (!container) {
-        attachRaf = requestAnimationFrame(attach)
-        return
-      }
-      if (!mapViewRef.current) {
-        const map = new Map({
-          basemap: 'dark-gray-vector',
-        })
-        mapViewRef.current = new MapView({
-          container,
-          map,
-          center: [...FUSION_CASCADE_SCENARIO.hub.coordinates] as [number, number],
-          zoom: 8,
-          ui: {
-            components: ['zoom'],
-          },
-        })
-      }
-    }
-
-    attachRaf = requestAnimationFrame(attach)
-
-    return () => {
-      cancelled = true
-      cancelAnimationFrame(attachRaf)
-      safeDestroyMapView(mapViewRef.current)
-      mapViewRef.current = null
-    }
-  }, [])
-
   useConsequenceEngineMapOverlay({
-    enabled: true,
+    enabled,
     mapViewRef,
     mapContainerRef,
     svgRef,
     onHubMarkerChange: handleHubMarkerChange,
     onSectorLabelsChange: handleSectorLabelsChange,
+    fitExtentOnAttach,
   })
 
   return (
-    <div className="relative h-72 w-full overflow-hidden rounded-md border bg-muted/30">
-      <div
-        ref={mapContainerRef}
-        className="absolute inset-0"
-        aria-label="Cascading critical infrastructure impacts map"
-      />
+    <div className={cn('pointer-events-none absolute inset-0', className)}>
       <svg
         ref={svgRef}
         className="pointer-events-none absolute inset-0 h-full w-full"

@@ -926,6 +926,7 @@ import {
 import { useNoaaGnomeMapLayer } from '@/features/hub/map-layers/gnome/useNoaaGnomeMapLayer'
 import { NoaaGnomeNotificationMapEmbed } from '@/features/hub/map-layers/gnome/NoaaGnomeNotificationMapEmbed'
 import { FusionCascadingImpactsEmbed } from '@/features/hub/fusion-centers/FusionCascadingImpactsEmbed'
+import { FusionCascadeHubMapOverlay } from '@/features/hub/fusion-centers/FusionCascadeHubMapOverlay'
 import { ProductToursMenu } from '@/components/ProductToursMenu'
 import { CreateHubNotificationDialog } from '@/components/CreateHubNotificationDialog'
 import {
@@ -6235,6 +6236,7 @@ function App() {
   )
   const [noaaGnomeLayerEnabled, setNoaaGnomeLayerEnabled] = useState(() => loadNoaaGnomeLayerEnabled())
   const [noaaGnomeHourIndex, setNoaaGnomeHourIndex] = useState(() => loadNoaaGnomeHourIndex())
+  const [fusionCascadeImpactsVisible, setFusionCascadeImpactsVisible] = useState(true)
   const [analyticsResolutionKindFilter, setAnalyticsResolutionKindFilter] =
     useState<AnalyticsResolutionKindFilter>('incidents')
   const [analyticsSpendKindFilter, setAnalyticsSpendKindFilter] =
@@ -11856,6 +11858,11 @@ function App() {
     noaaGnomeLayerEnabled &&
     !isInWorkspaceContext &&
     isMapVisible
+  const showFusionCascadeMapLayer =
+    isFusionCentersEnabled &&
+    fusionCascadeImpactsVisible &&
+    !isInWorkspaceContext &&
+    isMapVisible
   useEffect(() => {
     if (!isCisaEnabled && isHubCisaDashboardTab(activeTab)) {
       setActiveTab('incident-list')
@@ -11872,6 +11879,11 @@ function App() {
       saveNoaaGnomeLayerEnabled(false)
     }
   }, [isOilSpillTrajectoryModelsEnabled])
+  useEffect(() => {
+    if (!isFusionCentersEnabled) {
+      setFusionCascadeImpactsVisible(false)
+    }
+  }, [isFusionCentersEnabled])
   useEffect(() => {
     if (!isInWorkspaceContext && activeTab === 'cisa-national-geospatial-cop') {
       setIsMapVisible(true)
@@ -12073,6 +12085,16 @@ function App() {
     })
     setIsMapVisible(true)
   }, [])
+  const toggleFusionCascadeLayer = useCallback(() => {
+    setFusionCascadeImpactsVisible((previous) => !previous)
+    setIsMapVisible(true)
+  }, [])
+  const handleFusionCascadeImpactsVisibleChange = useCallback((visible: boolean) => {
+    setFusionCascadeImpactsVisible(visible)
+    if (visible) {
+      setIsMapVisible(true)
+    }
+  }, [])
   const handleNoaaGnomeHourIndexChange = useCallback((hourIndex: number) => {
     setNoaaGnomeHourIndex(hourIndex)
     saveNoaaGnomeHourIndex(hourIndex)
@@ -12100,7 +12122,8 @@ function App() {
         enabledAorBoundaryIds,
         weatherLayerStatuses,
         geospatialCopAisLayerEnabled,
-        isOilSpillTrajectoryModelsEnabled && noaaGnomeLayerEnabled
+        isOilSpillTrajectoryModelsEnabled && noaaGnomeLayerEnabled,
+        isFusionCentersEnabled && fusionCascadeImpactsVisible
       ),
     [
       enabledWeatherLayerIds,
@@ -12109,6 +12132,8 @@ function App() {
       geospatialCopAisLayerEnabled,
       isOilSpillTrajectoryModelsEnabled,
       noaaGnomeLayerEnabled,
+      isFusionCentersEnabled,
+      fusionCascadeImpactsVisible,
     ]
   )
   const handleRemoveHubMapVisibleItem = useCallback((item: HubMapVisibleItem) => {
@@ -12120,6 +12145,11 @@ function App() {
     if (item.source === 'gnome') {
       setNoaaGnomeLayerEnabled(false)
       saveNoaaGnomeLayerEnabled(false)
+      return
+    }
+
+    if (item.source === 'fusion-cascade') {
+      setFusionCascadeImpactsVisible(false)
       return
     }
 
@@ -12143,6 +12173,7 @@ function App() {
     hideAllWeatherMapLayers()
     hideAllAorBoundaries()
     setGeospatialCopAisLayerEnabled(false)
+    setFusionCascadeImpactsVisible(false)
   }, [hideAllAorBoundaries, hideAllWeatherMapLayers])
   const activeLocalRosterPlan =
     activeWorkspaceRosterKey !== null
@@ -27738,6 +27769,12 @@ function App() {
           isMapVisible ? 'opacity-100' : 'pointer-events-none opacity-0'
         )}
       />
+      {showFusionCascadeMapLayer ? (
+        <FusionCascadeHubMapOverlay
+          mapViewRef={mapViewRef}
+          mapContainerRef={mapContainerRef}
+        />
+      ) : null}
       {activeExerciseWorkspaceId !== null &&
       activeTab === 'sitreps' &&
       isMapVisible &&
@@ -29327,7 +29364,10 @@ function App() {
                                     })}
                                   </div>
                                   {isFusionCentersEnabled && item.id === 0 ? (
-                                    <FusionCascadingImpactsEmbed />
+                                    <FusionCascadingImpactsEmbed
+                                      visible={fusionCascadeImpactsVisible}
+                                      onVisibleChange={handleFusionCascadeImpactsVisibleChange}
+                                    />
                                   ) : null}
                                   {isOilSpillTrajectoryModelsEnabled && item.id === 0 ? (
                                     <NoaaGnomeNotificationMapEmbed
@@ -32976,6 +33016,9 @@ function App() {
                     gnomeHourIndex={noaaGnomeHourIndex}
                     onToggleGnomeLayer={toggleNoaaGnomeLayer}
                     onGnomeHourIndexChange={handleNoaaGnomeHourIndexChange}
+                    fusionCentersEnabled={isFusionCentersEnabled}
+                    fusionCascadeLayerEnabled={fusionCascadeImpactsVisible}
+                    onToggleFusionCascadeLayer={toggleFusionCascadeLayer}
                   />
                 )}
 

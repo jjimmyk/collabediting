@@ -1,7 +1,7 @@
 import { line, curveBasis } from 'd3-shape'
 import {
   sectorImpactRadius,
-  statusToStrokeClass,
+  statusToSvgPaint,
 } from '@/features/hub/fusion-centers/fusion-cascade-scenario-data'
 import type {
   ConsequenceLinkPath,
@@ -12,8 +12,11 @@ import type {
   ScreenPoint,
 } from '@/features/hub/fusion-centers/consequence-engine-types'
 
+const SVG_NS = 'http://www.w3.org/2000/svg'
 const PACKET_COUNT_PER_LINK = 3
 const DASH_PATTERN = '8 12'
+const HUB_RADIUS = 10
+const PACKET_RADIUS = 4
 
 export function projectScenarioToScreen(
   scenario: ConsequenceScenario,
@@ -44,6 +47,15 @@ export function projectScenarioToScreen(
   }
 }
 
+function measurePathLength(pathD: string): number {
+  if (!pathD || typeof document === 'undefined') {
+    return 0
+  }
+  const probe = document.createElementNS(SVG_NS, 'path')
+  probe.setAttribute('d', pathD)
+  return probe.getTotalLength()
+}
+
 export function buildCurvedLinkPath(hub: ScreenPoint, sector: ScreenPoint): ConsequenceLinkPath {
   const midX = (hub.x + sector.x) / 2
   const midY = (hub.y + sector.y) / 2
@@ -56,12 +68,12 @@ export function buildCurvedLinkPath(hub: ScreenPoint, sector: ScreenPoint): Cons
   ]
   const pathGenerator = line<[number, number]>().curve(curveBasis)
   const pathD = pathGenerator(pathPoints) ?? ''
-  const approximateLength = Math.hypot(sector.x - hub.x, sector.y - hub.y) * 1.25
+  const length = measurePathLength(pathD) || Math.hypot(sector.x - hub.x, sector.y - hub.y) * 1.25
 
   return {
     sectorId: 'unknown',
     pathD,
-    length: approximateLength,
+    length,
   }
 }
 
@@ -101,48 +113,50 @@ export function drawConsequenceOverlay(
   projected: ProjectedConsequenceScenario,
   options: ConsequenceOverlayDrawOptions
 ): DrawOverlayResult {
-  const width = svg.clientWidth || svg.getBoundingClientRect().width
-  const height = svg.clientHeight || svg.getBoundingClientRect().height
+  const width = svg.clientWidth || svg.getBoundingClientRect().width || 1
+  const height = svg.clientHeight || svg.getBoundingClientRect().height || 1
   svg.setAttribute('viewBox', `0 0 ${width} ${height}`)
   svg.innerHTML = ''
 
-  const ns = 'http://www.w3.org/2000/svg'
-  const linksGroup = document.createElementNS(ns, 'g')
+  const linksGroup = document.createElementNS(SVG_NS, 'g')
   linksGroup.setAttribute('class', 'consequence-links')
   svg.appendChild(linksGroup)
 
-  const nodesGroup = document.createElementNS(ns, 'g')
+  const nodesGroup = document.createElementNS(SVG_NS, 'g')
   nodesGroup.setAttribute('class', 'consequence-nodes')
   svg.appendChild(nodesGroup)
 
-  const packetsGroup = document.createElementNS(ns, 'g')
+  const packetsGroup = document.createElementNS(SVG_NS, 'g')
   packetsGroup.setAttribute('class', 'consequence-packets')
   svg.appendChild(packetsGroup)
 
   const linkPaths = buildScenarioLinkPaths(projected)
+  const hubPaint = statusToSvgPaint(projected.hub.status)
 
   for (const link of linkPaths) {
     const sector = projected.sectors.find((entry) => entry.id === link.sectorId)
-    const pathEl = document.createElementNS(ns, 'path')
+    const paint = sector ? statusToSvgPaint(sector.status) : statusToSvgPaint('MONITORED')
+    const pathEl = document.createElementNS(SVG_NS, 'path')
     pathEl.setAttribute('d', link.pathD)
     pathEl.setAttribute('fill', 'none')
-    pathEl.setAttribute('stroke-width', '2')
-    pathEl.setAttribute('class', sector ? statusToStrokeClass(sector.status) : 'stroke-primary')
+    pathEl.setAttribute('stroke', paint.stroke)
+    pathEl.setAttribute('stroke-width', '2.5')
     pathEl.setAttribute('stroke-dasharray', DASH_PATTERN)
     if (options.animate) {
-      const dashOffset = -options.animationPhase % 20
-      pathEl.setAttribute('stroke-dashoffset', String(dashOffset))
+      pathEl.setAttribute('stroke-dashoffset', String(-options.animationPhase % 20))
     }
-    pathEl.setAttribute('opacity', '0.85')
+    pathEl.setAttribute('opacity', '0.9')
     linksGroup.appendChild(pathEl)
 
-    if (options.animate && link.pathD) {
+    if (options.animate && link.pathD && link.length > 0) {
       for (let index = 0; index < PACKET_COUNT_PER_LINK; index += 1) {
-        const packet = document.createElementNS(ns, 'circle')
-        packet.setAttribute('r', '3')
-        packet.setAttribute('class', 'fill-primary')
+        const packet = document.createElementNS(SVG_NS, 'circle')
+        packet.setAttribute('r', String(PACKET_RADIUS))
+        packet.setAttribute('fill', 'var(--primary)')
+        packet.setAttribute('stroke', 'var(--background)')
+        packet.setAttribute('stroke-width', '1')
         const offset = packetOffsetForIndex(index, options.animationPhase, link.length)
-        packet.setAttribute('opacity', '0.9')
+        packet.setAttribute('opacity', '0.95')
         packet.dataset.pathD = link.pathD
         packet.dataset.offset = String(offset)
         packetsGroup.appendChild(packet)
@@ -152,21 +166,25 @@ export function drawConsequenceOverlay(
 
   for (const sector of projected.sectors) {
     const radius = sectorImpactRadius(sector.impactScore)
-    const circle = document.createElementNS(ns, 'circle')
+    const paint = statusToSvgPaint(sector.status)
+    const circle = document.createElementNS(SVG_NS, 'circle')
     circle.setAttribute('cx', String(sector.x))
     circle.setAttribute('cy', String(sector.y))
     circle.setAttribute('r', String(radius))
-    circle.setAttribute('class', `${statusToStrokeClass(sector.status)} fill-background stroke-2`)
-    circle.setAttribute('stroke-width', '2')
+    circle.setAttribute('stroke', paint.stroke)
+    circle.setAttribute('fill', paint.fill)
+    circle.setAttribute('stroke-width', '2.5')
     nodesGroup.appendChild(circle)
   }
 
-  const hubCircle = document.createElementNS(ns, 'circle')
+  const hubCircle = document.createElementNS(SVG_NS, 'circle')
   hubCircle.setAttribute('cx', String(projected.hub.x))
   hubCircle.setAttribute('cy', String(projected.hub.y))
-  hubCircle.setAttribute('r', '8')
-  hubCircle.setAttribute('class', 'fill-destructive stroke-destructive')
-  hubCircle.setAttribute('stroke-width', '2')
+  hubCircle.setAttribute('r', String(HUB_RADIUS))
+  hubCircle.setAttribute('stroke', hubPaint.stroke)
+  hubCircle.setAttribute('fill', hubPaint.stroke)
+  hubCircle.setAttribute('stroke-width', '2.5')
+  hubCircle.setAttribute('opacity', '0.95')
   nodesGroup.appendChild(hubCircle)
 
   updatePacketPositions(packetsGroup)
@@ -186,14 +204,13 @@ export function drawConsequenceOverlay(
 }
 
 export function updatePacketPositions(packetsGroup: SVGGElement) {
-  const paths = packetsGroup.querySelectorAll('circle')
-  paths.forEach((packet) => {
+  packetsGroup.querySelectorAll('circle').forEach((packet) => {
     const pathD = packet.dataset.pathD
     const offset = Number(packet.dataset.offset ?? 0)
     if (!pathD) {
       return
     }
-    const probe = document.createElementNS('http://www.w3.org/2000/svg', 'path')
+    const probe = document.createElementNS(SVG_NS, 'path')
     probe.setAttribute('d', pathD)
     const length = probe.getTotalLength()
     if (length <= 0) {

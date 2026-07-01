@@ -1,10 +1,11 @@
 import { useMemo } from 'react'
-import { AlertCircle, CloudRain, Droplets, Loader2, MapPin, Radio } from 'lucide-react'
+import { AlertCircle, CloudRain, Droplets, Loader2, MapPin, Network, Radio } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
 import { Slider } from '@/components/ui/slider'
 import { cn } from '@/lib/utils'
+import { FUSION_CASCADE_LAYER_DEFINITION } from '@/features/hub/fusion-centers/fusion-cascade-scenario-data'
 import { NOAA_GNOME_LAYER_DEFINITION } from '@/features/hub/map-layers/gnome/noaa-gnome-layer-catalog'
 import {
   formatCurrentForcing,
@@ -31,6 +32,9 @@ type HubMapLayersPanelProps = {
   gnomeHourIndex?: number
   onToggleGnomeLayer?: () => void
   onGnomeHourIndexChange?: (hourIndex: number) => void
+  fusionCentersEnabled?: boolean
+  fusionCascadeLayerEnabled?: boolean
+  onToggleFusionCascadeLayer?: () => void
 }
 
 function LayerStatusHint({
@@ -88,10 +92,15 @@ export function HubMapLayersPanel({
   gnomeHourIndex = 0,
   onToggleGnomeLayer,
   onGnomeHourIndexChange,
+  fusionCentersEnabled = false,
+  fusionCascadeLayerEnabled = false,
+  onToggleFusionCascadeLayer,
 }: HubMapLayersPanelProps) {
   const groupedLayers = useMemo(() => groupWeatherLayersByCategory(), [])
   const visibleLayerCount =
-    enabledLayerIds.size + (oilSpillTrajectoryModelsEnabled && gnomeLayerEnabled ? 1 : 0)
+    enabledLayerIds.size +
+    (oilSpillTrajectoryModelsEnabled && gnomeLayerEnabled ? 1 : 0) +
+    (fusionCentersEnabled && fusionCascadeLayerEnabled ? 1 : 0)
 
   return (
     <div className="flex min-w-0 flex-col gap-4 pb-2">
@@ -254,6 +263,40 @@ export function HubMapLayersPanel({
                 </div>
               </div>
             ) : null}
+          </div>
+        </section>
+      ) : null}
+
+      {fusionCentersEnabled ? (
+        <section
+          className={cn('w-full min-w-0 overflow-hidden rounded-lg border', glassItemBorderClasses)}
+        >
+          <div className="flex items-center gap-2 border-b px-3 py-2.5">
+            <Network className="h-4 w-4 text-primary" />
+            <div>
+              <p className="text-sm font-medium">Fusion Centers</p>
+              <p className="text-xs text-muted-foreground">
+                Cascading critical infrastructure consequence projections
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-col gap-2 px-3 py-3">
+            <div className="flex items-start gap-2">
+              <Checkbox
+                id="fusion-cascade-layer"
+                checked={fusionCascadeLayerEnabled}
+                onCheckedChange={() => onToggleFusionCascadeLayer?.()}
+                className="mt-0.5"
+              />
+              <div className="min-w-0 flex-1">
+                <Label htmlFor="fusion-cascade-layer" className="cursor-pointer font-normal leading-snug">
+                  {FUSION_CASCADE_LAYER_DEFINITION.label}
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  {FUSION_CASCADE_LAYER_DEFINITION.description}
+                </p>
+              </div>
+            </div>
           </div>
         </section>
       ) : null}

@@ -4,6 +4,13 @@ import type {
   GeoCoordinate,
 } from '@/features/hub/fusion-centers/consequence-engine-types'
 
+export const FUSION_CASCADE_LAYER_DEFINITION = {
+  id: 'fusion-cascade-impacts',
+  label: 'Cascading Impacts Consequence Engine',
+  description:
+    'Animated cascade paths from Port of Houston cyber incident hub to critical infrastructure sectors.',
+} as const
+
 export const FUSION_CASCADE_SCENARIO: ConsequenceScenario = {
   hub: {
     id: 'hub',
@@ -56,6 +63,11 @@ export type ConsequenceMapExtent = {
   zoom: number
 }
 
+export type ConsequenceSvgPaint = {
+  stroke: string
+  fill: string
+}
+
 export function getConsequenceMapExtent(
   scenario: ConsequenceScenario = FUSION_CASCADE_SCENARIO
 ): ConsequenceMapExtent {
@@ -92,20 +104,19 @@ export function statusToTailwindClass(status: ConsequenceNodeStatus): string {
   }
 }
 
-export function statusToStrokeClass(status: ConsequenceNodeStatus): string {
+export function statusToSvgPaint(status: ConsequenceNodeStatus): ConsequenceSvgPaint {
   switch (status) {
     case 'ENCRYPTED':
-      return 'stroke-destructive'
     case 'CRITICAL':
-      return 'stroke-destructive'
+      return { stroke: 'var(--destructive)', fill: 'var(--background)' }
     case 'HIGH RISK':
-      return 'stroke-amber-500'
+      return { stroke: 'var(--color-amber-500)', fill: 'var(--background)' }
     case 'ELEVATED':
-      return 'stroke-orange-500'
+      return { stroke: 'var(--color-orange-500)', fill: 'var(--background)' }
     case 'MONITORED':
-      return 'stroke-muted-foreground'
+      return { stroke: 'var(--muted-foreground)', fill: 'var(--background)' }
     default:
-      return 'stroke-primary'
+      return { stroke: 'var(--primary)', fill: 'var(--background)' }
   }
 }
 

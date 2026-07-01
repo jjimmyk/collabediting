@@ -5,7 +5,11 @@ import {
   buildScenarioLinkPaths,
   projectScenarioToScreen,
 } from '@/features/hub/fusion-centers/consequence-engine-overlay-draw'
-import { FUSION_CASCADE_SCENARIO, sectorImpactRadius } from '@/features/hub/fusion-centers/fusion-cascade-scenario-data'
+import {
+  FUSION_CASCADE_SCENARIO,
+  sectorImpactRadius,
+  statusToSvgPaint,
+} from '@/features/hub/fusion-centers/fusion-cascade-scenario-data'
 
 describe('consequence-engine-overlay-draw', () => {
   it('projects scenario coordinates through a mock projector', () => {
@@ -50,5 +54,11 @@ describe('consequence-engine-overlay-draw', () => {
   it('scales impact radius with score', () => {
     expect(sectorImpactRadius(78)).toBeCloseTo(13.75)
     expect(sectorImpactRadius(31)).toBeCloseTo(7.875)
+  })
+
+  it('uses CSS variable strokes from statusToSvgPaint for sector paint', () => {
+    expect(statusToSvgPaint('CRITICAL').stroke).toBe('var(--destructive)')
+    expect(statusToSvgPaint('HIGH RISK').stroke).toBe('var(--color-amber-500)')
+    expect(statusToSvgPaint('ELEVATED').stroke).toBe('var(--color-orange-500)')
   })
 })
