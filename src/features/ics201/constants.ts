@@ -125,6 +125,9 @@ export function createInitialIcs201Form(): Ics201FormState {
     resources: [
       {
         id: 1,
+        assetKey: null,
+        resourceId: null,
+        resourceSnapshot: null,
         resource: 'USAR',
         resourceIdentifier: 'Urban Search Team Alpha',
         dateTimeOrdered: '2026-04-25 14:00 UTC',
@@ -134,6 +137,9 @@ export function createInitialIcs201Form(): Ics201FormState {
       },
       {
         id: 2,
+        assetKey: null,
+        resourceId: null,
+        resourceSnapshot: null,
         resource: 'Medical',
         resourceIdentifier: 'Medical Strike Team',
         dateTimeOrdered: '2026-04-25 15:00 UTC',

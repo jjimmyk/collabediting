@@ -1,6 +1,10 @@
 import { formatIcs201ObjectiveKindLabel } from './constants'
 import { createEmptyHazmatAssessmentBox15, createEmptySafetyAnalysisBox13 } from './form-options'
 import { migrateIcs201FormState } from './migrate-form-state'
+import {
+  cloneIcs201ResourceSummaryRow,
+  normalizeIcs201ResourceSummaryRow,
+} from './resource-summary-utils'
 import type {
   Ics201FormState,
   Ics201ObjectiveKind,
@@ -100,15 +104,12 @@ export function normalizeIcs201FormState(form: Ics201FormState): Ics201FormState
       intelInvestSectionChief: String(migrated.orgChart?.intelInvestSectionChief ?? ''),
     },
     resources: Array.isArray(migrated.resources)
-      ? migrated.resources.map((resource, index) => ({
-          id: typeof resource.id === 'number' ? resource.id : index + 1,
-          resource: String(resource.resource ?? ''),
-          resourceIdentifier: String(resource.resourceIdentifier ?? ''),
-          dateTimeOrdered: String(resource.dateTimeOrdered ?? ''),
-          eta: String(resource.eta ?? ''),
-          onScene: Boolean(resource.onScene),
-          notes: String(resource.notes ?? ''),
-        }))
+      ? migrated.resources.map((resource, index) =>
+          normalizeIcs201ResourceSummaryRow({
+            ...resource,
+            id: typeof resource.id === 'number' ? resource.id : index + 1,
+          })
+        )
       : [],
     safetyAnalysisBox13: migrated.safetyAnalysisBox13 ?? createEmptySafetyAnalysisBox13(),
     hazmatAssessmentBox15: migrated.hazmatAssessmentBox15 ?? createEmptyHazmatAssessmentBox15(),
@@ -142,7 +143,7 @@ export function cloneIcs201FormState(form: Ics201FormState): Ics201FormState {
       ...form.orgChart,
       commandNames: [...form.orgChart.commandNames],
     },
-    resources: form.resources.map((resource) => ({ ...resource })),
+    resources: form.resources.map((resource) => cloneIcs201ResourceSummaryRow(resource)),
     safetyAnalysisBox13: {
       ...form.safetyAnalysisBox13,
       knownHazards: { ...form.safetyAnalysisBox13.knownHazards },

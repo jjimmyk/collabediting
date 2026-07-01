@@ -2,6 +2,7 @@ import {
   createEmptyHazmatAssessmentBox15,
   createEmptySafetyAnalysisBox13,
 } from './form-options'
+import { normalizeIcs201ResourceSummaryRow } from './resource-summary-utils'
 import type {
   Ics201ActionRow,
   Ics201FormState,
@@ -33,6 +34,9 @@ type LegacyResourceRow = {
   eta?: string
   onScene?: boolean
   notes?: string
+  assetKey?: string | null
+  resourceId?: number | null
+  resourceSnapshot?: Ics201ResourceSummaryRow['resourceSnapshot']
 }
 
 type LegacyOrgChart = {
@@ -87,16 +91,19 @@ function migrateLegacyResources(raw: LegacyResourceRow[] | undefined): Ics201Res
   if (!Array.isArray(raw)) return []
   return raw.map((row, index) => {
     const id = typeof row.id === 'number' ? row.id : index + 1
-    if (row.resource != null || row.resourceIdentifier != null) {
-      return {
+    if (row.resource != null || row.resourceIdentifier != null || row.assetKey != null) {
+      return normalizeIcs201ResourceSummaryRow({
         id,
+        assetKey: row.assetKey ?? null,
+        resourceId: row.resourceId ?? null,
+        resourceSnapshot: row.resourceSnapshot ?? null,
         resource: String(row.resource ?? ''),
         resourceIdentifier: String(row.resourceIdentifier ?? ''),
         dateTimeOrdered: String(row.dateTimeOrdered ?? ''),
         eta: String(row.eta ?? ''),
         onScene: Boolean(row.onScene),
         notes: String(row.notes ?? ''),
-      }
+      })
     }
     const notes = [
       row.quantity ? `Qty: ${row.quantity}` : '',
@@ -105,7 +112,7 @@ function migrateLegacyResources(raw: LegacyResourceRow[] | undefined): Ics201Res
     ]
       .filter(Boolean)
       .join(' · ')
-    return {
+    return normalizeIcs201ResourceSummaryRow({
       id,
       resource: String(row.category ?? ''),
       resourceIdentifier: String(row.identifier ?? ''),
@@ -113,7 +120,7 @@ function migrateLegacyResources(raw: LegacyResourceRow[] | undefined): Ics201Res
       eta: '',
       onScene: false,
       notes,
-    }
+    })
   })
 }
 
@@ -165,7 +172,17 @@ function migrateLegacyOrgChart(orgChart: LegacyOrgChart | undefined) {
 
 export function migrateIcs201FormState(raw: LegacyForm): Ics201FormState {
   if (raw.schemaVersion === 2 && raw.safetyAnalysisBox13 && raw.hazmatAssessmentBox15) {
-    return raw as Ics201FormState
+    return {
+      ...(raw as Ics201FormState),
+      resources: Array.isArray(raw.resources)
+        ? raw.resources.map((row, index) =>
+            normalizeIcs201ResourceSummaryRow({
+              ...(row as LegacyResourceRow),
+              id: typeof (row as LegacyResourceRow).id === 'number' ? (row as LegacyResourceRow).id : index + 1,
+            })
+          )
+        : [],
+    }
   }
 
   const orgChart = migrateLegacyOrgChart(raw.orgChart)

@@ -987,6 +987,10 @@ import {
   resolveActiveIcs201Section,
 } from '@/features/ics201/utils'
 import {
+  cloneIcs201ResourceSummaryRow,
+  refreshIcs201ResourceDenormalizedFields,
+} from '@/features/ics201/resource-summary-utils'
+import {
   createInitialSitrepForm,
   SITREP_AI_COMPATIBLE_SECTIONS,
   SITREP_SECTION_PRIMARY,
@@ -5656,6 +5660,9 @@ function ics201LegacyResourceRow(
 ): Ics201ResourceSummaryRow {
   return {
     id,
+    assetKey: null,
+    resourceId: null,
+    resourceSnapshot: null,
     resource: category,
     resourceIdentifier: identifier,
     dateTimeOrdered: '',
@@ -5768,6 +5775,9 @@ const BASELINE_ORG_CHART: Ics201FormState['orgChart'] = {
 const BASELINE_RESOURCES: Ics201ResourceSummaryRow[] = [
   {
     id: 1,
+    assetKey: null,
+    resourceId: null,
+    resourceSnapshot: null,
     resource: 'Air Operations',
     resourceIdentifier: 'MH-65 (3x airframes)',
     dateTimeOrdered: '2026-05-14 06:00 PT',
@@ -5777,6 +5787,9 @@ const BASELINE_RESOURCES: Ics201ResourceSummaryRow[] = [
   },
   {
     id: 2,
+    assetKey: null,
+    resourceId: null,
+    resourceSnapshot: null,
     resource: 'Boat Forces',
     resourceIdentifier: 'Response Boat - Medium',
     dateTimeOrdered: '2026-05-14 06:00 PT',
@@ -5786,6 +5799,9 @@ const BASELINE_RESOURCES: Ics201ResourceSummaryRow[] = [
   },
   {
     id: 3,
+    assetKey: null,
+    resourceId: null,
+    resourceSnapshot: null,
     resource: 'USAR',
     resourceIdentifier: 'Urban Search Team Alpha',
     dateTimeOrdered: '2026-05-14 06:00 PT',
@@ -8509,6 +8525,10 @@ function App() {
   const orgAssetIdsByKey = useMemo(
     () => Object.fromEntries(organizationAssets.map((asset) => [asset.assetKey, asset.id])),
     [organizationAssets]
+  )
+  const hubAssetsByKey = useMemo(
+    () => Object.fromEntries(hubAssets.map((asset) => [asset.assetKey, asset])),
+    [hubAssets]
   )
   const handleAssignAssetToCurrentWorkspace = useCallback(
     (assetKey: string) => {
@@ -15429,7 +15449,7 @@ function App() {
           break
         case 'resources':
           setIcs201ResourcesDraft(
-            ics201Form.resources.map((resource) => ({ ...resource }))
+            ics201Form.resources.map((resource) => cloneIcs201ResourceSummaryRow(resource))
           )
           setIcs201EditingResources(true)
           break
@@ -22228,7 +22248,7 @@ function App() {
             break
           case 'resources':
             setIcs201ResourcesDraft(
-              ics201Form.resources.map((resource) => ({ ...resource }))
+              ics201Form.resources.map((resource) => cloneIcs201ResourceSummaryRow(resource))
             )
             setIcs201EditingResources(true)
             break
@@ -22428,6 +22448,9 @@ function App() {
             const generated: Ics201ResourceSummaryRow[] = [
               {
                 id: 1,
+                assetKey: null,
+                resourceId: null,
+                resourceSnapshot: null,
                 resource: 'Operations',
                 resourceIdentifier: 'Urban Search Team Alpha',
                 dateTimeOrdered: `${new Date().toISOString().slice(0, 10)} 08:00`,
@@ -22437,6 +22460,9 @@ function App() {
               },
               {
                 id: 2,
+                assetKey: null,
+                resourceId: null,
+                resourceSnapshot: null,
                 resource: 'Logistics',
                 resourceIdentifier: 'Mobile Command Unit',
                 dateTimeOrdered: `${new Date().toISOString().slice(0, 10)} 08:30`,
@@ -22446,6 +22472,9 @@ function App() {
               },
               {
                 id: 3,
+                assetKey: null,
+                resourceId: null,
+                resourceSnapshot: null,
                 resource: 'Medical',
                 resourceIdentifier: 'Medical Strike Team',
                 dateTimeOrdered: `${new Date().toISOString().slice(0, 10)} 07:00`,
@@ -22455,6 +22484,9 @@ function App() {
               },
               {
                 id: 4,
+                assetKey: null,
+                resourceId: null,
+                resourceSnapshot: null,
                 resource: 'Aviation',
                 resourceIdentifier: 'Helicopter — Type II',
                 dateTimeOrdered: `${new Date().toISOString().slice(0, 10)} 06:00`,
@@ -22807,6 +22839,9 @@ function App() {
             previous.resources.length === 0
               ? 1
               : Math.max(...previous.resources.map((item) => item.id)) + 1,
+          assetKey: null,
+          resourceId: null,
+          resourceSnapshot: null,
           resource: '',
           resourceIdentifier: '',
           dateTimeOrdered: '',
@@ -34056,7 +34091,9 @@ function App() {
                         saveIcs201Section(
                           {
                             ...ics201Form,
-                            resources: ics201ResourcesDraft.map((resource) => ({ ...resource })),
+                            resources: ics201ResourcesDraft.map((resource) =>
+                              refreshIcs201ResourceDenormalizedFields(resource, hubAssetsByKey)
+                            ),
                           },
                           'resources'
                         )
@@ -34068,6 +34105,13 @@ function App() {
                       onDraftChange={setIcs201ResourcesDraft}
                       editors={ics201SectionEditors.resources ?? []}
                       cursor={ics201ResourcesCursor}
+                      hubAssets={hubAssets}
+                      workspaceOptions={assetWorkspaceOptions}
+                      orgAssetIdsByKey={orgAssetIdsByKey}
+                      glassItemBorderClasses={glassItemBorderClasses}
+                      onFocusResourceMap={(resourceId, mapLocation) => {
+                        void focusMapItem(`resource-${resourceId}`, mapLocation, 30000)
+                      }}
                     />
                     <Ics201SafetyAnalysisSection
                       className={glassItemBorderClasses}

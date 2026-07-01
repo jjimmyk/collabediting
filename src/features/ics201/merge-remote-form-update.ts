@@ -3,6 +3,7 @@ import type {
   Ics201ObjectiveRow,
 } from '@/features/ics201/types'
 import { applyIcs201DraftLiveOverlay, type Ics201DraftLiveOverlay } from '@/features/ics201/draft-live-overlay'
+import { cloneIcs201ResourceSummaryRow } from '@/features/ics201/resource-summary-utils'
 import { cloneIcs201FormState } from '@/features/ics201/utils'
 import type { Ics201SectionEditingFlags } from '@/hooks/useIcs201AllSectionCursors'
 
@@ -68,7 +69,7 @@ export function mergeRemoteIcs201FormUpdate(
   }
 
   if (editingFlags.resources) {
-    next.resources = local.resources.map((resource) => ({ ...resource }))
+    next.resources = local.resources.map((resource) => cloneIcs201ResourceSummaryRow(resource))
   }
 
   if (editingFlags.safetyAnalysis) {

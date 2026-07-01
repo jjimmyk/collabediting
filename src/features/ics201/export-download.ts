@@ -17,6 +17,7 @@ import {
   type PdfImageRect,
 } from '@/features/ics201/map-sketch-geometry'
 import type { Ics201ActionRow, Ics201FormState } from '@/features/ics201/types'
+import { refreshIcs201ResourceDenormalizedFields } from '@/features/ics201/resource-summary-utils'
 import { formatIcs201ObjectiveExportLine } from '@/features/ics201/utils'
 import type { DocxBlock, DocxOptions } from '@/lib/docx-blocks'
 
@@ -209,6 +210,16 @@ function formatAction(action: Ics201ActionRow): string {
   return time.length > 0 ? `${time}: ${actionText}` : actionText
 }
 
+function ics201ExportResources(form: Ics201FormState) {
+  return form.resources.map((row) => {
+    const assetsByKey =
+      row.assetKey && row.resourceSnapshot
+        ? { [row.assetKey]: row.resourceSnapshot }
+        : undefined
+    return refreshIcs201ResourceDenormalizedFields(row, assetsByKey)
+  })
+}
+
 export async function fillIcs201TemplatePdf(
   form: Ics201FormState,
   options: { paginated: boolean; mapSketchPng?: Uint8Array | null }
@@ -370,7 +381,7 @@ export async function fillIcs201TemplatePdf(
   setText('Logistics SectionRow1', form.orgChart.logisticsSectionChief)
   setText('Finance SectionRow1', form.orgChart.financeSectionChief)
 
-  form.resources.forEach((resource, index) => {
+  ics201ExportResources(form).forEach((resource, index) => {
     const rowNumber = index + 1
     if (rowNumber > 13) return
     setText(
@@ -621,10 +632,11 @@ export function buildIcs201DocxBlocks(
     populatedOrg.forEach(([role, name]) => pushBullet(`${role}: ${name.trim()}`))
   }
   pushHeading('Resources Summary')
-  if (form.resources.length === 0) {
+  const exportResources = ics201ExportResources(form)
+  if (exportResources.length === 0) {
     pushParagraph('No resources recorded.')
   } else {
-    form.resources.forEach((resource) => {
+    exportResources.forEach((resource) => {
       const head: string[] = []
       if (resource.resource.trim()) head.push(resource.resource.trim())
       if (resource.resourceIdentifier.trim()) head.push(resource.resourceIdentifier.trim())

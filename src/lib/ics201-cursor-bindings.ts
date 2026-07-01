@@ -8,7 +8,7 @@
  * - incident-briefing: `incidentBriefing.{field}`
  * - actions: `actions:{rowId}.{task|owner|startTime|endTime}`
  * - org-chart: `orgChart.{field}`
- * - resources: `resources:{rowId}.{category|identifier|quantity|status|assignment}`
+ * - resources: `resources:{rowId}.{resource|resourceIdentifier|dateTimeOrdered|eta|notes}` (global fields skipped for linked asset rows)
  * - safety-analysis: `safetyAnalysis:{rowId}.{hazard|mitigation|ppe|medicalPlan}`
  * - map-sketch: `mapSketch:{index}.lat|lng`, `map:draw` (anchor=latE6, head=lngE6)
  */

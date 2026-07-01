@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Item, ItemContent, ItemDescription, ItemTitle } from '@/components/ui/item'
 import type { Ics201FormState, Ics201Version } from '@/features/ics201/types'
+import { refreshIcs201ResourceDenormalizedFields } from '@/features/ics201/resource-summary-utils'
 import { formatIcs201ObjectiveKindLabel } from '@/features/ics201/constants'
 import {
   ICS201_ACTION_COLUMN_LABELS,
@@ -287,19 +288,24 @@ export function Ics201OperationalPeriodSnapshotPanel({
           <ReadOnlyField
             label={ICS201_BOX_LABELS.resources}
             value={displayForm.resources
-              .map(
-                (row) =>
-                  [
-                    row.resource,
-                    row.resourceIdentifier,
-                    row.dateTimeOrdered && `${ICS201_RESOURCE_COLUMN_LABELS.dateTimeOrdered}: ${row.dateTimeOrdered}`,
-                    row.eta && `${ICS201_RESOURCE_COLUMN_LABELS.eta}: ${row.eta}`,
-                    row.onScene && `${ICS201_RESOURCE_COLUMN_LABELS.onScene}: ${row.onScene}`,
-                    row.notes,
-                  ]
-                    .filter(Boolean)
-                    .join(' · ')
-              )
+              .map((row) => {
+                const assetsByKey =
+                  row.assetKey && row.resourceSnapshot
+                    ? { [row.assetKey]: row.resourceSnapshot }
+                    : undefined
+                const resource = refreshIcs201ResourceDenormalizedFields(row, assetsByKey)
+                return [
+                  resource.resource,
+                  resource.resourceIdentifier,
+                  resource.dateTimeOrdered &&
+                    `${ICS201_RESOURCE_COLUMN_LABELS.dateTimeOrdered}: ${resource.dateTimeOrdered}`,
+                  resource.eta && `${ICS201_RESOURCE_COLUMN_LABELS.eta}: ${resource.eta}`,
+                  resource.onScene && `${ICS201_RESOURCE_COLUMN_LABELS.onScene}: Yes`,
+                  resource.notes,
+                ]
+                  .filter(Boolean)
+                  .join(' · ')
+              })
               .join('\n')}
           />
           <ReadOnlyField

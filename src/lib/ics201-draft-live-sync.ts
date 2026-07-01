@@ -109,9 +109,16 @@ export function applyIcs201DraftFieldPatch(
       | 'dateTimeOrdered'
       | 'eta'
       | 'notes'
-    next.resources = next.resources.map((resource) =>
-      resource.id === id ? { ...resource, [field]: value } : resource
-    )
+    next.resources = next.resources.map((resource) => {
+      if (resource.id !== id) return resource
+      if (
+        resource.assetKey &&
+        (field === 'resource' || field === 'resourceIdentifier')
+      ) {
+        return resource
+      }
+      return { ...resource, [field]: value }
+    })
     return next
   }
 

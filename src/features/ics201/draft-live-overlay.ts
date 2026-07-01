@@ -190,7 +190,16 @@ export function applyIcs201DraftFieldPatchToDrafts(
       | 'eta'
       | 'notes'
     setters.setResourcesDraft?.((draft) =>
-      draft.map((resource) => (resource.id === id ? { ...resource, [field]: value } : resource))
+      draft.map((resource) => {
+        if (resource.id !== id) return resource
+        if (
+          resource.assetKey &&
+          (field === 'resource' || field === 'resourceIdentifier')
+        ) {
+          return resource
+        }
+        return { ...resource, [field]: value }
+      })
     )
     return
   }

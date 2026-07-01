@@ -70,14 +70,21 @@ export type Ics201HazmatPotentialHazardId =
   | 'scbaRequired'
   | 'levelARequired'
 
+import type { ResourceListItemData } from '@/features/resources/types'
+
 export type Ics201ActionRow = {
   id: number
   time: string
   action: string
 }
 
+export type Ics201ResourceSnapshot = ResourceListItemData
+
 export type Ics201ResourceSummaryRow = {
   id: number
+  assetKey: string | null
+  resourceId: number | null
+  resourceSnapshot: Ics201ResourceSnapshot | null
   resource: string
   resourceIdentifier: string
   dateTimeOrdered: string
