@@ -836,6 +836,9 @@ import {
 import { EventsSettingsPage } from '@/components/EventsSettingsPage'
 import { NotificationSettingsPage } from '@/components/NotificationSettingsPage'
 import pratusLogo from '@/assets/pratus-logo.png'
+import { Ics201FieldFocusIndicators } from '@/features/ics201/Ics201FieldFocusIndicators'
+import { Ics201RemoteTextCursors } from '@/features/ics201/Ics201RemoteTextCursors'
+import { Ics201SaveStatusIndicator } from '@/features/ics201/Ics201SaveStatusIndicator'
 import { Ics201SectionEditorBadges } from '@/features/ics201/Ics201SectionEditorBadges'
 import { Ics201TutorialWizard } from '@/features/ics201/Ics201TutorialWizard'
 import { UscgInitialResponseTutorialWizard } from '@/features/uscg-workspace/UscgInitialResponseTutorialWizard'
@@ -899,6 +902,7 @@ import {
   MOCK_ICS201_COLLABORATORS,
   formatIcs201ObjectiveKindLabel,
 } from '@/features/ics201/constants'
+import { buildIcs201LiveFormSnapshot } from '@/features/ics201/live-snapshot'
 import { syncIcs202ObjectivesFromIcs201 } from '@/features/ics201/sync-ics202-objectives'
 import type {
   Ics201ActionRow,
@@ -926,6 +930,7 @@ import {
   createLocalIcs201Version,
   createSeedIcs201Versions,
   ics201AuthorColorFromId,
+  ics201InitialsFromEmail,
   ics201ObjectivesFromStrings,
   ics201VersionAuthorLabel,
   normalizeIcs201FormState,
@@ -968,6 +973,8 @@ import {
 } from '@/features/sitrep/utils'
 import { useSitrepSync } from '@/hooks/useSitrepSync'
 import { fetchSitrepLiveSummaryForAor } from '@/lib/sitrep-service'
+import { useIcs201AggressiveAutosave } from '@/hooks/useIcs201AggressiveAutosave'
+import { useIcs201CursorSync } from '@/hooks/useIcs201CursorSync'
 import { useIcs201ObjectivesSectionEditor } from '@/hooks/useIcs201ObjectivesSectionEditor'
 import { useIcs201Presence } from '@/hooks/useIcs201Presence'
 import { useIcs201Sync } from '@/hooks/useIcs201Sync'
@@ -981,7 +988,9 @@ import { useWorkspacePermissions } from '@/hooks/useWorkspacePermissions'
 import { Ics201OperationalPeriodSnapshotPanel } from '@/features/operational-periods/Ics201OperationalPeriodSnapshotPanel'
 import { OperationalPeriodHistoricalFormShell } from '@/features/operational-periods/OperationalPeriodHistoricalFormShell'
 import { useOperationalPeriods } from '@/hooks/useOperationalPeriods'
-import { patchIcs201DocumentForm, seedIcs201DocumentForWorkspace } from '@/lib/ics201-service'
+import { hashIcs201FormStateSync } from '@/lib/ics201-content-hash'
+import { ICS201_CRDT_PERSIST_MS } from '@/lib/ics201-autosave-scheduler'
+import { replaceIcs201DocumentForm, seedIcs201DocumentForWorkspace } from '@/lib/ics201-service'
 import { isOperationalPeriodFormTab } from '@/lib/operational-period-form-registry'
 import {
   hasOperationalPeriodFormSnapshot,
@@ -15252,6 +15261,46 @@ function App() {
     userPosition: currentUserRosterPosition,
     activeSection: activeIcs201Section,
   })
+  const ics201SelfInitials = useMemo(
+    () => ics201InitialsFromEmail(profileEmail?.toLowerCase() ?? 'you@local.dev'),
+    [profileEmail]
+  )
+  const ics201LastEditedSectionRef = useRef<Ics201SectionId | null>(null)
+  const ics201CurrentSituationCursor = useIcs201CursorSync({
+    enabled:
+      isSupabaseEnabled &&
+      ics201DocumentId !== null &&
+      (ics201EditingCurrentSituation || activeTab === 'briefing'),
+    documentId: ics201DocumentId,
+    sectionId: 'current-situation',
+    selfUserId: user?.id ?? null,
+    selfColor: ics201SelfColor,
+    selfInitials: ics201SelfInitials,
+  })
+  const ics201ObjectivesCursor = useIcs201CursorSync({
+    enabled:
+      isSupabaseEnabled &&
+      ics201DocumentId !== null &&
+      (ics201EditingObjectives || activeTab === 'briefing'),
+    documentId: ics201DocumentId,
+    sectionId: 'objectives',
+    selfUserId: user?.id ?? null,
+    selfColor: ics201SelfColor,
+    selfInitials: ics201SelfInitials,
+  })
+  const ics201DraftSectionCursor = useIcs201CursorSync({
+    enabled:
+      isSupabaseEnabled &&
+      ics201DocumentId !== null &&
+      activeIcs201Section !== null &&
+      activeIcs201Section !== 'current-situation' &&
+      activeIcs201Section !== 'objectives',
+    documentId: ics201DocumentId,
+    sectionId: activeIcs201Section ?? 'report-info',
+    selfUserId: user?.id ?? null,
+    selfColor: ics201SelfColor,
+    selfInitials: ics201SelfInitials,
+  })
   const ics201VersionAuthorDisplay = useCallback(
     (version: Ics201Version) =>
       ics201VersionAuthorLabel(version, {
@@ -15259,21 +15308,6 @@ function App() {
         rosterMembers: activeWorkspaceRoster,
       }),
     [activeWorkspaceRoster, profileEmail]
-  )
-  const publishIcs201CurrentSituationToForm = useCallback(
-    async (value: string) => {
-      if (!ics201DocumentId) return
-      try {
-        await patchIcs201DocumentForm(
-          ics201DocumentId,
-          { currentSituationSummary: value },
-          user?.id ?? null
-        )
-      } catch {
-        // Autosave should not interrupt live co-editing.
-      }
-    },
-    [ics201DocumentId, user?.id]
   )
   const ics201CurrentSituationEditor = useIcs201TextSectionEditor({
     enabled: isSupabaseEnabled,
@@ -15283,37 +15317,73 @@ function App() {
     sectionId: 'current-situation',
     seedValue: ics201Form.currentSituationSummary,
     maxLength: ics201EnforcesCharLimit ? ICS201_STRICT_CHAR_LIMIT : undefined,
-    onFormPublish: publishIcs201CurrentSituationToForm,
-    formPublishDebounceMs: 10000,
+    persistDebounceMs: ICS201_CRDT_PERSIST_MS,
+    onSelectionChange: ({ anchor, head }) => {
+      ics201CurrentSituationCursor.publishCursor('content', anchor, head)
+    },
   })
   ics201LiveConnectedRef.current = ics201CurrentSituationEditor.isLiveConnected
   ics201LiveCurrentSituationRef.current = ics201CurrentSituationEditor.isLiveConnected
     ? ics201CurrentSituationEditor.value
     : ''
-  const getIcs201FormWithLiveSections = useCallback((): Ics201FormState => {
-    const form = cloneIcs201FormState(ics201Form)
-    if (ics201CurrentSituationEditor.isLiveConnected) {
-      form.currentSituationSummary = ics201CurrentSituationEditor.value
-    }
-    if (ics201EditingMapSketch) {
-      form.mapSketchPolygon = ics201MapSketchDraft.map((vertex) => ({ ...vertex }))
-    }
-    return form
-  }, [
-    ics201CurrentSituationEditor.isLiveConnected,
-    ics201CurrentSituationEditor.value,
-    ics201EditingMapSketch,
-    ics201Form,
-    ics201MapSketchDraft,
-  ])
   const ics201ObjectivesEditor = useIcs201ObjectivesSectionEditor({
     enabled: isSupabaseEnabled,
     active: ics201EditingObjectives && canEditIcs201Form,
+    stayConnected: isSupabaseEnabled && ics201DocumentId !== null && activeTab === 'briefing',
     documentId: ics201DocumentId,
     sectionId: 'objectives',
     seedValue: ics201Form.objectives,
     maxLength: ics201EnforcesCharLimit ? ICS201_STRICT_CHAR_LIMIT : undefined,
+    persistDebounceMs: ICS201_CRDT_PERSIST_MS,
   })
+  const getIcs201LiveFormSnapshot = useCallback(
+    () =>
+      buildIcs201LiveFormSnapshot({
+        form: ics201Form,
+        currentSituationLive: ics201CurrentSituationEditor.isLiveConnected
+          ? ics201CurrentSituationEditor.value
+          : undefined,
+        objectivesLive: ics201ObjectivesEditor.isLiveConnected
+          ? ics201ObjectivesEditor.objectives
+          : undefined,
+        editingReportInfo: ics201EditingReportInfo,
+        reportInfoDraft: ics201ReportInfoDraft,
+        editingIncidentBriefing: ics201EditingIncidentBriefing,
+        incidentBriefingDraft: ics201IncidentBriefingDraft,
+        editingMapSketch: ics201EditingMapSketch,
+        mapSketchDraft: ics201MapSketchDraft,
+        editingActions: ics201EditingActions,
+        actionsDraft: ics201ActionsDraft,
+        editingOrgChart: ics201EditingOrgChart,
+        orgChartDraft: ics201OrgChartDraft,
+        editingResources: ics201EditingResources,
+        resourcesDraft: ics201ResourcesDraft,
+        editingSafetyAnalysis: ics201EditingSafetyAnalysis,
+        safetyAnalysisDraft: ics201SafetyAnalysisDraft,
+      }),
+    [
+      ics201ActionsDraft,
+      ics201CurrentSituationEditor.isLiveConnected,
+      ics201CurrentSituationEditor.value,
+      ics201EditingActions,
+      ics201EditingIncidentBriefing,
+      ics201EditingMapSketch,
+      ics201EditingOrgChart,
+      ics201EditingReportInfo,
+      ics201EditingResources,
+      ics201EditingSafetyAnalysis,
+      ics201Form,
+      ics201IncidentBriefingDraft,
+      ics201MapSketchDraft,
+      ics201ObjectivesEditor.isLiveConnected,
+      ics201ObjectivesEditor.objectives,
+      ics201OrgChartDraft,
+      ics201ReportInfoDraft,
+      ics201ResourcesDraft,
+      ics201SafetyAnalysisDraft,
+    ]
+  )
+  const getIcs201FormWithLiveSections = getIcs201LiveFormSnapshot
   const beginIcs201SectionEdit = useCallback(
     (section: Ics201SectionId) => {
       if (!canEditIcs201Form) return
@@ -15424,6 +15494,59 @@ function App() {
     },
     [appendIcs201Version, ics201AuthorColor, ics201AuthorEmail, ics201AuthorName]
   )
+  const isLatestIcs201VersionSigned =
+    (ics201Versions[ics201Versions.length - 1]?.signatures.length ?? 0) > 0
+  const ics201AggressiveAutosave = useIcs201AggressiveAutosave({
+    enabled: isSupabaseEnabled && ics201DocumentId !== null,
+    documentId: ics201DocumentId,
+    userId: user?.id ?? null,
+    canEdit: canEditIcs201Form,
+    getLiveSnapshot: getIcs201LiveFormSnapshot,
+    getLastEditedSection: () => ics201LastEditedSectionRef.current,
+    isLatestSigned: isLatestIcs201VersionSigned,
+    onEnsureUnsignedBaseline: async () => {
+      pushIcs201Version(getIcs201LiveFormSnapshot())
+    },
+    onPatchForm: async (snapshot) => {
+      if (!ics201DocumentId) return
+      await replaceIcs201DocumentForm(ics201DocumentId, snapshot, user?.id ?? null)
+      setIcs201Form(cloneIcs201FormState(snapshot))
+    },
+    onCheckpointVersion: async (snapshot, sectionId) => {
+      pushIcs201Version(snapshot, {
+        sectionId: sectionId ?? undefined,
+        authorNameOverride: 'Autosave checkpoint',
+      })
+    },
+    persistCollaborative: async () => {
+      await ics201CurrentSituationEditor.persistNow()
+      await ics201ObjectivesEditor.persistNow()
+    },
+  })
+  const ics201LiveSnapshotHash = hashIcs201FormStateSync(getIcs201LiveFormSnapshot())
+  useEffect(() => {
+    if (!canEditIcs201Form) return
+    if (activeIcs201Section) {
+      ics201LastEditedSectionRef.current = activeIcs201Section
+    }
+    ics201AggressiveAutosave.markDirty()
+  }, [activeIcs201Section, canEditIcs201Form, ics201AggressiveAutosave, ics201LiveSnapshotHash])
+  const previousActiveIcs201SectionRef = useRef<Ics201SectionId | null>(null)
+  useEffect(() => {
+    if (previousActiveIcs201SectionRef.current && !activeIcs201Section) {
+      ics201AggressiveAutosave.onSectionBlur()
+      ics201CurrentSituationCursor.clearCursor()
+      ics201ObjectivesCursor.clearCursor()
+      ics201DraftSectionCursor.clearCursor()
+    }
+    previousActiveIcs201SectionRef.current = activeIcs201Section
+  }, [
+    activeIcs201Section,
+    ics201AggressiveAutosave,
+    ics201CurrentSituationCursor,
+    ics201DraftSectionCursor,
+    ics201ObjectivesCursor,
+  ])
   useEffect(() => {
     if (ics201SyncError) {
       toast.error(ics201SyncError)
@@ -33014,9 +33137,14 @@ function App() {
                                   : `${ics201TopBarEditors.length} ${
                                       ics201TopBarEditors.length === 1 ? 'person is' : 'people are'
                                     } editing now.`}
-                              {isIcs201Saving ? ' Saving…' : null}
+                              {ics201TopBarEditors.length > 8 ? (
+                                <span className="ml-1 text-amber-600 dark:text-amber-400">
+                                  High co-editing load — performance may degrade.
+                                </span>
+                              ) : null}
                               {isIcs201Loading ? ' Loading…' : null}
                             </span>
+                            <Ics201SaveStatusIndicator status={ics201AggressiveAutosave.status} />
                           </div>
                         </TooltipProvider>
                       )}
@@ -33942,18 +34070,37 @@ function App() {
                           </div>
                           {ics201EditingCurrentSituation ? (
                             <>
-                              <Textarea
-                                autoFocus
-                                value={ics201CurrentSituationEditor.value}
-                                onChange={(event) => {
-                                  ics201CurrentSituationEditor.setValue(event.target.value)
-                                }}
-                                maxLength={
-                                  ics201EnforcesCharLimit ? ICS201_STRICT_CHAR_LIMIT : undefined
-                                }
-                                className="min-h-24 text-xs"
-                                placeholder="Current situation summary"
-                              />
+                              <div className="relative">
+                                <Textarea
+                                  autoFocus
+                                  value={ics201CurrentSituationEditor.value}
+                                  onChange={(event) => {
+                                    ics201CurrentSituationEditor.setValue(event.target.value)
+                                  }}
+                                  onSelect={(event) => {
+                                    ics201CurrentSituationEditor.reportSelection(event.currentTarget)
+                                  }}
+                                  onKeyUp={(event) => {
+                                    ics201CurrentSituationEditor.reportSelection(event.currentTarget)
+                                  }}
+                                  onClick={(event) => {
+                                    ics201CurrentSituationEditor.reportSelection(event.currentTarget)
+                                  }}
+                                  onBlur={() => {
+                                    ics201CurrentSituationCursor.clearCursor()
+                                  }}
+                                  maxLength={
+                                    ics201EnforcesCharLimit ? ICS201_STRICT_CHAR_LIMIT : undefined
+                                  }
+                                  className="min-h-24 text-xs"
+                                  placeholder="Current situation summary"
+                                />
+                                <Ics201RemoteTextCursors
+                                  value={ics201CurrentSituationEditor.value}
+                                  cursors={ics201CurrentSituationCursor.remoteCursors}
+                                  className="min-h-24 text-xs"
+                                />
+                              </div>
                               <div
                                 className={cn(
                                   'flex justify-end text-[10px]',
@@ -33977,7 +34124,7 @@ function App() {
                               ariaLabel={`Edit ${ICS201_SECTION_LABELS['current-situation']} section`}
                               onStartEdit={() => beginIcs201SectionEdit('current-situation')}
                             >
-                            <div className="min-h-24 whitespace-pre-wrap rounded-md border border-dashed border-border/60 bg-muted/20 px-2.5 py-2 text-xs">
+                            <div className="relative min-h-24 whitespace-pre-wrap rounded-md border border-dashed border-border/60 bg-muted/20 px-2.5 py-2 text-xs">
                               {ics201CurrentSituationEditor.isLiveConnected
                                 ? ics201CurrentSituationEditor.value || (
                                     <span className="text-muted-foreground">—</span>
@@ -33985,6 +34132,15 @@ function App() {
                                 : ics201Form.currentSituationSummary || (
                                     <span className="text-muted-foreground">—</span>
                                   )}
+                              <Ics201RemoteTextCursors
+                                value={
+                                  ics201CurrentSituationEditor.isLiveConnected
+                                    ? ics201CurrentSituationEditor.value
+                                    : ics201Form.currentSituationSummary
+                                }
+                                cursors={ics201CurrentSituationCursor.remoteCursors}
+                                className="text-xs"
+                              />
                             </div>
                             </IcsEditableSectionContent>
                           )}
@@ -34131,6 +34287,21 @@ function App() {
                                             objective: event.target.value,
                                           })
                                         }}
+                                        onFocus={(event) => {
+                                          ics201ObjectivesCursor.publishCursor(
+                                            `objective:${row.id}`,
+                                            event.currentTarget.selectionStart ?? 0,
+                                            event.currentTarget.selectionEnd ?? 0
+                                          )
+                                        }}
+                                        onSelect={(event) => {
+                                          ics201ObjectivesCursor.publishCursor(
+                                            `objective:${row.id}`,
+                                            event.currentTarget.selectionStart ?? 0,
+                                            event.currentTarget.selectionEnd ?? 0
+                                          )
+                                        }}
+                                        onBlur={() => ics201ObjectivesCursor.clearCursor()}
                                         placeholder="Objective statement"
                                         className="h-8 w-full rounded-md border bg-transparent px-2 text-xs outline-none"
                                       />
@@ -34215,12 +34386,19 @@ function App() {
                               onStartEdit={() => beginIcs201SectionEdit('objectives')}
                               className="space-y-3"
                             >
-                          {ics201Form.objectives.length === 0 ? (
+                          <Ics201FieldFocusIndicators cursors={ics201ObjectivesCursor.remoteCursors} />
+                          {(ics201ObjectivesEditor.isLiveConnected
+                            ? ics201ObjectivesEditor.objectives
+                            : ics201Form.objectives
+                          ).length === 0 ? (
                             <div className="rounded-md border border-dashed border-border/60 bg-muted/20 px-2.5 py-2 text-xs text-muted-foreground">
                               No objectives recorded.
                             </div>
                           ) : (
-                            ics201Form.objectives.map((row, index) => (
+                            (ics201ObjectivesEditor.isLiveConnected
+                              ? ics201ObjectivesEditor.objectives
+                              : ics201Form.objectives
+                            ).map((row, index) => (
                               <div
                                 key={`ics-objective-${row.id}`}
                                 className="rounded-md border border-dashed border-border/60 bg-muted/20 px-2.5 py-2 text-xs"

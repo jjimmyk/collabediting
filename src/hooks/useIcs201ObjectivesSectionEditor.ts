@@ -9,10 +9,12 @@ import { createIcs201YjsProvider, type Ics201YjsProvider } from '@/lib/ics201-yj
 type UseIcs201ObjectivesSectionEditorOptions = {
   enabled: boolean
   active: boolean
+  stayConnected?: boolean
   documentId: string | null
   sectionId: Ics201SectionId
   seedValue: Ics201ObjectiveRow[]
   maxLength?: number
+  persistDebounceMs?: number
 }
 
 function nextObjectiveRowId(rows: Ics201ObjectiveRow[]): number {
@@ -94,26 +96,29 @@ function defaultObjectiveRows(seedValue: Ics201ObjectiveRow[]): Ics201ObjectiveR
 export function useIcs201ObjectivesSectionEditor({
   enabled,
   active,
+  stayConnected = false,
   documentId,
   sectionId,
   seedValue,
   maxLength,
+  persistDebounceMs,
 }: UseIcs201ObjectivesSectionEditorOptions) {
   const [objectives, setObjectives] = useState<Ics201ObjectiveRow[]>(seedValue)
   const ydocRef = useRef<Y.Doc | null>(null)
   const yarrayRef = useRef<Y.Array<unknown> | null>(null)
   const providerRef = useRef<Ics201YjsProvider | null>(null)
   const suppressObserverRef = useRef(false)
-  const isCollaborative = enabled && active && documentId !== null
+  const shouldConnect = enabled && documentId !== null && (active || stayConnected)
+  const isLiveConnected = shouldConnect
 
   useEffect(() => {
-    if (!active) {
+    if (!shouldConnect) {
       setObjectives(seedValue)
     }
-  }, [active, seedValue])
+  }, [seedValue, shouldConnect])
 
   useEffect(() => {
-    if (!enabled || !active || !documentId) {
+    if (!shouldConnect || !documentId) {
       providerRef.current?.destroy()
       providerRef.current = null
       ydocRef.current = null
@@ -157,6 +162,7 @@ export function useIcs201ObjectivesSectionEditor({
         doc: ydoc,
         documentId: activeDocumentId,
         sectionId,
+        debounceMs: persistDebounceMs,
         onPersist: (state) => persistSectionCrdtState(activeDocumentId, sectionId, state),
       })
     }
@@ -171,7 +177,7 @@ export function useIcs201ObjectivesSectionEditor({
       ydocRef.current = null
       yarrayRef.current = null
     }
-  }, [active, documentId, enabled, maxLength, sectionId, seedValue])
+  }, [documentId, maxLength, persistDebounceMs, sectionId, seedValue, shouldConnect])
 
   const updateObjectiveRow = useCallback(
     (rowId: number, patch: Partial<Pick<Ics201ObjectiveRow, 'kind' | 'objective'>>) => {
@@ -317,6 +323,7 @@ export function useIcs201ObjectivesSectionEditor({
     deleteObjective,
     replaceObjectives,
     persistNow,
-    isCollaborative,
+    isCollaborative: isLiveConnected && active,
+    isLiveConnected,
   }
 }

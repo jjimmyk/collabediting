@@ -17,6 +17,8 @@ type UseIcs201TextSectionEditorOptions = {
   /** Debounced publish of live text into ics201_documents.form_data (no version row). */
   onFormPublish?: (value: string) => Promise<void>
   formPublishDebounceMs?: number
+  onSelectionChange?: (selection: { anchor: number; head: number }) => void
+  persistDebounceMs?: number
 }
 
 export function useIcs201TextSectionEditor({
@@ -28,7 +30,9 @@ export function useIcs201TextSectionEditor({
   seedValue,
   maxLength,
   onFormPublish,
-  formPublishDebounceMs = 10000,
+  formPublishDebounceMs = 1500,
+  onSelectionChange,
+  persistDebounceMs,
 }: UseIcs201TextSectionEditorOptions) {
   const [value, setValue] = useState(seedValue)
   const ydocRef = useRef<Y.Doc | null>(null)
@@ -113,6 +117,7 @@ export function useIcs201TextSectionEditor({
         doc: ydoc,
         documentId: activeDocumentId,
         sectionId,
+        debounceMs: persistDebounceMs,
         onPersist: (state) => persistSectionCrdtState(activeDocumentId, sectionId, state),
       })
     }
@@ -131,7 +136,7 @@ export function useIcs201TextSectionEditor({
       ydocRef.current = null
       ytextRef.current = null
     }
-  }, [documentId, formPublishDebounceMs, maxLength, sectionId, seedValue, shouldConnect])
+  }, [documentId, formPublishDebounceMs, maxLength, persistDebounceMs, sectionId, seedValue, shouldConnect])
 
   const setValueFromInput = useCallback(
     (next: string) => {
@@ -185,12 +190,24 @@ export function useIcs201TextSectionEditor({
     }
   }, [maxLength, value])
 
+  const reportSelection = useCallback(
+    (element: HTMLTextAreaElement | null) => {
+      if (!element || !onSelectionChange) return
+      onSelectionChange({
+        anchor: element.selectionStart ?? 0,
+        head: element.selectionEnd ?? 0,
+      })
+    },
+    [onSelectionChange]
+  )
+
   return {
     value,
     setValue: setValueFromInput,
     replaceValue,
     persistNow,
-    isCollaborative: isLiveConnected,
+    reportSelection,
+    isCollaborative: isLiveConnected && active,
     isLiveConnected,
   }
 }

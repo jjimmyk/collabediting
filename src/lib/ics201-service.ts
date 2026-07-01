@@ -228,6 +228,30 @@ export async function persistIcs201Version(
   return mapIcs201VersionRow(versionRow as Ics201VersionRow)
 }
 
+export async function replaceIcs201DocumentForm(
+  documentId: string,
+  snapshot: Ics201FormState,
+  userId: string | null
+): Promise<void> {
+  const supabase = getSupabaseClient()
+  if (!supabase) return
+
+  const nextForm = normalizeIcs201FormState(cloneIcs201FormState(snapshot))
+
+  const { error: updateError } = await supabase
+    .from('ics201_documents')
+    .update({
+      form_data: nextForm,
+      updated_at: new Date().toISOString(),
+      updated_by: userId,
+    })
+    .eq('id', documentId)
+
+  if (updateError) {
+    throw new Error(updateError.message)
+  }
+}
+
 export async function patchIcs201DocumentForm(
   documentId: string,
   patch: Partial<Ics201FormState>,

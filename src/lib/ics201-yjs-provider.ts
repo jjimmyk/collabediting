@@ -2,6 +2,7 @@ import * as Y from 'yjs'
 import type { RealtimeChannel } from '@supabase/supabase-js'
 import type { Ics201SectionId } from '@/features/ics201/types'
 import { decodeBytea, encodeBytea, ICS201_YJS_REMOTE_ORIGIN } from '@/lib/ics201-crdt-utils'
+import { isIcs201Il4StrictMode } from '@/lib/ics201-sync-transport'
 import { getSupabaseClient } from '@/lib/supabase'
 
 export type Ics201YjsProvider = {
@@ -10,7 +11,7 @@ export type Ics201YjsProvider = {
 }
 
 const DEFAULT_BROADCAST_FLUSH_MS = 75
-const DEFAULT_PERSIST_DEBOUNCE_MS = 5000
+const DEFAULT_PERSIST_DEBOUNCE_MS = 1500
 
 export function mergeYjsBroadcastUpdates(updates: Uint8Array[]): Uint8Array | null {
   if (updates.length === 0) return null
@@ -75,7 +76,7 @@ export function createIcs201YjsProvider(options: {
   }
 
   const broadcastUpdate = (update: Uint8Array, channel: RealtimeChannel) => {
-    if (!isSubscribed || update.length === 0) return
+    if (isIcs201Il4StrictMode() || !isSubscribed || update.length === 0) return
     void channel.send({
       type: 'broadcast',
       event: 'yjs-update',
@@ -93,7 +94,7 @@ export function createIcs201YjsProvider(options: {
   }
 
   const queueBroadcast = (update: Uint8Array, channel: RealtimeChannel) => {
-    if (update.length === 0) return
+    if (isIcs201Il4StrictMode() || update.length === 0) return
     pendingBroadcastUpdates.push(update)
     if (broadcastTimer === null) {
       broadcastTimer = window.setTimeout(() => flushBroadcast(channel), broadcastFlushMs)
