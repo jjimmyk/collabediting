@@ -895,6 +895,8 @@ import {
 } from '@/features/hub/aor/hub-aor-boundary-geometries'
 import { hubAorDistrictBoundaryId } from '@/features/hub/aor/aor-boundary-map-keys'
 import { useHubAorBoundaryMapLayers } from '@/features/hub/aor/useHubAorBoundaryMapLayers'
+import { useHubNotificationMapLayer } from '@/features/hub/map/useHubNotificationMapLayer'
+import { syncHubMapGraphicsLayer } from '@/features/hub/map/sync-hub-map-graphics-layer'
 import { HubMapVisibleItemsPill } from '@/features/hub/map/HubMapVisibleItemsPill'
 import {
   buildHubMapVisibleItems,
@@ -3257,31 +3259,6 @@ const scheduleHubMapViewLayoutRefresh = (
       console.warn('MapView layout refresh failed', error)
     }
   })
-}
-
-const syncHubMapGraphicsLayer = (
-  view: MapView | null,
-  currentLayer: GraphicsLayer | null,
-  graphics: Graphic[]
-): GraphicsLayer => {
-  const map = view?.map ?? null
-  if (map && currentLayer && map.layers.includes(currentLayer)) {
-    const replacementLayer = new GraphicsLayer()
-    if (graphics.length > 0) {
-      replacementLayer.addMany(graphics)
-    }
-    const layerIndex = map.layers.indexOf(currentLayer)
-    map.remove(currentLayer)
-    map.add(replacementLayer, layerIndex >= 0 ? layerIndex : undefined)
-    return replacementLayer
-  }
-
-  const layer = currentLayer ?? new GraphicsLayer()
-  layer.removeAll()
-  if (graphics.length > 0) {
-    layer.addMany(graphics)
-  }
-  return layer
 }
 
 type Ics214ActivityLogEntry = {
@@ -12038,6 +12015,17 @@ function App() {
     aisLayerEnabled: geospatialCopAisLayerEnabled,
     mapViewRef,
     graphicsRef: geospatialCopGraphicsRef,
+  })
+  useHubNotificationMapLayer({
+    enabled:
+      !isInWorkspaceContext &&
+      isMapVisible &&
+      !isCreateIncidentOpen &&
+      !isCreateExerciseOpen,
+    mapViewRef,
+    mapGraphicsLayerRef,
+    graphicsRef: mapGraphicsRef,
+    notifications: userVisibleNotifications,
   })
   useNoaaGnomeMapLayer({
     enabled: showNoaaGnomeMapLayer,
@@ -29000,11 +28988,11 @@ function App() {
                                   event.stopPropagation()
                                   setSelectedPanelItemId(key)
                                   setSelectedNestedItemId(null)
-                                  if (relatedEvent) {
+                                  if (item.location) {
                                     void focusMapItem(
-                                      `event-list-${relatedEvent.id}`,
-                                      relatedEvent.location,
-                                      50000
+                                      `notification-${item.id}`,
+                                      item.location,
+                                      45000
                                     )
                                     return
                                   }
@@ -29018,12 +29006,6 @@ function App() {
                                       hubAorDistrictBoundaryId(linkedAor.id),
                                       linkedAor.location,
                                       10_000_000
-                                    )
-                                  } else {
-                                    void focusMapItem(
-                                      `notification-${item.id}`,
-                                      item.location,
-                                      45000
                                     )
                                   }
                                 }}
