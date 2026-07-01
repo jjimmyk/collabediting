@@ -22,6 +22,7 @@ import {
   extractIcs208SiteSafetyPlanDraft,
   formatIcs208YesNo,
 } from '@/features/ics208/utils'
+import { IcsEditableSectionContent } from '@/lib/ics-editable-section'
 import { cn } from '@/lib/utils'
 import { Item } from '@/components/ui/item'
 
@@ -109,7 +110,13 @@ export function Ics208FormSections({
             disabled={formIsLocked}
             onStartEdit={() => onStartSectionEdit(section)}
           />
-          {content}
+          <IcsEditableSectionContent
+            enabled={canEdit && !formIsLocked && !editing}
+            ariaLabel={`Edit ${ICS208_SECTION_LABELS[section].toLowerCase()}`}
+            onStartEdit={() => onStartSectionEdit(section)}
+          >
+            {content}
+          </IcsEditableSectionContent>
           <Ics202SectionEditActions
             isEditing={editing}
             isSaving={isSaving}

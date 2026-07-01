@@ -31,6 +31,7 @@ import {
   extractIcs215aPreparedByDraft,
   formatIcs215aRiskGain,
 } from '@/features/ics215a/utils'
+import { IcsEditableSectionContent } from '@/lib/ics-editable-section'
 import type { WorkspacePositionCatalog } from '@/features/roster/workspace-positions'
 import { cn } from '@/lib/utils'
 
@@ -183,7 +184,13 @@ export function Ics215aFormSections({
             />
             {extraActions}
           </div>
-          {content}
+          <IcsEditableSectionContent
+            enabled={canEdit && !formIsLocked && !editing}
+            ariaLabel={`Edit ${ICS215A_SECTION_LABELS[section].toLowerCase()}`}
+            onStartEdit={() => onStartSectionEdit(section)}
+          >
+            {content}
+          </IcsEditableSectionContent>
           <Ics202SectionEditActions
             isEditing={editing}
             isSaving={isSaving}

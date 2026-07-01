@@ -19,6 +19,8 @@ import {
   extractIcs214IncidentInfoDraft,
   extractIcs214PreparedByDraft,
 } from '@/features/ics214/utils'
+import { ICS214_SECTION_LABELS } from '@/features/ics214/constants'
+import { IcsEditableSectionContent } from '@/lib/ics-editable-section'
 import { cn } from '@/lib/utils'
 
 type Ics214FormSectionsProps = {
@@ -129,7 +131,13 @@ export function Ics214FormSections({
             />
             {extraActions}
           </div>
-          {content}
+          <IcsEditableSectionContent
+            enabled={canEdit && !formIsLocked && !editing}
+            ariaLabel={`Edit ${ICS214_SECTION_LABELS[section].toLowerCase()}`}
+            onStartEdit={() => onStartSectionEdit(section)}
+          >
+            {content}
+          </IcsEditableSectionContent>
           <Ics214SectionEditActions
             isEditing={editing}
             isSaving={isSaving}

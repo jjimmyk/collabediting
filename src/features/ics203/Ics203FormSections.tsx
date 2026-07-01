@@ -15,6 +15,7 @@ import {
   Ics202ReadOnlyField,
   Ics202SectionEditActions,
 } from '@/features/ics202/Ics202SectionToolbar'
+import { IcsEditableSectionContent } from '@/lib/ics-editable-section'
 import type {
   Ics203AgencyRepresentativeRow,
   Ics203DivisionGroupRow,
@@ -206,7 +207,13 @@ export function Ics203FormSections({
             ) : null}
             {extraActions}
           </div>
-          {content}
+          <IcsEditableSectionContent
+            enabled={canEdit && !formIsLocked && !editing}
+            ariaLabel={`Edit ${ICS203_SECTION_LABELS[section].toLowerCase()}`}
+            onStartEdit={() => onStartSectionEdit(section)}
+          >
+            {content}
+          </IcsEditableSectionContent>
           <Ics202SectionEditActions
             isEditing={editing}
             isSaving={isSaving}

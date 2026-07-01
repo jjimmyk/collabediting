@@ -41,6 +41,7 @@ import {
   formatIcs208hmSiteMapIncludes,
   formatIcs208hmYesNo,
 } from '@/features/ics208hm/utils'
+import { IcsEditableSectionContent } from '@/lib/ics-editable-section'
 import { cn } from '@/lib/utils'
 import { Item } from '@/components/ui/item'
 
@@ -194,7 +195,13 @@ export function Ics208hmFormSections({
             disabled={formIsLocked}
             onStartEdit={() => onStartSectionEdit(section)}
           />
-          {content}
+          <IcsEditableSectionContent
+            enabled={canEdit && !formIsLocked && !editing}
+            ariaLabel={`Edit ${ICS208HM_SECTION_LABELS[section].toLowerCase()}`}
+            onStartEdit={() => onStartSectionEdit(section)}
+          >
+            {content}
+          </IcsEditableSectionContent>
           <Ics202SectionEditActions
             isEditing={editing}
             isSaving={isSaving}

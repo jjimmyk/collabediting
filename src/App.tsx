@@ -717,6 +717,7 @@ import {
   resolveActivationIcs201DraftForWorkspace,
   type ActivationIcs201DraftState,
 } from '@/lib/activation-ics201-prefill'
+import { IcsEditableSectionContent } from '@/lib/ics-editable-section'
 import {
   districtNodeIdFromDistrictName,
   formatActivationAorLabels,
@@ -15313,6 +15314,73 @@ function App() {
     seedValue: ics201Form.objectives,
     maxLength: ics201EnforcesCharLimit ? ICS201_STRICT_CHAR_LIMIT : undefined,
   })
+  const beginIcs201SectionEdit = useCallback(
+    (section: Ics201SectionId) => {
+      if (!canEditIcs201Form) return
+      switch (section) {
+        case 'report-info':
+          setIcs201ReportInfoDraft({
+            incidentName: ics201Form.incidentName,
+            incidentLocation: ics201Form.incidentLocation,
+            dateInitiated: ics201Form.dateInitiated,
+            timeInitiated: ics201Form.timeInitiated,
+            preparedByName: ics201Form.preparedByName,
+            preparedByPositionTitle: ics201Form.preparedByPositionTitle,
+            preparedBySignature: ics201Form.preparedBySignature,
+            preparedDateTime: ics201Form.preparedDateTime,
+          })
+          setIcs201EditingReportInfo(true)
+          break
+        case 'incident-briefing':
+          setIcs201IncidentBriefingDraft({
+            incidentName: ics201Form.incidentName,
+            incidentNumber: ics201Form.incidentNumber,
+            preparedDateTime: ics201Form.preparedDateTime,
+            preparedBy: ics201Form.preparedBy,
+            operationalPeriodStart: ics201Form.operationalPeriodStart,
+            operationalPeriodEnd: ics201Form.operationalPeriodEnd,
+            jurisdiction: ics201Form.jurisdiction,
+          })
+          setIcs201EditingIncidentBriefing(true)
+          break
+        case 'map-sketch':
+          setIcs201MapSketchDraft(
+            ics201Form.mapSketchPolygon.map((vertex) => ({ ...vertex }))
+          )
+          setIcs201EditingMapSketch(true)
+          break
+        case 'current-situation':
+          setIcs201EditingCurrentSituation(true)
+          break
+        case 'objectives':
+          setIcs201EditingObjectives(true)
+          break
+        case 'actions':
+          setIcs201ActionsDraft(ics201Form.actions.map((action) => ({ ...action })))
+          setIcs201EditingActions(true)
+          break
+        case 'org-chart':
+          setIcs201OrgChartDraft({ ...ics201Form.orgChart })
+          setIcs201EditingOrgChart(true)
+          break
+        case 'resources':
+          setIcs201ResourcesDraft(
+            ics201Form.resources.map((resource) => ({ ...resource }))
+          )
+          setIcs201EditingResources(true)
+          break
+        case 'safety-analysis':
+          setIcs201SafetyAnalysisDraft(
+            ics201Form.safetyAnalysis.map((row) => ({ ...row }))
+          )
+          setIcs201EditingSafetyAnalysis(true)
+          break
+        default:
+          break
+      }
+    },
+    [canEditIcs201Form, ics201Form],
+  )
   const ics201TopBarEditors = isSupabaseEnabled
     ? ics201ActiveEditors
     : MOCK_ICS201_COLLABORATORS.map((collaborator) => ({
@@ -33117,24 +33185,18 @@ function App() {
                               variant="ghost"
                               className="h-7 w-7 text-muted-foreground"
                               aria-label="Edit report identification"
-                              onClick={() => {
-                                setIcs201ReportInfoDraft({
-                                  incidentName: ics201Form.incidentName,
-                                  incidentLocation: ics201Form.incidentLocation,
-                                  dateInitiated: ics201Form.dateInitiated,
-                                  timeInitiated: ics201Form.timeInitiated,
-                                  preparedByName: ics201Form.preparedByName,
-                                  preparedByPositionTitle: ics201Form.preparedByPositionTitle,
-                                  preparedBySignature: ics201Form.preparedBySignature,
-                                  preparedDateTime: ics201Form.preparedDateTime,
-                                })
-                                setIcs201EditingReportInfo(true)
-                              }}
+                              onClick={() => beginIcs201SectionEdit('report-info')}
                             >
                               <Pencil className="h-3.5 w-3.5" />
                             </Button>
                           )}
                         </div>
+                        <IcsEditableSectionContent
+                          enabled={canEditIcs201Form && !ics201EditingReportInfo}
+                          ariaLabel={`Edit ${ICS201_SECTION_LABELS['report-info']} section`}
+                          onStartEdit={() => beginIcs201SectionEdit('report-info')}
+                          className="space-y-2"
+                        >
                         <p className="text-[11px] text-muted-foreground">
                           These values appear in the header and footer boxes on every page of
                           the exported ICS-201 Word or PDF document.
@@ -33290,6 +33352,7 @@ function App() {
                             </div>
                           ))}
                         </div>
+                        </IcsEditableSectionContent>
                         {ics201EditingReportInfo && (
                           <div className="flex items-center justify-end gap-1.5">
                             <Button
@@ -33356,23 +33419,17 @@ function App() {
                                 variant="ghost"
                                 className="h-7 w-7 text-muted-foreground"
                                 aria-label="Edit incident briefing"
-                                onClick={() => {
-                                  setIcs201IncidentBriefingDraft({
-                                    incidentName: ics201Form.incidentName,
-                                    incidentNumber: ics201Form.incidentNumber,
-                                    preparedDateTime: ics201Form.preparedDateTime,
-                                    preparedBy: ics201Form.preparedBy,
-                                    operationalPeriodStart: ics201Form.operationalPeriodStart,
-                                    operationalPeriodEnd: ics201Form.operationalPeriodEnd,
-                                    jurisdiction: ics201Form.jurisdiction,
-                                  })
-                                  setIcs201EditingIncidentBriefing(true)
-                                }}
+                                onClick={() => beginIcs201SectionEdit('incident-briefing')}
                               >
                                 <Pencil className="h-3.5 w-3.5" />
                               </Button>
                             )}
                           </div>
+                          <IcsEditableSectionContent
+                            enabled={canEditIcs201Form && !ics201EditingIncidentBriefing}
+                            ariaLabel={`Edit ${ICS201_SECTION_LABELS['incident-briefing']} section`}
+                            onStartEdit={() => beginIcs201SectionEdit('incident-briefing')}
+                          >
                           {ics201EditingIncidentBriefing ? (
                             <div className="grid grid-cols-2 gap-2">
                               <input
@@ -33489,6 +33546,7 @@ function App() {
                               ))}
                             </div>
                           )}
+                          </IcsEditableSectionContent>
                           {ics201EditingIncidentBriefing && (
                             <div className="flex items-center justify-end gap-1.5">
                               <Button
@@ -33609,12 +33667,7 @@ function App() {
                                 variant="ghost"
                                 className="h-7 w-7 text-muted-foreground"
                                 aria-label="Edit map sketch"
-                                onClick={() => {
-                                  setIcs201MapSketchDraft(
-                                    ics201Form.mapSketchPolygon.map((vertex) => ({ ...vertex }))
-                                  )
-                                  setIcs201EditingMapSketch(true)
-                                }}
+                                onClick={() => beginIcs201SectionEdit('map-sketch')}
                               >
                                 <Pencil className="h-3.5 w-3.5" />
                               </Button>
@@ -33826,6 +33879,12 @@ function App() {
                               </div>
                             </>
                           ) : (
+                            <IcsEditableSectionContent
+                              enabled={canEditIcs201Form && !ics201EditingMapSketch}
+                              ariaLabel={`Edit ${ICS201_SECTION_LABELS['map-sketch']} section`}
+                              onStartEdit={() => beginIcs201SectionEdit('map-sketch')}
+                              className="space-y-1.5"
+                            >
                             <div className="space-y-1.5">
                               <span className="text-[11px] text-muted-foreground">
                                 {ics201Form.mapSketchPolygon.length}{' '}
@@ -33849,6 +33908,7 @@ function App() {
                                 ))
                               )}
                             </div>
+                            </IcsEditableSectionContent>
                           )}
                         </ItemContent>
                       </div>
@@ -33874,9 +33934,7 @@ function App() {
                                 variant="ghost"
                                 className="h-7 w-7 text-muted-foreground"
                                 aria-label="Edit current situation"
-                                onClick={() => {
-                                  setIcs201EditingCurrentSituation(true)
-                                }}
+                                onClick={() => beginIcs201SectionEdit('current-situation')}
                               >
                                 <Pencil className="h-3.5 w-3.5" />
                               </Button>
@@ -33914,6 +33972,11 @@ function App() {
                               </div>
                             </>
                           ) : (
+                            <IcsEditableSectionContent
+                              enabled={canEditIcs201Form && !ics201EditingCurrentSituation}
+                              ariaLabel={`Edit ${ICS201_SECTION_LABELS['current-situation']} section`}
+                              onStartEdit={() => beginIcs201SectionEdit('current-situation')}
+                            >
                             <div className="min-h-24 whitespace-pre-wrap rounded-md border border-dashed border-border/60 bg-muted/20 px-2.5 py-2 text-xs">
                               {ics201CurrentSituationEditor.isLiveConnected
                                 ? ics201CurrentSituationEditor.value || (
@@ -33923,6 +33986,7 @@ function App() {
                                     <span className="text-muted-foreground">—</span>
                                   )}
                             </div>
+                            </IcsEditableSectionContent>
                           )}
                           {ics201EditingCurrentSituation && (
                             <div className="flex items-center justify-end gap-1.5">
@@ -33990,9 +34054,7 @@ function App() {
                                 variant="ghost"
                                 className="h-7 w-7 text-muted-foreground"
                                 aria-label="Edit objectives"
-                                onClick={() => {
-                                  setIcs201EditingObjectives(true)
-                                }}
+                                onClick={() => beginIcs201SectionEdit('objectives')}
                               >
                                 <Pencil className="h-3.5 w-3.5" />
                               </Button>
@@ -34146,7 +34208,14 @@ function App() {
                                 </>
                               )
                             })()
-                          ) : ics201Form.objectives.length === 0 ? (
+                          ) : (
+                            <IcsEditableSectionContent
+                              enabled={canEditIcs201Form && !ics201EditingObjectives}
+                              ariaLabel={`Edit ${ICS201_SECTION_LABELS.objectives} section`}
+                              onStartEdit={() => beginIcs201SectionEdit('objectives')}
+                              className="space-y-3"
+                            >
+                          {ics201Form.objectives.length === 0 ? (
                             <div className="rounded-md border border-dashed border-border/60 bg-muted/20 px-2.5 py-2 text-xs text-muted-foreground">
                               No objectives recorded.
                             </div>
@@ -34172,6 +34241,8 @@ function App() {
                               </div>
                             ))
                           )}
+                            </IcsEditableSectionContent>
+                          )}
                         </ItemContent>
                       </div>
                     </Item>
@@ -34191,12 +34262,7 @@ function App() {
                                 variant="ghost"
                                 className="h-7 w-7 text-muted-foreground"
                                 aria-label="Edit actions"
-                                onClick={() => {
-                                  setIcs201ActionsDraft(
-                                    ics201Form.actions.map((action) => ({ ...action }))
-                                  )
-                                  setIcs201EditingActions(true)
-                                }}
+                                onClick={() => beginIcs201SectionEdit('actions')}
                               >
                                 <Pencil className="h-3.5 w-3.5" />
                               </Button>
@@ -34326,7 +34392,14 @@ function App() {
                                 </Button>
                               </div>
                             </>
-                          ) : ics201Form.actions.length === 0 ? (
+                          ) : (
+                            <IcsEditableSectionContent
+                              enabled={canEditIcs201Form && !ics201EditingActions}
+                              ariaLabel={`Edit ${ICS201_SECTION_LABELS.actions} section`}
+                              onStartEdit={() => beginIcs201SectionEdit('actions')}
+                              className="space-y-3"
+                            >
+                          {ics201Form.actions.length === 0 ? (
                             <div className="rounded-md border border-dashed border-border/60 bg-muted/20 px-2.5 py-2 text-xs text-muted-foreground">
                               No actions recorded.
                             </div>
@@ -34343,6 +34416,8 @@ function App() {
                                 </div>
                               </div>
                             ))
+                          )}
+                            </IcsEditableSectionContent>
                           )}
                         </ItemContent>
                       </div>
@@ -34362,10 +34437,7 @@ function App() {
                                 variant="ghost"
                                 className="h-7 w-7 text-muted-foreground"
                                 aria-label="Edit organization chart"
-                                onClick={() => {
-                                  setIcs201OrgChartDraft({ ...ics201Form.orgChart })
-                                  setIcs201EditingOrgChart(true)
-                                }}
+                                onClick={() => beginIcs201SectionEdit('org-chart')}
                               >
                                 <Pencil className="h-3.5 w-3.5" />
                               </Button>
@@ -34439,6 +34511,11 @@ function App() {
                               </div>
                             </>
                           ) : (
+                            <IcsEditableSectionContent
+                              enabled={canEditIcs201Form && !ics201EditingOrgChart}
+                              ariaLabel={`Edit ${ICS201_SECTION_LABELS['org-chart']} section`}
+                              onStartEdit={() => beginIcs201SectionEdit('org-chart')}
+                            >
                             <div className="grid grid-cols-2 gap-2">
                               {(
                                 [
@@ -34477,6 +34554,7 @@ function App() {
                                 </div>
                               ))}
                             </div>
+                            </IcsEditableSectionContent>
                           )}
                         </ItemContent>
                       </div>
@@ -34497,12 +34575,7 @@ function App() {
                                 variant="ghost"
                                 className="h-7 w-7 text-muted-foreground"
                                 aria-label="Edit resources summary"
-                                onClick={() => {
-                                  setIcs201ResourcesDraft(
-                                    ics201Form.resources.map((resource) => ({ ...resource }))
-                                  )
-                                  setIcs201EditingResources(true)
-                                }}
+                                onClick={() => beginIcs201SectionEdit('resources')}
                               >
                                 <Pencil className="h-3.5 w-3.5" />
                               </Button>
@@ -34648,7 +34721,14 @@ function App() {
                                 </Button>
                               </div>
                             </>
-                          ) : ics201Form.resources.length === 0 ? (
+                          ) : (
+                            <IcsEditableSectionContent
+                              enabled={canEditIcs201Form && !ics201EditingResources}
+                              ariaLabel={`Edit ${ICS201_SECTION_LABELS.resources} section`}
+                              onStartEdit={() => beginIcs201SectionEdit('resources')}
+                              className="space-y-3"
+                            >
+                          {ics201Form.resources.length === 0 ? (
                             <div className="rounded-md border border-dashed border-border/60 bg-muted/20 px-2.5 py-2 text-xs text-muted-foreground">
                               No resources recorded.
                             </div>
@@ -34668,6 +34748,8 @@ function App() {
                                 </div>
                               </div>
                             ))
+                          )}
+                            </IcsEditableSectionContent>
                           )}
                         </ItemContent>
                       </div>
@@ -34690,12 +34772,7 @@ function App() {
                                 variant="ghost"
                                 className="h-7 w-7 text-muted-foreground"
                                 aria-label="Edit safety analysis"
-                                onClick={() => {
-                                  setIcs201SafetyAnalysisDraft(
-                                    ics201Form.safetyAnalysis.map((row) => ({ ...row }))
-                                  )
-                                  setIcs201EditingSafetyAnalysis(true)
-                                }}
+                                onClick={() => beginIcs201SectionEdit('safety-analysis')}
                               >
                                 <Pencil className="h-3.5 w-3.5" />
                               </Button>
@@ -34826,7 +34903,14 @@ function App() {
                                 </Button>
                               </div>
                             </>
-                          ) : ics201Form.safetyAnalysis.length === 0 ? (
+                          ) : (
+                            <IcsEditableSectionContent
+                              enabled={canEditIcs201Form && !ics201EditingSafetyAnalysis}
+                              ariaLabel={`Edit ${ICS201_SECTION_LABELS['safety-analysis']} section`}
+                              onStartEdit={() => beginIcs201SectionEdit('safety-analysis')}
+                              className="space-y-3"
+                            >
+                          {ics201Form.safetyAnalysis.length === 0 ? (
                             <div className="rounded-md border border-dashed border-border/60 bg-muted/20 px-2.5 py-2 text-xs text-muted-foreground">
                               No safety items recorded.
                             </div>
@@ -34844,6 +34928,8 @@ function App() {
                                 </div>
                               </div>
                             ))
+                          )}
+                            </IcsEditableSectionContent>
                           )}
                         </ItemContent>
                       </div>

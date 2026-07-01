@@ -20,6 +20,7 @@ import type {
   Ics234SectionId,
 } from '@/features/ics234/types'
 import { extractIcs234SectionDraft } from '@/features/ics234/utils'
+import { IcsEditableSectionContent } from '@/lib/ics-editable-section'
 import { cn } from '@/lib/utils'
 
 type Ics234FormSectionsProps = {
@@ -176,7 +177,13 @@ export function Ics234FormSections({
               ) : null}
             </div>
           </div>
-          {content}
+          <IcsEditableSectionContent
+            enabled={canEdit && !formIsLocked && !editing && !hideSectionEdit}
+            ariaLabel={`Edit ${ICS234_SECTION_LABELS[section].toLowerCase()}`}
+            onStartEdit={() => onStartSectionEdit(section)}
+          >
+            {content}
+          </IcsEditableSectionContent>
           {!hideSectionEdit ? (
             <Ics202SectionEditActions
               isEditing={editing}

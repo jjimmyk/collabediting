@@ -10,6 +10,7 @@ import {
   Ics202SectionEditActions,
   Ics202SectionHeader,
 } from '@/features/ics202/Ics202SectionToolbar'
+import { IcsEditableSectionContent } from '@/lib/ics-editable-section'
 import {
   ICS209_LIFE_SAFETY_THREAT_LABELS,
   ICS209_SECTION_LABELS,
@@ -106,7 +107,13 @@ function SectionShell({
           disabled={formIsLocked}
           onStartEdit={() => onStartSectionEdit(section)}
         />
-        {children}
+        <IcsEditableSectionContent
+          enabled={canEdit && !formIsLocked && !editing}
+          ariaLabel={`Edit ${ICS209_SECTION_LABELS[section].toLowerCase()}`}
+          onStartEdit={() => onStartSectionEdit(section)}
+        >
+          {children}
+        </IcsEditableSectionContent>
         <Ics202SectionEditActions
           isEditing={editing}
           isSaving={isSaving}

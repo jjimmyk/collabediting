@@ -34,6 +34,7 @@ import type {
   Ics234TacticsRow,
 } from '@/features/ics234/types'
 import { ics234MatrixItemKey, ics234MatrixItemRefsMatch, isIcs234ObjectiveLinkedToIcs202 } from '@/features/ics234/utils'
+import { IcsEditableSectionContent } from '@/lib/ics-editable-section'
 import { cn } from '@/lib/utils'
 
 function strategyKey(objectiveId: number, strategyId: number) {
@@ -79,6 +80,11 @@ export function Ics234WorkAnalysisMatrix({
     }
   }
 
+  const startMatrixItemEdit = (ref: Ics234MatrixItemRef) => {
+    onStartItemEdit(ref)
+    handleEditClick(ref)
+  }
+
   const renderTactic = (
     objective: Ics234ObjectiveRow,
     strategy: Ics234StrategyRow,
@@ -101,12 +107,18 @@ export function Ics234WorkAnalysisMatrix({
         className="flex items-center gap-2 rounded-md border px-2 py-1.5"
       >
         <div className="min-w-0 flex-1">
-          <Ics234MatrixInlineNameField
-            name={name}
-            editing={editing}
-            placeholder={placeholder}
-            onChange={(next) => onPatchItemDraft({ kind: 'tactic', name: next })}
-          />
+          <IcsEditableSectionContent
+            enabled={canMutate && !editing}
+            ariaLabel="Edit tactic"
+            onStartEdit={() => startMatrixItemEdit(ref)}
+          >
+            <Ics234MatrixInlineNameField
+              name={name}
+              editing={editing}
+              placeholder={placeholder}
+              onChange={(next) => onPatchItemDraft({ kind: 'tactic', name: next })}
+            />
+          </IcsEditableSectionContent>
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
           <Badge variant="outline" className="text-xs">
@@ -168,20 +180,37 @@ export function Ics234WorkAnalysisMatrix({
         className="rounded-md border"
       >
         <div className="flex items-center gap-2 px-2 py-1.5">
-          <div
-            className="flex min-w-0 flex-1 cursor-pointer items-center gap-2"
-            onClick={() =>
-              setExpandedStrategyKey((previous) => (previous === key ? null : key))
-            }
-          >
-            <Ics234MatrixInlineNameField
-              name={name}
-              editing={editing}
-              placeholder={placeholder}
-              onChange={(next) => onPatchItemDraft({ kind: 'strategy', name: next })}
-              className="flex-1"
-            />
-          </div>
+          {canMutate && !editing ? (
+            <IcsEditableSectionContent
+              enabled
+              ariaLabel="Edit strategy"
+              onStartEdit={() => startMatrixItemEdit(ref)}
+              className="flex min-w-0 flex-1 items-center gap-2"
+            >
+              <Ics234MatrixInlineNameField
+                name={name}
+                editing={editing}
+                placeholder={placeholder}
+                onChange={(next) => onPatchItemDraft({ kind: 'strategy', name: next })}
+                className="flex-1"
+              />
+            </IcsEditableSectionContent>
+          ) : (
+            <div
+              className="flex min-w-0 flex-1 cursor-pointer items-center gap-2"
+              onClick={() =>
+                setExpandedStrategyKey((previous) => (previous === key ? null : key))
+              }
+            >
+              <Ics234MatrixInlineNameField
+                name={name}
+                editing={editing}
+                placeholder={placeholder}
+                onChange={(next) => onPatchItemDraft({ kind: 'strategy', name: next })}
+                className="flex-1"
+              />
+            </div>
+          )}
           <div className="flex shrink-0 items-center gap-1.5">
             <Badge variant="outline" className="text-xs">
               Strategy
@@ -315,26 +344,49 @@ export function Ics234WorkAnalysisMatrix({
                 onOpenChange={(open) => setExpandedObjectiveId(open ? objective.id : null)}
               >
                 <div className="flex items-center gap-2 px-3 py-2.5">
-                  <ItemContent
-                    className="min-w-0 flex-1 cursor-pointer"
-                    onClick={() =>
-                      setExpandedObjectiveId((previous) =>
-                        previous === objective.id ? null : objective.id
-                      )
-                    }
-                  >
-                    <ItemTitle className="line-clamp-none w-full font-medium">
-                      <Ics234MatrixInlineNameField
-                        name={name}
-                        editing={editing}
-                        readOnly={isLinkedToIcs202}
-                        placeholder={placeholder}
-                        onChange={(next) =>
-                          onPatchItemDraft({ kind: 'objective', name: next })
-                        }
-                      />
-                    </ItemTitle>
-                  </ItemContent>
+                  {canMutate && !editing && !isLinkedToIcs202 ? (
+                    <IcsEditableSectionContent
+                      enabled
+                      ariaLabel="Edit objective"
+                      onStartEdit={() => startMatrixItemEdit(ref)}
+                      className="min-w-0 flex-1"
+                    >
+                      <ItemContent className="min-w-0 flex-1">
+                        <ItemTitle className="line-clamp-none w-full font-medium">
+                          <Ics234MatrixInlineNameField
+                            name={name}
+                            editing={editing}
+                            readOnly={isLinkedToIcs202}
+                            placeholder={placeholder}
+                            onChange={(next) =>
+                              onPatchItemDraft({ kind: 'objective', name: next })
+                            }
+                          />
+                        </ItemTitle>
+                      </ItemContent>
+                    </IcsEditableSectionContent>
+                  ) : (
+                    <ItemContent
+                      className="min-w-0 flex-1 cursor-pointer"
+                      onClick={() =>
+                        setExpandedObjectiveId((previous) =>
+                          previous === objective.id ? null : objective.id
+                        )
+                      }
+                    >
+                      <ItemTitle className="line-clamp-none w-full font-medium">
+                        <Ics234MatrixInlineNameField
+                          name={name}
+                          editing={editing}
+                          readOnly={isLinkedToIcs202}
+                          placeholder={placeholder}
+                          onChange={(next) =>
+                            onPatchItemDraft({ kind: 'objective', name: next })
+                          }
+                        />
+                      </ItemTitle>
+                    </ItemContent>
+                  )}
                   <ItemActions>
                     <Badge variant="outline">Objective</Badge>
                     {ics202SourceLabel ? (

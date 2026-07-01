@@ -33,6 +33,7 @@ import {
   fillAllIcs215WorkAssignmentsHaveInDraft,
   normalizeIcs215WorkAssignmentsLayoutMode,
 } from '@/features/ics215/utils'
+import { IcsEditableSectionContent } from '@/lib/ics-editable-section'
 import type { HaveLinkRosterActions } from '@/features/ics215/have-link-roster-actions'
 import type { HaveLinkRosterPanelRenderer } from '@/features/roster/WorkspaceRosterPanel'
 import type { HaveLinkRosterWorkspaceControls } from '@/features/roster/WorkspaceRosterToolbar'
@@ -382,9 +383,22 @@ export function Ics215FormSections({
             {headerActions}
           </div>
           {fillViewport ? (
-            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">{content}</div>
+            <IcsEditableSectionContent
+              enabled={canEdit && !formIsLocked && !editing}
+              ariaLabel={`Edit ${ICS215_SECTION_LABELS[section].toLowerCase()}`}
+              onStartEdit={() => onStartSectionEdit(section)}
+              className="flex min-h-0 flex-1 flex-col overflow-hidden"
+            >
+              {content}
+            </IcsEditableSectionContent>
           ) : (
-            content
+            <IcsEditableSectionContent
+              enabled={canEdit && !formIsLocked && !editing}
+              ariaLabel={`Edit ${ICS215_SECTION_LABELS[section].toLowerCase()}`}
+              onStartEdit={() => onStartSectionEdit(section)}
+            >
+              {content}
+            </IcsEditableSectionContent>
           )}
           <Ics202SectionEditActions
             isEditing={editing}

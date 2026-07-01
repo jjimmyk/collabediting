@@ -14,6 +14,7 @@ import {
   ICS202_OBJECTIVE_KIND_OPTIONS,
   ICS202_OBJECTIVE_KIND_TOOLTIP,
   ICS202_PREPARED_BY_SIGNATURE_TOOLTIP,
+  ICS202_SECTION_LABELS,
 } from '@/features/ics202/constants'
 import {
   Ics202FieldLabel,
@@ -23,6 +24,7 @@ import {
   Ics202SectionHeader,
   Ics202YesNoReadOnly,
 } from '@/features/ics202/Ics202SectionToolbar'
+import { IcsEditableSectionContent } from '@/lib/ics-editable-section'
 import type {
   Ics202CommunityLifelines,
   Ics202FormSectionDrafts,
@@ -219,7 +221,13 @@ export function Ics202FormSections({
             />
             {extraActions}
           </div>
-          {content}
+          <IcsEditableSectionContent
+            enabled={canEdit && !formIsLocked && !editing && allowEdit}
+            ariaLabel={`Edit ${ICS202_SECTION_LABELS[section].toLowerCase()}`}
+            onStartEdit={() => onStartSectionEdit(section)}
+          >
+            {content}
+          </IcsEditableSectionContent>
           {allowEdit ? (
             <Ics202SectionEditActions
               isEditing={editing}

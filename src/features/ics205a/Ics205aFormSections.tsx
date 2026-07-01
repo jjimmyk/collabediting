@@ -10,6 +10,7 @@ import {
   Ics202SectionEditActions,
   Ics202SectionHeader,
 } from '@/features/ics202/Ics202SectionToolbar'
+import { IcsEditableSectionContent } from '@/lib/ics-editable-section'
 import { Ics205aContactRowsList } from '@/features/ics205a/Ics205aContactRowsList'
 import { Ics205aContactRowsTable } from '@/features/ics205a/Ics205aContactRowsTable'
 import { buildIcs205aContactsFromNextOpRoster } from '@/features/ics205a/build-ics205a-contacts-from-roster'
@@ -170,7 +171,13 @@ export function Ics205aFormSections({
             />
             {extraActions}
           </div>
-          {content}
+          <IcsEditableSectionContent
+            enabled={canEdit && !formIsLocked && !editing}
+            ariaLabel={`Edit ${ICS205A_SECTION_LABELS[section].toLowerCase()}`}
+            onStartEdit={() => onStartSectionEdit(section)}
+          >
+            {content}
+          </IcsEditableSectionContent>
           <Ics202SectionEditActions
             isEditing={editing}
             isSaving={isSaving}

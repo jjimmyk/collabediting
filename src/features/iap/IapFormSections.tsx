@@ -9,6 +9,7 @@ import {
   IapSectionEditActions,
   IapSectionHeader,
 } from '@/features/iap/IapSectionToolbar'
+import { IAP_SECTION_LABELS } from '@/features/iap/constants'
 import type {
   IapChecklistFormId,
   IapCoverSheetDraft,
@@ -18,6 +19,7 @@ import type {
   IapIncidentCommanderRow,
   IapSectionId,
 } from '@/features/iap/types'
+import { IcsEditableSectionContent } from '@/lib/ics-editable-section'
 import {
   cloneIapFormsChecklist,
   cloneIapIncidentCommanderRows,
@@ -139,7 +141,13 @@ export function IapFormSections({
             disabled={formIsLocked}
             onStartEdit={() => onStartSectionEdit(section)}
           />
-          {content}
+          <IcsEditableSectionContent
+            enabled={canEdit && !formIsLocked && !editing}
+            ariaLabel={`Edit ${IAP_SECTION_LABELS[section].toLowerCase()}`}
+            onStartEdit={() => onStartSectionEdit(section)}
+          >
+            {content}
+          </IcsEditableSectionContent>
           <IapSectionEditActions
             isEditing={editing}
             isSaving={isSaving}

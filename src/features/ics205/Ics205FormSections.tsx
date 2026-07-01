@@ -11,6 +11,7 @@ import {
   Ics202SectionEditActions,
   Ics202SectionHeader,
 } from '@/features/ics202/Ics202SectionToolbar'
+import { IcsEditableSectionContent } from '@/lib/ics-editable-section'
 import { ICS205_SECTION_LABELS } from '@/features/ics205/constants'
 import type {
   Ics205FormSectionDrafts,
@@ -160,7 +161,13 @@ export function Ics205FormSections({
             />
             {extraActions}
           </div>
-          {content}
+          <IcsEditableSectionContent
+            enabled={canEdit && !formIsLocked && !editing}
+            ariaLabel={`Edit ${ICS205_SECTION_LABELS[section].toLowerCase()}`}
+            onStartEdit={() => onStartSectionEdit(section)}
+          >
+            {content}
+          </IcsEditableSectionContent>
           <Ics202SectionEditActions
             isEditing={editing}
             isSaving={isSaving}
