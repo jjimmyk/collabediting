@@ -1,4 +1,4 @@
-export type FeatureFlagId = 'cisa' | 'oilSpillTrajectoryModels'
+export type FeatureFlagId = 'cisa' | 'oilSpillTrajectoryModels' | 'fusionCenters'
 
 export type FeatureFlagDefinition = {
   id: FeatureFlagId
@@ -17,6 +17,12 @@ export const FEATURE_FLAG_CATALOG: FeatureFlagDefinition[] = [
     label: 'Oil Spill Trajectory Models',
     description: 'Show NOAA GNOME oil spill trajectory layers in Map Layers.',
   },
+  {
+    id: 'fusionCenters',
+    label: 'Fusion Centers',
+    description:
+      'Swap hub org branding and primary notification to the Port of Houston cyber demo scenario.',
+  },
 ]
 
 export type FeatureFlagState = Record<FeatureFlagId, boolean>
@@ -24,6 +30,7 @@ export type FeatureFlagState = Record<FeatureFlagId, boolean>
 export const DEFAULT_FEATURE_FLAG_STATE: FeatureFlagState = {
   cisa: false,
   oilSpillTrajectoryModels: false,
+  fusionCenters: false,
 }
 
 export function getFeatureFlagDefinition(id: FeatureFlagId): FeatureFlagDefinition | undefined {

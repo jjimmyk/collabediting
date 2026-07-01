@@ -26,5 +26,6 @@ export function useFeatureFlags() {
     setFlag,
     isCisaEnabled: isFeatureFlagEnabled(flags, 'cisa'),
     isOilSpillTrajectoryModelsEnabled: isFeatureFlagEnabled(flags, 'oilSpillTrajectoryModels'),
+    isFusionCentersEnabled: isFeatureFlagEnabled(flags, 'fusionCenters'),
   }
 }

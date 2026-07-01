@@ -17,14 +17,22 @@ type OrganizationProfileMenuSectionProps = {
   onOpenMyProfile?: () => void
   canManageMembers: boolean
   oilSpillTrajectoryModelsEnabled?: boolean
+  fusionCentersEnabled?: boolean
 }
 
 function getOrganizationMenuLabel(
   organization: UserOrganization,
-  oilSpillTrajectoryModelsEnabled: boolean
+  oilSpillTrajectoryModelsEnabled: boolean,
+  fusionCentersEnabled: boolean
 ): string {
   if (organization.organizationId === USCG_ORGANIZATION_ID) {
-    return getHubOrganizationDisplayName(oilSpillTrajectoryModelsEnabled, organization.organizationId)
+    return getHubOrganizationDisplayName(
+      {
+        oilSpillTrajectoryModelsEnabled,
+        fusionCentersEnabled,
+      },
+      organization.organizationId
+    )
   }
   return organization.name
 }
@@ -38,6 +46,7 @@ export function OrganizationProfileMenuSection({
   onOpenMyProfile,
   canManageMembers,
   oilSpillTrajectoryModelsEnabled = false,
+  fusionCentersEnabled = false,
 }: OrganizationProfileMenuSectionProps) {
   const activeOrganization = resolveDisplayOrganization(
     organizations,
@@ -63,7 +72,11 @@ export function OrganizationProfileMenuSection({
             className="flex items-center justify-between gap-2"
           >
             <span className="min-w-0 truncate">
-              {getOrganizationMenuLabel(organization, oilSpillTrajectoryModelsEnabled)}
+              {getOrganizationMenuLabel(
+                organization,
+                oilSpillTrajectoryModelsEnabled,
+                fusionCentersEnabled
+              )}
             </span>
             {organization.organizationId === activeOrganizationId ? (
               <Check className="h-4 w-4 shrink-0" />

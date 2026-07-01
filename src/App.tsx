@@ -872,6 +872,15 @@ import { HubCisaDashboardIcon } from '@/features/hub/cisa-dashboards/HubCisaDash
 import { FeatureFlagsPage } from '@/features/hub/feature-flags/FeatureFlagsPage'
 import { getHubMoreMenuItems } from '@/features/hub/feature-flags/hub-menu'
 import { useFeatureFlags } from '@/features/hub/feature-flags/useFeatureFlags'
+import { loadFeatureFlags } from '@/features/hub/feature-flags/feature-flag-storage'
+import {
+  getLinkedEvent11Seed,
+  getLinkedIncident1Seed,
+  getPrimaryNotificationSeed,
+  toEventListItem,
+  USCG_LINKED_EVENT_11,
+  USCG_LINKED_INCIDENT_1,
+} from '@/data/fusion-centers-demo'
 import { useGeospatialCopMapLayer } from '@/features/hub/cisa-dashboards/useGeospatialCopMapLayer'
 import {
   applyLiveDistrictSummaryToGraphic,
@@ -2038,50 +2047,7 @@ const DEFAULT_EVENT_LIST: EventListItem[] = (
       'Perimeter monitoring threshold reached for MPLX Sabine River pipeline release support zone',
   },
   {
-    id: 11,
-    name: 'Garyville Refinery Fire — Fired Heater Tube Rupture',
-    type: 'Industrial Fire / Hydrocarbon Release',
-    status: 'Active',
-    severity: 'High',
-    region: 'Gulf Coast Refining — Louisiana',
-    location: [-90.615, 30.054],
-    lead: 'United States Coast Guard Garyville Unified Command · St. James Parish OEM Liaison',
-    startedAt: '2026-05-09 07:00 CST',
-    lastUpdate: '2026-05-09 09:46 CST',
-    summary:
-      'Fired heater tube rupture during startup at United States Coast Guard Garyville Refinery. Hydrocarbon release and fire in crude/vacuum unit area; emergency shutdown initiated; all personnel accounted for; downwind air monitoring and community notification per refinery ERP.',
-    resourcesCommitted:
-      'United States Coast Guard industrial fire brigade, St. James Parish mutual aid, LDEQ air monitoring, foam strike teams, MPLX terminal liaison',
-    businessUnit: 'Gulf Coast Refining — Louisiana',
-    creationKind: 'threshold',
-    createdByUser: null,
-    thresholdDescription:
-      'Sensor Alpha fixed gas detection threshold exceeded — crude/vacuum unit LEL and thermal plume alert at United States Coast Guard Garyville',
-    sourceReport: {
-      shortDescription: 'Garyville Refinery Fire — Fired Heater Tube Rupture',
-      reportDate: '2026-05-09',
-      reportTime: '07:00',
-      facilityLocations: [],
-      facilityLocationOther: 'United States Coast Guard Garyville Refinery — Crude/Vacuum Unit, Garyville, LA',
-      ccmerAdvisors: [],
-      callerName: 'Garyville Site Emergency Manager',
-      callbackNumber: 'garyville.emergency@marathon.com',
-      callType: 'incident',
-      whatHappened:
-        'Fired heater tube rupture during startup sequence with hydrocarbon release and fire. Emergency shutdown initiated; personnel accounted for; LP flare and fixed monitors active; downwind air monitoring underway.',
-      facilityMuster: 'yes',
-      abandonStations: 'no',
-      assistanceNeeded: 'yes',
-      qiDrill: 'no',
-      icNotified: 'yes',
-      icNotifiedName: 'United States Coast Guard Garyville Unified Command',
-      rpName: 'United States Coast Guard Petroleum Corporation',
-      materialReleased: 'Hydrocarbon vapor and liquid — quantity under assessment',
-      enterWater: 'no',
-      releaseDischargeRate: 'Under assessment',
-      sourceControlled: 'no',
-      scenarios: ['Fire – Jet Pressurized', 'Process Area - Gas Release'],
-    },
+    ...USCG_LINKED_EVENT_11,
   },
   {
     id: 12,
@@ -6104,7 +6070,7 @@ function App() {
     setActiveOrganizationId,
     signOut,
   } = useAuth()
-  const { flags: featureFlags, setFlag: setFeatureFlag, isCisaEnabled, isOilSpillTrajectoryModelsEnabled } =
+  const { flags: featureFlags, setFlag: setFeatureFlag, isCisaEnabled, isOilSpillTrajectoryModelsEnabled, isFusionCentersEnabled } =
     useFeatureFlags()
   const hubOrganizationDisplayName = useMemo(() => {
     if (
@@ -6113,8 +6079,19 @@ function App() {
     ) {
       return activeOrganization.name
     }
-    return getHubOrganizationDisplayName(isOilSpillTrajectoryModelsEnabled, activeOrganizationId)
-  }, [activeOrganization, activeOrganizationId, isOilSpillTrajectoryModelsEnabled])
+    return getHubOrganizationDisplayName(
+      {
+        oilSpillTrajectoryModelsEnabled: isOilSpillTrajectoryModelsEnabled,
+        fusionCentersEnabled: isFusionCentersEnabled,
+      },
+      activeOrganizationId
+    )
+  }, [
+    activeOrganization,
+    activeOrganizationId,
+    isFusionCentersEnabled,
+    isOilSpillTrajectoryModelsEnabled,
+  ])
   const mapContainerRef = useRef<HTMLDivElement | null>(null)
   const leftPanelRef = useRef<HTMLDivElement | null>(null)
   const searchComponentRef = useRef<HTMLDivElement | null>(null)
@@ -8230,67 +8207,8 @@ function App() {
   const [appearanceMode, setAppearanceMode] = useState<'light' | 'dark' | 'glass'>(
     'light'
   )
-  const [notifications, setNotifications] = useState<NotificationItem[]>([
-    {
-      id: 0,
-      title: 'Refinery fire reported at United States Coast Guard Garyville, Louisiana',
-      severity: 'Critical',
-      status: 'New',
-      category: 'Hazmat',
-      timestamp: '2026-05-09 07:00',
-      owner: 'Sensor Alpha',
-      summary:
-        'Fired heater tube rupture during startup at United States Coast Guard Garyville Refinery. Unified command activating ERP; St. James Parish OEM and LDEQ notified per standing protocol. Hydrocarbon release with active fire in crude/vacuum unit area.',
-      impact:
-        'Crude and vacuum unit curtailment, MPLX terminal load suspensions, and downwind air quality monitoring across St. James Parish and the Mississippi River corridor.',
-      location: [-90.615, 30.054],
-      relatedEventId: 11,
-      regionalThreats: {
-        region: 'Gulf Coast Refining — Louisiana',
-        description:
-          'Active refinery fire, thermal plume, and hydrocarbon release place the following United States Coast Guard assets and adjacent receptors at elevated risk:',
-        threats: [
-          {
-            id: 'GV-REF-CVU-001',
-            resource: 'United States Coast Guard Garyville Refinery — Crude/Vacuum Unit',
-            risk: 'Fired heater tube rupture with hydrocarbon fire requires full unit isolation, foam application, and perimeter cooling; adjacent units on controlled shutdown with potential cascade impact to reformer and alkylation trains.',
-            location: [-90.615, 30.054],
-            operationalStatus: 'Partially Operational',
-          },
-          {
-            id: 'GV-MT-002',
-            resource: 'Garyville Marine & MPLX Terminal',
-            risk: 'Tanker loading and berthing suspended; vapor recovery and firewater supply prioritized to protect dock manifold and export tanks from radiant heat exposure.',
-            location: [-90.605, 30.048],
-            operationalStatus: 'Not Operational',
-          },
-          {
-            id: 'GV-TF-003',
-            resource: 'Refinery Tank Farm — East Battery',
-            risk: 'Elevated thermal radiation and smoke plume require fixed monitor activation, foam stock drawdown tracking, and secondary containment inspection on gasoline and diesel storage.',
-            location: [-90.608, 30.058],
-            operationalStatus: 'Partially Operational',
-          },
-          {
-            id: 'GV-DC-004',
-            resource: 'Garyville / Convent Downwind Community Corridor',
-            risk: 'Modeled downwind particulate and VOC plume may require public shelter-in-place messaging, LA-44 corridor restrictions, and continuous air monitoring at school and hospital receptors.',
-            location: [-90.82, 30.02],
-            operationalStatus: 'Operational',
-          },
-        ],
-        responseChecklist: [
-          {
-            label:
-              'Activate United States Coast Guard Garyville refinery ERP and unified command; notify St. James Parish OEM, LDEQ, and USCG Sector New Orleans.',
-          },
-          {
-            label:
-              'Deploy industrial firefighting foam units and mutual-aid strike teams; establish downwind air monitoring perimeter.',
-          },
-        ],
-      },
-    },
+  const [notifications, setNotifications] = useState<NotificationItem[]>(() => [
+    getPrimaryNotificationSeed(loadFeatureFlags().fusionCenters) as NotificationItem,
     {
       id: 1,
       title: 'MPLX crude pipeline rupture reported near Sabine River',
@@ -8411,25 +8329,8 @@ function App() {
     requestId: number
     defaultMode: 'view' | 'edit'
   } | null>(null)
-  const [incidentList, setIncidentList] = useState<IncidentListItem[]>([
-    {
-      id: 1,
-      name: 'Garyville Refinery Fire — Fired Heater Tube Rupture',
-      type: 'Industrial Fire / Hydrocarbon Release',
-      category: 'Refinery Operations',
-      status: 'Active',
-      severity: 'High',
-      region: 'Gulf Coast Refining — Louisiana',
-      location: [-90.615, 30.054],
-      lead: 'United States Coast Guard Garyville Unified Command · Site Emergency Manager',
-      startedAt: '2026-05-09 07:00 CST',
-      lastUpdate: '2026-05-09 09:46 CST',
-      summary:
-        'Fired heater tube rupture during startup at United States Coast Guard Garyville Refinery (528,000 bpd). Hydrocarbon release and fire in crude/vacuum unit area; emergency shutdown initiated; all personnel accounted for; LP flare and fixed monitors deployed; downwind air quality monitoring and community notification per refinery ERP.',
-      resourcesCommitted:
-        'United States Coast Guard industrial fire brigade, St. James Parish mutual aid, LDEQ air monitoring, Gulf Coast foam strike teams, MPLX terminal liaison',
-      relatedEventIds: [11],
-    },
+  const [incidentList, setIncidentList] = useState<IncidentListItem[]>(() => [
+    USCG_LINKED_INCIDENT_1 as IncidentListItem,
     {
       id: 2,
       name: 'MPLX Pipeline Rupture — Crude Release Near Sabine River',
@@ -9027,6 +8928,26 @@ function App() {
     ICS_POSITIONS[0]
   )
   const [eventList, setEventList] = useState<EventListItem[]>(DEFAULT_EVENT_LIST)
+  useEffect(() => {
+    const primaryNotification = getPrimaryNotificationSeed(isFusionCentersEnabled)
+    const linkedEvent = toEventListItem(
+      getLinkedEvent11Seed(isFusionCentersEnabled)
+    ) as EventListItem
+    const linkedIncident = getLinkedIncident1Seed(isFusionCentersEnabled)
+    setNotifications((previous) =>
+      previous.map((item) =>
+        item.id === 0 ? ({ ...primaryNotification } as NotificationItem) : item
+      )
+    )
+    setEventList((previous) =>
+      previous.map((item) => (item.id === 11 ? linkedEvent : item))
+    )
+    setIncidentList((previous) =>
+      previous.map((item) =>
+        item.id === 1 ? ({ ...linkedIncident } as IncidentListItem) : item
+      )
+    )
+  }, [isFusionCentersEnabled])
   const [eventSeverityFilters, setEventSeverityFilters] = useState<EventListItem['severity'][]>([])
   const [eventBusinessUnitFilters, setEventBusinessUnitFilters] = useState<string[]>([])
   const [isEventsSettingsOpen, setIsEventsSettingsOpen] = useState(false)
@@ -27674,6 +27595,7 @@ function App() {
                     }}
                     canManageMembers={isOrgAdmin}
                     oilSpillTrajectoryModelsEnabled={isOilSpillTrajectoryModelsEnabled}
+                    fusionCentersEnabled={isFusionCentersEnabled}
                   />
                   <DropdownMenuSeparator />
                   <DropdownMenuItem
@@ -29273,8 +29195,12 @@ function App() {
                                                         }}
                                                       >
                                                         {threatLiveFeedVisible
-                                                          ? 'Hide Live Feed'
-                                                          : 'Show Live Feed'}
+                                                          ? isFusionCentersEnabled
+                                                            ? 'Hide SIEM Feed'
+                                                            : 'Hide Live Feed'
+                                                          : isFusionCentersEnabled
+                                                            ? 'Show SIEM Feed'
+                                                            : 'Show Live Feed'}
                                                       </Button>
                                                     </div>
                                                     {threatLiveFeedVisible && (
@@ -29284,7 +29210,9 @@ function App() {
                                                             className="pratus-map-camera-feed__dot"
                                                             aria-hidden="true"
                                                           />
-                                                          Live Camera — {threat.resource}
+                                                          {isFusionCentersEnabled
+                                                            ? `SIEM Feed — ${threat.resource}`
+                                                            : `Live Camera — ${threat.resource}`}
                                                         </div>
                                                         <div className="pratus-map-camera-feed__viewport">
                                                           <div className="pratus-map-camera-feed__placeholder">
@@ -29294,9 +29222,15 @@ function App() {
                                                             >
                                                               ▶
                                                             </span>
-                                                            <span>Connecting to site camera…</span>
+                                                            <span>
+                                                              {isFusionCentersEnabled
+                                                                ? 'Connecting to SIEM telemetry…'
+                                                                : 'Connecting to site camera…'}
+                                                            </span>
                                                             <span className="pratus-map-camera-feed__hint">
-                                                              Placeholder feed for {threat.resource}
+                                                              {isFusionCentersEnabled
+                                                                ? `Placeholder SIEM feed for ${threat.resource}`
+                                                                : `Placeholder feed for ${threat.resource}`}
                                                             </span>
                                                           </div>
                                                         </div>
