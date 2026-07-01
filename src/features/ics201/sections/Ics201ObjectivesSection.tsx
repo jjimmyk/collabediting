@@ -7,6 +7,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
+import { IcsSortableVerticalList } from '@/features/ics/shared/IcsSortableVerticalList'
 import { Ics201FieldFocusIndicators } from '@/features/ics201/Ics201FieldFocusIndicators'
 import {
   Ics201RemoteFieldCarets,
@@ -16,12 +17,12 @@ import { Ics201SectionEditorBadges } from '@/features/ics201/Ics201SectionEditor
 import {
   ICS201_OBJECTIVE_KIND_OPTIONS,
   ICS201_OBJECTIVE_KIND_TOOLTIP,
-  formatIcs201ObjectiveKindLabel,
 } from '../constants'
 import { ICS201_BOX_LABELS } from '../field-labels'
 import type { Ics201CollaboratorPresence, Ics201ObjectiveKind, Ics201ObjectiveRow } from '../types'
 import { IcsEditableSectionContent } from '@/lib/ics-editable-section'
 import type { Ics201SectionCursorApi } from '@/hooks/useIcs201AllSectionCursors'
+import { reorderArrayItems } from '@/lib/reorder-array'
 import { cn } from '@/lib/utils'
 import { Ics201BoxHeader } from './Ics201BoxHeader'
 import { Ics201SectionEditActions } from './Ics201SectionEditActions'
@@ -110,16 +111,24 @@ export function Ics201ObjectivesSection({
   const nearLimit = enforcesCharLimit && charLimit !== undefined && totalLength >= charLimit
 
   const headerRow = (
-    <div className="grid grid-cols-[minmax(9rem,1fr)_minmax(0,2fr)_auto] gap-2 text-[11px] font-semibold text-muted-foreground">
+    <div
+      className={cn(
+        'grid gap-2 text-[11px] font-semibold text-muted-foreground',
+        isEditing
+          ? 'grid-cols-[auto_4.5rem_minmax(0,1fr)_auto]'
+          : 'grid-cols-[4.5rem_minmax(0,1fr)]'
+      )}
+    >
+      {isEditing ? <span className="w-7" aria-hidden /> : null}
       <div className="flex items-center gap-1">
-        <span>Type</span>
+        <span>O/M</span>
         <TooltipProvider delayDuration={150}>
           <Tooltip>
             <TooltipTrigger asChild>
               <button
                 type="button"
                 className="inline-flex shrink-0 rounded-sm text-muted-foreground hover:text-foreground"
-                aria-label="Objective type help"
+                aria-label="O/M field help"
               >
                 <Info className="h-3.5 w-3.5" />
               </button>
@@ -131,7 +140,7 @@ export function Ics201ObjectivesSection({
         </TooltipProvider>
       </div>
       <span>Objective</span>
-      <span />
+      {isEditing ? <span /> : null}
     </div>
   )
 
@@ -139,48 +148,53 @@ export function Ics201ObjectivesSection({
     <>
       {headerRow}
       <Ics201FieldFocusIndicators cursors={cursor.remoteCursors} />
-      {draft.map((row) => (
-        <div
-          key={`ics-objective-draft-${row.id}`}
-          className="grid grid-cols-[minmax(9rem,1fr)_minmax(0,2fr)_auto] items-start gap-2"
-        >
-          <select
-            value={row.kind}
-            className="h-7 rounded-md border bg-transparent px-2 text-xs outline-none"
-            onChange={(event) =>
-              updateRow(row.id, { kind: event.target.value as Ics201ObjectiveKind })
-            }
-          >
-            <option value="">—</option>
-            {ICS201_OBJECTIVE_KIND_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-          <Ics201RemoteFieldCarets
-            fieldKey={`objective:${row.id}`}
-            value={row.objective}
-            cursors={cursor.remoteCursors}
-            publish={cursor.publishCursor}
-            clear={cursor.clearCursor}
-            placeholder="Objective statement"
-            inputClassName="h-7"
-            onChange={(event) => updateRow(row.id, { objective: event.target.value })}
-          />
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            aria-label="Delete objective"
-            className="h-7 w-7 text-destructive hover:text-destructive"
-            disabled={!canDeleteObjective(row)}
-            onClick={() => deleteRow(row.id)}
-          >
-            <Trash2 className="h-4 w-4" />
-          </Button>
-        </div>
-      ))}
+      <IcsSortableVerticalList
+        items={draft}
+        onReorder={(fromIndex, toIndex) =>
+          onDraftChange(reorderArrayItems(draft, fromIndex, toIndex))
+        }
+        className="space-y-2"
+        renderItem={(row, _index, dragHandle) => (
+          <div className="grid grid-cols-[auto_4.5rem_minmax(0,1fr)_auto] items-start gap-2">
+            {dragHandle}
+            <select
+              value={row.kind}
+              className="h-8 rounded-md border bg-transparent px-1 text-xs outline-none"
+              onChange={(event) =>
+                updateRow(row.id, { kind: event.target.value as Ics201ObjectiveKind })
+              }
+            >
+              <option value="">—</option>
+              {ICS201_OBJECTIVE_KIND_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <Ics201RemoteFieldCarets
+              fieldKey={`objective:${row.id}`}
+              value={row.objective}
+              cursors={cursor.remoteCursors}
+              publish={cursor.publishCursor}
+              clear={cursor.clearCursor}
+              placeholder="Objective statement"
+              inputClassName="h-7"
+              onChange={(event) => updateRow(row.id, { objective: event.target.value })}
+            />
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              aria-label="Delete objective"
+              className="h-7 w-7 text-destructive hover:text-destructive"
+              disabled={!canDeleteObjective(row)}
+              onClick={() => deleteRow(row.id)}
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          </div>
+        )}
+      />
       <div
         className={cn(
           'flex justify-end text-[10px]',
@@ -209,12 +223,10 @@ export function Ics201ObjectivesSection({
         rows.map((row) => (
           <div
             key={`ics-objective-${row.id}`}
-            className="grid grid-cols-[minmax(9rem,1fr)_minmax(0,2fr)] items-start gap-2"
+            className="grid grid-cols-[4.5rem_minmax(0,1fr)] items-start gap-2"
           >
             <div className="rounded-md border border-dashed border-border/60 bg-muted/20 px-2.5 py-2 text-xs">
-              {formatIcs201ObjectiveKindLabel(row.kind) || (
-                <span className="text-muted-foreground">—</span>
-              )}
+              {row.kind || <span className="text-muted-foreground">—</span>}
             </div>
             <Ics201RemoteFieldCaretsView
               fieldKey={`objective:${row.id}`}

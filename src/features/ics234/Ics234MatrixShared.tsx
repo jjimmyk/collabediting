@@ -180,4 +180,5 @@ export type Ics234WorkAnalysisMatrixProps = {
   onDeleteObjective: (objectiveId: number) => void
   onDeleteStrategy: (objectiveId: number, strategyId: number) => void
   onDeleteTactic: (objectiveId: number, strategyId: number, tacticId: number) => void
+  onReorderObjectives: (fromIndex: number, toIndex: number) => void
 }

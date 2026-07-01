@@ -171,6 +171,7 @@ import {
   type ResourceRequestItem,
 } from '@/lib/ics-213rr-resource-request'
 import { cn } from '@/lib/utils'
+import { reorderArrayItems } from '@/lib/reorder-array'
 import {
   IcsFormSignedVersionsLockMessage,
   IcsFormVersionsMenuButton,
@@ -951,7 +952,7 @@ import {
   Ics201ResourcesSection,
   Ics201SafetyAnalysisSection,
 } from '@/features/ics201/sections'
-import { syncIcs202ObjectivesFromIcs201 } from '@/features/ics201/sync-ics202-objectives'
+import { syncIcs202ObjectivesFromIcs201, syncIcs201ObjectivesOrderFromIcs202 } from '@/features/ics201/sync-ics202-objectives'
 import type {
   Ics201ActionRow,
   Ics201FormState,
@@ -23862,6 +23863,10 @@ function App() {
       [section]: value,
     }))
   }
+  const handleIcs202ObjectivesReorder = (nextObjectives: Ics202ObjectiveRow[]) => {
+    patchIcs202SectionDraft('objectives', nextObjectives)
+    applyIcs202ObjectivesOrderToIcs201(nextObjectives)
+  }
   const saveIcs202Section = (section: Ics202SectionId) => {
     if (!canEditIcs201Form) {
       toast.error('Your ICS position does not include permission to edit ICS-202 forms.')
@@ -24401,11 +24406,48 @@ function App() {
     if (changed) {
       const nextForm = { ...ics202Form, objectives }
       setIcs202Form(cloneIcs202FormState(nextForm))
+      if (ics202EditingSections.objectives) {
+        setIcs202SectionDrafts((previous) => ({
+          ...previous,
+          objectives,
+        }))
+      }
       if (latestIcs202Version && latestIcs202Version.signatures.length === 0) {
         handleIcs202SaveDraft(nextForm, latestIcs202Version)
       }
       applyIcs202ObjectivesToIcs234(objectives)
     }
+  }
+  const applyIcs202ObjectivesOrderToIcs201 = (
+    ics202Objectives: Ics202ObjectiveRow[],
+    options?: { showLockedToast?: boolean }
+  ) => {
+    if (!canEditIcs201Form || !ics201Form) {
+      return
+    }
+    const latestIcs201Version = ics201Versions[ics201Versions.length - 1]
+    if (latestIcs201Version && latestIcs201Version.signatures.length > 0) {
+      if (options?.showLockedToast) {
+        toast.message('ICS-201 is signed — ICS-202 objective order changes were not applied.')
+      }
+      return
+    }
+    const { objectives, changed } = syncIcs201ObjectivesOrderFromIcs202(
+      ics201Form.objectives,
+      ics202Objectives
+    )
+    if (!changed) {
+      return
+    }
+    const nextIcs201Form = cloneIcs201FormState({
+      ...ics201Form,
+      objectives,
+    })
+    setIcs201Form(nextIcs201Form)
+    if (ics201EditingObjectives) {
+      ics201ObjectivesEditor.replaceObjectives(objectives)
+    }
+    applyIcs201ObjectivesToIcs202(objectives)
   }
   const applyIcs202ObjectivesToIcs234 = (
     ics202Objectives: Ics202ObjectiveRow[],
@@ -24569,6 +24611,12 @@ function App() {
       ref: { kind: 'objective', objectiveId: nextId },
       draft: { kind: 'objective', name: '' },
     })
+  }
+  const reorderIcs234MatrixObjectives = (fromIndex: number, toIndex: number) => {
+    if (!canEditIcs201Form || !ics234Form) return
+    persistIcs234Objectives(
+      reorderArrayItems(ics234Form.objectives, fromIndex, toIndex)
+    )
   }
   const addIcs234MatrixStrategy = (objectiveId: number) => {
     if (!canEditIcs201Form || !ics234Form) return
@@ -33926,7 +33974,10 @@ function App() {
                       onGenerate={() => openIcs201SectionGeneration('objectives')}
                       objectives={ics201Form.objectives}
                       draft={ics201ObjectivesEditor.objectives}
-                      onDraftChange={(draft) => ics201ObjectivesEditor.replaceObjectives(draft)}
+                      onDraftChange={(draft) => {
+                        ics201ObjectivesEditor.replaceObjectives(draft)
+                        applyIcs201ObjectivesToIcs202(draft)
+                      }}
                       isLiveConnected={ics201ObjectivesEditor.isLiveConnected}
                       liveObjectives={ics201ObjectivesEditor.objectives}
                       editors={ics201SectionEditors.objectives ?? []}
@@ -35221,6 +35272,7 @@ function App() {
                     onDeleteMatrixObjective={deleteIcs234MatrixObjective}
                     onDeleteMatrixStrategy={deleteIcs234MatrixStrategy}
                     onDeleteMatrixTactic={deleteIcs234MatrixTactic}
+                    onReorderMatrixObjectives={reorderIcs234MatrixObjectives}
                     onAppendVersion={handleIcs234AppendVersion}
                     onSignReview={handleIcs234SignReview}
                     downloadDocx={downloadDocx}
@@ -35687,6 +35739,7 @@ function App() {
                     onSaveSection={saveIcs202Section}
                     onGenerateSection={openIcs202SectionGeneration}
                     onPatchSectionDraft={patchIcs202SectionDraft}
+                    onObjectivesReorder={handleIcs202ObjectivesReorder}
                     onAppendVersion={handleIcs202AppendVersion}
                     onSignReview={handleIcs202SignReview}
                   />

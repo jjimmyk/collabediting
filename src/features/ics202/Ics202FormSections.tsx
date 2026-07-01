@@ -9,6 +9,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
+import { IcsSortableVerticalList } from '@/features/ics/shared/IcsSortableVerticalList'
 import {
   ICS202_COMMUNITY_LIFELINES,
   ICS202_OBJECTIVE_KIND_OPTIONS,
@@ -41,6 +42,7 @@ import {
   extractIcs202SiteSafetyPlanDraft,
   isIcs202ObjectiveLinkedToIcs201,
 } from '@/features/ics202/utils'
+import { reorderArrayItems } from '@/lib/reorder-array'
 import { cn } from '@/lib/utils'
 
 type Ics202FormSectionsProps = {
@@ -60,6 +62,7 @@ type Ics202FormSectionsProps = {
     section: S,
     value: Ics202FormSectionDrafts[S]
   ) => void
+  onObjectivesReorder: (objectives: Ics202ObjectiveRow[]) => void
 }
 
 function isSectionEditing(
@@ -83,6 +86,7 @@ export function Ics202FormSections({
   onSaveSection,
   onGenerateSection,
   onPatchDraft,
+  onObjectivesReorder,
 }: Ics202FormSectionsProps) {
   const incidentInfo =
     isSectionEditing(editingSections, 'incident-info') && drafts['incident-info']
@@ -313,7 +317,17 @@ export function Ics202FormSections({
       {renderSectionShell(
         'objectives',
         <div className="space-y-2">
-          <div className="grid grid-cols-[4.5rem_minmax(0,1fr)_auto] gap-2 text-[11px] font-semibold text-muted-foreground">
+          <div
+            className={cn(
+              'grid gap-2 text-[11px] font-semibold text-muted-foreground',
+              isSectionEditing(editingSections, 'objectives')
+                ? 'grid-cols-[auto_4.5rem_minmax(0,1fr)_auto]'
+                : 'grid-cols-[4.5rem_minmax(0,1fr)_auto]'
+            )}
+          >
+            {isSectionEditing(editingSections, 'objectives') ? (
+              <span className="w-7" aria-hidden />
+            ) : null}
             <div className="flex items-center gap-1">
               <span>O/M</span>
               <TooltipProvider delayDuration={150}>
@@ -338,64 +352,89 @@ export function Ics202FormSections({
           </div>
           {objectives.length === 0 ? (
             <p className="text-xs text-muted-foreground">No objectives recorded.</p>
+          ) : isSectionEditing(editingSections, 'objectives') ? (
+            <IcsSortableVerticalList
+              items={objectives}
+              onReorder={(fromIndex, toIndex) =>
+                onObjectivesReorder(reorderArrayItems(objectives, fromIndex, toIndex))
+              }
+              className="space-y-2"
+              renderItem={(row, _index, dragHandle) => {
+                const linkedToIcs201 = isIcs202ObjectiveLinkedToIcs201(row)
+                return (
+                  <div className="grid grid-cols-[auto_4.5rem_minmax(0,1fr)_auto] items-start gap-2">
+                    {dragHandle}
+                    {!linkedToIcs201 ? (
+                      <>
+                        <select
+                          value={row.kind}
+                          onChange={(event) =>
+                            patchObjectiveRow(row.id, 'kind', event.target.value)
+                          }
+                          className="h-8 rounded-md border bg-transparent px-1 text-xs outline-none"
+                        >
+                          <option value="">—</option>
+                          {ICS202_OBJECTIVE_KIND_OPTIONS.map((option) => (
+                            <option key={option.value} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                        <Textarea
+                          value={row.objective}
+                          onChange={(event) =>
+                            patchObjectiveRow(row.id, 'objective', event.target.value)
+                          }
+                          className="min-h-8 text-xs"
+                        />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          aria-label="Delete objective row"
+                          className="h-8 w-8 text-destructive hover:text-destructive"
+                          onClick={() => deleteObjectiveRow(row.id)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </>
+                    ) : (
+                      <>
+                        <Ics202ReadOnlyField value={row.kind} />
+                        <div className="space-y-1">
+                          <Ics202ReadOnlyTextBlock value={row.objective} />
+                          <span className="inline-flex rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                            From ICS-201
+                          </span>
+                        </div>
+                        <span />
+                      </>
+                    )}
+                  </div>
+                )
+              }}
+            />
           ) : (
             objectives.map((row) => {
               const linkedToIcs201 = isIcs202ObjectiveLinkedToIcs201(row)
               return (
-              <div
-                key={row.id}
-                className="grid grid-cols-[4.5rem_minmax(0,1fr)_auto] items-start gap-2"
-              >
-                {isSectionEditing(editingSections, 'objectives') && !linkedToIcs201 ? (
-                  <>
-                    <select
-                      value={row.kind}
-                      onChange={(event) =>
-                        patchObjectiveRow(row.id, 'kind', event.target.value)
-                      }
-                      className="h-8 rounded-md border bg-transparent px-1 text-xs outline-none"
-                    >
-                      <option value="">—</option>
-                      {ICS202_OBJECTIVE_KIND_OPTIONS.map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
-                    <Textarea
-                      value={row.objective}
-                      onChange={(event) =>
-                        patchObjectiveRow(row.id, 'objective', event.target.value)
-                      }
-                      className="min-h-8 text-xs"
-                    />
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      aria-label="Delete objective row"
-                      className="h-8 w-8 text-destructive hover:text-destructive"
-                      onClick={() => deleteObjectiveRow(row.id)}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </>
-                ) : (
-                  <>
-                    <Ics202ReadOnlyField value={row.kind} />
-                    <div className="space-y-1">
-                      <Ics202ReadOnlyTextBlock value={row.objective} />
-                      {linkedToIcs201 ? (
-                        <span className="inline-flex rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
-                          From ICS-201
-                        </span>
-                      ) : null}
-                    </div>
-                    <span />
-                  </>
-                )}
-              </div>
-            )})
+                <div
+                  key={row.id}
+                  className="grid grid-cols-[4.5rem_minmax(0,1fr)_auto] items-start gap-2"
+                >
+                  <Ics202ReadOnlyField value={row.kind} />
+                  <div className="space-y-1">
+                    <Ics202ReadOnlyTextBlock value={row.objective} />
+                    {linkedToIcs201 ? (
+                      <span className="inline-flex rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                        From ICS-201
+                      </span>
+                    ) : null}
+                  </div>
+                  <span />
+                </div>
+              )
+            })
           )}
         </div>,
         isSectionEditing(editingSections, 'objectives') ? (

@@ -38,6 +38,7 @@ import {
 import type {
   Ics202FormSectionDrafts,
   Ics202FormState,
+  Ics202ObjectiveRow,
   Ics202PreparedByDraft,
   Ics202SectionId,
   Ics202Version,
@@ -77,6 +78,7 @@ type Ics202WorkspacePanelProps = {
     section: S,
     value: Ics202FormSectionDrafts[S]
   ) => void
+  onObjectivesReorder: (objectives: Ics202ObjectiveRow[]) => void
   onAppendVersion: (
     form: Ics202FormState,
     signatures?: Ics201VersionSignature[],
@@ -107,6 +109,7 @@ export function Ics202WorkspacePanel({
   onSaveSection,
   onGenerateSection,
   onPatchSectionDraft,
+  onObjectivesReorder,
   onAppendVersion,
   onSignReview,
 }: Ics202WorkspacePanelProps) {
@@ -480,6 +483,7 @@ export function Ics202WorkspacePanel({
             onSaveSection={onSaveSection}
             onGenerateSection={onGenerateSection}
             onPatchDraft={onPatchSectionDraft}
+            onObjectivesReorder={onObjectivesReorder}
           />
         </div>
 

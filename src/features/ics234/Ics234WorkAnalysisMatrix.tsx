@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { ChevronDown, Trash2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -26,6 +26,7 @@ import {
   Ics234MatrixItemEditControls,
   type Ics234WorkAnalysisMatrixProps,
 } from '@/features/ics234/Ics234MatrixShared'
+import { IcsSortableVerticalList } from '@/features/ics/shared/IcsSortableVerticalList'
 import { formatIcs202SourceLabel } from '@/features/ics234/sync-ics202-objectives'
 import type {
   Ics234MatrixItemRef,
@@ -59,6 +60,7 @@ export function Ics234WorkAnalysisMatrix({
   onDeleteObjective,
   onDeleteStrategy,
   onDeleteTactic,
+  onReorderObjectives,
 }: Ics234WorkAnalysisMatrixProps) {
   const [expandedObjectiveId, setExpandedObjectiveId] = useState<number | null>(null)
   const [expandedStrategyKey, setExpandedStrategyKey] = useState<string | null>(null)
@@ -303,6 +305,191 @@ export function Ics234WorkAnalysisMatrix({
     )
   }
 
+  const renderObjectiveCard = (
+    objective: Ics234ObjectiveRow,
+    objectiveIndex: number,
+    dragHandle: ReactNode | null
+  ) => {
+    const ref: Ics234MatrixItemRef = { kind: 'objective', objectiveId: objective.id }
+    const isOpen = expandedObjectiveId === objective.id
+    const isLinkedToIcs202 = isIcs234ObjectiveLinkedToIcs202(objective)
+    const editing = isEditingRef(ref) && !isLinkedToIcs202
+    const name = getIcs234MatrixItemDraftName(ref, objective.name, editingItem)
+    const placeholder = `Objective ${objectiveIndex + 1}`
+    const ics202SourceLabel =
+      isLinkedToIcs202 && objective.ics202SourceKind
+        ? formatIcs202SourceLabel(objective.ics202SourceKind)
+        : null
+
+    return (
+      <Item
+        variant="outline"
+        className={cn('flex-col items-stretch p-0', glassItemBorderClasses)}
+      >
+        <Collapsible
+          open={isOpen}
+          onOpenChange={(open) => setExpandedObjectiveId(open ? objective.id : null)}
+        >
+          <div className="flex items-center gap-2 px-3 py-2.5">
+            {dragHandle}
+            {canMutate && !editing && !isLinkedToIcs202 ? (
+              <IcsEditableSectionContent
+                enabled
+                ariaLabel="Edit objective"
+                onStartEdit={() => startMatrixItemEdit(ref)}
+                className="min-w-0 flex-1"
+              >
+                <ItemContent className="min-w-0 flex-1">
+                  <ItemTitle className="line-clamp-none w-full font-medium">
+                    <Ics234MatrixInlineNameField
+                      name={name}
+                      editing={editing}
+                      readOnly={isLinkedToIcs202}
+                      placeholder={placeholder}
+                      onChange={(next) =>
+                        onPatchItemDraft({ kind: 'objective', name: next })
+                      }
+                    />
+                  </ItemTitle>
+                </ItemContent>
+              </IcsEditableSectionContent>
+            ) : (
+              <ItemContent
+                className="min-w-0 flex-1 cursor-pointer"
+                onClick={() =>
+                  setExpandedObjectiveId((previous) =>
+                    previous === objective.id ? null : objective.id
+                  )
+                }
+              >
+                <ItemTitle className="line-clamp-none w-full font-medium">
+                  <Ics234MatrixInlineNameField
+                    name={name}
+                    editing={editing}
+                    readOnly={isLinkedToIcs202}
+                    placeholder={placeholder}
+                    onChange={(next) =>
+                      onPatchItemDraft({ kind: 'objective', name: next })
+                    }
+                  />
+                </ItemTitle>
+              </ItemContent>
+            )}
+            <ItemActions>
+              <Badge variant="outline">Objective</Badge>
+              {ics202SourceLabel ? (
+                <TooltipProvider delayDuration={150}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Badge variant="secondary" className="max-w-[12rem] truncate text-xs">
+                        From ICS-202 · {ics202SourceLabel}
+                      </Badge>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className="max-w-xs text-xs">
+                      Autopopulated from ICS-202 Incident Objectives. The objective name is
+                      read-only here.
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              ) : (
+                <Badge variant="secondary" className="text-xs">
+                  Operational
+                </Badge>
+              )}
+              <Ics234MatrixItemEditControls
+                ref={ref}
+                itemLabel="objective"
+                canMutate={canMutate}
+                isSaving={isSaving}
+                editingItem={editingItem}
+                disabled={isLinkedToIcs202}
+                onStartItemEdit={onStartItemEdit}
+                onCancelItemEdit={onCancelItemEdit}
+                onSaveItem={onSaveItem}
+                onGenerateItem={onGenerateItem}
+                onEditClick={handleEditClick}
+              />
+              {canMutate && !editing && !isLinkedToIcs202 ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  aria-label="Delete objective"
+                  className="text-destructive hover:text-destructive"
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    onDeleteObjective(objective.id)
+                    if (expandedObjectiveId === objective.id) {
+                      setExpandedObjectiveId(null)
+                    }
+                    if (
+                      editingItem &&
+                      (editingItem.ref.objectiveId === objective.id ||
+                        ics234MatrixItemKey(editingItem.ref).startsWith(
+                          `str-${objective.id}-`
+                        ) ||
+                        ics234MatrixItemKey(editingItem.ref).startsWith(
+                          `tac-${objective.id}-`
+                        ))
+                    ) {
+                      onCancelItemEdit()
+                    }
+                  }}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              ) : null}
+              <CollapsibleTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  aria-label="Toggle objective details"
+                  onClick={(event) => event.stopPropagation()}
+                >
+                  <ChevronDown
+                    className={cn('h-4 w-4 transition-transform', isOpen && 'rotate-180')}
+                  />
+                </Button>
+              </CollapsibleTrigger>
+            </ItemActions>
+          </div>
+          <CollapsibleContent>
+            <div className="border-t px-3 py-2 text-sm">
+              <div className="rounded-md p-2">
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <p className="text-sm font-medium">Child Strategies</p>
+                  {canMutate && !editing ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        onAddStrategy(objective.id)
+                        setExpandedObjectiveId(objective.id)
+                      }}
+                    >
+                      + Add Strategy
+                    </Button>
+                  ) : null}
+                </div>
+                {objective.strategies.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">No strategies recorded.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {objective.strategies.map((strategy, strategyIndex) =>
+                      renderStrategy(objective, strategy, strategyIndex)
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
+      </Item>
+    )
+  }
+
   return (
     <div className="space-y-2">
       {canMutate ? (
@@ -320,187 +507,19 @@ export function Ics234WorkAnalysisMatrix({
             <ItemDescription>Add objectives to build the work analysis matrix.</ItemDescription>
           </ItemContent>
         </Item>
+      ) : canMutate ? (
+        <IcsSortableVerticalList
+          items={objectives}
+          onReorder={onReorderObjectives}
+          className="space-y-2"
+          renderItem={(objective, index, dragHandle) =>
+            renderObjectiveCard(objective, index, dragHandle)
+          }
+        />
       ) : (
-        objectives.map((objective, objectiveIndex) => {
-          const ref: Ics234MatrixItemRef = { kind: 'objective', objectiveId: objective.id }
-          const isOpen = expandedObjectiveId === objective.id
-          const isLinkedToIcs202 = isIcs234ObjectiveLinkedToIcs202(objective)
-          const editing = isEditingRef(ref) && !isLinkedToIcs202
-          const name = getIcs234MatrixItemDraftName(ref, objective.name, editingItem)
-          const placeholder = `Objective ${objectiveIndex + 1}`
-          const ics202SourceLabel =
-            isLinkedToIcs202 && objective.ics202SourceKind
-              ? formatIcs202SourceLabel(objective.ics202SourceKind)
-              : null
-
-          return (
-            <Item
-              key={objective.id}
-              variant="outline"
-              className={cn('flex-col items-stretch p-0', glassItemBorderClasses)}
-            >
-              <Collapsible
-                open={isOpen}
-                onOpenChange={(open) => setExpandedObjectiveId(open ? objective.id : null)}
-              >
-                <div className="flex items-center gap-2 px-3 py-2.5">
-                  {canMutate && !editing && !isLinkedToIcs202 ? (
-                    <IcsEditableSectionContent
-                      enabled
-                      ariaLabel="Edit objective"
-                      onStartEdit={() => startMatrixItemEdit(ref)}
-                      className="min-w-0 flex-1"
-                    >
-                      <ItemContent className="min-w-0 flex-1">
-                        <ItemTitle className="line-clamp-none w-full font-medium">
-                          <Ics234MatrixInlineNameField
-                            name={name}
-                            editing={editing}
-                            readOnly={isLinkedToIcs202}
-                            placeholder={placeholder}
-                            onChange={(next) =>
-                              onPatchItemDraft({ kind: 'objective', name: next })
-                            }
-                          />
-                        </ItemTitle>
-                      </ItemContent>
-                    </IcsEditableSectionContent>
-                  ) : (
-                    <ItemContent
-                      className="min-w-0 flex-1 cursor-pointer"
-                      onClick={() =>
-                        setExpandedObjectiveId((previous) =>
-                          previous === objective.id ? null : objective.id
-                        )
-                      }
-                    >
-                      <ItemTitle className="line-clamp-none w-full font-medium">
-                        <Ics234MatrixInlineNameField
-                          name={name}
-                          editing={editing}
-                          readOnly={isLinkedToIcs202}
-                          placeholder={placeholder}
-                          onChange={(next) =>
-                            onPatchItemDraft({ kind: 'objective', name: next })
-                          }
-                        />
-                      </ItemTitle>
-                    </ItemContent>
-                  )}
-                  <ItemActions>
-                    <Badge variant="outline">Objective</Badge>
-                    {ics202SourceLabel ? (
-                      <TooltipProvider delayDuration={150}>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Badge variant="secondary" className="max-w-[12rem] truncate text-xs">
-                              From ICS-202 · {ics202SourceLabel}
-                            </Badge>
-                          </TooltipTrigger>
-                          <TooltipContent side="top" className="max-w-xs text-xs">
-                            Autopopulated from ICS-202 Incident Objectives. The objective name is
-                            read-only here.
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
-                    ) : (
-                      <Badge variant="secondary" className="text-xs">
-                        Operational
-                      </Badge>
-                    )}
-                    <Ics234MatrixItemEditControls
-                      ref={ref}
-                      itemLabel="objective"
-                      canMutate={canMutate}
-                      isSaving={isSaving}
-                      editingItem={editingItem}
-                      disabled={isLinkedToIcs202}
-                      onStartItemEdit={onStartItemEdit}
-                      onCancelItemEdit={onCancelItemEdit}
-                      onSaveItem={onSaveItem}
-                      onGenerateItem={onGenerateItem}
-                      onEditClick={handleEditClick}
-                    />
-                    {canMutate && !editing && !isLinkedToIcs202 ? (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        aria-label="Delete objective"
-                        className="text-destructive hover:text-destructive"
-                        onClick={(event) => {
-                          event.stopPropagation()
-                          onDeleteObjective(objective.id)
-                          if (expandedObjectiveId === objective.id) {
-                            setExpandedObjectiveId(null)
-                          }
-                          if (
-                            editingItem &&
-                            (editingItem.ref.objectiveId === objective.id ||
-                              ics234MatrixItemKey(editingItem.ref).startsWith(
-                                `str-${objective.id}-`
-                              ) ||
-                              ics234MatrixItemKey(editingItem.ref).startsWith(
-                                `tac-${objective.id}-`
-                              ))
-                          ) {
-                            onCancelItemEdit()
-                          }
-                        }}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    ) : null}
-                    <CollapsibleTrigger asChild>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        aria-label="Toggle objective details"
-                        onClick={(event) => event.stopPropagation()}
-                      >
-                        <ChevronDown
-                          className={cn('h-4 w-4 transition-transform', isOpen && 'rotate-180')}
-                        />
-                      </Button>
-                    </CollapsibleTrigger>
-                  </ItemActions>
-                </div>
-                <CollapsibleContent>
-                  <div className="border-t px-3 py-2 text-sm">
-                    <div className="rounded-md p-2">
-                      <div className="mb-2 flex items-center justify-between gap-2">
-                        <p className="text-sm font-medium">Child Strategies</p>
-                        {canMutate && !editing ? (
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            onClick={() => {
-                              onAddStrategy(objective.id)
-                              setExpandedObjectiveId(objective.id)
-                            }}
-                          >
-                            + Add Strategy
-                          </Button>
-                        ) : null}
-                      </div>
-                      {objective.strategies.length === 0 ? (
-                        <p className="text-xs text-muted-foreground">No strategies recorded.</p>
-                      ) : (
-                        <div className="space-y-2">
-                          {objective.strategies.map((strategy, strategyIndex) =>
-                            renderStrategy(objective, strategy, strategyIndex)
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </CollapsibleContent>
-              </Collapsible>
-            </Item>
-          )
-        })
+        objectives.map((objective, objectiveIndex) =>
+          renderObjectiveCard(objective, objectiveIndex, null)
+        )
       )}
     </div>
   )

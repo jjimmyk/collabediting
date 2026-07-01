@@ -51,6 +51,7 @@ type Ics234FormSectionsProps = {
   onDeleteMatrixObjective: (objectiveId: number) => void
   onDeleteMatrixStrategy: (objectiveId: number, strategyId: number) => void
   onDeleteMatrixTactic: (objectiveId: number, strategyId: number, tacticId: number) => void
+  onReorderMatrixObjectives: (fromIndex: number, toIndex: number) => void
 }
 
 function isEditing(
@@ -85,6 +86,7 @@ export function Ics234FormSections({
   onDeleteMatrixObjective,
   onDeleteMatrixStrategy,
   onDeleteMatrixTactic,
+  onReorderMatrixObjectives,
 }: Ics234FormSectionsProps) {
   const [matrixViewMode, setMatrixViewMode] = useState<'list' | 'table'>('list')
 
@@ -118,10 +120,15 @@ export function Ics234FormSections({
     onDeleteObjective: onDeleteMatrixObjective,
     onDeleteStrategy: onDeleteMatrixStrategy,
     onDeleteTactic: onDeleteMatrixTactic,
+    onReorderObjectives: onReorderMatrixObjectives,
   }
 
   const matrixToolbar = (
-    <ToggleGroup
+    <div className="flex flex-wrap items-center gap-2">
+      {matrixViewMode === 'table' && canEdit && !formIsLocked ? (
+        <span className="text-[10px] text-muted-foreground">Use list view to reorder objectives.</span>
+      ) : null}
+      <ToggleGroup
       type="single"
       value={matrixViewMode}
       onValueChange={(next) => {
@@ -142,6 +149,7 @@ export function Ics234FormSections({
         Table view
       </ToggleGroupItem>
     </ToggleGroup>
+    </div>
   )
 
   const renderSectionShell = (

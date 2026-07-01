@@ -84,6 +84,7 @@ type Ics234WorkspacePanelProps = {
   onDeleteMatrixObjective: (objectiveId: number) => void
   onDeleteMatrixStrategy: (objectiveId: number, strategyId: number) => void
   onDeleteMatrixTactic: (objectiveId: number, strategyId: number, tacticId: number) => void
+  onReorderMatrixObjectives: (fromIndex: number, toIndex: number) => void
   onAppendVersion: (
     form: Ics234FormState,
     signatures?: Ics201VersionSignature[],
@@ -126,6 +127,7 @@ export function Ics234WorkspacePanel({
   onDeleteMatrixObjective,
   onDeleteMatrixStrategy,
   onDeleteMatrixTactic,
+  onReorderMatrixObjectives,
   onAppendVersion,
   onSignReview,
   downloadDocx,
@@ -488,6 +490,7 @@ export function Ics234WorkspacePanel({
             onDeleteMatrixObjective={onDeleteMatrixObjective}
             onDeleteMatrixStrategy={onDeleteMatrixStrategy}
             onDeleteMatrixTactic={onDeleteMatrixTactic}
+            onReorderMatrixObjectives={onReorderMatrixObjectives}
           />
         </div>
 

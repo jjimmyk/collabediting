@@ -14,9 +14,9 @@ export const ICS201_OBJECTIVE_KIND_OPTIONS: ReadonlyArray<{
   value: Ics201ObjectiveKind
   label: string
 }> = [
-  { value: 'O', label: 'Operational' },
-  { value: 'M', label: 'Managerial' },
-  { value: 'O&M', label: 'Operational & Managerial' },
+  { value: 'O', label: 'O' },
+  { value: 'M', label: 'M' },
+  { value: 'O&M', label: 'O&M' },
 ]
 
 export const ICS201_OBJECTIVE_KIND_TOOLTIP =
