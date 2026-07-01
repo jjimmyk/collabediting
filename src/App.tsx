@@ -925,6 +925,7 @@ import {
 } from '@/features/hub/map-layers/gnome/noaa-gnome-layer-storage'
 import { useNoaaGnomeMapLayer } from '@/features/hub/map-layers/gnome/useNoaaGnomeMapLayer'
 import { NoaaGnomeNotificationMapEmbed } from '@/features/hub/map-layers/gnome/NoaaGnomeNotificationMapEmbed'
+import { FusionCascadingImpactsEmbed } from '@/features/hub/fusion-centers/FusionCascadingImpactsEmbed'
 import { ProductToursMenu } from '@/components/ProductToursMenu'
 import { CreateHubNotificationDialog } from '@/components/CreateHubNotificationDialog'
 import {
@@ -29325,6 +29326,9 @@ function App() {
                                       )
                                     })}
                                   </div>
+                                  {isFusionCentersEnabled && item.id === 0 ? (
+                                    <FusionCascadingImpactsEmbed />
+                                  ) : null}
                                   {isOilSpillTrajectoryModelsEnabled && item.id === 0 ? (
                                     <NoaaGnomeNotificationMapEmbed
                                       hourIndex={noaaGnomeHourIndex}
