@@ -1,4 +1,4 @@
-import { AlertTriangle, Check, History, Lock, MapPin, Plus, Sparkles } from 'lucide-react'
+import { AlertTriangle, Check, MapPin, Plus, Sparkles } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -16,6 +16,12 @@ import {
   getSitrepLastEditorLabel,
 } from '@/features/sitrep/editor-utils'
 import type { SitrepScopeKind, SitrepVersion, SitrepViewMode } from '@/features/sitrep/types'
+import {
+  IcsFormSignedVersionsLockMessage,
+  IcsFormVersionsMenuButton,
+  IcsFormVersionStatusStickyBar,
+} from '@/features/ics/shared/IcsFormVersionStatusStickyBar'
+import { ICS_FORM_STATUS_AMBER_CLASS, ICS_FORM_STICKY_CHROME_CLASS } from '@/features/ics/shared/ics-form-sticky-status'
 import { cn } from '@/lib/utils'
 
 export type SitrepScopeOption = {
@@ -127,18 +133,78 @@ export function SitrepScopeHeader({
   )
 }
 
-type SitrepVersionToolbarProps = {
+type SitrepVersionStatusBannerProps = {
   latestVersion: SitrepVersion | null
   isLatestSigned: boolean
+  authorDisplay: (version: SitrepVersion) => string
   signedVersionsCount: number
   versionsCount: number
+  onOpenVersionHistory: () => void
+  onOpenSignedVersions: () => void
+  isCreatingSignedVersion?: boolean
+}
+
+export function SitrepVersionStatusBanner({
+  latestVersion,
+  isLatestSigned,
+  authorDisplay,
+  signedVersionsCount,
+  versionsCount,
+  onOpenVersionHistory,
+  onOpenSignedVersions,
+  isCreatingSignedVersion = false,
+}: SitrepVersionStatusBannerProps) {
+  return (
+    <IcsFormVersionStatusStickyBar
+      variant="latest"
+      statusContent={
+        latestVersion ? (
+          <span>
+            You are viewing the latest{' '}
+            <span className="font-semibold">{isLatestSigned ? 'signed' : 'draft'}</span> version from{' '}
+            <span className="font-semibold">
+              {new Date(latestVersion.createdAt).toLocaleTimeString([], {
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+              })}
+            </span>{' '}
+            last edited by{' '}
+            <span
+              className="rounded px-1.5 py-0.5 text-[10px] font-semibold text-white"
+              style={{ backgroundColor: latestVersion.authorColor }}
+            >
+              {authorDisplay(latestVersion)}
+            </span>
+            .
+          </span>
+        ) : (
+          <span>No SITREP versions yet. Create a draft to get started.</span>
+        )
+      }
+      leadingActions={
+        isLatestSigned && !isCreatingSignedVersion ? (
+          <IcsFormSignedVersionsLockMessage message="Signed versions cannot be edited." />
+        ) : undefined
+      }
+      versionsButton={
+        <IcsFormVersionsMenuButton
+          historyCount={versionsCount}
+          signedCount={signedVersionsCount}
+          onOpenHistory={onOpenVersionHistory}
+          onOpenSigned={onOpenSignedVersions}
+        />
+      }
+    />
+  )
+}
+
+type SitrepVersionToolbarProps = {
+  isLatestSigned: boolean
   isSaving: boolean
   isLoading: boolean
   viewingHistorical: boolean
   isCreatingSignedVersion: boolean
-  authorDisplay: (version: SitrepVersion) => string
-  onOpenVersionHistory: () => void
-  onOpenSignedVersions: () => void
   onCreateSignedOrNewVersion: () => void
   onGenerateDraft?: () => void
   generateDraftDisabled?: boolean
@@ -148,17 +214,11 @@ type SitrepVersionToolbarProps = {
 }
 
 export function SitrepVersionToolbar({
-  latestVersion,
   isLatestSigned,
-  signedVersionsCount,
-  versionsCount,
   isSaving,
   isLoading,
   viewingHistorical,
   isCreatingSignedVersion,
-  authorDisplay,
-  onOpenVersionHistory,
-  onOpenSignedVersions,
   onCreateSignedOrNewVersion,
   onGenerateDraft,
   generateDraftDisabled = false,
@@ -168,80 +228,12 @@ export function SitrepVersionToolbar({
 }: SitrepVersionToolbarProps) {
   return (
     <>
-      {!viewingHistorical && !isCreatingSignedVersion && (
-        <div className="flex flex-wrap items-center gap-2 rounded-md border border-emerald-400 bg-emerald-50 px-3 py-2 text-xs text-emerald-900 dark:border-emerald-500 dark:bg-emerald-500/10 dark:text-emerald-200">
-          {latestVersion ? (
-            <span>
-              You are viewing the latest{' '}
-              <span className="font-semibold">{isLatestSigned ? 'signed' : 'draft'}</span> version
-              from{' '}
-              <span className="font-semibold">
-                {new Date(latestVersion.createdAt).toLocaleTimeString([], {
-                  hour: '2-digit',
-                  minute: '2-digit',
-                  second: '2-digit',
-                })}
-              </span>{' '}
-              last edited by{' '}
-              <span
-                className="rounded px-1.5 py-0.5 text-[10px] font-semibold text-white"
-                style={{ backgroundColor: latestVersion.authorColor }}
-              >
-                {authorDisplay(latestVersion)}
-              </span>
-              .
-            </span>
-          ) : (
-            <span>No SITREP versions yet. Create a draft to get started.</span>
-          )}
-        </div>
-      )}
-
-      <div className="flex items-center justify-between rounded-md border bg-background/70 px-3 py-2 text-xs">
-        {isLatestSigned && !isCreatingSignedVersion ? (
-          <div className="flex items-center gap-2 text-muted-foreground">
-            <Lock className="h-3.5 w-3.5" />
-            <span>Signed versions cannot be edited.</span>
-          </div>
-        ) : (
-          <span className="text-muted-foreground">
-            {isCreatingSignedVersion
-              ? 'Review this version and sign at the bottom when ready.'
-              : 'Edit any section below. Each save creates a new version.'}
-            {isSaving ? ' Saving…' : null}
-            {isLoading ? ' Loading…' : null}
-          </span>
-        )}
-        <div className="flex items-center gap-2">
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            className="h-7 gap-1 text-xs"
-            onClick={onOpenVersionHistory}
-          >
-            <History className="h-3.5 w-3.5" />
-            Version history
-            <Badge variant="secondary" className="ml-1 h-4 px-1.5 text-[10px]">
-              {versionsCount}
-            </Badge>
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            disabled={signedVersionsCount === 0}
-            className="h-7 gap-1 text-xs"
-            onClick={onOpenSignedVersions}
-          >
-            <Check className="h-3.5 w-3.5" />
-            Signed Versions
-            <Badge variant="secondary" className="ml-1 h-4 px-1.5 text-[10px]">
-              {signedVersionsCount}
-            </Badge>
-          </Button>
-        </div>
-      </div>
+      {(isSaving || isLoading) && !isCreatingSignedVersion ? (
+        <span className="text-xs text-muted-foreground">
+          {isSaving ? 'Saving…' : null}
+          {isLoading ? ' Loading…' : null}
+        </span>
+      ) : null}
 
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2">
@@ -339,8 +331,9 @@ export function SitrepHistoricalBanner({
           ← {backLabel}
         </Button>
       </div>
-      <div className="flex flex-col gap-2 rounded-md border border-amber-400 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-500 dark:bg-amber-500/10 dark:text-amber-200">
-        <span>
+      <div className={ICS_FORM_STICKY_CHROME_CLASS}>
+        <div className={cn(ICS_FORM_STATUS_AMBER_CLASS, 'flex flex-col gap-2')}>
+          <span>
           {isViewingSubmittedDraft ? (
             <>
               You are viewing a draft last edited by{' '}
@@ -367,6 +360,7 @@ export function SitrepHistoricalBanner({
             </>
           )}
         </span>
+        </div>
       </div>
     </>
   )

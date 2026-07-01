@@ -40,6 +40,11 @@ import type {
   Ics206Version,
 } from '@/features/ics206/types'
 import { cloneIcs206FormState, getIcs206FormForExport } from '@/features/ics206/utils'
+import {
+  IcsFormSignedVersionsLockMessage,
+  IcsFormVersionsMenuButton,
+  IcsFormVersionStatusStickyBar,
+} from '@/features/ics/shared/IcsFormVersionStatusStickyBar'
 import { cn } from '@/lib/utils'
 
 type ExportBlock = Ics206DocxBlock
@@ -297,47 +302,51 @@ export function Ics206WorkspacePanel({
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
-
-        <div className="sticky top-0 z-10 space-y-3 rounded-md border bg-card/95 p-3 backdrop-blur-sm">
-          {viewingPastVersion && (
-            <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-amber-400 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-500 dark:bg-amber-500/10 dark:text-amber-200">
-              <div className="flex flex-wrap items-center gap-2">
-                <History className="h-3.5 w-3.5" />
-                <span>
-                  You are viewing a past version from{' '}
-                  <span className="font-semibold">
-                    {new Date(viewingPastVersion.createdAt).toLocaleTimeString([], {
-                      hour: '2-digit',
-                      minute: '2-digit',
-                      second: '2-digit',
-                    })}
-                  </span>{' '}
-                  last edited by{' '}
-                  <span
-                    className="rounded px-1.5 py-0.5 text-[10px] font-semibold text-white"
-                    style={{ backgroundColor: viewingPastVersion.authorColor }}
-                  >
-                    {viewingPastVersion.authorName}
+        {viewingPastVersion && (
+          <IcsFormVersionStatusStickyBar
+            variant="past"
+            statusContent={
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <History className="h-3.5 w-3.5" />
+                  <span>
+                    You are viewing a past version from{' '}
+                    <span className="font-semibold">
+                      {new Date(viewingPastVersion.createdAt).toLocaleTimeString([], {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        second: '2-digit',
+                      })}
+                    </span>{' '}
+                    last edited by{' '}
+                    <span
+                      className="rounded px-1.5 py-0.5 text-[10px] font-semibold text-white"
+                      style={{ backgroundColor: viewingPastVersion.authorColor }}
+                    >
+                      {viewingPastVersion.authorName}
+                    </span>
+                    .
                   </span>
-                  .
-                </span>
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-7 gap-1 text-xs"
+                  onClick={restoreLiveForm}
+                >
+                  <X className="h-3.5 w-3.5" />
+                  View latest
+                </Button>
               </div>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                className="h-7 gap-1 text-xs"
-                onClick={restoreLiveForm}
-              >
-                <X className="h-3.5 w-3.5" />
-                View latest
-              </Button>
-            </div>
-          )}
-
-          {!viewingPastVersion && !isCreatingSignedVersion && (
-            <div className="flex flex-wrap items-center gap-2 rounded-md border border-emerald-400 bg-emerald-50 px-3 py-2 text-xs text-emerald-900 dark:border-emerald-500 dark:bg-emerald-500/10 dark:text-emerald-200">
-              {latestVersion ? (
+            }
+          />
+        )}
+        {!viewingPastVersion && !isCreatingSignedVersion && (
+          <IcsFormVersionStatusStickyBar
+            variant="latest"
+            statusContent={
+              latestVersion ? (
                 <span>
                   You are viewing the latest{' '}
                   <span className="font-semibold">{isLatestSigned ? 'signed' : 'draft'}</span>{' '}
@@ -360,54 +369,22 @@ export function Ics206WorkspacePanel({
                 </span>
               ) : (
                 <span>You are viewing the latest version.</span>
-              )}
-            </div>
-          )}
-
-          {!viewingPastVersion && !isCreatingSignedVersion && (
-            <div className="flex items-center justify-between rounded-md border bg-background/70 px-3 py-2 text-xs">
-              {isLatestSigned ? (
-                <div className="flex items-center gap-2 text-muted-foreground">
-                  <Lock className="h-3.5 w-3.5" />
-                  <span>Signed versions are locked from edits.</span>
-                </div>
-              ) : (
-                <div className="text-muted-foreground">
-                  Draft is editable. Use each section&apos;s Save button to update the latest
-                  draft, or sign to promote it.
-                </div>
-              )}
-              <div className="flex items-center gap-2">
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  className="h-7 gap-1 text-xs"
-                  onClick={() => setVersionDialogKind('all')}
-                >
-                  <History className="h-3.5 w-3.5" />
-                  Version history
-                  <Badge variant="secondary" className="ml-1 h-4 px-1.5 text-[10px]">
-                    {versions.length}
-                  </Badge>
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  disabled={signedVersionsCount === 0}
-                  className="h-7 gap-1 text-xs"
-                  onClick={() => setVersionDialogKind('signed')}
-                >
-                  <Check className="h-3.5 w-3.5" />
-                  Signed Versions
-                  <Badge variant="secondary" className="ml-1 h-4 px-1.5 text-[10px]">
-                    {signedVersionsCount}
-                  </Badge>
-                </Button>
-              </div>
-            </div>
-          )}
+              )
+            }
+            leadingActions={
+              isLatestSigned ? <IcsFormSignedVersionsLockMessage /> : undefined
+            }
+            versionsButton={
+              <IcsFormVersionsMenuButton
+                historyCount={versions.length}
+                signedCount={signedVersionsCount}
+                onOpenHistory={() => setVersionDialogKind('all')}
+                onOpenSigned={() => setVersionDialogKind('signed')}
+              />
+            }
+          />
+        )}
+        <div className="space-y-3 rounded-md border bg-card/95 p-3 backdrop-blur-sm">
 
           {!viewingPastVersion && !isCreatingSignedVersion && (
             <div className="flex items-center justify-start gap-2">

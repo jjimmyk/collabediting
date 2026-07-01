@@ -171,6 +171,11 @@ import {
   type ResourceRequestItem,
 } from '@/lib/ics-213rr-resource-request'
 import { cn } from '@/lib/utils'
+import {
+  IcsFormSignedVersionsLockMessage,
+  IcsFormVersionsMenuButton,
+  IcsFormVersionStatusStickyBar,
+} from '@/features/ics/shared/IcsFormVersionStatusStickyBar'
 import { useAuth } from '@/contexts/AuthContext'
 import { consumeInvitedWorkspaceId } from '@/lib/auth-callback'
 import {
@@ -985,6 +990,7 @@ import {
   SitrepHistoricalBanner,
   SitrepReviewTargetBanner,
   SitrepScopeHeader,
+  SitrepVersionStatusBanner,
   SitrepVersionToolbar,
 } from '@/features/sitrep/SitrepChrome'
 import { SitrepVersionDialogs } from '@/features/sitrep/SitrepVersionDialogs'
@@ -32949,215 +32955,195 @@ function App() {
                         </div>
                       </div>
                     )}
-                    <div className="sticky top-0 z-10 -mx-2 space-y-3 bg-card px-2 pb-2 pt-1">
                     {viewingIcs201Version && (
-                      <div className="flex items-center justify-between rounded-md border border-amber-400 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-500 dark:bg-amber-500/10 dark:text-amber-200">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <History className="h-3.5 w-3.5" />
-                          <span>
-                            You are viewing a past version from{' '}
-                            <span className="font-semibold">
-                              {new Date(viewingIcs201Version.createdAt).toLocaleTimeString([], {
-                                hour: '2-digit',
-                                minute: '2-digit',
-                                second: '2-digit',
-                              })}
-                            </span>{' '}
-                            last edited by{' '}
-                            <span
-                              className="rounded px-1.5 py-0.5 text-[10px] font-semibold text-white"
-                              style={{ backgroundColor: viewingIcs201Version.authorColor }}
+                      <IcsFormVersionStatusStickyBar
+                        variant="past"
+                        statusContent={
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <History className="h-3.5 w-3.5" />
+                              <span>
+                                You are viewing a past version from{' '}
+                                <span className="font-semibold">
+                                  {new Date(viewingIcs201Version.createdAt).toLocaleTimeString([], {
+                                    hour: '2-digit',
+                                    minute: '2-digit',
+                                    second: '2-digit',
+                                  })}
+                                </span>{' '}
+                                last edited by{' '}
+                                <span
+                                  className="rounded px-1.5 py-0.5 text-[10px] font-semibold text-white"
+                                  style={{ backgroundColor: viewingIcs201Version.authorColor }}
+                                >
+                                  {ics201VersionAuthorDisplay(viewingIcs201Version)}
+                                </span>
+                                .
+                              </span>
+                              {(() => {
+                                const liveSignatures =
+                                  ics201Versions.find((entry) => entry.id === viewingIcs201Version.id)
+                                    ?.signatures ?? viewingIcs201Version.signatures
+                                if (liveSignatures.length === 0) {
+                                  return null
+                                }
+                                return (
+                                  <span
+                                    className="flex items-center gap-1 rounded-full border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-800 dark:border-emerald-500/50 dark:bg-emerald-500/10 dark:text-emerald-300"
+                                    title={liveSignatures
+                                      .map(
+                                        (signature) =>
+                                          `${signature.name} (${signature.role}) at ${new Date(
+                                            signature.signedAt
+                                          ).toLocaleTimeString([], {
+                                            hour: '2-digit',
+                                            minute: '2-digit',
+                                          })}`
+                                      )
+                                      .join(', ')}
+                                  >
+                                    <Check className="h-3 w-3" />
+                                    Signed by{' '}
+                                    {liveSignatures
+                                      .map((signature) => `${signature.name} (${signature.role})`)
+                                      .join(', ')}
+                                  </span>
+                                )
+                              })()}
+                            </div>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              className="h-7 gap-1 text-xs"
+                              onClick={() => {
+                                if (liveIcs201FormRef.current) {
+                                  setIcs201Form(liveIcs201FormRef.current)
+                                  liveIcs201FormRef.current = null
+                                }
+                                setViewingIcs201Version(null)
+                              }}
                             >
-                              {ics201VersionAuthorDisplay(viewingIcs201Version)}
-                            </span>
-                            .
-                          </span>
-                          {(() => {
-                            const liveSignatures =
-                              ics201Versions.find((entry) => entry.id === viewingIcs201Version.id)
-                                ?.signatures ?? viewingIcs201Version.signatures
-                            if (liveSignatures.length === 0) {
-                              return null
-                            }
-                            return (
-                              <span
-                                className="flex items-center gap-1 rounded-full border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-800 dark:border-emerald-500/50 dark:bg-emerald-500/10 dark:text-emerald-300"
-                                title={liveSignatures
-                                  .map(
-                                    (signature) =>
-                                      `${signature.name} (${signature.role}) at ${new Date(
-                                        signature.signedAt
-                                      ).toLocaleTimeString([], {
-                                        hour: '2-digit',
-                                        minute: '2-digit',
-                                      })}`
-                                  )
-                                  .join(', ')}
-                              >
-                                <Check className="h-3 w-3" />
-                                Signed by{' '}
-                                {liveSignatures
-                                  .map((signature) => `${signature.name} (${signature.role})`)
-                                  .join(', ')}
+                              <X className="h-3.5 w-3.5" />
+                              View latest
+                            </Button>
+                          </div>
+                        }
+                      />
+                    )}
+                    {!viewingIcs201Version && !isCreatingSignedIcs201Version && (() => {
+                      const latest = ics201Versions[ics201Versions.length - 1]
+                      const isLatestSigned = !!latest && latest.signatures.length > 0
+                      const signedVersionsCount = ics201Versions.filter(
+                        (version) => version.signatures.length > 0
+                      ).length
+                      return (
+                        <IcsFormVersionStatusStickyBar
+                          variant="latest"
+                          statusContent={
+                            latest ? (
+                              <span>
+                                You are viewing the latest{' '}
+                                <span className="font-semibold">
+                                  {isLatestSigned ? 'signed' : 'draft'}
+                                </span>{' '}
+                                version from{' '}
+                                <span className="font-semibold">
+                                  {new Date(latest.createdAt).toLocaleTimeString([], {
+                                    hour: '2-digit',
+                                    minute: '2-digit',
+                                    second: '2-digit',
+                                  })}
+                                </span>{' '}
+                                last edited by{' '}
+                                <span
+                                  className="rounded px-1.5 py-0.5 text-[10px] font-semibold text-white"
+                                  style={{ backgroundColor: latest.authorColor }}
+                                >
+                                  {ics201VersionAuthorDisplay(latest)}
+                                </span>
+                                .
+                              </span>
+                            ) : (
+                              <span>
+                                You are viewing the latest{' '}
+                                <span className="font-semibold">draft</span> version.
                               </span>
                             )
-                          })()}
-                        </div>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          className="h-7 gap-1 text-xs"
-                          onClick={() => {
-                            if (liveIcs201FormRef.current) {
-                              setIcs201Form(liveIcs201FormRef.current)
-                              liveIcs201FormRef.current = null
-                            }
-                            setViewingIcs201Version(null)
-                          }}
-                        >
-                          <X className="h-3.5 w-3.5" />
-                          View latest
-                        </Button>
-                      </div>
-                    )}
+                          }
+                          leadingActions={
+                            isLatestSigned ? (
+                              <IcsFormSignedVersionsLockMessage message="Signed versions cannot be edited." />
+                            ) : (
+                              <TooltipProvider delayDuration={150}>
+                                <div className="flex items-center gap-2">
+                                  {ics201TopBarEditors.length > 0 ? (
+                                    <div className="flex -space-x-2">
+                                      {ics201TopBarEditors.map((editor) => (
+                                        <Tooltip key={editor.id}>
+                                          <TooltipTrigger asChild>
+                                            <div
+                                              className="flex h-6 w-6 cursor-default items-center justify-center rounded-full border-2 border-background text-[10px] font-semibold text-white"
+                                              style={{ backgroundColor: editor.color }}
+                                            >
+                                              {editor.initials}
+                                            </div>
+                                          </TooltipTrigger>
+                                          <TooltipContent side="top" className="text-xs">
+                                            <div className="font-medium">{editor.position}</div>
+                                            <div className="opacity-80">{editor.email}</div>
+                                            {editor.activeSection ? (
+                                              <div className="opacity-80">
+                                                Editing {ICS201_SECTION_LABELS[editor.activeSection]}
+                                              </div>
+                                            ) : null}
+                                          </TooltipContent>
+                                        </Tooltip>
+                                      ))}
+                                    </div>
+                                  ) : null}
+                                  <span className="text-muted-foreground">
+                                    {ics201TopBarEditors.length === 0
+                                      ? activeIcs201Section
+                                        ? `You are editing ${ICS201_SECTION_LABELS[activeIcs201Section]}.`
+                                        : 'You are viewing the ICS-201.'
+                                      : ics201TopBarEditors.length === 1 &&
+                                          ics201TopBarEditors[0]?.isSelf
+                                        ? `You are editing ${ICS201_SECTION_LABELS[ics201TopBarEditors[0].activeSection!]}.`
+                                        : `${ics201TopBarEditors.length} ${
+                                            ics201TopBarEditors.length === 1 ? 'person is' : 'people are'
+                                          } editing now.`}
+                                    {ics201TopBarEditors.length > 8 ? (
+                                      <span className="ml-1 text-amber-600 dark:text-amber-400">
+                                        High co-editing load — performance may degrade.
+                                      </span>
+                                    ) : null}
+                                    {isIcs201Loading ? ' Loading…' : null}
+                                  </span>
+                                  <Ics201SaveStatusIndicator status={ics201AggressiveAutosave.status} />
+                                </div>
+                              </TooltipProvider>
+                            )
+                          }
+                          versionsButton={
+                            <IcsFormVersionsMenuButton
+                              historyCount={ics201Versions.length}
+                              signedCount={signedVersionsCount}
+                              tutorialId="ics201-version-history"
+                              onOpenHistory={() => setIsIcs201VersionDialogOpen(true)}
+                              onOpenSigned={() => setIsIcs201SignedVersionsDialogOpen(true)}
+                            />
+                          }
+                        />
+                      )
+                    })()}
+                    <div className="-mx-2 space-y-3 bg-card px-2 pb-2 pt-1">
                     {!canEditIcs201Form && !viewingIcs201Version && (
                       <div className="flex flex-wrap items-center gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-950 dark:border-amber-500 dark:bg-amber-500/10 dark:text-amber-100">
                         View only — your ICS position(s) do not include permission to edit the
                         ICS-201 form.
                       </div>
                     )}
-                    {!viewingIcs201Version && !isCreatingSignedIcs201Version && (
-                      <div className="flex flex-wrap items-center gap-2 rounded-md border border-emerald-400 bg-emerald-50 px-3 py-2 text-xs text-emerald-900 dark:border-emerald-500 dark:bg-emerald-500/10 dark:text-emerald-200">
-                        {(() => {
-                          const latest = ics201Versions[ics201Versions.length - 1]
-                          if (!latest) {
-                            return <span>You are viewing the latest <span className="font-semibold">draft</span> version.</span>
-                          }
-                          const versionType = latest.signatures.length > 0 ? 'signed' : 'draft'
-                          return (
-                            <span>
-                              You are viewing the latest <span className="font-semibold">{versionType}</span> version from{' '}
-                              <span className="font-semibold">
-                                {new Date(latest.createdAt).toLocaleTimeString([], {
-                                  hour: '2-digit',
-                                  minute: '2-digit',
-                                  second: '2-digit',
-                                })}
-                              </span>{' '}
-                              last edited by{' '}
-                              <span
-                                className="rounded px-1.5 py-0.5 text-[10px] font-semibold text-white"
-                                style={{ backgroundColor: latest.authorColor }}
-                              >
-                                {ics201VersionAuthorDisplay(latest)}
-                              </span>
-                              .
-                            </span>
-                          )
-                        })()}
-                      </div>
-                    )}
-                    {!isCreatingSignedIcs201Version && (() => {
-                      const latestVersion = ics201Versions[ics201Versions.length - 1]
-                      const isLatestSigned =
-                        !!latestVersion && latestVersion.signatures.length > 0
-                      return (
-                    <div className="flex items-center justify-between rounded-md border bg-background/70 px-3 py-2 text-xs">
-                      {isLatestSigned ? (
-                        <div className="flex items-center gap-2 text-muted-foreground">
-                          <Lock className="h-3.5 w-3.5" />
-                          <span>Signed versions cannot be edited.</span>
-                        </div>
-                      ) : (
-                        <TooltipProvider delayDuration={150}>
-                          <div className="flex items-center gap-2">
-                            {ics201TopBarEditors.length > 0 ? (
-                              <div className="flex -space-x-2">
-                                {ics201TopBarEditors.map((editor) => (
-                                  <Tooltip key={editor.id}>
-                                    <TooltipTrigger asChild>
-                                      <div
-                                        className="flex h-6 w-6 cursor-default items-center justify-center rounded-full border-2 border-background text-[10px] font-semibold text-white"
-                                        style={{ backgroundColor: editor.color }}
-                                      >
-                                        {editor.initials}
-                                      </div>
-                                    </TooltipTrigger>
-                                    <TooltipContent side="top" className="text-xs">
-                                      <div className="font-medium">{editor.position}</div>
-                                      <div className="opacity-80">{editor.email}</div>
-                                      {editor.activeSection ? (
-                                        <div className="opacity-80">
-                                          Editing {ICS201_SECTION_LABELS[editor.activeSection]}
-                                        </div>
-                                      ) : null}
-                                    </TooltipContent>
-                                  </Tooltip>
-                                ))}
-                              </div>
-                            ) : null}
-                            <span className="text-muted-foreground">
-                              {ics201TopBarEditors.length === 0
-                                ? activeIcs201Section
-                                  ? `You are editing ${ICS201_SECTION_LABELS[activeIcs201Section]}.`
-                                  : 'You are viewing the ICS-201.'
-                                : ics201TopBarEditors.length === 1 && ics201TopBarEditors[0]?.isSelf
-                                  ? `You are editing ${ICS201_SECTION_LABELS[ics201TopBarEditors[0].activeSection!]}.`
-                                  : `${ics201TopBarEditors.length} ${
-                                      ics201TopBarEditors.length === 1 ? 'person is' : 'people are'
-                                    } editing now.`}
-                              {ics201TopBarEditors.length > 8 ? (
-                                <span className="ml-1 text-amber-600 dark:text-amber-400">
-                                  High co-editing load — performance may degrade.
-                                </span>
-                              ) : null}
-                              {isIcs201Loading ? ' Loading…' : null}
-                            </span>
-                            <Ics201SaveStatusIndicator status={ics201AggressiveAutosave.status} />
-                          </div>
-                        </TooltipProvider>
-                      )}
-                      <div className="flex items-center gap-2">
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          className="h-7 gap-1 text-xs"
-                          data-ics201-tutorial="ics201-version-history"
-                          onClick={() => setIsIcs201VersionDialogOpen(true)}
-                        >
-                          <History className="h-3.5 w-3.5" />
-                          Version history
-                          <Badge variant="secondary" className="ml-1 h-4 px-1.5 text-[10px]">
-                            {ics201Versions.length}
-                          </Badge>
-                        </Button>
-                        {(() => {
-                          const signedVersionsCount = ics201Versions.filter(
-                            (version) => version.signatures.length > 0
-                          ).length
-                          return (
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="outline"
-                              disabled={signedVersionsCount === 0}
-                              className="h-7 gap-1 text-xs"
-                              onClick={() => setIsIcs201SignedVersionsDialogOpen(true)}
-                            >
-                              <Check className="h-3.5 w-3.5" />
-                              Signed Versions
-                              <Badge variant="secondary" className="ml-1 h-4 px-1.5 text-[10px]">
-                                {signedVersionsCount}
-                              </Badge>
-                            </Button>
-                          )
-                        })()}
-                      </div>
-                    </div>
-                      )
-                    })()}
                     <div className="flex items-center justify-start gap-2">
                       {(() => {
                         const latest = ics201Versions[ics201Versions.length - 1]
@@ -35343,16 +35329,28 @@ function App() {
                         </div>
                       </div>
                     )}
-                    <div className="sticky top-0 z-10 -mx-2 space-y-3 bg-card px-2 pb-2 pt-1">
-                      {viewingSitrepVersion && (
-                        <SitrepHistoricalBanner
-                          version={viewingSitrepVersion}
-                          originMode={viewingSitrepVersionOrigin}
-                          onBack={() => {
-                            viewLatestSitrep()
-                          }}
-                        />
-                      )}
+                    {viewingSitrepVersion && (
+                      <SitrepHistoricalBanner
+                        version={viewingSitrepVersion}
+                        originMode={viewingSitrepVersionOrigin}
+                        onBack={() => {
+                          viewLatestSitrep()
+                        }}
+                      />
+                    )}
+                    {!viewingSitrepVersion && !isCreatingSignedSitrepVersion && (
+                      <SitrepVersionStatusBanner
+                        latestVersion={sitrepEditor.latestVersion}
+                        isLatestSigned={sitrepEditor.isLatestSigned}
+                        authorDisplay={(version) => version.authorName}
+                        signedVersionsCount={sitrepEditor.signedVersionsCount}
+                        versionsCount={sitrepVersions.length}
+                        isCreatingSignedVersion={isCreatingSignedSitrepVersion}
+                        onOpenVersionHistory={() => setIsSitrepVersionDialogOpen(true)}
+                        onOpenSignedVersions={() => setIsSitrepSignedVersionsDialogOpen(true)}
+                      />
+                    )}
+                    <div className="-mx-2 space-y-3 bg-card px-2 pb-2 pt-1">
                       {sitrepReviewTarget && !viewingSitrepVersion && (
                         <SitrepReviewTargetBanner
                           version={sitrepReviewTarget}
@@ -35374,17 +35372,11 @@ function App() {
                       ) : null}
                       {!viewingSitrepVersion && (
                         <SitrepVersionToolbar
-                          latestVersion={sitrepEditor.latestVersion}
                           isLatestSigned={sitrepEditor.isLatestSigned}
-                          signedVersionsCount={sitrepEditor.signedVersionsCount}
-                          versionsCount={sitrepVersions.length}
                           isSaving={isSitrepSaving}
                           isLoading={isSitrepLoading}
                           viewingHistorical={false}
                           isCreatingSignedVersion={isCreatingSignedSitrepVersion}
-                          authorDisplay={(version) => version.authorName}
-                          onOpenVersionHistory={() => setIsSitrepVersionDialogOpen(true)}
-                          onOpenSignedVersions={() => setIsSitrepSignedVersionsDialogOpen(true)}
                           onCreateSignedOrNewVersion={handleSitrepCreateSignedOrNewVersion}
                           generateDraftDisabled={
                             isCreatingSignedSitrepVersion ||
@@ -37072,174 +37064,145 @@ function App() {
                                 </div>
                                 <CollapsibleContent>
                                   <div className="min-w-0 max-w-full space-y-3 border-t px-3 py-2.5 pr-6">
-                                    <div className="sticky top-0 z-10 -mx-3 space-y-3 border-b bg-card px-3 pb-3 pt-1">
                                     {viewingPastFormVersion && (
-                                      <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-amber-400 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-500 dark:bg-amber-500/10 dark:text-amber-200">
-                                        <div className="flex flex-wrap items-center gap-2">
-                                          <History className="h-3.5 w-3.5" />
-                                          <span>
-                                            You are viewing a past version from{' '}
-                                            <span className="font-semibold">
-                                              {new Date(
-                                                viewingPastFormVersion.createdAt
-                                              ).toLocaleTimeString([], {
-                                                hour: '2-digit',
-                                                minute: '2-digit',
-                                                second: '2-digit',
-                                              })}
-                                            </span>{' '}
-                                            last edited by{' '}
-                                            <span
-                                              className="rounded px-1.5 py-0.5 text-[10px] font-semibold text-white"
-                                              style={{
-                                                backgroundColor: viewingPastFormVersion.authorColor,
-                                              }}
-                                            >
-                                              {viewingPastFormVersion.authorName}
-                                            </span>
-                                            .
-                                          </span>
-                                          {(() => {
-                                            const liveSigs =
-                                              formVersions.find(
-                                                (entry) => entry.id === viewingPastFormVersion.id
-                                              )?.signatures ?? viewingPastFormVersion.signatures
-                                            if (liveSigs.length === 0) return null
-                                            return (
-                                              <span className="flex items-center gap-1 rounded-full border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-800 dark:border-emerald-500/50 dark:bg-emerald-500/10 dark:text-emerald-300">
-                                                <Check className="h-3 w-3" />
-                                                Signed by{' '}
-                                                {liveSigs
-                                                  .map(
-                                                    (signature) =>
-                                                      `${signature.name} (${signature.role})`
-                                                  )
-                                                  .join(', ')}
+                                      <IcsFormVersionStatusStickyBar
+                                        variant="past"
+                                        statusContent={
+                                          <div className="flex flex-wrap items-center justify-between gap-2">
+                                            <div className="flex flex-wrap items-center gap-2">
+                                              <History className="h-3.5 w-3.5" />
+                                              <span>
+                                                You are viewing a past version from{' '}
+                                                <span className="font-semibold">
+                                                  {new Date(
+                                                    viewingPastFormVersion.createdAt
+                                                  ).toLocaleTimeString([], {
+                                                    hour: '2-digit',
+                                                    minute: '2-digit',
+                                                    second: '2-digit',
+                                                  })}
+                                                </span>{' '}
+                                                last edited by{' '}
+                                                <span
+                                                  className="rounded px-1.5 py-0.5 text-[10px] font-semibold text-white"
+                                                  style={{
+                                                    backgroundColor: viewingPastFormVersion.authorColor,
+                                                  }}
+                                                >
+                                                  {viewingPastFormVersion.authorName}
+                                                </span>
+                                                .
                                               </span>
-                                            )
-                                          })()}
-                                        </div>
-                                        <Button
-                                          type="button"
-                                          size="sm"
-                                          variant="outline"
-                                          className="h-7 gap-1 text-xs"
-                                          onClick={() => {
-                                            const live = liveIcs204FormsRef.current[form.id]
-                                            if (live) {
-                                              setIcs204Forms((previous) =>
-                                                previous.map((entry) =>
-                                                  entry.id === form.id ? live : entry
+                                              {(() => {
+                                                const liveSigs =
+                                                  formVersions.find(
+                                                    (entry) => entry.id === viewingPastFormVersion.id
+                                                  )?.signatures ?? viewingPastFormVersion.signatures
+                                                if (liveSigs.length === 0) return null
+                                                return (
+                                                  <span className="flex items-center gap-1 rounded-full border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-800 dark:border-emerald-500/50 dark:bg-emerald-500/10 dark:text-emerald-300">
+                                                    <Check className="h-3 w-3" />
+                                                    Signed by{' '}
+                                                    {liveSigs
+                                                      .map(
+                                                        (signature) =>
+                                                          `${signature.name} (${signature.role})`
+                                                      )
+                                                      .join(', ')}
+                                                  </span>
                                                 )
-                                              )
-                                              delete liveIcs204FormsRef.current[form.id]
-                                            }
-                                            setViewingIcs204VersionByFormId((previous) => {
-                                              const next = { ...previous }
-                                              delete next[form.id]
-                                              return next
-                                            })
-                                          }}
-                                        >
-                                          <X className="h-3.5 w-3.5" />
-                                          View latest
-                                        </Button>
-                                      </div>
-                                    )}
-                                    {!viewingPastFormVersion && !isDraftingFormSigned && (
-                                      <div className="flex flex-wrap items-center gap-2 rounded-md border border-emerald-400 bg-emerald-50 px-3 py-2 text-xs text-emerald-900 dark:border-emerald-500 dark:bg-emerald-500/10 dark:text-emerald-200">
-                                        {latestFormVersion ? (
-                                          <span>
-                                            You are viewing the latest{' '}
-                                            <span className="font-semibold">
-                                              {isLatestFormSigned ? 'signed' : 'draft'}
-                                            </span>{' '}
-                                            version from{' '}
-                                            <span className="font-semibold">
-                                              {new Date(
-                                                latestFormVersion.createdAt
-                                              ).toLocaleTimeString([], {
-                                                hour: '2-digit',
-                                                minute: '2-digit',
-                                                second: '2-digit',
-                                              })}
-                                            </span>{' '}
-                                            last edited by{' '}
-                                            <span
-                                              className="rounded px-1.5 py-0.5 text-[10px] font-semibold text-white"
-                                              style={{
-                                                backgroundColor: latestFormVersion.authorColor,
+                                              })()}
+                                            </div>
+                                            <Button
+                                              type="button"
+                                              size="sm"
+                                              variant="outline"
+                                              className="h-7 gap-1 text-xs"
+                                              onClick={() => {
+                                                const live = liveIcs204FormsRef.current[form.id]
+                                                if (live) {
+                                                  setIcs204Forms((previous) =>
+                                                    previous.map((entry) =>
+                                                      entry.id === form.id ? live : entry
+                                                    )
+                                                  )
+                                                  delete liveIcs204FormsRef.current[form.id]
+                                                }
+                                                setViewingIcs204VersionByFormId((previous) => {
+                                                  const next = { ...previous }
+                                                  delete next[form.id]
+                                                  return next
+                                                })
                                               }}
                                             >
-                                              {latestFormVersion.authorName}
-                                            </span>
-                                            .
-                                          </span>
-                                        ) : (
-                                          <span>You are viewing the latest version.</span>
-                                        )}
-                                      </div>
+                                              <X className="h-3.5 w-3.5" />
+                                              View latest
+                                            </Button>
+                                          </div>
+                                        }
+                                      />
                                     )}
                                     {!viewingPastFormVersion && !isDraftingFormSigned && (
-                                      <div className="flex items-center justify-between rounded-md border bg-background/70 px-3 py-2 text-xs">
-                                        {isLatestFormSigned ? (
-                                          <div className="flex items-center gap-2 text-muted-foreground">
-                                            <Lock className="h-3.5 w-3.5" />
-                                            <span>Signed versions are locked from edits.</span>
-                                          </div>
-                                        ) : (
-                                          <div className="text-muted-foreground">
-                                            Draft is editable. Use each section&apos;s Save button to
-                                            update the latest draft, or sign to promote it.
-                                          </div>
-                                        )}
-                                        <div className="flex items-center gap-2">
-                                          <Button
-                                            type="button"
-                                            size="sm"
-                                            variant="outline"
-                                            className="h-7 gap-1 text-xs"
-                                            onClick={() =>
+                                      <IcsFormVersionStatusStickyBar
+                                        variant="latest"
+                                        statusContent={
+                                          latestFormVersion ? (
+                                            <span>
+                                              You are viewing the latest{' '}
+                                              <span className="font-semibold">
+                                                {isLatestFormSigned ? 'signed' : 'draft'}
+                                              </span>{' '}
+                                              version from{' '}
+                                              <span className="font-semibold">
+                                                {new Date(
+                                                  latestFormVersion.createdAt
+                                                ).toLocaleTimeString([], {
+                                                  hour: '2-digit',
+                                                  minute: '2-digit',
+                                                  second: '2-digit',
+                                                })}
+                                              </span>{' '}
+                                              last edited by{' '}
+                                              <span
+                                                className="rounded px-1.5 py-0.5 text-[10px] font-semibold text-white"
+                                                style={{
+                                                  backgroundColor: latestFormVersion.authorColor,
+                                                }}
+                                              >
+                                                {latestFormVersion.authorName}
+                                              </span>
+                                              .
+                                            </span>
+                                          ) : (
+                                            <span>You are viewing the latest version.</span>
+                                          )
+                                        }
+                                        leadingActions={
+                                          isLatestFormSigned ? (
+                                            <IcsFormSignedVersionsLockMessage />
+                                          ) : undefined
+                                        }
+                                        versionsButton={
+                                          <IcsFormVersionsMenuButton
+                                            historyCount={formVersions.length}
+                                            signedCount={signedFormVersionsCount}
+                                            onOpenHistory={() =>
                                               setIcs204VersionDialog({
                                                 formId: form.id,
                                                 kind: 'all',
                                               })
                                             }
-                                          >
-                                            <History className="h-3.5 w-3.5" />
-                                            Version history
-                                            <Badge
-                                              variant="secondary"
-                                              className="ml-1 h-4 px-1.5 text-[10px]"
-                                            >
-                                              {formVersions.length}
-                                            </Badge>
-                                          </Button>
-                                          <Button
-                                            type="button"
-                                            size="sm"
-                                            variant="outline"
-                                            disabled={signedFormVersionsCount === 0}
-                                            className="h-7 gap-1 text-xs"
-                                            onClick={() =>
+                                            onOpenSigned={() =>
                                               setIcs204VersionDialog({
                                                 formId: form.id,
                                                 kind: 'signed',
                                               })
                                             }
-                                          >
-                                            <Check className="h-3.5 w-3.5" />
-                                            Signed Versions
-                                            <Badge
-                                              variant="secondary"
-                                              className="ml-1 h-4 px-1.5 text-[10px]"
-                                            >
-                                              {signedFormVersionsCount}
-                                            </Badge>
-                                          </Button>
-                                        </div>
-                                      </div>
+                                          />
+                                        }
+                                      />
                                     )}
+                                    <div className="-mx-3 space-y-3 border-b bg-card px-3 pb-3 pt-1">
                                     {!viewingPastFormVersion && !isDraftingFormSigned && (
                                       <div className="flex items-center justify-start gap-2">
                                         <Button
