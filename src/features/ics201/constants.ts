@@ -1,3 +1,8 @@
+import { ICS201_SECTION_BOX_LABELS } from './field-labels'
+import {
+  createEmptyHazmatAssessmentBox15,
+  createEmptySafetyAnalysisBox13,
+} from './form-options'
 import type {
   Ics201FormState,
   Ics201MapSketchVertex,
@@ -31,17 +36,7 @@ export const BASELINE_MAP_SKETCH_POLYGON: Ics201MapSketchVertex[] = [
   { longitude: -122.4115, latitude: 37.8074 },
 ]
 
-export const ICS201_SECTION_LABELS: Record<Ics201SectionId, string> = {
-  'report-info': 'Report Identification',
-  'incident-briefing': 'ICS-201 Incident Briefing',
-  'map-sketch': 'Map Sketch',
-  'current-situation': 'Current Situation',
-  objectives: 'Objectives',
-  actions: 'Actions',
-  'org-chart': 'Organization Chart',
-  resources: 'Resources Summary',
-  'safety-analysis': 'Safety Analysis',
-}
+export const ICS201_SECTION_LABELS: Record<Ics201SectionId, string> = ICS201_SECTION_BOX_LABELS
 
 export const ICS201_SECTION_PROMPTS: Record<Ics201SectionId, string> = {
   'report-info':
@@ -55,13 +50,15 @@ export const ICS201_SECTION_PROMPTS: Record<Ics201SectionId, string> = {
   objectives:
     'Draft a numbered set of SMART operational-period objectives for the ICS-201, aligned to the current Incident Commander priorities. Cover life safety, incident stabilization, property/environmental protection, and continuity of operations. Keep the combined text within the strict-structure character limit.',
   actions:
-    'Draft a set of priority actions for the current operational period with task, owner (ICS role), start time, and end time. Align each action to one of the ICS-201 objectives and the current operational tempo.',
+    'Draft Box 7 actions for the ICS-201 with time and action entries aligned to operational-period objectives.',
   'org-chart':
     'Populate the ICS-201 Organization Chart (Incident Commander, Operations, Planning, Logistics, Finance/Admin Section Chiefs, Public Information Officer, Safety Officer, Liaison Officer) using the current roster and the latest staffing assignments.',
   resources:
-    'Draft a Resources Summary for the ICS-201 (category, identifier, quantity, status, assignment) drawn from the resources currently checked in or ordered for this incident.',
+    'Draft Box 11 Resources Summary rows (resource, identifier, date/time ordered, ETA, on-scene status, notes) from checked-in or ordered incident resources.',
+  'hazmat-assessment':
+    'Draft Box 15 HAZMAT Assessment when Box 13.F is Yes, covering classification, product description, potential hazards, required procedures, air monitoring, SOP, decon, medical, and emergency procedures.',
   'safety-analysis':
-    'Draft the ICS-201 Safety Analysis (hazard, mitigation, PPE, medical plan) covering the top operational hazards for the current operational period, drawing from the situation summary, weather, and any prior safety analyses.',
+    'Draft Box 13 Safety Analysis (safety officer, known hazards, weather, safety notes, required PPE, HAZMAT yes/no) for the current operational period.',
 }
 
 export function createInitialIcs201Form(): Ics201FormState {
@@ -105,23 +102,17 @@ export function createInitialIcs201Form(): Ics201FormState {
     actions: [
       {
         id: 1,
-        task: 'Deploy barricade teams to South Connector choke points.',
-        owner: 'Operations Branch I',
-        startTime: '2026-04-25 16:30 UTC',
-        endTime: '2026-04-25 20:30 UTC',
-        status: 'In Progress',
+        time: '2026-04-25 16:30 UTC',
+        action: 'Deploy barricade teams to South Connector choke points. (Operations Branch I)',
       },
       {
         id: 2,
-        task: 'Coordinate utility assessment sweep for North Levee Sector.',
-        owner: 'Infrastructure Group',
-        startTime: '2026-04-25 17:00 UTC',
-        endTime: '2026-04-25 22:00 UTC',
-        status: 'Planned',
+        time: '2026-04-25 17:00 UTC',
+        action: 'Coordinate utility assessment sweep for North Levee Sector. (Infrastructure Group)',
       },
     ],
     orgChart: {
-      incidentCommander: 'R. Morgan',
+      commandNames: ['R. Morgan', '', '', '', ''],
       operationsSectionChief: 'T. Hale',
       planningSectionChief: 'A. Rivera',
       logisticsSectionChief: 'J. Nguyen',
@@ -129,41 +120,36 @@ export function createInitialIcs201Form(): Ics201FormState {
       publicInformationOfficer: 'M. Wells',
       safetyOfficer: 'K. Simmons',
       liaisonOfficer: 'R. Patel',
+      intelInvestSectionChief: '',
     },
     resources: [
       {
         id: 1,
-        category: 'USAR',
-        identifier: 'Urban Search Team Alpha',
-        quantity: '2',
-        status: 'Assigned',
-        assignment: 'North Levee Sector',
+        resource: 'USAR',
+        resourceIdentifier: 'Urban Search Team Alpha',
+        dateTimeOrdered: '2026-04-25 14:00 UTC',
+        eta: '2026-04-25 16:00 UTC',
+        onScene: true,
+        notes: 'Assigned — North Levee Sector',
       },
       {
         id: 2,
-        category: 'Medical',
-        identifier: 'Medical Strike Team',
-        quantity: '1',
-        status: 'Available',
-        assignment: 'South Aid Station',
+        resource: 'Medical',
+        resourceIdentifier: 'Medical Strike Team',
+        dateTimeOrdered: '2026-04-25 15:00 UTC',
+        eta: '2026-04-25 16:30 UTC',
+        onScene: false,
+        notes: 'Available — South Aid Station',
       },
     ],
-    safetyAnalysis: [
-      {
-        id: 1,
-        hazard: 'Flooded roadways and unseen washouts',
-        mitigation: 'Use spotters; enforce route checks before convoy movement',
-        ppe: 'High-visibility PPE and water-resistant boots',
-        medicalPlan: 'Nearest treatment: Central Medical Corridor',
-      },
-      {
-        id: 2,
-        hazard: 'Downed power infrastructure',
-        mitigation: 'Maintain exclusion zones and utility escort procedures',
-        ppe: 'Electrical hazard gloves and insulated tools',
-        medicalPlan: 'EMS support staged at Grid N-4',
-      },
-    ],
+    schemaVersion: 2 as const,
+    safetyAnalysisBox13: (() => {
+      const box = createEmptySafetyAnalysisBox13('K. Simmons')
+      box.safetyNotes = '1. Hazard: Flooded roadways and unseen washouts | Mitigation: Use spotters; enforce route checks before convoy movement | PPE: High-visibility PPE and water-resistant boots | Medical: Nearest treatment: Central Medical Corridor\n2. Hazard: Downed power infrastructure | Mitigation: Maintain exclusion zones and utility escort procedures | PPE: Electrical hazard gloves and insulated tools | Medical: EMS support staged at Grid N-4'
+      box.weather.forecast = 'Next 12 hours: scattered thunderstorms, wind gusts 25-35 mph, localized flash-flood risk in low-lying corridors.'
+      return box
+    })(),
+    hazmatAssessmentBox15: createEmptyHazmatAssessmentBox15(),
   }
 }
 

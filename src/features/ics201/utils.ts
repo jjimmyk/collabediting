@@ -1,4 +1,6 @@
 import { formatIcs201ObjectiveKindLabel } from './constants'
+import { createEmptyHazmatAssessmentBox15, createEmptySafetyAnalysisBox13 } from './form-options'
+import { migrateIcs201FormState } from './migrate-form-state'
 import type {
   Ics201FormState,
   Ics201ObjectiveKind,
@@ -51,72 +53,69 @@ export function normalizeIcs201ObjectiveRows(raw: unknown): Ics201ObjectiveRow[]
 }
 
 export function normalizeIcs201FormState(form: Ics201FormState): Ics201FormState {
+  const migrated = migrateIcs201FormState(form as Ics201FormState & Record<string, unknown>)
   return {
-    ...form,
-    incidentName: String(form.incidentName ?? ''),
-    incidentNumber: String(form.incidentNumber ?? ''),
-    incidentLocation: String(form.incidentLocation ?? ''),
-    dateInitiated: String(form.dateInitiated ?? ''),
-    timeInitiated: String(form.timeInitiated ?? ''),
-    preparedDateTime: String(form.preparedDateTime ?? ''),
-    operationalPeriodStart: String(form.operationalPeriodStart ?? ''),
-    operationalPeriodEnd: String(form.operationalPeriodEnd ?? ''),
-    jurisdiction: String(form.jurisdiction ?? ''),
-    preparedBy: String(form.preparedBy ?? ''),
-    preparedByName: String(form.preparedByName ?? ''),
-    preparedByPositionTitle: String(form.preparedByPositionTitle ?? ''),
-    preparedBySignature: String(form.preparedBySignature ?? ''),
-    mapSketchPolygon: Array.isArray(form.mapSketchPolygon)
-      ? form.mapSketchPolygon.map((vertex) => ({
+    ...migrated,
+    incidentName: String(migrated.incidentName ?? ''),
+    incidentNumber: String(migrated.incidentNumber ?? ''),
+    incidentLocation: String(migrated.incidentLocation ?? ''),
+    dateInitiated: String(migrated.dateInitiated ?? ''),
+    timeInitiated: String(migrated.timeInitiated ?? ''),
+    preparedDateTime: String(migrated.preparedDateTime ?? ''),
+    operationalPeriodStart: String(migrated.operationalPeriodStart ?? ''),
+    operationalPeriodEnd: String(migrated.operationalPeriodEnd ?? ''),
+    jurisdiction: String(migrated.jurisdiction ?? ''),
+    preparedBy: String(migrated.preparedBy ?? ''),
+    preparedByName: String(migrated.preparedByName ?? ''),
+    preparedByPositionTitle: String(migrated.preparedByPositionTitle ?? ''),
+    preparedBySignature: String(migrated.preparedBySignature ?? ''),
+    mapSketchPolygon: Array.isArray(migrated.mapSketchPolygon)
+      ? migrated.mapSketchPolygon.map((vertex) => ({
           longitude: Number(vertex.longitude),
           latitude: Number(vertex.latitude),
         }))
       : [],
-    currentSituationSummary: String(form.currentSituationSummary ?? ''),
-    weatherForecast: String(form.weatherForecast ?? ''),
-    projectedIncidentCourse: String(form.projectedIncidentCourse ?? ''),
-    objectives: normalizeIcs201ObjectiveRows(form.objectives),
-    actions: Array.isArray(form.actions)
-      ? form.actions.map((action, index) => ({
+    currentSituationSummary: String(migrated.currentSituationSummary ?? ''),
+    weatherForecast: String(migrated.weatherForecast ?? ''),
+    projectedIncidentCourse: String(migrated.projectedIncidentCourse ?? ''),
+    objectives: normalizeIcs201ObjectiveRows(migrated.objectives),
+    actions: Array.isArray(migrated.actions)
+      ? migrated.actions.map((action, index) => ({
           id: typeof action.id === 'number' ? action.id : index + 1,
-          task: String(action.task ?? ''),
-          owner: String(action.owner ?? ''),
-          startTime: String(action.startTime ?? ''),
-          endTime: String(action.endTime ?? ''),
-          status: String(action.status ?? ''),
+          time: String(action.time ?? ''),
+          action: String(action.action ?? ''),
         }))
       : [],
     orgChart: {
-      incidentCommander: String(form.orgChart?.incidentCommander ?? ''),
-      operationsSectionChief: String(form.orgChart?.operationsSectionChief ?? ''),
-      planningSectionChief: String(form.orgChart?.planningSectionChief ?? ''),
-      logisticsSectionChief: String(form.orgChart?.logisticsSectionChief ?? ''),
-      financeSectionChief: String(form.orgChart?.financeSectionChief ?? ''),
-      publicInformationOfficer: String(form.orgChart?.publicInformationOfficer ?? ''),
-      safetyOfficer: String(form.orgChart?.safetyOfficer ?? ''),
-      liaisonOfficer: String(form.orgChart?.liaisonOfficer ?? ''),
+      commandNames: Array.isArray(migrated.orgChart?.commandNames)
+        ? migrated.orgChart.commandNames.slice(0, 5).map((name) => String(name ?? ''))
+        : ['', '', '', '', ''],
+      safetyOfficer: String(migrated.orgChart?.safetyOfficer ?? ''),
+      liaisonOfficer: String(migrated.orgChart?.liaisonOfficer ?? ''),
+      publicInformationOfficer: String(migrated.orgChart?.publicInformationOfficer ?? ''),
+      operationsSectionChief: String(migrated.orgChart?.operationsSectionChief ?? ''),
+      planningSectionChief: String(migrated.orgChart?.planningSectionChief ?? ''),
+      logisticsSectionChief: String(migrated.orgChart?.logisticsSectionChief ?? ''),
+      financeSectionChief: String(migrated.orgChart?.financeSectionChief ?? ''),
+      intelInvestSectionChief: String(migrated.orgChart?.intelInvestSectionChief ?? ''),
     },
-    resources: Array.isArray(form.resources)
-      ? form.resources.map((resource, index) => ({
+    resources: Array.isArray(migrated.resources)
+      ? migrated.resources.map((resource, index) => ({
           id: typeof resource.id === 'number' ? resource.id : index + 1,
-          category: String(resource.category ?? ''),
-          identifier: String(resource.identifier ?? ''),
-          quantity: String(resource.quantity ?? ''),
-          status: String(resource.status ?? ''),
-          assignment: String(resource.assignment ?? ''),
+          resource: String(resource.resource ?? ''),
+          resourceIdentifier: String(resource.resourceIdentifier ?? ''),
+          dateTimeOrdered: String(resource.dateTimeOrdered ?? ''),
+          eta: String(resource.eta ?? ''),
+          onScene: Boolean(resource.onScene),
+          notes: String(resource.notes ?? ''),
         }))
       : [],
-    safetyAnalysis: Array.isArray(form.safetyAnalysis)
-      ? form.safetyAnalysis.map((row, index) => ({
-          id: typeof row.id === 'number' ? row.id : index + 1,
-          hazard: String(row.hazard ?? ''),
-          mitigation: String(row.mitigation ?? ''),
-          ppe: String(row.ppe ?? ''),
-          medicalPlan: String(row.medicalPlan ?? ''),
-        }))
-      : [],
+    safetyAnalysisBox13: migrated.safetyAnalysisBox13 ?? createEmptySafetyAnalysisBox13(),
+    hazmatAssessmentBox15: migrated.hazmatAssessmentBox15 ?? createEmptyHazmatAssessmentBox15(),
+    schemaVersion: 2 as const,
   }
 }
+
 
 export function ics201ObjectivesFromStrings(texts: string[]): Ics201ObjectiveRow[] {
   return texts.map((objective, index) => ({
@@ -139,9 +138,24 @@ export function cloneIcs201FormState(form: Ics201FormState): Ics201FormState {
     mapSketchPolygon: form.mapSketchPolygon.map((vertex) => ({ ...vertex })),
     objectives: form.objectives.map((row) => ({ ...row })),
     actions: form.actions.map((action) => ({ ...action })),
-    orgChart: { ...form.orgChart },
+    orgChart: {
+      ...form.orgChart,
+      commandNames: [...form.orgChart.commandNames],
+    },
     resources: form.resources.map((resource) => ({ ...resource })),
-    safetyAnalysis: form.safetyAnalysis.map((row) => ({ ...row })),
+    safetyAnalysisBox13: {
+      ...form.safetyAnalysisBox13,
+      knownHazards: { ...form.safetyAnalysisBox13.knownHazards },
+      weather: { ...form.safetyAnalysisBox13.weather },
+      requiredPpe: { ...form.safetyAnalysisBox13.requiredPpe },
+    },
+    hazmatAssessmentBox15: {
+      ...form.hazmatAssessmentBox15,
+      classification: { ...form.hazmatAssessmentBox15.classification },
+      products: form.hazmatAssessmentBox15.products.map((row) => ({ ...row })),
+      potentialHazards: { ...form.hazmatAssessmentBox15.potentialHazards },
+      requiredProcedures: { ...form.hazmatAssessmentBox15.requiredProcedures },
+    },
   }
 }
 
@@ -320,6 +334,7 @@ export function isIcs201EditingAnySection(flags: {
   orgChart: boolean
   resources: boolean
   safetyAnalysis: boolean
+  hazmatAssessment: boolean
 }): boolean {
   return Object.values(flags).some(Boolean)
 }
@@ -334,6 +349,7 @@ export function resolveActiveIcs201Section(flags: {
   orgChart: boolean
   resources: boolean
   safetyAnalysis: boolean
+  hazmatAssessment: boolean
 }): Ics201SectionId | null {
   if (flags.reportInfo) return 'report-info'
   if (flags.incidentBriefing) return 'incident-briefing'
@@ -344,5 +360,6 @@ export function resolveActiveIcs201Section(flags: {
   if (flags.orgChart) return 'org-chart'
   if (flags.resources) return 'resources'
   if (flags.safetyAnalysis) return 'safety-analysis'
+  if (flags.hazmatAssessment) return 'hazmat-assessment'
   return null
 }

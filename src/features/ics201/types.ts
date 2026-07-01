@@ -3,30 +3,134 @@ export type Ics201MapSketchVertex = {
   latitude: number
 }
 
+export type Ics201KnownHazardId =
+  | 'severeWeather'
+  | 'onWaterResponse'
+  | 'flooding'
+  | 'heat'
+  | 'iceWinterConditions'
+  | 'debrisInWater'
+  | 'oilPetroleum'
+  | 'flammableGas'
+  | 'radiological'
+  | 'poisonToxins'
+  | 'bloodBornePathogens'
+  | 'biologicalDisease'
+  | 'hazardousMaterials'
+  | 'explosives'
+  | 'humanRemains'
+  | 'nuclear'
+  | 'fire'
+  | 'terrorism'
+  | 'civilDisturbance'
+  | 'traumaticIncidentStress'
+  | 'criminalViolence'
+  | 'wildlifeEncounters'
+
+export type Ics201PpeId =
+  | 'lifeJackets'
+  | 'steelToedBoots'
+  | 'hardHat'
+  | 'eyeProtection'
+  | 'gloves'
+  | 'masks'
+  | 'hearingProtection'
+  | 'protectiveClothing'
+  | 'respirators'
+  | 'faceShields'
+  | 'fallProtectionGear'
+  | 'gasDetectors'
+
+export type Ics201HazmatClassificationId =
+  | 'oilPetroleumProducts'
+  | 'flammableLiquid'
+  | 'explosives'
+  | 'gases'
+  | 'flammableSolid'
+  | 'flammableGas'
+  | 'oxidizer'
+  | 'poisonToxic'
+  | 'poisonInhalationHazard'
+  | 'radioactive'
+  | 'corrosive'
+  | 'dangerousWhenWet'
+  | 'otherMiscellaneous'
+
+export type Ics201HazmatProcedureId =
+  | 'securityPerimeter'
+  | 'evacuationProcedures'
+  | 'medicalTriage'
+  | 'safetyZone'
+  | 'warningDangerSigns'
+  | 'safetyBriefingsForResponders'
+
+export type Ics201HazmatPotentialHazardId =
+  | 'noKnownHazards'
+  | 'airPurifyingCriteriaMet'
+  | 'scbaRequired'
+  | 'levelARequired'
+
 export type Ics201ActionRow = {
   id: number
-  task: string
-  owner: string
-  startTime: string
-  endTime: string
-  status: string
+  time: string
+  action: string
 }
 
 export type Ics201ResourceSummaryRow = {
   id: number
-  category: string
-  identifier: string
-  quantity: string
-  status: string
-  assignment: string
+  resource: string
+  resourceIdentifier: string
+  dateTimeOrdered: string
+  eta: string
+  onScene: boolean
+  notes: string
 }
 
-export type Ics201SafetyRow = {
+export type Ics201WeatherConditions = {
+  temp: string
+  conditions: string
+  wind: string
+  tides: string
+  seaState: string
+  waterTemp: string
+  forecast: string
+}
+
+export type Ics201SafetyAnalysisBox13 = {
+  safetyOfficer: string
+  knownHazards: Record<Ics201KnownHazardId, boolean>
+  weather: Ics201WeatherConditions
+  safetyNotes: string
+  requiredPpe: Record<Ics201PpeId, boolean>
+  ppeNotes: string
+  involvesHazmat: boolean | null
+}
+
+export type Ics201HazmatProductRow = {
   id: number
-  hazard: string
-  mitigation: string
-  ppe: string
-  medicalPlan: string
+  material: string
+  qty: string
+  physState: string
+  niosh: string
+  specificGravity: string
+  ph: string
+  idlh: string
+  flashPoint: string
+  lel: string
+  uel: string
+}
+
+export type Ics201HazmatAssessmentBox15 = {
+  classification: Record<Ics201HazmatClassificationId, boolean>
+  products: Ics201HazmatProductRow[]
+  potentialHazards: Record<Ics201HazmatPotentialHazardId, boolean>
+  requiredProcedures: Record<Ics201HazmatProcedureId, boolean>
+  airMonitoringRequired: boolean | null
+  sopAndSafeWorkPractices: string
+  decontaminationProcedures: string
+  medicalMonitoringRequired: boolean | null
+  medicalTreatmentTransportInPlace: boolean | null
+  emergencyProcedures: string
 }
 
 export type Ics201ObjectiveKind = 'O' | 'M' | 'O&M' | ''
@@ -38,6 +142,7 @@ export type Ics201ObjectiveRow = {
 }
 
 export type Ics201FormState = {
+  schemaVersion: 2
   incidentName: string
   incidentNumber: string
   incidentLocation: string
@@ -58,17 +163,28 @@ export type Ics201FormState = {
   objectives: Ics201ObjectiveRow[]
   actions: Ics201ActionRow[]
   orgChart: {
-    incidentCommander: string
+    commandNames: string[]
+    safetyOfficer: string
+    liaisonOfficer: string
+    publicInformationOfficer: string
     operationsSectionChief: string
     planningSectionChief: string
     logisticsSectionChief: string
     financeSectionChief: string
-    publicInformationOfficer: string
-    safetyOfficer: string
-    liaisonOfficer: string
+    intelInvestSectionChief: string
   }
   resources: Ics201ResourceSummaryRow[]
-  safetyAnalysis: Ics201SafetyRow[]
+  safetyAnalysisBox13: Ics201SafetyAnalysisBox13
+  hazmatAssessmentBox15: Ics201HazmatAssessmentBox15
+}
+
+/** @deprecated Legacy row shape — migrated into safetyAnalysisBox13.safetyNotes */
+export type Ics201SafetyRow = {
+  id: number
+  hazard: string
+  mitigation: string
+  ppe: string
+  medicalPlan: string
 }
 
 export type Ics201SectionId =
@@ -81,6 +197,7 @@ export type Ics201SectionId =
   | 'org-chart'
   | 'resources'
   | 'safety-analysis'
+  | 'hazmat-assessment'
 
 export type Ics201StructureMode = 'flexible' | 'paginated' | 'strict'
 

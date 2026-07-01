@@ -110,10 +110,15 @@ export type Ics201DraftLiveDraftSetters = {
       draft: Ics201FormState['resources']
     ) => Ics201FormState['resources']
   ) => void
-  setSafetyAnalysisDraft?: (
+  setSafetyAnalysisBox13Draft?: (
     updater: (
-      draft: Ics201FormState['safetyAnalysis']
-    ) => Ics201FormState['safetyAnalysis']
+      draft: Ics201FormState['safetyAnalysisBox13']
+    ) => Ics201FormState['safetyAnalysisBox13']
+  ) => void
+  setHazmatAssessmentBox15Draft?: (
+    updater: (
+      draft: Ics201FormState['hazmatAssessmentBox15']
+    ) => Ics201FormState['hazmatAssessmentBox15']
   ) => void
 }
 
@@ -145,6 +150,16 @@ export function applyIcs201DraftFieldPatchToDrafts(
   if (editingFlags.orgChart && fieldKey.startsWith('orgChart.')) {
     const field = fieldKey.slice('orgChart.'.length)
     setters.setOrgChartDraft?.((draft) => {
+      if (field.startsWith('commandNames.')) {
+        const index = Number(field.slice('commandNames.'.length))
+        if (!Number.isFinite(index) || index < 0) return draft
+        const commandNames = [...draft.commandNames]
+        while (commandNames.length <= index) {
+          commandNames.push('')
+        }
+        commandNames[index] = value
+        return { ...draft, commandNames }
+      }
       if (!(field in draft)) return draft
       return { ...draft, [field]: value }
     })
@@ -156,7 +171,7 @@ export function applyIcs201DraftFieldPatchToDrafts(
     const dot = rest.indexOf('.')
     if (dot === -1) return
     const id = Number(rest.slice(0, dot))
-    const field = rest.slice(dot + 1) as 'task' | 'owner' | 'startTime' | 'endTime'
+    const field = rest.slice(dot + 1) as 'time' | 'action'
     setters.setActionsDraft?.((draft) =>
       draft.map((action) => (action.id === id ? { ...action, [field]: value } : action))
     )
@@ -169,26 +184,64 @@ export function applyIcs201DraftFieldPatchToDrafts(
     if (dot === -1) return
     const id = Number(rest.slice(0, dot))
     const field = rest.slice(dot + 1) as
-      | 'category'
-      | 'identifier'
-      | 'quantity'
-      | 'status'
-      | 'assignment'
+      | 'resource'
+      | 'resourceIdentifier'
+      | 'dateTimeOrdered'
+      | 'eta'
+      | 'notes'
     setters.setResourcesDraft?.((draft) =>
       draft.map((resource) => (resource.id === id ? { ...resource, [field]: value } : resource))
     )
     return
   }
 
-  if (editingFlags.safetyAnalysis && fieldKey.startsWith('safetyAnalysis:')) {
-    const rest = fieldKey.slice('safetyAnalysis:'.length)
-    const dot = rest.indexOf('.')
-    if (dot === -1) return
-    const id = Number(rest.slice(0, dot))
-    const field = rest.slice(dot + 1) as 'hazard' | 'mitigation' | 'ppe' | 'medicalPlan'
-    setters.setSafetyAnalysisDraft?.((draft) =>
-      draft.map((row) => (row.id === id ? { ...row, [field]: value } : row))
-    )
+  if (editingFlags.safetyAnalysis && fieldKey.startsWith('safetyAnalysisBox13.')) {
+    const field = fieldKey.slice('safetyAnalysisBox13.'.length)
+    setters.setSafetyAnalysisBox13Draft?.((draft) => {
+      if (field === 'safetyOfficer' || field === 'safetyNotes' || field === 'ppeNotes') {
+        return { ...draft, [field]: value }
+      }
+      if (field.startsWith('weather.')) {
+        const weatherField = field.slice('weather.'.length) as keyof typeof draft.weather
+        if (!(weatherField in draft.weather)) return draft
+        return {
+          ...draft,
+          weather: { ...draft.weather, [weatherField]: value },
+        }
+      }
+      return draft
+    })
+    return
+  }
+
+  if (editingFlags.hazmatAssessment && fieldKey.startsWith('hazmatAssessmentBox15.')) {
+    const field = fieldKey.slice('hazmatAssessmentBox15.'.length)
+    if (field.startsWith('products:')) {
+      const rest = field.slice('products:'.length)
+      const dot = rest.indexOf('.')
+      if (dot === -1) return
+      const id = Number(rest.slice(0, dot))
+      const productField = rest.slice(dot + 1)
+      setters.setHazmatAssessmentBox15Draft?.((draft) => ({
+        ...draft,
+        products: draft.products.map((product) =>
+          product.id === id && productField in product
+            ? { ...product, [productField]: value }
+            : product
+        ),
+      }))
+      return
+    }
+    setters.setHazmatAssessmentBox15Draft?.((draft) => {
+      if (
+        field === 'sopAndSafeWorkPractices' ||
+        field === 'decontaminationProcedures' ||
+        field === 'emergencyProcedures'
+      ) {
+        return { ...draft, [field]: value }
+      }
+      return draft
+    })
     return
   }
 

@@ -937,14 +937,29 @@ import {
   formatIcs201ObjectiveKindLabel,
 } from '@/features/ics201/constants'
 import { buildIcs201LiveFormSnapshot } from '@/features/ics201/live-snapshot'
+import {
+  createEmptyHazmatAssessmentBox15,
+  createEmptySafetyAnalysisBox13,
+} from '@/features/ics201/form-options'
+import {
+  Ics201ActionsSection,
+  Ics201CurrentSituationSection,
+  Ics201HazmatAssessmentSection,
+  Ics201MapSketchSection,
+  Ics201ObjectivesSection,
+  Ics201OrgChartSection,
+  Ics201ResourcesSection,
+  Ics201SafetyAnalysisSection,
+} from '@/features/ics201/sections'
 import { syncIcs202ObjectivesFromIcs201 } from '@/features/ics201/sync-ics202-objectives'
 import type {
   Ics201ActionRow,
   Ics201FormState,
+  Ics201HazmatAssessmentBox15,
   Ics201MapSketchVertex,
   Ics201ObjectiveRow,
   Ics201ResourceSummaryRow,
-  Ics201SafetyRow,
+  Ics201SafetyAnalysisBox13,
   Ics201SectionId,
   Ics201Version,
   Ics201VersionSignature,
@@ -5612,55 +5627,64 @@ const INCIDENT_FILE_FOLDERS: IncidentFileFolder[] = [
   },
 ]
 
-type Ics201FormStateForGenerator = {
-  incidentName: string
-  incidentNumber: string
-  incidentLocation: string
-  dateInitiated: string
-  timeInitiated: string
-  preparedDateTime: string
-  operationalPeriodStart: string
-  operationalPeriodEnd: string
-  jurisdiction: string
-  preparedBy: string
-  mapSketchPolygon: Ics201MapSketchVertex[]
-  currentSituationSummary: string
-  weatherForecast: string
-  projectedIncidentCourse: string
-  objectives: Ics201ObjectiveRow[]
-  actions: Array<{
-    id: number
-    task: string
-    owner: string
-    startTime: string
-    endTime: string
-    status: 'Planned' | 'In Progress' | 'Completed'
-  }>
-  orgChart: {
-    incidentCommander: string
-    operationsSectionChief: string
-    planningSectionChief: string
-    logisticsSectionChief: string
-    financeSectionChief: string
-    publicInformationOfficer: string
-    safetyOfficer: string
-    liaisonOfficer: string
+type Ics201FormStateForGenerator = Omit<
+  Ics201FormState,
+  'schemaVersion' | 'preparedByName' | 'preparedByPositionTitle' | 'preparedBySignature'
+>
+
+function ics201LegacyActionRow(
+  id: number,
+  task: string,
+  owner: string,
+  startTime: string
+): Ics201ActionRow {
+  return {
+    id,
+    time: startTime,
+    action: owner ? `${task} (${owner})` : task,
   }
-  resources: Array<{
-    id: number
-    category: string
-    identifier: string
-    quantity: string
-    status: string
-    assignment: string
-  }>
-  safetyAnalysis: Array<{
-    id: number
-    hazard: string
-    mitigation: string
-    ppe: string
-    medicalPlan: string
-  }>
+}
+
+function ics201LegacyResourceRow(
+  id: number,
+  category: string,
+  identifier: string,
+  quantity: string,
+  status: string,
+  assignment: string
+): Ics201ResourceSummaryRow {
+  return {
+    id,
+    resource: category,
+    resourceIdentifier: identifier,
+    dateTimeOrdered: '',
+    eta: '',
+    onScene: /on scene|assigned/i.test(status),
+    notes: [quantity && `Qty: ${quantity}`, status, assignment].filter(Boolean).join(' · '),
+  }
+}
+
+function cloneIcs201SafetyAnalysisBox13Draft(
+  box: Ics201SafetyAnalysisBox13
+): Ics201SafetyAnalysisBox13 {
+  return {
+    ...box,
+    knownHazards: { ...box.knownHazards },
+    weather: { ...box.weather },
+    requiredPpe: { ...box.requiredPpe },
+  }
+}
+
+function cloneIcs201HazmatAssessmentBox15Draft(
+  box: Ics201HazmatAssessmentBox15
+): Ics201HazmatAssessmentBox15 {
+  return {
+    ...box,
+    classification: { ...box.classification },
+    products: box.products.map((row) => ({ ...row })),
+    potentialHazards: { ...box.potentialHazards },
+    requiredProcedures: { ...box.requiredProcedures },
+  }
 }
 
 function buildIcs201Baseline(preparedBy?: string): Ics201FormStateForGenerator {
@@ -5686,9 +5710,10 @@ function buildIcs201Baseline(preparedBy?: string): Ics201FormStateForGenerator {
     projectedIncidentCourse: BASELINE_PROJECTED_COURSE,
     objectives: [...BASELINE_OBJECTIVES],
     actions: BASELINE_ACTIONS.map((action) => ({ ...action })),
-    orgChart: { ...BASELINE_ORG_CHART },
+    orgChart: { ...BASELINE_ORG_CHART, commandNames: [...BASELINE_ORG_CHART.commandNames] },
     resources: BASELINE_RESOURCES.map((resource) => ({ ...resource })),
-    safetyAnalysis: BASELINE_SAFETY_ANALYSIS.map((row) => ({ ...row })),
+    safetyAnalysisBox13: cloneIcs201SafetyAnalysisBox13Draft(BASELINE_SAFETY_BOX13),
+    hazmatAssessmentBox15: createEmptyHazmatAssessmentBox15(),
   }
 }
 
@@ -5708,35 +5733,27 @@ const BASELINE_OBJECTIVES: Ics201ObjectiveRow[] = ics201ObjectivesFromStrings([
   'Coordinate mutual-aid resources with Alameda County OES.',
 ])
 
-const BASELINE_ACTIONS: Ics201FormStateForGenerator['actions'] = [
+const BASELINE_ACTIONS: Ics201ActionRow[] = [
   {
     id: 1,
-    task: 'Maintain evacuation perimeter at Sectors A and B; rotate barricade teams.',
-    owner: 'Operations Branch I',
-    startTime: '2026-05-14 06:00 PT',
-    endTime: '2026-05-14 18:00 PT',
-    status: 'In Progress',
+    time: '2026-05-14 06:00 PT',
+    action:
+      'Maintain evacuation perimeter at Sectors A and B; rotate barricade teams. (Operations Branch I)',
   },
   {
     id: 2,
-    task: 'Coordinate utility assessment sweep for Pier 33 and adjacent berths.',
-    owner: 'Infrastructure Group',
-    startTime: '2026-05-14 07:00 PT',
-    endTime: '2026-05-14 12:00 PT',
-    status: 'In Progress',
+    time: '2026-05-14 07:00 PT',
+    action: 'Coordinate utility assessment sweep for Pier 33 and adjacent berths. (Infrastructure Group)',
   },
   {
     id: 3,
-    task: 'Stand up shelter coverage at Treasure Island annex.',
-    owner: 'Logistics Section',
-    startTime: '2026-05-14 06:00 PT',
-    endTime: '2026-05-14 18:00 PT',
-    status: 'Planned',
+    time: '2026-05-14 06:00 PT',
+    action: 'Stand up shelter coverage at Treasure Island annex. (Logistics Section)',
   },
 ]
 
-const BASELINE_ORG_CHART: Ics201FormStateForGenerator['orgChart'] = {
-  incidentCommander: 'R. Morgan',
+const BASELINE_ORG_CHART: Ics201FormState['orgChart'] = {
+  commandNames: ['R. Morgan', '', '', '', ''],
   operationsSectionChief: 'M. Chen',
   planningSectionChief: 'You',
   logisticsSectionChief: 'J. Nguyen',
@@ -5744,51 +5761,50 @@ const BASELINE_ORG_CHART: Ics201FormStateForGenerator['orgChart'] = {
   publicInformationOfficer: 'M. Wells',
   safetyOfficer: 'K. Doe',
   liaisonOfficer: 'A. Rivera',
+  intelInvestSectionChief: '',
 }
 
-const BASELINE_RESOURCES: Ics201FormStateForGenerator['resources'] = [
+const BASELINE_RESOURCES: Ics201ResourceSummaryRow[] = [
   {
     id: 1,
-    category: 'Air Operations',
-    identifier: 'MH-65 (3x airframes)',
-    quantity: '2',
-    status: 'Mission Capable',
-    assignment: 'Sector overflight + medevac standby',
+    resource: 'Air Operations',
+    resourceIdentifier: 'MH-65 (3x airframes)',
+    dateTimeOrdered: '2026-05-14 06:00 PT',
+    eta: '2026-05-14 08:00 PT',
+    onScene: true,
+    notes: 'Qty: 2 · Mission Capable · Sector overflight + medevac standby',
   },
   {
     id: 2,
-    category: 'Boat Forces',
-    identifier: 'Response Boat - Medium',
-    quantity: '3',
-    status: 'On Scene',
-    assignment: 'Berths 31-33 perimeter security',
+    resource: 'Boat Forces',
+    resourceIdentifier: 'Response Boat - Medium',
+    dateTimeOrdered: '2026-05-14 06:00 PT',
+    eta: '2026-05-14 07:00 PT',
+    onScene: true,
+    notes: 'Qty: 3 · On Scene · Berths 31-33 perimeter security',
   },
   {
     id: 3,
-    category: 'USAR',
-    identifier: 'Urban Search Team Alpha',
-    quantity: '1',
-    status: 'Assigned',
-    assignment: 'Pier 33 structural assessment',
+    resource: 'USAR',
+    resourceIdentifier: 'Urban Search Team Alpha',
+    dateTimeOrdered: '2026-05-14 06:00 PT',
+    eta: '2026-05-14 09:00 PT',
+    onScene: false,
+    notes: 'Qty: 1 · Assigned · Pier 33 structural assessment',
   },
 ]
 
-const BASELINE_SAFETY_ANALYSIS: Ics201FormStateForGenerator['safetyAnalysis'] = [
-  {
-    id: 1,
-    hazard: 'Deteriorating marine weather (wind 25+ kt, seas 6-8 ft) after 22:00 PT',
-    mitigation: 'Curfew Air Ops after 22:00 PT; rotate boat crews; monitor sea state',
-    ppe: 'PFD Type III, water-resistant comms, foul-weather gear',
-    medicalPlan: 'EMS staged at Embarcadero ICP; UCSF Mission Bay as primary trauma',
-  },
-  {
-    id: 2,
-    hazard: 'Unstable pier structure at Berths 31-33',
-    mitigation: 'Maintain 50 ft exclusion zone landside; dive ops only at slack tide',
-    ppe: 'Hardhat, steel-toe boots, fall protection for elevated work',
-    medicalPlan: 'Trauma kit and AED at Pier 35 staging',
-  },
-]
+const BASELINE_SAFETY_BOX13: Ics201SafetyAnalysisBox13 = (() => {
+  const box = createEmptySafetyAnalysisBox13('K. Doe')
+  box.safetyNotes = [
+    '1. Hazard: Deteriorating marine weather (wind 25+ kt, seas 6-8 ft) after 22:00 PT | Mitigation: Curfew Air Ops after 22:00 PT; rotate boat crews; monitor sea state | PPE: PFD Type III, water-resistant comms, foul-weather gear | Medical: EMS staged at Embarcadero ICP; UCSF Mission Bay as primary trauma',
+    '2. Hazard: Unstable pier structure at Berths 31-33 | Mitigation: Maintain 50 ft exclusion zone landside; dive ops only at slack tide | PPE: Hardhat, steel-toe boots, fall protection for elevated work | Medical: Trauma kit and AED at Pier 35 staging',
+  ].join('\n')
+  box.weather.forecast = BASELINE_WEATHER_FORECAST
+  box.knownHazards.severeWeather = true
+  box.knownHazards.onWaterResponse = true
+  return box
+})()
 
 function buildIcs201BaseFromFile(
   folderId: string,
@@ -5843,14 +5859,14 @@ function buildIcs201BaseFromFile(
         )
       }
       if (rfis.length > 0) {
-        base.actions = rfis.map((text, index) => ({
-          id: index + 1,
-          task: text,
-          owner: index === 0 ? 'Planning Section' : 'Logistics Section',
-          startTime: '2026-05-14 06:00 PT',
-          endTime: '2026-05-14 18:00 PT',
-          status: 'Planned',
-        }))
+        base.actions = rfis.map((text, index) =>
+          ics201LegacyActionRow(
+            index + 1,
+            text,
+            index === 0 ? 'Planning Section' : 'Logistics Section',
+            '2026-05-14 06:00 PT'
+          )
+        )
       }
       base.preparedBy = `${sitrep.author} (autogenerated from ${file.name})`
     }
@@ -5864,22 +5880,18 @@ function buildIcs201BaseFromFile(
       'Complete structural assessment at Pier 33 and adjacent berths.',
     ])
     base.actions = [
-      {
-        id: 1,
-        task: 'Branch I work assignments per ICS-204 (Division A) — Pier 33 perimeter security.',
-        owner: 'Operations Branch I',
-        startTime: '2026-05-14 06:00 PT',
-        endTime: '2026-05-14 18:00 PT',
-        status: 'In Progress',
-      },
-      {
-        id: 2,
-        task: 'Branch II work assignments per ICS-204 (Division B) — shelter operations.',
-        owner: 'Operations Branch II',
-        startTime: '2026-05-14 06:00 PT',
-        endTime: '2026-05-14 18:00 PT',
-        status: 'In Progress',
-      },
+      ics201LegacyActionRow(
+        1,
+        'Branch I work assignments per ICS-204 (Division A) — Pier 33 perimeter security.',
+        'Operations Branch I',
+        '2026-05-14 06:00 PT'
+      ),
+      ics201LegacyActionRow(
+        2,
+        'Branch II work assignments per ICS-204 (Division B) — shelter operations.',
+        'Operations Branch II',
+        '2026-05-14 06:00 PT'
+      ),
     ]
   } else if (folderId === 'maps-imagery') {
     base.mapSketchPolygon = BASELINE_MAP_SKETCH_POLYGON.map((vertex) => ({ ...vertex }))
@@ -5902,79 +5914,67 @@ function buildIcs201BaseFromFile(
   } else if (folderId === 'forms') {
     if (file.name.startsWith('ICS-204')) {
       base.actions = [
-        {
-          id: 1,
-          task: 'Division A perimeter security at Pier 33 per ICS-204.',
-          owner: 'Division A Supervisor',
-          startTime: '2026-05-14 06:00 PT',
-          endTime: '2026-05-14 18:00 PT',
-          status: 'In Progress',
-        },
-        {
-          id: 2,
-          task: 'Division A access control at Embarcadero entry points.',
-          owner: 'Division A Supervisor',
-          startTime: '2026-05-14 06:00 PT',
-          endTime: '2026-05-14 18:00 PT',
-          status: 'In Progress',
-        },
+        ics201LegacyActionRow(
+          1,
+          'Division A perimeter security at Pier 33 per ICS-204.',
+          'Division A Supervisor',
+          '2026-05-14 06:00 PT'
+        ),
+        ics201LegacyActionRow(
+          2,
+          'Division A access control at Embarcadero entry points.',
+          'Division A Supervisor',
+          '2026-05-14 06:00 PT'
+        ),
       ]
       base.resources = [
-        {
-          id: 1,
-          category: 'Strike Team',
-          identifier: 'Strike Team Alpha (Division A)',
-          quantity: '1',
-          status: 'Assigned',
-          assignment: 'Pier 33 perimeter security',
-        },
-        {
-          id: 2,
-          category: 'Task Force',
-          identifier: 'Task Force Bravo (Division A)',
-          quantity: '1',
-          status: 'Assigned',
-          assignment: 'Embarcadero access control',
-        },
+        ics201LegacyResourceRow(
+          1,
+          'Strike Team',
+          'Strike Team Alpha (Division A)',
+          '1',
+          'Assigned',
+          'Pier 33 perimeter security'
+        ),
+        ics201LegacyResourceRow(
+          2,
+          'Task Force',
+          'Task Force Bravo (Division A)',
+          '1',
+          'Assigned',
+          'Embarcadero access control'
+        ),
       ]
     } else if (file.name.startsWith('ICS-233')) {
       base.actions = [
-        {
-          id: 1,
-          task: 'RFI-014: Confirm shelter capacity at Treasure Island annex.',
-          owner: 'Planning Section',
-          startTime: '2026-05-14 08:00 PT',
-          endTime: '2026-05-14 12:00 PT',
-          status: 'Planned',
-        },
-        {
-          id: 2,
-          task: 'RFR-022: Request additional USCG Auxiliary patrols for OP4 night ops.',
-          owner: 'Logistics Section',
-          startTime: '2026-05-14 09:00 PT',
-          endTime: '2026-05-14 15:00 PT',
-          status: 'Planned',
-        },
+        ics201LegacyActionRow(
+          1,
+          'RFI-014: Confirm shelter capacity at Treasure Island annex.',
+          'Planning Section',
+          '2026-05-14 08:00 PT'
+        ),
+        ics201LegacyActionRow(
+          2,
+          'RFR-022: Request additional USCG Auxiliary patrols for OP4 night ops.',
+          'Logistics Section',
+          '2026-05-14 09:00 PT'
+        ),
       ]
     }
   } else if (folderId === 'comms-log') {
     base.actions = [
-      {
-        id: 1,
-        task: 'Maintain hourly comms with Alameda County OES per comms log.',
-        owner: 'Comms Unit',
-        startTime: '2026-05-14 06:00 PT',
-        endTime: '2026-05-14 18:00 PT',
-        status: 'In Progress',
-      },
-      {
-        id: 2,
-        task: 'Coordinate mutual-aid traffic with CAL FIRE Incident Commander.',
-        owner: 'Liaison Officer',
-        startTime: '2026-05-14 12:30 PT',
-        endTime: '2026-05-14 13:00 PT',
-        status: 'Planned',
-      },
+      ics201LegacyActionRow(
+        1,
+        'Maintain hourly comms with Alameda County OES per comms log.',
+        'Comms Unit',
+        '2026-05-14 06:00 PT'
+      ),
+      ics201LegacyActionRow(
+        2,
+        'Coordinate mutual-aid traffic with CAL FIRE liaison officer.',
+        'Liaison Officer',
+        '2026-05-14 12:30 PT'
+      ),
     ]
     base.currentSituationSummary =
       'Comms log indicates steady traffic with Alameda County OES, CAL FIRE liaison, and FEMA Region IX. No outstanding congressional inquiries.'
@@ -7301,19 +7301,24 @@ function App() {
   const [ics201ActionsDraft, setIcs201ActionsDraft] = useState<Ics201ActionRow[]>([])
   const [ics201EditingOrgChart, setIcs201EditingOrgChart] = useState(false)
   const [ics201OrgChartDraft, setIcs201OrgChartDraft] = useState<Ics201FormState['orgChart']>({
-    incidentCommander: '',
+    commandNames: ['', '', '', '', ''],
+    safetyOfficer: '',
+    liaisonOfficer: '',
+    publicInformationOfficer: '',
     operationsSectionChief: '',
     planningSectionChief: '',
     logisticsSectionChief: '',
     financeSectionChief: '',
-    publicInformationOfficer: '',
-    safetyOfficer: '',
-    liaisonOfficer: '',
+    intelInvestSectionChief: '',
   })
   const [ics201EditingResources, setIcs201EditingResources] = useState(false)
   const [ics201ResourcesDraft, setIcs201ResourcesDraft] = useState<Ics201ResourceSummaryRow[]>([])
   const [ics201EditingSafetyAnalysis, setIcs201EditingSafetyAnalysis] = useState(false)
-  const [ics201SafetyAnalysisDraft, setIcs201SafetyAnalysisDraft] = useState<Ics201SafetyRow[]>([])
+  const [ics201SafetyAnalysisDraft, setIcs201SafetyAnalysisDraft] =
+    useState<Ics201SafetyAnalysisBox13>(() => createEmptySafetyAnalysisBox13())
+  const [ics201EditingHazmatAssessment, setIcs201EditingHazmatAssessment] = useState(false)
+  const [ics201HazmatAssessmentDraft, setIcs201HazmatAssessmentDraft] =
+    useState<Ics201HazmatAssessmentBox15>(() => createEmptyHazmatAssessmentBox15())
   const [ics201Versions, setIcs201Versions] = useState<Ics201Version[]>(() =>
     isSupabaseEnabled ? [] : createSeedIcs201Versions(INITIAL_ICS201_FORM)
   )
@@ -12536,6 +12541,7 @@ function App() {
       orgChart: ics201EditingOrgChart,
       resources: ics201EditingResources,
       safetyAnalysis: ics201EditingSafetyAnalysis,
+      hazmatAssessment: ics201EditingHazmatAssessment,
     }),
     [
       ics201EditingReportInfo,
@@ -12547,6 +12553,7 @@ function App() {
       ics201EditingOrgChart,
       ics201EditingResources,
       ics201EditingSafetyAnalysis,
+      ics201EditingHazmatAssessment,
     ]
   )
   const activeIcs201Section = useMemo(
@@ -12771,7 +12778,8 @@ function App() {
       setActionsDraft: setIcs201ActionsDraft,
       setOrgChartDraft: setIcs201OrgChartDraft,
       setResourcesDraft: setIcs201ResourcesDraft,
-      setSafetyAnalysisDraft: setIcs201SafetyAnalysisDraft,
+      setSafetyAnalysisBox13Draft: setIcs201SafetyAnalysisDraft,
+      setHazmatAssessmentBox15Draft: setIcs201HazmatAssessmentDraft,
     })
   }, [])
   const handleIcs201RemoteVersionInserted = useCallback((version: Ics201Version) => {
@@ -15128,6 +15136,7 @@ function App() {
     setIcs201EditingOrgChart(false)
     setIcs201EditingResources(false)
     setIcs201EditingSafetyAnalysis(false)
+    setIcs201EditingHazmatAssessment(false)
     setIsCreatingSignedIcs201Version(false)
     setIcs204EditingSectionsByFormId({})
     setIcs204SectionDraftsByFormId({})
@@ -15259,6 +15268,7 @@ function App() {
     'org-chart': ics201OrgChartCursor,
     resources: ics201ResourcesCursor,
     'safety-analysis': ics201SafetyAnalysisCursor,
+    'hazmat-assessment': ics201HazmatAssessmentCursor,
   } = ics201SectionCursors
   const ics201MapSketchCursorPublishRef = useRef(ics201MapSketchCursor.publishCursor)
   ics201MapSketchCursorPublishRef.current = ics201MapSketchCursor.publishCursor
@@ -15335,13 +15345,16 @@ function App() {
         editingResources: ics201EditingResources,
         resourcesDraft: ics201ResourcesDraft,
         editingSafetyAnalysis: ics201EditingSafetyAnalysis,
-        safetyAnalysisDraft: ics201SafetyAnalysisDraft,
+        safetyAnalysisBox13Draft: ics201SafetyAnalysisDraft,
+        editingHazmatAssessment: ics201EditingHazmatAssessment,
+        hazmatAssessmentBox15Draft: ics201HazmatAssessmentDraft,
       }),
     [
       ics201ActionsDraft,
       ics201CurrentSituationEditor.isLiveConnected,
       ics201CurrentSituationEditor.value,
       ics201EditingActions,
+      ics201EditingHazmatAssessment,
       ics201EditingIncidentBriefing,
       ics201EditingMapSketch,
       ics201EditingOrgChart,
@@ -15349,6 +15362,7 @@ function App() {
       ics201EditingResources,
       ics201EditingSafetyAnalysis,
       ics201Form,
+      ics201HazmatAssessmentDraft,
       ics201IncidentBriefingDraft,
       ics201MapSketchDraft,
       ics201ObjectivesEditor.isLiveConnected,
@@ -15406,7 +15420,10 @@ function App() {
           setIcs201EditingActions(true)
           break
         case 'org-chart':
-          setIcs201OrgChartDraft({ ...ics201Form.orgChart })
+          setIcs201OrgChartDraft({
+            ...ics201Form.orgChart,
+            commandNames: [...ics201Form.orgChart.commandNames],
+          })
           setIcs201EditingOrgChart(true)
           break
         case 'resources':
@@ -15416,10 +15433,14 @@ function App() {
           setIcs201EditingResources(true)
           break
         case 'safety-analysis':
-          setIcs201SafetyAnalysisDraft(
-            ics201Form.safetyAnalysis.map((row) => ({ ...row }))
-          )
+          setIcs201SafetyAnalysisDraft(cloneIcs201SafetyAnalysisBox13Draft(ics201Form.safetyAnalysisBox13))
           setIcs201EditingSafetyAnalysis(true)
+          break
+        case 'hazmat-assessment':
+          setIcs201HazmatAssessmentDraft(
+            cloneIcs201HazmatAssessmentBox15Draft(ics201Form.hazmatAssessmentBox15)
+          )
+          setIcs201EditingHazmatAssessment(true)
           break
         default:
           break
@@ -22198,7 +22219,10 @@ function App() {
             setIcs201EditingActions(true)
             break
           case 'org-chart':
-            setIcs201OrgChartDraft({ ...ics201Form.orgChart })
+            setIcs201OrgChartDraft({
+              ...ics201Form.orgChart,
+              commandNames: [...ics201Form.orgChart.commandNames],
+            })
             setIcs201EditingOrgChart(true)
             break
           case 'resources':
@@ -22209,9 +22233,15 @@ function App() {
             break
           case 'safety-analysis':
             setIcs201SafetyAnalysisDraft(
-              ics201Form.safetyAnalysis.map((row) => ({ ...row }))
+              cloneIcs201SafetyAnalysisBox13Draft(ics201Form.safetyAnalysisBox13)
             )
             setIcs201EditingSafetyAnalysis(true)
+            break
+          case 'hazmat-assessment':
+            setIcs201HazmatAssessmentDraft(
+              cloneIcs201HazmatAssessmentBox15Draft(ics201Form.hazmatAssessmentBox15)
+            )
+            setIcs201EditingHazmatAssessment(true)
             break
           default:
             break
@@ -22342,35 +22372,27 @@ function App() {
             const generated: Ics201ActionRow[] = [
               {
                 id: 1,
-                task: 'Conduct perimeter sweep across Divisions A and B.',
-                owner: 'Operations Section Chief',
-                startTime: `${baseTimestamp} 08:00`,
-                endTime: `${baseTimestamp} 12:00`,
-                status: 'In Progress',
+                time: `${baseTimestamp} 08:00`,
+                action:
+                  'Conduct perimeter sweep across Divisions A and B. (Operations Section Chief)',
               },
               {
                 id: 2,
-                task: 'Coordinate mutual-aid relief crews and confirm staging at Base Camp.',
-                owner: 'Logistics Section Chief',
-                startTime: `${baseTimestamp} 09:00`,
-                endTime: `${baseTimestamp} 11:30`,
-                status: 'Planned',
+                time: `${baseTimestamp} 09:00`,
+                action:
+                  'Coordinate mutual-aid relief crews and confirm staging at Base Camp. (Logistics Section Chief)',
               },
               {
                 id: 3,
-                task: 'Publish updated SITREP and distribute to interagency partners.',
-                owner: 'Planning Section Chief',
-                startTime: `${baseTimestamp} 13:00`,
-                endTime: `${baseTimestamp} 14:00`,
-                status: 'Planned',
+                time: `${baseTimestamp} 13:00`,
+                action:
+                  'Publish updated SITREP and distribute to interagency partners. (Planning Section Chief)',
               },
               {
                 id: 4,
-                task: 'Brief next operational period assignments at the planning meeting.',
-                owner: 'Incident Commander',
-                startTime: `${baseTimestamp} 16:00`,
-                endTime: `${baseTimestamp} 17:00`,
-                status: 'Planned',
+                time: `${baseTimestamp} 16:00`,
+                action:
+                  'Brief next operational period assignments at the planning meeting. (Incident Commander)',
               },
             ]
             setIcs201ActionsDraft(generated)
@@ -22378,8 +22400,13 @@ function App() {
           }
           case 'org-chart':
             setIcs201OrgChartDraft({
-              incidentCommander:
-                ics201Form.orgChart.incidentCommander || 'CDR M. Alvarez (USCG)',
+              commandNames: [
+                ics201Form.orgChart.commandNames[0] || 'CDR M. Alvarez (USCG)',
+                ics201Form.orgChart.commandNames[1] || '',
+                ics201Form.orgChart.commandNames[2] || '',
+                ics201Form.orgChart.commandNames[3] || '',
+                ics201Form.orgChart.commandNames[4] || '',
+              ],
               operationsSectionChief:
                 ics201Form.orgChart.operationsSectionChief || 'LCDR R. Patel',
               planningSectionChief:
@@ -22390,78 +22417,86 @@ function App() {
                 ics201Form.orgChart.financeSectionChief || 'LT J. Nguyen',
               publicInformationOfficer:
                 ics201Form.orgChart.publicInformationOfficer || 'LT K. Simmons',
-              safetyOfficer:
-                ics201Form.orgChart.safetyOfficer || 'CWO T. Hale',
-              liaisonOfficer:
-                ics201Form.orgChart.liaisonOfficer || 'CWO S. Brooks',
+              safetyOfficer: ics201Form.orgChart.safetyOfficer || 'CWO T. Hale',
+              liaisonOfficer: ics201Form.orgChart.liaisonOfficer || 'CWO S. Brooks',
+              intelInvestSectionChief:
+                ics201Form.orgChart.intelInvestSectionChief || 'LT A. Chen',
             })
             break
           case 'resources': {
             const generated: Ics201ResourceSummaryRow[] = [
               {
                 id: 1,
-                category: 'Operations',
-                identifier: 'Urban Search Team Alpha',
-                quantity: '1',
-                status: 'Assigned',
-                assignment: 'Division A — Perimeter sweep',
+                resource: 'Operations',
+                resourceIdentifier: 'Urban Search Team Alpha',
+                dateTimeOrdered: `${new Date().toISOString().slice(0, 10)} 08:00`,
+                eta: `${new Date().toISOString().slice(0, 10)} 10:00`,
+                onScene: true,
+                notes: 'Assigned — Division A perimeter sweep',
               },
               {
                 id: 2,
-                category: 'Logistics',
-                identifier: 'Mobile Command Unit',
-                quantity: '1',
-                status: 'Staged',
-                assignment: 'Central Staging — Comms relay',
+                resource: 'Logistics',
+                resourceIdentifier: 'Mobile Command Unit',
+                dateTimeOrdered: `${new Date().toISOString().slice(0, 10)} 08:30`,
+                eta: `${new Date().toISOString().slice(0, 10)} 09:00`,
+                onScene: false,
+                notes: 'Staged — Central Staging comms relay',
               },
               {
                 id: 3,
-                category: 'Medical',
-                identifier: 'Medical Strike Team',
-                quantity: '1',
-                status: 'Assigned',
-                assignment: 'Hot Zone Entry Point 2',
+                resource: 'Medical',
+                resourceIdentifier: 'Medical Strike Team',
+                dateTimeOrdered: `${new Date().toISOString().slice(0, 10)} 07:00`,
+                eta: `${new Date().toISOString().slice(0, 10)} 08:00`,
+                onScene: true,
+                notes: 'Assigned — Hot Zone Entry Point 2',
               },
               {
                 id: 4,
-                category: 'Aviation',
-                identifier: 'Helicopter — Type II',
-                quantity: '1',
-                status: 'Available',
-                assignment: 'Helibase 1 — Recon / bucket support',
+                resource: 'Aviation',
+                resourceIdentifier: 'Helicopter — Type II',
+                dateTimeOrdered: `${new Date().toISOString().slice(0, 10)} 06:00`,
+                eta: `${new Date().toISOString().slice(0, 10)} 07:00`,
+                onScene: false,
+                notes: 'Available — Helibase 1 recon / bucket support',
               },
             ]
             setIcs201ResourcesDraft(generated)
             break
           }
           case 'safety-analysis': {
-            const generated: Ics201SafetyRow[] = [
-              {
-                id: 1,
-                hazard: 'Heat stress during extended outdoor operations.',
-                mitigation:
-                  'Enforce work/rest cycles; pre-stage water and shade at staging areas.',
-                ppe: 'Hi-vis vests, sun-protective uniforms, hydration packs.',
-                medicalPlan: 'EMS staged at Base Camp; nearest hospital coordinated.',
-              },
-              {
-                id: 2,
-                hazard: 'Vessel traffic interaction within enforced security zone.',
-                mitigation:
-                  'Maintain 500-yard standoff; coordinate with VTS for transit windows.',
-                ppe: 'PFDs, marine VHF radios, AIS-equipped small boats.',
-                medicalPlan: 'USCG Sector duty corpsman on call; medevac via local EMS.',
-              },
-              {
-                id: 3,
-                hazard: 'Crowd density and pedestrian movement near event venues.',
-                mitigation:
-                  'Coordinate with LE for crowd flow; establish cordon and signage.',
-                ppe: 'Hi-vis vests, body-cams (LE), comms earpieces.',
-                medicalPlan: 'Mobile aid stations at venue ingress/egress points.',
-              },
-            ]
+            const generated = cloneIcs201SafetyAnalysisBox13Draft(
+              ics201Form.safetyAnalysisBox13.safetyOfficer
+                ? ics201Form.safetyAnalysisBox13
+                : createEmptySafetyAnalysisBox13('CWO T. Hale')
+            )
+            generated.safetyNotes = [
+              '1. Hazard: Heat stress during extended outdoor operations. | Mitigation: Enforce work/rest cycles; pre-stage water and shade at staging areas. | PPE: Hi-vis vests, sun-protective uniforms, hydration packs. | Medical: EMS staged at Base Camp; nearest hospital coordinated.',
+              '2. Hazard: Vessel traffic interaction within enforced security zone. | Mitigation: Maintain 500-yard standoff; coordinate with VTS for transit windows. | PPE: PFDs, marine VHF radios, AIS-equipped small boats. | Medical: USCG Sector duty corpsman on call; medevac via local EMS.',
+              '3. Hazard: Crowd density and pedestrian movement near event venues. | Mitigation: Coordinate with LE for crowd flow; establish cordon and signage. | PPE: Hi-vis vests, body-cams (LE), comms earpieces. | Medical: Mobile aid stations at venue ingress/egress points.',
+            ].join('\n')
+            generated.knownHazards.heat = true
+            generated.knownHazards.onWaterResponse = true
+            generated.knownHazards.civilDisturbance = true
+            generated.involvesHazmat = false
             setIcs201SafetyAnalysisDraft(generated)
+            break
+          }
+          case 'hazmat-assessment': {
+            const generated = cloneIcs201HazmatAssessmentBox15Draft(
+              ics201Form.hazmatAssessmentBox15
+            )
+            generated.classification.oilPetroleumProducts = true
+            generated.potentialHazards.scbaRequired = true
+            generated.requiredProcedures.securityPerimeter = true
+            generated.requiredProcedures.safetyBriefingsForResponders = true
+            generated.airMonitoringRequired = true
+            generated.sopAndSafeWorkPractices =
+              'Maintain exclusion zone; coordinate with hazmat specialist before entry.'
+            generated.emergencyProcedures =
+              'Withdraw personnel on air monitor alarm; notify IC and safety officer immediately.'
+            setIcs201HazmatAssessmentDraft(generated)
             break
           }
           default:
@@ -22537,13 +22572,12 @@ function App() {
                     id: accumulator.resources.length + resourceIndex + 1,
                   })),
                 ],
-                safetyAnalysis: [
-                  ...accumulator.safetyAnalysis,
-                  ...generated.safetyAnalysis.map((row, rowIndex) => ({
-                    ...row,
-                    id: accumulator.safetyAnalysis.length + rowIndex + 1,
-                  })),
-                ],
+                safetyAnalysisBox13: {
+                  ...accumulator.safetyAnalysisBox13,
+                  safetyNotes: [accumulator.safetyAnalysisBox13.safetyNotes, generated.safetyAnalysisBox13.safetyNotes]
+                    .filter((entry) => entry.trim().length > 0)
+                    .join('\n'),
+                },
                 currentSituationSummary: [
                   accumulator.currentSituationSummary,
                   generated.currentSituationSummary,
@@ -22727,18 +22761,15 @@ function App() {
         ...previous.actions,
         {
           id: previous.actions.length === 0 ? 1 : Math.max(...previous.actions.map((item) => item.id)) + 1,
-          task: '',
-          owner: '',
-          startTime: '',
-          endTime: '',
-          status: 'Planned',
+          time: '',
+          action: '',
         },
       ],
     }))
   }
   const updateIcs201OrgChartField = (
     field: keyof Ics201FormState['orgChart'],
-    value: string
+    value: Ics201FormState['orgChart'][typeof field]
   ) => {
     setIcs201Form((previous) => ({
       ...previous,
@@ -22751,7 +22782,7 @@ function App() {
   const updateIcs201Resource = (
     resourceId: number,
     field: keyof Ics201ResourceSummaryRow,
-    value: string
+    value: string | boolean
   ) => {
     setIcs201Form((previous) => ({
       ...previous,
@@ -22775,48 +22806,26 @@ function App() {
             previous.resources.length === 0
               ? 1
               : Math.max(...previous.resources.map((item) => item.id)) + 1,
-          category: '',
-          identifier: '',
-          quantity: '',
-          status: 'Planned',
-          assignment: '',
+          resource: '',
+          resourceIdentifier: '',
+          dateTimeOrdered: '',
+          eta: '',
+          onScene: false,
+          notes: '',
         },
       ],
     }))
   }
-  const updateIcs201SafetyAnalysis = (
-    rowId: number,
-    field: keyof Ics201SafetyRow,
-    value: string
+  const updateIcs201SafetyAnalysisBox13 = <K extends keyof Ics201SafetyAnalysisBox13>(
+    field: K,
+    value: Ics201SafetyAnalysisBox13[K]
   ) => {
     setIcs201Form((previous) => ({
       ...previous,
-      safetyAnalysis: previous.safetyAnalysis.map((row) =>
-        row.id === rowId
-          ? {
-              ...row,
-              [field]: value,
-            }
-          : row
-      ),
-    }))
-  }
-  const addIcs201SafetyAnalysis = () => {
-    setIcs201Form((previous) => ({
-      ...previous,
-      safetyAnalysis: [
-        ...previous.safetyAnalysis,
-        {
-          id:
-            previous.safetyAnalysis.length === 0
-              ? 1
-              : Math.max(...previous.safetyAnalysis.map((item) => item.id)) + 1,
-          hazard: '',
-          mitigation: '',
-          ppe: '',
-          medicalPlan: '',
-        },
-      ],
+      safetyAnalysisBox13: {
+        ...previous.safetyAnalysisBox13,
+        [field]: value,
+      },
     }))
   }
   const addIcs204Form = async () => {
@@ -33740,1434 +33749,328 @@ function App() {
                         </ItemContent>
                       </div>
                     </Item>
-                    <Item variant="outline" className={cn('flex-col items-stretch p-0', glassItemBorderClasses)}>
-                      <div className="px-3 py-2.5">
-                        <ItemContent className="space-y-2">
-                          <div className="flex items-center justify-between gap-2">
-                            <div className="flex items-center gap-1.5">
-                              <ItemTitle>Map Sketch</ItemTitle>
-                              <Ics201SectionEditorBadges editors={ics201SectionEditors['map-sketch'] ?? []} />
-                              <TooltipProvider delayDuration={150}>
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <Button
-                                      type="button"
-                                      size="icon"
-                                      variant="ghost"
-                                      aria-label="Zoom to polygon on map"
-                                      className="h-6 w-6 text-foreground hover:text-foreground"
-                                      disabled={
-                                        (ics201EditingMapSketch
-                                          ? ics201MapSketchDraft
-                                          : ics201Form.mapSketchPolygon
-                                        ).length < 3
-                                      }
-                                      onClick={() => {
-                                        const view = mapViewRef.current
-                                        const vertices = ics201EditingMapSketch
-                                          ? ics201MapSketchDraft
-                                          : ics201Form.mapSketchPolygon
-                                        if (!view || vertices.length < 3) {
-                                          return
-                                        }
-                                        const ring = vertices.map((vertex) => [
-                                          vertex.longitude,
-                                          vertex.latitude,
-                                        ])
-                                        const first = ring[0]
-                                        const last = ring[ring.length - 1]
-                                        if (first[0] !== last[0] || first[1] !== last[1]) {
-                                          ring.push([first[0], first[1]])
-                                        }
-                                        const target = new Graphic({
-                                          geometry: {
-                                            type: 'polygon',
-                                            rings: [ring],
-                                          },
-                                        } as ConstructorParameters<typeof Graphic>[0])
-                                        const leftPanelWidth =
-                                          leftPanelRef.current?.getBoundingClientRect().width ?? 0
-                                        const previousPadding = view.padding
-                                        view.padding = {
-                                          ...previousPadding,
-                                          left: Math.max(
-                                            leftPanelWidth,
-                                            previousPadding?.left ?? 0
-                                          ),
-                                        }
-                                        void view
-                                          .goTo(target, { duration: 600 })
-                                          .catch(() => {
-                                            // Ignore interrupted goTo calls.
-                                          })
-                                      }}
-                                    >
-                                      <MapIcon className="h-3.5 w-3.5" />
-                                    </Button>
-                                  </TooltipTrigger>
-                                  <TooltipContent side="top" className="text-xs">
-                                    Zoom to polygon on map
-                                  </TooltipContent>
-                                </Tooltip>
-                              </TooltipProvider>
-                            </div>
-                            {canEditIcs201Form && !ics201EditingMapSketch && (
+                    <Ics201MapSketchSection
+                      className={glassItemBorderClasses}
+                      canEdit={canEditIcs201Form}
+                      isEditing={ics201EditingMapSketch}
+                      onBeginEdit={() => beginIcs201SectionEdit('map-sketch')}
+                      onCancel={() => {
+                        if (isDrawingIcs201Polygon) {
+                          setIsDrawingIcs201Polygon(false)
+                        }
+                        setIcs201EditingMapSketch(false)
+                      }}
+                      onSave={() => {
+                        if (isDrawingIcs201Polygon) {
+                          setIsDrawingIcs201Polygon(false)
+                        }
+                        saveIcs201Section(
+                          {
+                            ...ics201Form,
+                            mapSketchPolygon: ics201MapSketchDraft.map((vertex) => ({ ...vertex })),
+                          },
+                          'map-sketch'
+                        )
+                        setIcs201EditingMapSketch(false)
+                      }}
+                      onGenerate={() => openIcs201SectionGeneration('map-sketch')}
+                      mapSketchPolygon={ics201Form.mapSketchPolygon}
+                      draft={ics201MapSketchDraft}
+                      onDraftChange={setIcs201MapSketchDraft}
+                      isDrawing={isDrawingIcs201Polygon}
+                      onToggleDrawing={() => setIsDrawingIcs201Polygon((current) => !current)}
+                      onClearDraft={() => {
+                        if (isDrawingIcs201Polygon) {
+                          setIsDrawingIcs201Polygon(false)
+                        }
+                        setIcs201MapSketchDraft([])
+                      }}
+                      onAddVertex={() => {
+                        const polygon = ics201MapSketchDraft
+                        const lastVertex = polygon[polygon.length - 1]
+                        const nextVertex: Ics201MapSketchVertex = lastVertex
+                          ? {
+                              longitude: Number((lastVertex.longitude + 0.001).toFixed(6)),
+                              latitude: lastVertex.latitude,
+                            }
+                          : { longitude: 0, latitude: 0 }
+                        setIcs201MapSketchDraft([...polygon, nextVertex])
+                      }}
+                      onRemoveVertex={(index) =>
+                        setIcs201MapSketchDraft((draft) =>
+                          draft.filter((_, entryIndex) => entryIndex !== index)
+                        )
+                      }
+                      editors={ics201SectionEditors['map-sketch'] ?? []}
+                      cursor={ics201MapSketchCursor}
+                      sketchLayerRef={ics201SketchLayerRef}
+                      remotePointerRefreshKey={activeTab}
+                      headerExtra={
+                        <TooltipProvider delayDuration={150}>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
                               <Button
                                 type="button"
                                 size="icon"
                                 variant="ghost"
-                                className="h-7 w-7 text-muted-foreground"
-                                aria-label="Edit map sketch"
-                                onClick={() => beginIcs201SectionEdit('map-sketch')}
-                              >
-                                <Pencil className="h-3.5 w-3.5" />
-                              </Button>
-                            )}
-                          </div>
-                          <ItemDescription>
-                            Draw the incident perimeter on the ArcGIS map to the right or enter coordinates manually.
-                          </ItemDescription>
-                          <Ics201MapSketchRemotePointers
-                            cursors={ics201MapSketchCursor.remoteCursors}
-                            layerRef={ics201SketchLayerRef}
-                            refreshKey={activeTab}
-                          />
-                          {ics201EditingMapSketch ? (
-                            <>
-                              <Ics201FieldFocusIndicators cursors={ics201MapSketchCursor.remoteCursors} />
-                              <div className="flex flex-wrap items-center gap-2 pt-1">
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant={isDrawingIcs201Polygon ? 'default' : 'outline'}
-                                  className="h-7 gap-1 text-xs"
-                                  onClick={() => setIsDrawingIcs201Polygon((current) => !current)}
-                                >
-                                  <Pencil className="h-3.5 w-3.5" />
-                                  {isDrawingIcs201Polygon ? 'Cancel drawing' : 'Draw polygon'}
-                                </Button>
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant="outline"
-                                  className="h-7 gap-1 text-xs"
-                                  disabled={ics201MapSketchDraft.length === 0}
-                                  onClick={() => {
-                                    if (isDrawingIcs201Polygon) {
-                                      setIsDrawingIcs201Polygon(false)
-                                    }
-                                    setIcs201MapSketchDraft([])
-                                  }}
-                                >
-                                  <Trash2 className="h-3.5 w-3.5" />
-                                  Clear
-                                </Button>
-                                <span className="text-[11px] text-muted-foreground">
-                                  {ics201MapSketchDraft.length}{' '}
-                                  {ics201MapSketchDraft.length === 1 ? 'vertex' : 'vertices'}
-                                  {ics201MapSketchDraft.length > 0 &&
-                                    ics201MapSketchDraft.length < 3 &&
-                                    ' (need at least 3 to form a polygon)'}
-                                </span>
-                              </div>
-                              {isDrawingIcs201Polygon && (
-                                <p className="text-[11px] font-medium text-blue-700 dark:text-blue-300">
-                                  Click on the map to add vertices. Double-click the last vertex to finish.
-                                </p>
-                              )}
-                              <div className="space-y-1.5">
-                                <div className="grid grid-cols-[1.5rem_1fr_1fr_1.75rem] items-center gap-2 px-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                                  <span>#</span>
-                                  <span>Latitude</span>
-                                  <span>Longitude</span>
-                                  <span className="sr-only">Actions</span>
-                                </div>
-                                {ics201MapSketchDraft.length === 0 ? (
-                                  <div className="rounded-md border border-dashed border-border/60 bg-muted/20 px-2.5 py-3 text-center text-[11px] text-muted-foreground">
-                                    No vertices yet. Use Draw polygon or Add vertex to start.
-                                  </div>
-                                ) : (
-                                  ics201MapSketchDraft.map((vertex, index) => (
-                                    <div
-                                      key={index}
-                                      className="grid grid-cols-[1.5rem_1fr_1fr_1.75rem] items-center gap-2"
-                                    >
-                                      <span className="text-[10px] font-medium text-muted-foreground">
-                                        {index + 1}
-                                      </span>
-                                      <Ics201RemoteFieldCarets
-                                        fieldKey={`mapSketch:${index}.lat`}
-                                        type="number"
-                                        step="any"
-                                        value={
-                                          Number.isFinite(vertex.latitude) ? String(vertex.latitude) : ''
-                                        }
-                                        cursors={ics201MapSketchCursor.remoteCursors}
-                                        publish={ics201MapSketchCursor.publishCursor}
-                                        clear={ics201MapSketchCursor.clearCursor}
-                                        aria-label={`Latitude for vertex ${index + 1}`}
-                                        placeholder="Latitude"
-                                        onChange={(event) => {
-                                          const raw = event.target.value
-                                          const parsed = raw === '' ? 0 : Number(raw)
-                                          setIcs201MapSketchDraft((draft) =>
-                                            draft.map((entry, entryIndex) =>
-                                              entryIndex === index
-                                                ? {
-                                                    ...entry,
-                                                    latitude: Number.isFinite(parsed)
-                                                      ? parsed
-                                                      : 0,
-                                                  }
-                                                : entry
-                                            )
-                                          )
-                                        }}
-                                      />
-                                      <Ics201RemoteFieldCarets
-                                        fieldKey={`mapSketch:${index}.lng`}
-                                        type="number"
-                                        step="any"
-                                        value={
-                                          Number.isFinite(vertex.longitude)
-                                            ? String(vertex.longitude)
-                                            : ''
-                                        }
-                                        cursors={ics201MapSketchCursor.remoteCursors}
-                                        publish={ics201MapSketchCursor.publishCursor}
-                                        clear={ics201MapSketchCursor.clearCursor}
-                                        aria-label={`Longitude for vertex ${index + 1}`}
-                                        placeholder="Longitude"
-                                        onChange={(event) => {
-                                          const raw = event.target.value
-                                          const parsed = raw === '' ? 0 : Number(raw)
-                                          setIcs201MapSketchDraft((draft) =>
-                                            draft.map((entry, entryIndex) =>
-                                              entryIndex === index
-                                                ? {
-                                                    ...entry,
-                                                    longitude: Number.isFinite(parsed)
-                                                      ? parsed
-                                                      : 0,
-                                                  }
-                                                : entry
-                                            )
-                                          )
-                                        }}
-                                      />
-                                      <Button
-                                        type="button"
-                                        size="icon"
-                                        variant="ghost"
-                                        className="h-7 w-7"
-                                        aria-label={`Remove vertex ${index + 1}`}
-                                        onClick={() =>
-                                          setIcs201MapSketchDraft((draft) =>
-                                            draft.filter((_, entryIndex) => entryIndex !== index)
-                                          )
-                                        }
-                                      >
-                                        <X className="h-3.5 w-3.5" />
-                                      </Button>
-                                    </div>
-                                  ))
-                                )}
-                              </div>
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="outline"
-                                className="h-7 w-fit gap-1 text-xs"
-                                onClick={() => {
-                                  const polygon = ics201MapSketchDraft
-                                  const lastVertex = polygon[polygon.length - 1]
-                                  const nextVertex: Ics201MapSketchVertex = lastVertex
-                                    ? {
-                                        longitude: Number(
-                                          (lastVertex.longitude + 0.001).toFixed(6)
-                                        ),
-                                        latitude: lastVertex.latitude,
-                                      }
-                                    : { longitude: 0, latitude: 0 }
-                                  setIcs201MapSketchDraft([...polygon, nextVertex])
-                                }}
-                              >
-                                <Plus className="h-3.5 w-3.5" />
-                                Add vertex
-                              </Button>
-                              <div className="flex items-center justify-end gap-1.5">
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant="outline"
-                                  className="h-7 gap-1 text-xs"
-                                  onClick={() => openIcs201SectionGeneration('map-sketch')}
-                                >
-                                  <Sparkles className="h-3.5 w-3.5" />
-                                  Generate Section Content
-                                </Button>
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant="ghost"
-                                  className="h-7 gap-1 text-xs"
-                                  onClick={() => {
-                                    if (isDrawingIcs201Polygon) {
-                                      setIsDrawingIcs201Polygon(false)
-                                    }
-                                    setIcs201EditingMapSketch(false)
-                                  }}
-                                >
-                                  <X className="h-3.5 w-3.5" />
-                                  Cancel
-                                </Button>
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  className="h-7 gap-1 bg-blue-600 text-xs text-white hover:bg-blue-700"
-                                  onClick={() => {
-                                    if (isDrawingIcs201Polygon) {
-                                      setIsDrawingIcs201Polygon(false)
-                                    }
-                                    saveIcs201Section({
-                                      ...ics201Form,
-                                      mapSketchPolygon: ics201MapSketchDraft.map((vertex) => ({
-                                        ...vertex,
-                                      })),
-                                    })
-                                    setIcs201EditingMapSketch(false)
-                                  }}
-                                >
-                                  <Check className="h-3.5 w-3.5" />
-                                  Save
-                                </Button>
-                              </div>
-                            </>
-                          ) : (
-                            <IcsEditableSectionContent
-                              enabled={canEditIcs201Form && !ics201EditingMapSketch}
-                              ariaLabel={`Edit ${ICS201_SECTION_LABELS['map-sketch']} section`}
-                              onStartEdit={() => beginIcs201SectionEdit('map-sketch')}
-                              className="space-y-1.5"
-                            >
-                            <div className="space-y-1.5">
-                              <Ics201FieldFocusIndicators cursors={ics201MapSketchCursor.remoteCursors} />
-                              <span className="text-[11px] text-muted-foreground">
-                                {ics201Form.mapSketchPolygon.length}{' '}
-                                {ics201Form.mapSketchPolygon.length === 1 ? 'vertex' : 'vertices'}
-                              </span>
-                              {ics201Form.mapSketchPolygon.length === 0 ? (
-                                <div className="rounded-md border border-dashed border-border/60 bg-muted/20 px-2.5 py-3 text-center text-[11px] text-muted-foreground">
-                                  No polygon defined.
-                                </div>
-                              ) : (
-                                ics201Form.mapSketchPolygon.map((vertex, index) => (
-                                  <div
-                                    key={index}
-                                    className="grid grid-cols-[1.5rem_1fr_1fr] items-center gap-2"
-                                  >
-                                    <span className="text-[10px] font-medium text-muted-foreground">
-                                      {index + 1}
-                                    </span>
-                                    <Ics201RemoteFieldCaretsView
-                                      fieldKey={`mapSketch:${index}.lat`}
-                                      value={String(vertex.latitude)}
-                                      cursors={ics201MapSketchCursor.remoteCursors}
-                                    />
-                                    <Ics201RemoteFieldCaretsView
-                                      fieldKey={`mapSketch:${index}.lng`}
-                                      value={String(vertex.longitude)}
-                                      cursors={ics201MapSketchCursor.remoteCursors}
-                                    />
-                                  </div>
-                                ))
-                              )}
-                            </div>
-                            </IcsEditableSectionContent>
-                          )}
-                        </ItemContent>
-                      </div>
-                    </Item>
-                    <Item
-                      variant="outline"
-                      className={cn('flex-col items-stretch p-0', glassItemBorderClasses)}
-                      data-ics201-tutorial="ics201-current-situation"
-                    >
-                      <div className="px-3 py-2.5">
-                        <ItemContent className="space-y-2">
-                          <div className="flex items-center justify-between gap-2">
-                            <div className="flex items-center gap-1.5">
-                              <ItemTitle>Current Situation</ItemTitle>
-                              <Ics201SectionEditorBadges
-                                editors={ics201SectionEditors['current-situation'] ?? []}
-                              />
-                            </div>
-                            {canEditIcs201Form && !ics201EditingCurrentSituation && (
-                              <Button
-                                type="button"
-                                size="icon"
-                                variant="ghost"
-                                className="h-7 w-7 text-muted-foreground"
-                                aria-label="Edit current situation"
-                                onClick={() => beginIcs201SectionEdit('current-situation')}
-                              >
-                                <Pencil className="h-3.5 w-3.5" />
-                              </Button>
-                            )}
-                          </div>
-                          {ics201EditingCurrentSituation ? (
-                            <>
-                              <div className="relative">
-                                <Textarea
-                                  autoFocus
-                                  value={ics201CurrentSituationEditor.value}
-                                  onChange={(event) => {
-                                    ics201CurrentSituationEditor.setValue(event.target.value)
-                                  }}
-                                  onSelect={(event) => {
-                                    ics201CurrentSituationEditor.reportSelection(event.currentTarget)
-                                  }}
-                                  onKeyUp={(event) => {
-                                    ics201CurrentSituationEditor.reportSelection(event.currentTarget)
-                                  }}
-                                  onInput={(event) => {
-                                    ics201CurrentSituationEditor.reportSelection(event.currentTarget)
-                                  }}
-                                  onClick={(event) => {
-                                    ics201CurrentSituationEditor.reportSelection(event.currentTarget)
-                                  }}
-                                  onBlur={() => {
-                                    ics201CurrentSituationCursor.clearCursor()
-                                  }}
-                                  maxLength={
-                                    ics201EnforcesCharLimit ? ICS201_STRICT_CHAR_LIMIT : undefined
-                                  }
-                                  className="min-h-24 text-xs"
-                                  placeholder="Current situation summary"
-                                />
-                                <Ics201RemoteTextCursors
-                                  value={ics201CurrentSituationEditor.value}
-                                  cursors={ics201CurrentSituationCursor.remoteCursors}
-                                  className="min-h-24 text-xs"
-                                />
-                              </div>
-                              <div
-                                className={cn(
-                                  'flex justify-end text-[10px]',
-                                  ics201EnforcesCharLimit &&
-                                    ics201CurrentSituationEditor.value.length >= ICS201_STRICT_CHAR_LIMIT
-                                    ? 'text-amber-600 dark:text-amber-400'
-                                    : 'text-muted-foreground'
-                                )}
-                              >
-                                {ics201CurrentSituationEditor.value.length.toLocaleString()}
-                                {ics201EnforcesCharLimit
-                                  ? ` / ${ICS201_STRICT_CHAR_LIMIT.toLocaleString()} characters`
-                                  : ics201StructureMode === 'paginated'
-                                    ? ' characters (Paginated Structure)'
-                                    : ' characters (Flexible Structure)'}
-                              </div>
-                            </>
-                          ) : (
-                            <IcsEditableSectionContent
-                              enabled={canEditIcs201Form && !ics201EditingCurrentSituation}
-                              ariaLabel={`Edit ${ICS201_SECTION_LABELS['current-situation']} section`}
-                              onStartEdit={() => beginIcs201SectionEdit('current-situation')}
-                            >
-                            <div className="relative min-h-24 whitespace-pre-wrap rounded-md border border-dashed border-border/60 bg-muted/20 px-2.5 py-2 text-xs">
-                              {ics201CurrentSituationEditor.isLiveConnected
-                                ? ics201CurrentSituationEditor.value || (
-                                    <span className="text-muted-foreground">—</span>
-                                  )
-                                : ics201Form.currentSituationSummary || (
-                                    <span className="text-muted-foreground">—</span>
-                                  )}
-                              <Ics201RemoteTextCursors
-                                value={
-                                  ics201CurrentSituationEditor.isLiveConnected
-                                    ? ics201CurrentSituationEditor.value
-                                    : ics201Form.currentSituationSummary
-                                }
-                                cursors={ics201CurrentSituationCursor.remoteCursors}
-                                className="text-xs"
-                              />
-                            </div>
-                            </IcsEditableSectionContent>
-                          )}
-                          {ics201EditingCurrentSituation && (
-                            <div className="flex items-center justify-end gap-1.5">
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="outline"
-                                className="h-7 gap-1 text-xs"
-                                onClick={() => openIcs201SectionGeneration('current-situation')}
-                              >
-                                <Sparkles className="h-3.5 w-3.5" />
-                                Generate Section Content
-                              </Button>
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="ghost"
-                                className="h-7 gap-1 text-xs"
-                                onClick={() => setIcs201EditingCurrentSituation(false)}
-                              >
-                                <X className="h-3.5 w-3.5" />
-                                Cancel
-                              </Button>
-                              <Button
-                                type="button"
-                                size="sm"
-                                className="h-7 gap-1 bg-blue-600 text-xs text-white hover:bg-blue-700"
+                                aria-label="Zoom to polygon on map"
+                                className="h-6 w-6 text-foreground hover:text-foreground"
                                 disabled={
-                                  ics201EnforcesCharLimit &&
-                                  ics201CurrentSituationEditor.value.length > ICS201_STRICT_CHAR_LIMIT
+                                  (ics201EditingMapSketch
+                                    ? ics201MapSketchDraft
+                                    : ics201Form.mapSketchPolygon
+                                  ).length < 3
                                 }
                                 onClick={() => {
-                                  void ics201CurrentSituationEditor.persistNow()
-                                  saveIcs201Section(
-                                    {
-                                      ...ics201Form,
-                                      currentSituationSummary: ics201CurrentSituationEditor.value,
+                                  const view = mapViewRef.current
+                                  const vertices = ics201EditingMapSketch
+                                    ? ics201MapSketchDraft
+                                    : ics201Form.mapSketchPolygon
+                                  if (!view || vertices.length < 3) {
+                                    return
+                                  }
+                                  const ring = vertices.map((vertex) => [
+                                    vertex.longitude,
+                                    vertex.latitude,
+                                  ])
+                                  const first = ring[0]
+                                  const last = ring[ring.length - 1]
+                                  if (first[0] !== last[0] || first[1] !== last[1]) {
+                                    ring.push([first[0], first[1]])
+                                  }
+                                  const target = new Graphic({
+                                    geometry: {
+                                      type: 'polygon',
+                                      rings: [ring],
                                     },
-                                    'current-situation'
-                                  )
-                                  setIcs201EditingCurrentSituation(false)
+                                  } as ConstructorParameters<typeof Graphic>[0])
+                                  const leftPanelWidth =
+                                    leftPanelRef.current?.getBoundingClientRect().width ?? 0
+                                  const previousPadding = view.padding
+                                  view.padding = {
+                                    ...previousPadding,
+                                    left: Math.max(leftPanelWidth, previousPadding?.left ?? 0),
+                                  }
+                                  void view.goTo(target, { duration: 600 }).catch(() => {})
                                 }}
                               >
-                                <Check className="h-3.5 w-3.5" />
-                                Save
+                                <MapIcon className="h-3.5 w-3.5" />
                               </Button>
-                            </div>
-                          )}
-                        </ItemContent>
-                      </div>
-                    </Item>
-                    <Item variant="outline" className={cn('flex-col items-stretch p-0', glassItemBorderClasses)}>
-                      <div className="px-3 py-2.5">
-                        <ItemContent className="space-y-3">
-                          <div className="flex items-center justify-between gap-2">
-                            <div className="flex items-center gap-1.5">
-                              <ItemTitle>Objectives</ItemTitle>
-                              <Ics201SectionEditorBadges editors={ics201SectionEditors.objectives ?? []} />
-                            </div>
-                            {canEditIcs201Form &&
-                              (!ics201EditingObjectives ? (
-                              <Button
-                                type="button"
-                                size="icon"
-                                variant="ghost"
-                                className="h-7 w-7 text-muted-foreground"
-                                aria-label="Edit objectives"
-                                onClick={() => beginIcs201SectionEdit('objectives')}
-                              >
-                                <Pencil className="h-3.5 w-3.5" />
-                              </Button>
-                            ) : (
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="outline"
-                                onClick={() => ics201ObjectivesEditor.addObjective()}
-                              >
-                                + Add Objective
-                              </Button>
-                            ))}
-                          </div>
-                          {ics201EditingObjectives ? (
-                            (() => {
-                              const totalObjectivesLength = ics201ObjectivesEditor.objectives.reduce(
-                                (sum, entry) => sum + entry.objective.length,
-                                0
-                              )
-                              const objectivesOverLimit =
-                                ics201EnforcesCharLimit &&
-                                totalObjectivesLength > ICS201_STRICT_CHAR_LIMIT
-                              return (
-                                <>
-                                  <div className="grid grid-cols-[minmax(9rem,1fr)_minmax(0,2fr)_auto] gap-2 text-[11px] font-semibold text-muted-foreground">
-                                    <div className="flex items-center gap-1">
-                                      <span>Type</span>
-                                      <TooltipProvider delayDuration={150}>
-                                        <Tooltip>
-                                          <TooltipTrigger asChild>
-                                            <button
-                                              type="button"
-                                              className="inline-flex shrink-0 rounded-sm text-muted-foreground hover:text-foreground"
-                                              aria-label="Objective type help"
-                                            >
-                                              <Info className="h-3.5 w-3.5" />
-                                            </button>
-                                          </TooltipTrigger>
-                                          <TooltipContent side="top" className="max-w-xs text-xs">
-                                            {ICS201_OBJECTIVE_KIND_TOOLTIP}
-                                          </TooltipContent>
-                                        </Tooltip>
-                                      </TooltipProvider>
-                                    </div>
-                                    <span>Objective</span>
-                                    <span />
-                                  </div>
-                                  <Ics201FieldFocusIndicators cursors={ics201ObjectivesCursor.remoteCursors} />
-                                  {ics201ObjectivesEditor.objectives.map((row) => (
-                                    <div
-                                      key={`ics-objective-draft-${row.id}`}
-                                      className="grid grid-cols-[minmax(9rem,1fr)_minmax(0,2fr)_auto] items-start gap-2"
-                                    >
-                                      <select
-                                        value={row.kind}
-                                        onChange={(event) => {
-                                          ics201ObjectivesEditor.updateObjectiveRow(row.id, {
-                                            kind: event.target.value as Ics201ObjectiveRow['kind'],
-                                          })
-                                        }}
-                                        className="h-8 rounded-md border bg-transparent px-2 text-xs outline-none"
-                                      >
-                                        <option value="">—</option>
-                                        {ICS201_OBJECTIVE_KIND_OPTIONS.map((option) => (
-                                          <option key={option.value} value={option.value}>
-                                            {option.label}
-                                          </option>
-                                        ))}
-                                      </select>
-                                      <Ics201RemoteFieldCarets
-                                        fieldKey={`objective:${row.id}`}
-                                        value={row.objective}
-                                        cursors={ics201ObjectivesCursor.remoteCursors}
-                                        publish={ics201ObjectivesCursor.publishCursor}
-                                        clear={ics201ObjectivesCursor.clearCursor}
-                                        onChange={(event) => {
-                                          ics201ObjectivesEditor.updateObjectiveRow(row.id, {
-                                            objective: event.target.value,
-                                          })
-                                        }}
-                                        placeholder="Objective statement"
-                                      />
-                                      <Button
-                                        type="button"
-                                        variant="ghost"
-                                        size="icon"
-                                        aria-label="Delete objective"
-                                        className="h-8 w-8 text-destructive hover:text-destructive"
-                                        onClick={() => ics201ObjectivesEditor.deleteObjective(row.id)}
-                                      >
-                                        <Trash2 className="h-4 w-4" />
-                                      </Button>
-                                    </div>
-                                  ))}
-                                  <div
-                                    className={cn(
-                                      'flex justify-end text-[10px]',
-                                      objectivesOverLimit ||
-                                        (ics201EnforcesCharLimit &&
-                                          totalObjectivesLength >= ICS201_STRICT_CHAR_LIMIT)
-                                        ? 'text-amber-600 dark:text-amber-400'
-                                        : 'text-muted-foreground'
-                                    )}
-                                  >
-                                    {totalObjectivesLength.toLocaleString()}
-                                    {ics201EnforcesCharLimit
-                                      ? ` / ${ICS201_STRICT_CHAR_LIMIT.toLocaleString()} characters across objectives`
-                                      : ics201StructureMode === 'paginated'
-                                        ? ' characters across objectives (Paginated Structure)'
-                                        : ' characters across objectives (Flexible Structure)'}
-                                  </div>
-                                  <div className="flex items-center justify-end gap-1.5">
-                                    <Button
-                                      type="button"
-                                      size="sm"
-                                      variant="outline"
-                                      className="h-7 gap-1 text-xs"
-                                      onClick={() => openIcs201SectionGeneration('objectives')}
-                                    >
-                                      <Sparkles className="h-3.5 w-3.5" />
-                                      Generate Section Content
-                                    </Button>
-                                    <Button
-                                      type="button"
-                                      size="sm"
-                                      variant="ghost"
-                                      className="h-7 gap-1 text-xs"
-                                      onClick={() => setIcs201EditingObjectives(false)}
-                                    >
-                                      <X className="h-3.5 w-3.5" />
-                                      Cancel
-                                    </Button>
-                                    <Button
-                                      type="button"
-                                      size="sm"
-                                      className="h-7 gap-1 bg-blue-600 text-xs text-white hover:bg-blue-700"
-                                      disabled={objectivesOverLimit}
-                                      onClick={() => {
-                                        void ics201ObjectivesEditor.persistNow()
-                                        saveIcs201Section(
-                                          {
-                                            ...ics201Form,
-                                            objectives: [...ics201ObjectivesEditor.objectives],
-                                          },
-                                          'objectives'
-                                        )
-                                        setIcs201EditingObjectives(false)
-                                      }}
-                                    >
-                                      <Check className="h-3.5 w-3.5" />
-                                      Save
-                                    </Button>
-                                  </div>
-                                </>
-                              )
-                            })()
-                          ) : (
-                            <IcsEditableSectionContent
-                              enabled={canEditIcs201Form && !ics201EditingObjectives}
-                              ariaLabel={`Edit ${ICS201_SECTION_LABELS.objectives} section`}
-                              onStartEdit={() => beginIcs201SectionEdit('objectives')}
-                              className="space-y-3"
-                            >
-                          <Ics201FieldFocusIndicators cursors={ics201ObjectivesCursor.remoteCursors} />
-                          {(ics201ObjectivesEditor.isLiveConnected
-                            ? ics201ObjectivesEditor.objectives
-                            : ics201Form.objectives
-                          ).length === 0 ? (
-                            <div className="rounded-md border border-dashed border-border/60 bg-muted/20 px-2.5 py-2 text-xs text-muted-foreground">
-                              No objectives recorded.
-                            </div>
-                          ) : (
-                            (ics201ObjectivesEditor.isLiveConnected
-                              ? ics201ObjectivesEditor.objectives
-                              : ics201Form.objectives
-                            ).map((row, index) => (
-                              <div
-                                key={`ics-objective-${row.id}`}
-                                className="relative rounded-md border border-dashed border-border/60 bg-muted/20 px-2.5 py-2 text-xs"
-                              >
-                                <div className="flex items-start gap-2">
-                                  <span className="text-[10px] font-medium text-muted-foreground">
-                                    {index + 1}.
-                                  </span>
-                                  <div className="min-w-0 flex-1 space-y-1">
-                                    {row.kind ? (
-                                      <span className="inline-flex rounded-full bg-background px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
-                                        {formatIcs201ObjectiveKindLabel(row.kind)}
-                                      </span>
-                                    ) : null}
-                                    <p>{row.objective || <span className="text-muted-foreground">—</span>}</p>
-                                  </div>
-                                </div>
-                                <Ics201RemoteCaretsOverlay
-                                  value={row.objective}
-                                  cursors={ics201ObjectivesCursor.remoteCursors}
-                                  fieldKey={`objective:${row.id}`}
-                                  variant="singleline"
-                                  className="px-2.5 py-2 text-xs"
-                                />
-                              </div>
-                            ))
-                          )}
-                            </IcsEditableSectionContent>
-                          )}
-                        </ItemContent>
-                      </div>
-                    </Item>
-                    <Item variant="outline" className={cn('flex-col items-stretch p-0', glassItemBorderClasses)}>
-                      <div className="px-3 py-2.5">
-                        <ItemContent className="space-y-3">
-                          <div className="flex items-center justify-between gap-2">
-                            <div className="flex items-center gap-1.5">
-                              <ItemTitle>Actions</ItemTitle>
-                              <Ics201SectionEditorBadges editors={ics201SectionEditors.actions ?? []} />
-                            </div>
-                            {canEditIcs201Form &&
-                              (!ics201EditingActions ? (
-                              <Button
-                                type="button"
-                                size="icon"
-                                variant="ghost"
-                                className="h-7 w-7 text-muted-foreground"
-                                aria-label="Edit actions"
-                                onClick={() => beginIcs201SectionEdit('actions')}
-                              >
-                                <Pencil className="h-3.5 w-3.5" />
-                              </Button>
-                            ) : (
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="outline"
-                                onClick={() =>
-                                  setIcs201ActionsDraft((draft) => [
-                                    ...draft,
-                                    {
-                                      id:
-                                        draft.length === 0
-                                          ? 1
-                                          : Math.max(...draft.map((item) => item.id)) + 1,
-                                      task: '',
-                                      owner: '',
-                                      startTime: '',
-                                      endTime: '',
-                                      status: 'Planned',
-                                    },
-                                  ])
-                                }
-                              >
-                                + Add Action
-                              </Button>
-                            ))}
-                          </div>
-                          {ics201EditingActions ? (
-                            <>
-                              <Ics201FieldFocusIndicators cursors={ics201ActionsCursor.remoteCursors} />
-                              {ics201ActionsDraft.map((action) => (
-                                <div key={action.id} className="grid grid-cols-5 gap-2">
-                                  <Ics201RemoteFieldCarets
-                                    fieldKey={`actions:${action.id}.task`}
-                                    className="col-span-2"
-                                    value={action.task}
-                                    cursors={ics201ActionsCursor.remoteCursors}
-                                    publish={ics201ActionsCursor.publishCursor}
-                                    clear={ics201ActionsCursor.clearCursor}
-                                    placeholder="Action"
-                                    onChange={(event) =>
-                                      setIcs201ActionsDraft((draft) =>
-                                        draft.map((entry) =>
-                                          entry.id === action.id
-                                            ? { ...entry, task: event.target.value }
-                                            : entry
-                                        )
-                                      )
-                                    }
-                                  />
-                                  <Ics201RemoteFieldCarets
-                                    fieldKey={`actions:${action.id}.owner`}
-                                    value={action.owner}
-                                    cursors={ics201ActionsCursor.remoteCursors}
-                                    publish={ics201ActionsCursor.publishCursor}
-                                    clear={ics201ActionsCursor.clearCursor}
-                                    placeholder="Owner"
-                                    onChange={(event) =>
-                                      setIcs201ActionsDraft((draft) =>
-                                        draft.map((entry) =>
-                                          entry.id === action.id
-                                            ? { ...entry, owner: event.target.value }
-                                            : entry
-                                        )
-                                      )
-                                    }
-                                  />
-                                  <Ics201RemoteFieldCarets
-                                    fieldKey={`actions:${action.id}.startTime`}
-                                    value={action.startTime}
-                                    cursors={ics201ActionsCursor.remoteCursors}
-                                    publish={ics201ActionsCursor.publishCursor}
-                                    clear={ics201ActionsCursor.clearCursor}
-                                    placeholder="Start"
-                                    onChange={(event) =>
-                                      setIcs201ActionsDraft((draft) =>
-                                        draft.map((entry) =>
-                                          entry.id === action.id
-                                            ? { ...entry, startTime: event.target.value }
-                                            : entry
-                                        )
-                                      )
-                                    }
-                                  />
-                                  <Ics201RemoteFieldCarets
-                                    fieldKey={`actions:${action.id}.endTime`}
-                                    value={action.endTime}
-                                    cursors={ics201ActionsCursor.remoteCursors}
-                                    publish={ics201ActionsCursor.publishCursor}
-                                    clear={ics201ActionsCursor.clearCursor}
-                                    placeholder="End"
-                                    onChange={(event) =>
-                                      setIcs201ActionsDraft((draft) =>
-                                        draft.map((entry) =>
-                                          entry.id === action.id
-                                            ? { ...entry, endTime: event.target.value }
-                                            : entry
-                                        )
-                                      )
-                                    }
-                                  />
-                                </div>
-                              ))}
-                              <div className="flex items-center justify-end gap-1.5">
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant="outline"
-                                  className="h-7 gap-1 text-xs"
-                                  onClick={() => openIcs201SectionGeneration('actions')}
-                                >
-                                  <Sparkles className="h-3.5 w-3.5" />
-                                  Generate Section Content
-                                </Button>
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant="ghost"
-                                  className="h-7 gap-1 text-xs"
-                                  onClick={() => setIcs201EditingActions(false)}
-                                >
-                                  <X className="h-3.5 w-3.5" />
-                                  Cancel
-                                </Button>
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  className="h-7 gap-1 bg-blue-600 text-xs text-white hover:bg-blue-700"
-                                  onClick={() => {
-                                    saveIcs201Section({
-                                      ...ics201Form,
-                                      actions: ics201ActionsDraft.map((action) => ({ ...action })),
-                                    })
-                                    setIcs201EditingActions(false)
-                                  }}
-                                >
-                                  <Check className="h-3.5 w-3.5" />
-                                  Save
-                                </Button>
-                              </div>
-                            </>
-                          ) : (
-                            <IcsEditableSectionContent
-                              enabled={canEditIcs201Form && !ics201EditingActions}
-                              ariaLabel={`Edit ${ICS201_SECTION_LABELS.actions} section`}
-                              onStartEdit={() => beginIcs201SectionEdit('actions')}
-                              className="space-y-3"
-                            >
-                          <Ics201FieldFocusIndicators cursors={ics201ActionsCursor.remoteCursors} />
-                          {ics201Form.actions.length === 0 ? (
-                            <div className="rounded-md border border-dashed border-border/60 bg-muted/20 px-2.5 py-2 text-xs text-muted-foreground">
-                              No actions recorded.
-                            </div>
-                          ) : (
-                            ics201Form.actions.map((action) => (
-                              <div key={action.id} className="grid grid-cols-5 gap-2">
-                                <Ics201RemoteFieldCaretsView
-                                  fieldKey={`actions:${action.id}.task`}
-                                  className="col-span-2"
-                                  value={action.task}
-                                  cursors={ics201ActionsCursor.remoteCursors}
-                                />
-                                <Ics201RemoteFieldCaretsView
-                                  fieldKey={`actions:${action.id}.owner`}
-                                  value={action.owner}
-                                  cursors={ics201ActionsCursor.remoteCursors}
-                                />
-                                <Ics201RemoteFieldCaretsView
-                                  fieldKey={`actions:${action.id}.startTime`}
-                                  value={action.startTime}
-                                  cursors={ics201ActionsCursor.remoteCursors}
-                                />
-                                <Ics201RemoteFieldCaretsView
-                                  fieldKey={`actions:${action.id}.endTime`}
-                                  value={action.endTime}
-                                  cursors={ics201ActionsCursor.remoteCursors}
-                                />
-                              </div>
-                            ))
-                          )}
-                            </IcsEditableSectionContent>
-                          )}
-                        </ItemContent>
-                      </div>
-                    </Item>
-                    <Item variant="outline" className={cn('flex-col items-stretch p-0', glassItemBorderClasses)}>
-                      <div className="px-3 py-2.5">
-                        <ItemContent className="space-y-2">
-                          <div className="flex items-center justify-between gap-2">
-                            <div className="flex items-center gap-1.5">
-                              <ItemTitle>Organization Chart</ItemTitle>
-                              <Ics201SectionEditorBadges editors={ics201SectionEditors['org-chart'] ?? []} />
-                            </div>
-                            {canEditIcs201Form && !ics201EditingOrgChart && (
-                              <Button
-                                type="button"
-                                size="icon"
-                                variant="ghost"
-                                className="h-7 w-7 text-muted-foreground"
-                                aria-label="Edit organization chart"
-                                onClick={() => beginIcs201SectionEdit('org-chart')}
-                              >
-                                <Pencil className="h-3.5 w-3.5" />
-                              </Button>
-                            )}
-                          </div>
-                          {ics201EditingOrgChart ? (
-                            <>
-                              <Ics201FieldFocusIndicators cursors={ics201OrgChartCursor.remoteCursors} />
-                              <div className="grid grid-cols-2 gap-2">
-                                {(
-                                  [
-                                    ['incidentCommander', 'Incident Commander'],
-                                    ['operationsSectionChief', 'Operations Section Chief'],
-                                    ['planningSectionChief', 'Planning Section Chief'],
-                                    ['logisticsSectionChief', 'Logistics Section Chief'],
-                                    ['financeSectionChief', 'Finance Section Chief'],
-                                    ['publicInformationOfficer', 'Public Information Officer'],
-                                    ['safetyOfficer', 'Safety Officer'],
-                                    ['liaisonOfficer', 'Liaison Officer'],
-                                  ] as const
-                                ).map(([field, placeholder]) => (
-                                  <Ics201RemoteFieldCarets
-                                    key={field}
-                                    fieldKey={`orgChart.${field}`}
-                                    value={ics201OrgChartDraft[field]}
-                                    cursors={ics201OrgChartCursor.remoteCursors}
-                                    publish={ics201OrgChartCursor.publishCursor}
-                                    clear={ics201OrgChartCursor.clearCursor}
-                                    placeholder={placeholder}
-                                    onChange={(event) =>
-                                      setIcs201OrgChartDraft((draft) => ({
-                                        ...draft,
-                                        [field]: event.target.value,
-                                      }))
-                                    }
-                                  />
-                                ))}
-                              </div>
-                              <div className="flex items-center justify-end gap-1.5">
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant="outline"
-                                  className="h-7 gap-1 text-xs"
-                                  onClick={() => openIcs201SectionGeneration('org-chart')}
-                                >
-                                  <Sparkles className="h-3.5 w-3.5" />
-                                  Generate Section Content
-                                </Button>
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant="ghost"
-                                  className="h-7 gap-1 text-xs"
-                                  onClick={() => setIcs201EditingOrgChart(false)}
-                                >
-                                  <X className="h-3.5 w-3.5" />
-                                  Cancel
-                                </Button>
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  className="h-7 gap-1 bg-blue-600 text-xs text-white hover:bg-blue-700"
-                                  onClick={() => {
-                                    saveIcs201Section({
-                                      ...ics201Form,
-                                      orgChart: { ...ics201OrgChartDraft },
-                                    })
-                                    setIcs201EditingOrgChart(false)
-                                  }}
-                                >
-                                  <Check className="h-3.5 w-3.5" />
-                                  Save
-                                </Button>
-                              </div>
-                            </>
-                          ) : (
-                            <IcsEditableSectionContent
-                              enabled={canEditIcs201Form && !ics201EditingOrgChart}
-                              ariaLabel={`Edit ${ICS201_SECTION_LABELS['org-chart']} section`}
-                              onStartEdit={() => beginIcs201SectionEdit('org-chart')}
-                            >
-                            <Ics201FieldFocusIndicators cursors={ics201OrgChartCursor.remoteCursors} />
-                            <div className="grid grid-cols-2 gap-2">
-                              {(
-                                [
-                                  ['incidentCommander', 'Incident Commander'],
-                                  ['operationsSectionChief', 'Operations Section Chief'],
-                                  ['planningSectionChief', 'Planning Section Chief'],
-                                  ['logisticsSectionChief', 'Logistics Section Chief'],
-                                  ['financeSectionChief', 'Finance Section Chief'],
-                                  ['publicInformationOfficer', 'Public Information Officer'],
-                                  ['safetyOfficer', 'Safety Officer'],
-                                  ['liaisonOfficer', 'Liaison Officer'],
-                                ] as const
-                              ).map(([field, label]) => (
-                                <div key={field} className="space-y-1">
-                                  <Label className="text-[11px] font-medium text-muted-foreground">
-                                    {label}
-                                  </Label>
-                                  <Ics201RemoteFieldCaretsView
-                                    fieldKey={`orgChart.${field}`}
-                                    value={ics201Form.orgChart[field]}
-                                    cursors={ics201OrgChartCursor.remoteCursors}
-                                  />
-                                </div>
-                              ))}
-                            </div>
-                            </IcsEditableSectionContent>
-                          )}
-                        </ItemContent>
-                      </div>
-                    </Item>
-                    <Item variant="outline" className={cn('flex-col items-stretch p-0', glassItemBorderClasses)}>
-                      <div className="px-3 py-2.5">
-                        <ItemContent className="space-y-3">
-                          <div className="flex items-center justify-between gap-2">
-                            <div className="flex items-center gap-1.5">
-                              <ItemTitle>Resources Summary</ItemTitle>
-                              <Ics201SectionEditorBadges editors={ics201SectionEditors.resources ?? []} />
-                            </div>
-                            {canEditIcs201Form &&
-                              (!ics201EditingResources ? (
-                              <Button
-                                type="button"
-                                size="icon"
-                                variant="ghost"
-                                className="h-7 w-7 text-muted-foreground"
-                                aria-label="Edit resources summary"
-                                onClick={() => beginIcs201SectionEdit('resources')}
-                              >
-                                <Pencil className="h-3.5 w-3.5" />
-                              </Button>
-                            ) : (
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="outline"
-                                onClick={() =>
-                                  setIcs201ResourcesDraft((draft) => [
-                                    ...draft,
-                                    {
-                                      id:
-                                        draft.length === 0
-                                          ? 1
-                                          : Math.max(...draft.map((item) => item.id)) + 1,
-                                      category: '',
-                                      identifier: '',
-                                      quantity: '',
-                                      status: '',
-                                      assignment: '',
-                                    },
-                                  ])
-                                }
-                              >
-                                + Add Resource
-                              </Button>
-                            ))}
-                          </div>
-                          {ics201EditingResources ? (
-                            <>
-                              <Ics201FieldFocusIndicators cursors={ics201ResourcesCursor.remoteCursors} />
-                              {ics201ResourcesDraft.map((resource) => (
-                                <div key={resource.id} className="grid grid-cols-5 gap-2">
-                                  {(
-                                    [
-                                      ['category', 'Category'],
-                                      ['identifier', 'Identifier'],
-                                      ['quantity', 'Qty'],
-                                      ['status', 'Status'],
-                                      ['assignment', 'Assignment'],
-                                    ] as const
-                                  ).map(([field, placeholder]) => (
-                                    <Ics201RemoteFieldCarets
-                                      key={`${resource.id}-${field}`}
-                                      fieldKey={`resources:${resource.id}.${field}`}
-                                      value={resource[field]}
-                                      cursors={ics201ResourcesCursor.remoteCursors}
-                                      publish={ics201ResourcesCursor.publishCursor}
-                                      clear={ics201ResourcesCursor.clearCursor}
-                                      placeholder={placeholder}
-                                      onChange={(event) =>
-                                        setIcs201ResourcesDraft((draft) =>
-                                          draft.map((entry) =>
-                                            entry.id === resource.id
-                                              ? { ...entry, [field]: event.target.value }
-                                              : entry
-                                          )
-                                        )
-                                      }
-                                    />
-                                  ))}
-                                </div>
-                              ))}
-                              <div className="flex items-center justify-end gap-1.5">
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant="outline"
-                                  className="h-7 gap-1 text-xs"
-                                  onClick={() => openIcs201SectionGeneration('resources')}
-                                >
-                                  <Sparkles className="h-3.5 w-3.5" />
-                                  Generate Section Content
-                                </Button>
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant="ghost"
-                                  className="h-7 gap-1 text-xs"
-                                  onClick={() => setIcs201EditingResources(false)}
-                                >
-                                  <X className="h-3.5 w-3.5" />
-                                  Cancel
-                                </Button>
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  className="h-7 gap-1 bg-blue-600 text-xs text-white hover:bg-blue-700"
-                                  onClick={() => {
-                                    saveIcs201Section({
-                                      ...ics201Form,
-                                      resources: ics201ResourcesDraft.map((resource) => ({
-                                        ...resource,
-                                      })),
-                                    })
-                                    setIcs201EditingResources(false)
-                                  }}
-                                >
-                                  <Check className="h-3.5 w-3.5" />
-                                  Save
-                                </Button>
-                              </div>
-                            </>
-                          ) : (
-                            <IcsEditableSectionContent
-                              enabled={canEditIcs201Form && !ics201EditingResources}
-                              ariaLabel={`Edit ${ICS201_SECTION_LABELS.resources} section`}
-                              onStartEdit={() => beginIcs201SectionEdit('resources')}
-                              className="space-y-3"
-                            >
-                          <Ics201FieldFocusIndicators cursors={ics201ResourcesCursor.remoteCursors} />
-                          {ics201Form.resources.length === 0 ? (
-                            <div className="rounded-md border border-dashed border-border/60 bg-muted/20 px-2.5 py-2 text-xs text-muted-foreground">
-                              No resources recorded.
-                            </div>
-                          ) : (
-                            ics201Form.resources.map((resource) => (
-                              <div key={resource.id} className="grid grid-cols-5 gap-2">
-                                {(
-                                  [
-                                    ['category', resource.category],
-                                    ['identifier', resource.identifier],
-                                    ['quantity', resource.quantity],
-                                    ['status', resource.status],
-                                    ['assignment', resource.assignment],
-                                  ] as const
-                                ).map(([field, value]) => (
-                                  <Ics201RemoteFieldCaretsView
-                                    key={`${resource.id}-${field}`}
-                                    fieldKey={`resources:${resource.id}.${field}`}
-                                    value={value}
-                                    cursors={ics201ResourcesCursor.remoteCursors}
-                                  />
-                                ))}
-                              </div>
-                            ))
-                          )}
-                            </IcsEditableSectionContent>
-                          )}
-                        </ItemContent>
-                      </div>
-                    </Item>
-                    <Item variant="outline" className={cn('flex-col items-stretch p-0', glassItemBorderClasses)}>
-                      <div className="px-3 py-2.5">
-                        <ItemContent className="space-y-3">
-                          <div className="flex items-center justify-between gap-2">
-                            <div className="flex items-center gap-1.5">
-                              <ItemTitle>Safety Analysis</ItemTitle>
-                              <Ics201SectionEditorBadges
-                                editors={ics201SectionEditors['safety-analysis'] ?? []}
-                              />
-                            </div>
-                            {canEditIcs201Form &&
-                              (!ics201EditingSafetyAnalysis ? (
-                              <Button
-                                type="button"
-                                size="icon"
-                                variant="ghost"
-                                className="h-7 w-7 text-muted-foreground"
-                                aria-label="Edit safety analysis"
-                                onClick={() => beginIcs201SectionEdit('safety-analysis')}
-                              >
-                                <Pencil className="h-3.5 w-3.5" />
-                              </Button>
-                            ) : (
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="outline"
-                                onClick={() =>
-                                  setIcs201SafetyAnalysisDraft((draft) => [
-                                    ...draft,
-                                    {
-                                      id:
-                                        draft.length === 0
-                                          ? 1
-                                          : Math.max(...draft.map((item) => item.id)) + 1,
-                                      hazard: '',
-                                      mitigation: '',
-                                      ppe: '',
-                                      medicalPlan: '',
-                                    },
-                                  ])
-                                }
-                              >
-                                + Add Safety Item
-                              </Button>
-                            ))}
-                          </div>
-                          {ics201EditingSafetyAnalysis ? (
-                            <>
-                              <Ics201FieldFocusIndicators cursors={ics201SafetyAnalysisCursor.remoteCursors} />
-                              {ics201SafetyAnalysisDraft.map((safetyRow) => (
-                                <div key={safetyRow.id} className="grid grid-cols-2 gap-2">
-                                  <Ics201RemoteTextareaCarets
-                                    fieldKey={`safetyAnalysis:${safetyRow.id}.hazard`}
-                                    value={safetyRow.hazard}
-                                    cursors={ics201SafetyAnalysisCursor.remoteCursors}
-                                    publish={ics201SafetyAnalysisCursor.publishCursor}
-                                    clear={ics201SafetyAnalysisCursor.clearCursor}
-                                    placeholder="Hazard"
-                                    onChange={(event) =>
-                                      setIcs201SafetyAnalysisDraft((draft) =>
-                                        draft.map((entry) =>
-                                          entry.id === safetyRow.id
-                                            ? { ...entry, hazard: event.target.value }
-                                            : entry
-                                        )
-                                      )
-                                    }
-                                  />
-                                  <Ics201RemoteTextareaCarets
-                                    fieldKey={`safetyAnalysis:${safetyRow.id}.mitigation`}
-                                    value={safetyRow.mitigation}
-                                    cursors={ics201SafetyAnalysisCursor.remoteCursors}
-                                    publish={ics201SafetyAnalysisCursor.publishCursor}
-                                    clear={ics201SafetyAnalysisCursor.clearCursor}
-                                    placeholder="Mitigation"
-                                    onChange={(event) =>
-                                      setIcs201SafetyAnalysisDraft((draft) =>
-                                        draft.map((entry) =>
-                                          entry.id === safetyRow.id
-                                            ? { ...entry, mitigation: event.target.value }
-                                            : entry
-                                        )
-                                      )
-                                    }
-                                  />
-                                  <Ics201RemoteFieldCarets
-                                    fieldKey={`safetyAnalysis:${safetyRow.id}.ppe`}
-                                    value={safetyRow.ppe}
-                                    cursors={ics201SafetyAnalysisCursor.remoteCursors}
-                                    publish={ics201SafetyAnalysisCursor.publishCursor}
-                                    clear={ics201SafetyAnalysisCursor.clearCursor}
-                                    placeholder="PPE"
-                                    onChange={(event) =>
-                                      setIcs201SafetyAnalysisDraft((draft) =>
-                                        draft.map((entry) =>
-                                          entry.id === safetyRow.id
-                                            ? { ...entry, ppe: event.target.value }
-                                            : entry
-                                        )
-                                      )
-                                    }
-                                  />
-                                  <Ics201RemoteFieldCarets
-                                    fieldKey={`safetyAnalysis:${safetyRow.id}.medicalPlan`}
-                                    value={safetyRow.medicalPlan}
-                                    cursors={ics201SafetyAnalysisCursor.remoteCursors}
-                                    publish={ics201SafetyAnalysisCursor.publishCursor}
-                                    clear={ics201SafetyAnalysisCursor.clearCursor}
-                                    placeholder="Medical Plan"
-                                    onChange={(event) =>
-                                      setIcs201SafetyAnalysisDraft((draft) =>
-                                        draft.map((entry) =>
-                                          entry.id === safetyRow.id
-                                            ? { ...entry, medicalPlan: event.target.value }
-                                            : entry
-                                        )
-                                      )
-                                    }
-                                  />
-                                </div>
-                              ))}
-                              <div className="flex items-center justify-end gap-1.5">
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant="outline"
-                                  className="h-7 gap-1 text-xs"
-                                  onClick={() => openIcs201SectionGeneration('safety-analysis')}
-                                >
-                                  <Sparkles className="h-3.5 w-3.5" />
-                                  Generate Section Content
-                                </Button>
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant="ghost"
-                                  className="h-7 gap-1 text-xs"
-                                  onClick={() => setIcs201EditingSafetyAnalysis(false)}
-                                >
-                                  <X className="h-3.5 w-3.5" />
-                                  Cancel
-                                </Button>
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  className="h-7 gap-1 bg-blue-600 text-xs text-white hover:bg-blue-700"
-                                  onClick={() => {
-                                    saveIcs201Section({
-                                      ...ics201Form,
-                                      safetyAnalysis: ics201SafetyAnalysisDraft.map((row) => ({
-                                        ...row,
-                                      })),
-                                    })
-                                    setIcs201EditingSafetyAnalysis(false)
-                                  }}
-                                >
-                                  <Check className="h-3.5 w-3.5" />
-                                  Save
-                                </Button>
-                              </div>
-                            </>
-                          ) : (
-                            <IcsEditableSectionContent
-                              enabled={canEditIcs201Form && !ics201EditingSafetyAnalysis}
-                              ariaLabel={`Edit ${ICS201_SECTION_LABELS['safety-analysis']} section`}
-                              onStartEdit={() => beginIcs201SectionEdit('safety-analysis')}
-                              className="space-y-3"
-                            >
-                          <Ics201FieldFocusIndicators cursors={ics201SafetyAnalysisCursor.remoteCursors} />
-                          {ics201Form.safetyAnalysis.length === 0 ? (
-                            <div className="rounded-md border border-dashed border-border/60 bg-muted/20 px-2.5 py-2 text-xs text-muted-foreground">
-                              No safety items recorded.
-                            </div>
-                          ) : (
-                            ics201Form.safetyAnalysis.map((safetyRow) => (
-                              <div key={safetyRow.id} className="grid grid-cols-2 gap-2">
-                                <Ics201RemoteTextareaCaretsView
-                                  fieldKey={`safetyAnalysis:${safetyRow.id}.hazard`}
-                                  value={safetyRow.hazard}
-                                  cursors={ics201SafetyAnalysisCursor.remoteCursors}
-                                />
-                                <Ics201RemoteTextareaCaretsView
-                                  fieldKey={`safetyAnalysis:${safetyRow.id}.mitigation`}
-                                  value={safetyRow.mitigation}
-                                  cursors={ics201SafetyAnalysisCursor.remoteCursors}
-                                />
-                                <Ics201RemoteFieldCaretsView
-                                  fieldKey={`safetyAnalysis:${safetyRow.id}.ppe`}
-                                  value={safetyRow.ppe}
-                                  cursors={ics201SafetyAnalysisCursor.remoteCursors}
-                                />
-                                <Ics201RemoteFieldCaretsView
-                                  fieldKey={`safetyAnalysis:${safetyRow.id}.medicalPlan`}
-                                  value={safetyRow.medicalPlan}
-                                  cursors={ics201SafetyAnalysisCursor.remoteCursors}
-                                />
-                              </div>
-                            ))
-                          )}
-                            </IcsEditableSectionContent>
-                          )}
-                        </ItemContent>
-                      </div>
-                    </Item>
+                            </TooltipTrigger>
+                            <TooltipContent side="top" className="text-xs">
+                              Zoom to polygon on map
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      }
+                    />
+                    <Ics201CurrentSituationSection
+                      className={glassItemBorderClasses}
+                      canEdit={canEditIcs201Form}
+                      isEditing={ics201EditingCurrentSituation}
+                      onBeginEdit={() => beginIcs201SectionEdit('current-situation')}
+                      onCancel={() => setIcs201EditingCurrentSituation(false)}
+                      onSave={() => {
+                        void ics201CurrentSituationEditor.persistNow()
+                        saveIcs201Section(
+                          {
+                            ...ics201Form,
+                            currentSituationSummary: ics201CurrentSituationEditor.value,
+                          },
+                          'current-situation'
+                        )
+                        setIcs201EditingCurrentSituation(false)
+                      }}
+                      onGenerate={() => openIcs201SectionGeneration('current-situation')}
+                      currentSituationSummary={ics201Form.currentSituationSummary}
+                      draftSummary={ics201CurrentSituationEditor.value}
+                      onDraftChange={(value) => ics201CurrentSituationEditor.setValue(value)}
+                      isLiveConnected={ics201CurrentSituationEditor.isLiveConnected}
+                      liveValue={ics201CurrentSituationEditor.value}
+                      editors={ics201SectionEditors['current-situation'] ?? []}
+                      remoteCursors={ics201CurrentSituationCursor.remoteCursors}
+                      onSelectionChange={(element) =>
+                        ics201CurrentSituationEditor.reportSelection(element)
+                      }
+                      onBlur={() => ics201CurrentSituationCursor.clearCursor()}
+                      enforcesCharLimit={ics201EnforcesCharLimit}
+                      charLimit={ICS201_STRICT_CHAR_LIMIT}
+                      structureModeLabel={
+                        ics201StructureMode === 'paginated'
+                          ? ' characters (Paginated Structure)'
+                          : ' characters (Flexible Structure)'
+                      }
+                      saveDisabled={
+                        ics201EnforcesCharLimit &&
+                        ics201CurrentSituationEditor.value.length > ICS201_STRICT_CHAR_LIMIT
+                      }
+                      tutorialDataAttribute="ics201-current-situation"
+                    />
+                    <Ics201ObjectivesSection
+                      className={glassItemBorderClasses}
+                      canEdit={canEditIcs201Form}
+                      isEditing={ics201EditingObjectives}
+                      onBeginEdit={() => beginIcs201SectionEdit('objectives')}
+                      onCancel={() => setIcs201EditingObjectives(false)}
+                      onSave={() => {
+                        void ics201ObjectivesEditor.persistNow()
+                        saveIcs201Section(
+                          {
+                            ...ics201Form,
+                            objectives: [...ics201ObjectivesEditor.objectives],
+                          },
+                          'objectives'
+                        )
+                        setIcs201EditingObjectives(false)
+                      }}
+                      onGenerate={() => openIcs201SectionGeneration('objectives')}
+                      objectives={ics201Form.objectives}
+                      draft={ics201ObjectivesEditor.objectives}
+                      onDraftChange={(draft) => ics201ObjectivesEditor.replaceObjectives(draft)}
+                      isLiveConnected={ics201ObjectivesEditor.isLiveConnected}
+                      liveObjectives={ics201ObjectivesEditor.objectives}
+                      editors={ics201SectionEditors.objectives ?? []}
+                      cursor={ics201ObjectivesCursor}
+                      enforcesCharLimit={ics201EnforcesCharLimit}
+                      charLimit={ICS201_STRICT_CHAR_LIMIT}
+                      structureModeLabel={
+                        ics201StructureMode === 'paginated'
+                          ? ' characters across objectives (Paginated Structure)'
+                          : ' characters across objectives (Flexible Structure)'
+                      }
+                      saveDisabled={
+                        ics201EnforcesCharLimit &&
+                        ics201ObjectivesEditor.objectives.reduce(
+                          (sum, entry) => sum + entry.objective.length,
+                          0
+                        ) > ICS201_STRICT_CHAR_LIMIT
+                      }
+                    />
+                    <Ics201ActionsSection
+                      className={glassItemBorderClasses}
+                      canEdit={canEditIcs201Form}
+                      isEditing={ics201EditingActions}
+                      onBeginEdit={() => beginIcs201SectionEdit('actions')}
+                      onCancel={() => setIcs201EditingActions(false)}
+                      onSave={() => {
+                        saveIcs201Section(
+                          {
+                            ...ics201Form,
+                            actions: ics201ActionsDraft.map((action) => ({ ...action })),
+                          },
+                          'actions'
+                        )
+                        setIcs201EditingActions(false)
+                      }}
+                      onGenerate={() => openIcs201SectionGeneration('actions')}
+                      actions={ics201Form.actions}
+                      draft={ics201ActionsDraft}
+                      onDraftChange={setIcs201ActionsDraft}
+                      editors={ics201SectionEditors.actions ?? []}
+                      cursor={ics201ActionsCursor}
+                    />
+                    <Ics201OrgChartSection
+                      className={glassItemBorderClasses}
+                      canEdit={canEditIcs201Form}
+                      isEditing={ics201EditingOrgChart}
+                      onBeginEdit={() => beginIcs201SectionEdit('org-chart')}
+                      onCancel={() => setIcs201EditingOrgChart(false)}
+                      onSave={() => {
+                        saveIcs201Section(
+                          {
+                            ...ics201Form,
+                            orgChart: {
+                              ...ics201OrgChartDraft,
+                              commandNames: [...ics201OrgChartDraft.commandNames],
+                            },
+                          },
+                          'org-chart'
+                        )
+                        setIcs201EditingOrgChart(false)
+                      }}
+                      onGenerate={() => openIcs201SectionGeneration('org-chart')}
+                      orgChart={ics201Form.orgChart}
+                      draft={ics201OrgChartDraft}
+                      onDraftChange={setIcs201OrgChartDraft}
+                      editors={ics201SectionEditors['org-chart'] ?? []}
+                      cursor={ics201OrgChartCursor}
+                    />
+                    <Ics201ResourcesSection
+                      className={glassItemBorderClasses}
+                      canEdit={canEditIcs201Form}
+                      isEditing={ics201EditingResources}
+                      onBeginEdit={() => beginIcs201SectionEdit('resources')}
+                      onCancel={() => setIcs201EditingResources(false)}
+                      onSave={() => {
+                        saveIcs201Section(
+                          {
+                            ...ics201Form,
+                            resources: ics201ResourcesDraft.map((resource) => ({ ...resource })),
+                          },
+                          'resources'
+                        )
+                        setIcs201EditingResources(false)
+                      }}
+                      onGenerate={() => openIcs201SectionGeneration('resources')}
+                      resources={ics201Form.resources}
+                      draft={ics201ResourcesDraft}
+                      onDraftChange={setIcs201ResourcesDraft}
+                      editors={ics201SectionEditors.resources ?? []}
+                      cursor={ics201ResourcesCursor}
+                    />
+                    <Ics201SafetyAnalysisSection
+                      className={glassItemBorderClasses}
+                      canEdit={canEditIcs201Form}
+                      isEditing={ics201EditingSafetyAnalysis}
+                      onBeginEdit={() => beginIcs201SectionEdit('safety-analysis')}
+                      onCancel={() => setIcs201EditingSafetyAnalysis(false)}
+                      onSave={() => {
+                        saveIcs201Section(
+                          {
+                            ...ics201Form,
+                            safetyAnalysisBox13: cloneIcs201SafetyAnalysisBox13Draft(
+                              ics201SafetyAnalysisDraft
+                            ),
+                          },
+                          'safety-analysis'
+                        )
+                        setIcs201EditingSafetyAnalysis(false)
+                      }}
+                      onGenerate={() => openIcs201SectionGeneration('safety-analysis')}
+                      safetyAnalysisBox13={ics201Form.safetyAnalysisBox13}
+                      draft={ics201SafetyAnalysisDraft}
+                      onDraftChange={setIcs201SafetyAnalysisDraft}
+                      editors={ics201SectionEditors['safety-analysis'] ?? []}
+                      cursor={ics201SafetyAnalysisCursor}
+                    />
+                    {ics201Form.safetyAnalysisBox13.involvesHazmat === true && (
+                      <Ics201HazmatAssessmentSection
+                        className={glassItemBorderClasses}
+                        canEdit={canEditIcs201Form}
+                        isEditing={ics201EditingHazmatAssessment}
+                        onBeginEdit={() => beginIcs201SectionEdit('hazmat-assessment')}
+                        onCancel={() => setIcs201EditingHazmatAssessment(false)}
+                        onSave={() => {
+                          saveIcs201Section(
+                            {
+                              ...ics201Form,
+                              hazmatAssessmentBox15: cloneIcs201HazmatAssessmentBox15Draft(
+                                ics201HazmatAssessmentDraft
+                              ),
+                            },
+                            'hazmat-assessment'
+                          )
+                          setIcs201EditingHazmatAssessment(false)
+                        }}
+                        onGenerate={() => openIcs201SectionGeneration('hazmat-assessment')}
+                        involvesHazmat={ics201Form.safetyAnalysisBox13.involvesHazmat}
+                        hazmatAssessmentBox15={ics201Form.hazmatAssessmentBox15}
+                        draft={ics201HazmatAssessmentDraft}
+                        onDraftChange={setIcs201HazmatAssessmentDraft}
+                        editors={ics201SectionEditors['hazmat-assessment'] ?? []}
+                        cursor={ics201HazmatAssessmentCursor}
+                      />
+                    )}
                     {!viewingIcs201Version &&
                       !isCreatingSignedIcs201Version &&
                       (() => {

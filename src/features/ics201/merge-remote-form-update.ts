@@ -72,7 +72,22 @@ export function mergeRemoteIcs201FormUpdate(
   }
 
   if (editingFlags.safetyAnalysis) {
-    next.safetyAnalysis = local.safetyAnalysis.map((row) => ({ ...row }))
+    next.safetyAnalysisBox13 = {
+      ...local.safetyAnalysisBox13,
+      knownHazards: { ...local.safetyAnalysisBox13.knownHazards },
+      weather: { ...local.safetyAnalysisBox13.weather },
+      requiredPpe: { ...local.safetyAnalysisBox13.requiredPpe },
+    }
+  }
+
+  if (editingFlags.hazmatAssessment) {
+    next.hazmatAssessmentBox15 = {
+      ...local.hazmatAssessmentBox15,
+      classification: { ...local.hazmatAssessmentBox15.classification },
+      products: local.hazmatAssessmentBox15.products.map((row) => ({ ...row })),
+      potentialHazards: { ...local.hazmatAssessmentBox15.potentialHazards },
+      requiredProcedures: { ...local.hazmatAssessmentBox15.requiredProcedures },
+    }
   }
 
   if (liveYjs.draftLiveOverlay && Object.keys(liveYjs.draftLiveOverlay).length > 0) {

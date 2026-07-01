@@ -17,6 +17,12 @@ import {
 import { Item, ItemContent, ItemDescription, ItemTitle } from '@/components/ui/item'
 import type { Ics201FormState, Ics201Version } from '@/features/ics201/types'
 import { formatIcs201ObjectiveKindLabel } from '@/features/ics201/constants'
+import {
+  ICS201_ACTION_COLUMN_LABELS,
+  ICS201_BOX_LABELS,
+  ICS201_RESOURCE_COLUMN_LABELS,
+  ICS201_SAFETY_13_SUBLABELS,
+} from '@/features/ics201/field-labels'
 import { cloneIcs201FormState, ics201VersionAuthorLabel } from '@/features/ics201/utils'
 import { formatOperationalPeriodLabel } from '@/lib/operational-period-utils'
 
@@ -246,15 +252,21 @@ export function Ics201OperationalPeriodSnapshotPanel({
 
       <Item variant="outline" className={glassItemBorderClasses}>
         <ItemContent className="space-y-4">
-          <ReadOnlyField label="Incident Name" value={displayForm.incidentName} />
-          <ReadOnlyField label="Incident Location" value={displayForm.incidentLocation} />
+          <ReadOnlyField label={ICS201_BOX_LABELS.incidentName} value={displayForm.incidentName} />
+          <ReadOnlyField
+            label={ICS201_BOX_LABELS.incidentLocation}
+            value={displayForm.incidentLocation}
+          />
           <ReadOnlyField
             label="Operational Period"
             value={`${displayForm.operationalPeriodStart} – ${displayForm.operationalPeriodEnd}`}
           />
-          <ReadOnlyField label="Current Situation" value={displayForm.currentSituationSummary} />
           <ReadOnlyField
-            label="Objectives"
+            label={ICS201_BOX_LABELS.currentSituation}
+            value={displayForm.currentSituationSummary}
+          />
+          <ReadOnlyField
+            label={ICS201_BOX_LABELS.objectives}
             value={displayForm.objectives
               .map(
                 (row, index) =>
@@ -263,19 +275,51 @@ export function Ics201OperationalPeriodSnapshotPanel({
               .join('\n')}
           />
           <ReadOnlyField
-            label="Actions"
-            value={displayForm.actions.map((row) => `${row.task} (${row.owner})`).join('\n')}
-          />
-          <ReadOnlyField
-            label="Resources"
-            value={displayForm.resources
-              .map((row) => `${row.category}: ${row.identifier} × ${row.quantity}`)
+            label={ICS201_BOX_LABELS.actions}
+            value={displayForm.actions
+              .map((row) =>
+                row.time
+                  ? `${ICS201_ACTION_COLUMN_LABELS.time} ${row.time} — ${row.action}`
+                  : row.action
+              )
               .join('\n')}
           />
           <ReadOnlyField
-            label="Safety Analysis"
-            value={displayForm.safetyAnalysis.map((row) => row.hazard).join('\n')}
+            label={ICS201_BOX_LABELS.resources}
+            value={displayForm.resources
+              .map(
+                (row) =>
+                  [
+                    row.resource,
+                    row.resourceIdentifier,
+                    row.dateTimeOrdered && `${ICS201_RESOURCE_COLUMN_LABELS.dateTimeOrdered}: ${row.dateTimeOrdered}`,
+                    row.eta && `${ICS201_RESOURCE_COLUMN_LABELS.eta}: ${row.eta}`,
+                    row.onScene && `${ICS201_RESOURCE_COLUMN_LABELS.onScene}: ${row.onScene}`,
+                    row.notes,
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')
+              )
+              .join('\n')}
           />
+          <ReadOnlyField
+            label={`${ICS201_BOX_LABELS.safetyAnalysis} — ${ICS201_SAFETY_13_SUBLABELS.A}`}
+            value={displayForm.safetyAnalysisBox13.safetyOfficer}
+          />
+          <ReadOnlyField
+            label={`${ICS201_BOX_LABELS.safetyAnalysis} — ${ICS201_SAFETY_13_SUBLABELS.D}`}
+            value={displayForm.safetyAnalysisBox13.safetyNotes}
+          />
+          {displayForm.safetyAnalysisBox13.involvesHazmat === true ? (
+            <ReadOnlyField
+              label={ICS201_BOX_LABELS.hazmatAssessment}
+              value={
+                displayForm.hazmatAssessmentBox15.sopAndSafeWorkPractices ||
+                displayForm.hazmatAssessmentBox15.emergencyProcedures ||
+                '—'
+              }
+            />
+          ) : null}
         </ItemContent>
       </Item>
 

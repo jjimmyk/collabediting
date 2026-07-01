@@ -1,10 +1,11 @@
 import type {
   Ics201ActionRow,
   Ics201FormState,
+  Ics201HazmatAssessmentBox15,
   Ics201MapSketchVertex,
   Ics201ObjectiveRow,
   Ics201ResourceSummaryRow,
-  Ics201SafetyRow,
+  Ics201SafetyAnalysisBox13,
 } from '@/features/ics201/types'
 import { cloneIcs201FormState } from '@/features/ics201/utils'
 
@@ -42,7 +43,28 @@ export type Ics201LiveSnapshotInput = {
   editingResources: boolean
   resourcesDraft: Ics201ResourceSummaryRow[]
   editingSafetyAnalysis: boolean
-  safetyAnalysisDraft: Ics201SafetyRow[]
+  safetyAnalysisBox13Draft: Ics201SafetyAnalysisBox13
+  editingHazmatAssessment: boolean
+  hazmatAssessmentBox15Draft: Ics201HazmatAssessmentBox15
+}
+
+function cloneSafetyAnalysisBox13(box: Ics201SafetyAnalysisBox13): Ics201SafetyAnalysisBox13 {
+  return {
+    ...box,
+    knownHazards: { ...box.knownHazards },
+    weather: { ...box.weather },
+    requiredPpe: { ...box.requiredPpe },
+  }
+}
+
+function cloneHazmatAssessmentBox15(box: Ics201HazmatAssessmentBox15): Ics201HazmatAssessmentBox15 {
+  return {
+    ...box,
+    classification: { ...box.classification },
+    products: box.products.map((row) => ({ ...row })),
+    potentialHazards: { ...box.potentialHazards },
+    requiredProcedures: { ...box.requiredProcedures },
+  }
 }
 
 export function buildIcs201LiveFormSnapshot(input: Ics201LiveSnapshotInput): Ics201FormState {
@@ -74,13 +96,19 @@ export function buildIcs201LiveFormSnapshot(input: Ics201LiveSnapshotInput): Ics
     form.actions = input.actionsDraft.map((action) => ({ ...action }))
   }
   if (input.editingOrgChart) {
-    form.orgChart = { ...input.orgChartDraft }
+    form.orgChart = {
+      ...input.orgChartDraft,
+      commandNames: [...input.orgChartDraft.commandNames],
+    }
   }
   if (input.editingResources) {
     form.resources = input.resourcesDraft.map((resource) => ({ ...resource }))
   }
   if (input.editingSafetyAnalysis) {
-    form.safetyAnalysis = input.safetyAnalysisDraft.map((row) => ({ ...row }))
+    form.safetyAnalysisBox13 = cloneSafetyAnalysisBox13(input.safetyAnalysisBox13Draft)
+  }
+  if (input.editingHazmatAssessment) {
+    form.hazmatAssessmentBox15 = cloneHazmatAssessmentBox15(input.hazmatAssessmentBox15Draft)
   }
 
   return form

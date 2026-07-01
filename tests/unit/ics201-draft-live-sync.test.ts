@@ -9,7 +9,7 @@ import {
 describe('ics201-draft-live-sync', () => {
   it('maps field keys to section ids', () => {
     expect(fieldKeyToSectionId('orgChart.incidentCommander')).toBe('org-chart')
-    expect(fieldKeyToSectionId('actions:3.task')).toBe('actions')
+    expect(fieldKeyToSectionId('actions:3.action')).toBe('actions')
     expect(fieldKeyToSectionId('mapSketch:0.lat')).toBe('map-sketch')
   })
 
@@ -19,17 +19,17 @@ describe('ics201-draft-live-sync', () => {
       fieldKey: 'orgChart.incidentCommander',
       value: 'Jane Doe',
     })
-    expect(next.orgChart.incidentCommander).toBe('Jane Doe')
+    expect(next.orgChart.commandNames[0]).toBe('Jane Doe')
   })
 
   it('applies action row patches', () => {
     const form = createInitialIcs201Form()
-    form.actions = [{ id: 2, task: '', owner: '', startTime: '', endTime: '', status: '' }]
+    form.actions = [{ id: 2, time: '', action: '' }]
     const next = applyIcs201DraftFieldPatch(form, {
-      fieldKey: 'actions:2.task',
+      fieldKey: 'actions:2.action',
       value: 'Evacuate zone A',
     })
-    expect(next.actions[0]?.task).toBe('Evacuate zone A')
+    expect(next.actions[0]?.action).toBe('Evacuate zone A')
   })
 
   it('detects when a section is being edited locally', () => {
@@ -45,6 +45,7 @@ describe('ics201-draft-live-sync', () => {
           orgChart: false,
           resources: false,
           safetyAnalysis: false,
+          hazmatAssessment: false,
         },
         'actions'
       )
@@ -61,6 +62,7 @@ describe('ics201-draft-live-sync', () => {
           orgChart: false,
           resources: false,
           safetyAnalysis: false,
+          hazmatAssessment: false,
         },
         'org-chart'
       )

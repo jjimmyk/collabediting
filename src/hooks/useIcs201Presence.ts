@@ -14,6 +14,7 @@ const ICS201_SECTION_IDS: Ics201SectionId[] = [
   'org-chart',
   'resources',
   'safety-analysis',
+  'hazmat-assessment',
 ]
 
 type PresencePayload = {

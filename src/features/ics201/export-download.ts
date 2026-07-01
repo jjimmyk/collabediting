@@ -203,18 +203,10 @@ function joinNonEmpty(parts: Array<string | undefined | null>, separator: string
 }
 
 function formatAction(action: Ics201ActionRow): string {
-  const meta = joinNonEmpty(
-    [
-      action.owner ? `Owner: ${action.owner}` : '',
-      action.startTime ? `Start: ${action.startTime}` : '',
-      action.endTime ? `End: ${action.endTime}` : '',
-      action.status ? `Status: ${action.status}` : '',
-    ],
-    ' · '
-  )
-  const task = clean(action.task)
-  if (task.length === 0 && meta.length === 0) return ''
-  return meta.length > 0 ? `${task} (${meta})` : task
+  const time = clean(action.time)
+  const actionText = clean(action.action)
+  if (time.length === 0 && actionText.length === 0) return ''
+  return time.length > 0 ? `${time}: ${actionText}` : actionText
 }
 
 export async function fillIcs201TemplatePdf(
@@ -258,32 +250,23 @@ export async function fillIcs201TemplatePdf(
     .map((row, index) => formatIcs201ObjectiveExportLine(row, index))
     .join('\n')
 
-  const safetyText = form.safetyAnalysis
-    .map((row, index) => {
-      const parts = joinNonEmpty(
-        [
-          row.hazard ? `Hazard: ${row.hazard}` : '',
-          row.mitigation ? `Mitigation: ${row.mitigation}` : '',
-          row.ppe ? `PPE: ${row.ppe}` : '',
-          row.medicalPlan ? `Medical: ${row.medicalPlan}` : '',
-        ],
-        ' | '
-      )
-      return parts.length > 0 ? `${index + 1}. ${parts}` : ''
-    })
-    .filter((line) => line.length > 0)
-    .join('\n')
+  const box13 = form.safetyAnalysisBox13
+  const safetyParts = joinNonEmpty(
+    [
+      box13.safetyOfficer ? `Safety Officer: ${box13.safetyOfficer}` : '',
+      box13.safetyNotes ? `Safety Notes: ${box13.safetyNotes}` : '',
+      box13.ppeNotes ? `PPE Notes: ${box13.ppeNotes}` : '',
+      box13.involvesHazmat === true ? 'HAZMAT: Yes' : box13.involvesHazmat === false ? 'HAZMAT: No' : '',
+    ],
+    '\n'
+  )
+  const safetyText = safetyParts
 
   const currentActionsText = form.actions
-    .filter((action) => action.status !== 'Planned')
     .map(formatAction)
     .filter((line) => line.length > 0)
     .join('\n')
-  const plannedActionsText = form.actions
-    .filter((action) => action.status === 'Planned')
-    .map(formatAction)
-    .filter((line) => line.length > 0)
-    .join('\n')
+  const plannedActionsText = ''
 
   const templateSections: Ics201TemplatePaginatedSection[] = paginated
     ? [
@@ -374,11 +357,11 @@ export async function fillIcs201TemplatePdf(
   form.actions.forEach((action, index) => {
     if (index >= actionRowNumbers.length) return
     const rowNumber = actionRowNumbers[index]
-    setText(`TIMERow${rowNumber}`, clean(action.startTime))
-    setText(`ACTIONSRow${rowNumber}`, formatAction(action))
+    setText(`TIMERow${rowNumber}`, clean(action.time))
+    setText(`ACTIONSRow${rowNumber}`, clean(action.action))
   })
 
-  setText('Incident Commander', form.orgChart.incidentCommander)
+  setText('Incident Commander', form.orgChart.commandNames[0] ?? '')
   setText('Safety Officer', form.orgChart.safetyOfficer)
   setText('Liaison Officer', form.orgChart.liaisonOfficer)
   setText('Public Information Officer', form.orgChart.publicInformationOfficer)
@@ -392,13 +375,13 @@ export async function fillIcs201TemplatePdf(
     if (rowNumber > 13) return
     setText(
       `Resource OrderedRow${rowNumber}`,
-      joinNonEmpty([resource.quantity, resource.category], ' ')
+      joinNonEmpty([resource.dateTimeOrdered, resource.resource], ' ')
     )
-    setText(`DescriptionIdentificationRow${rowNumber}`, resource.identifier)
+    setText(`DescriptionIdentificationRow${rowNumber}`, resource.resourceIdentifier)
     setText(
       `LocationAssignmentStatusRow${rowNumber}`,
       joinNonEmpty(
-        [resource.assignment, resource.status ? `(${resource.status})` : ''],
+        [resource.notes, resource.eta ? `ETA: ${resource.eta}` : '', resource.onScene ? '(On Scene)' : ''],
         ' '
       )
     )
@@ -616,20 +599,13 @@ export function buildIcs201DocxBlocks(
     pushParagraph('No actions recorded.')
   } else {
     form.actions.forEach((action) => {
-      const meta: string[] = []
-      if (action.owner.trim()) meta.push(`Owner: ${action.owner.trim()}`)
-      if (action.startTime.trim()) meta.push(`Start: ${action.startTime.trim()}`)
-      if (action.endTime.trim()) meta.push(`End: ${action.endTime.trim()}`)
-      if (action.status.trim()) meta.push(`Status: ${action.status.trim()}`)
-      const text =
-        (action.task.trim() || 'Untitled action') +
-        (meta.length > 0 ? ` — ${meta.join(' · ')}` : '')
+      const text = formatAction(action) || 'Untitled action'
       pushBullet(text)
     })
   }
   pushHeading('Organization Chart')
   const orgEntries: Array<[string, string]> = [
-    ['Incident Commander', form.orgChart.incidentCommander],
+    ['Incident Commander', form.orgChart.commandNames[0] ?? ''],
     ['Operations Section Chief', form.orgChart.operationsSectionChief],
     ['Planning Section Chief', form.orgChart.planningSectionChief],
     ['Logistics Section Chief', form.orgChart.logisticsSectionChief],
@@ -650,29 +626,28 @@ export function buildIcs201DocxBlocks(
   } else {
     form.resources.forEach((resource) => {
       const head: string[] = []
-      if (resource.category.trim()) head.push(resource.category.trim())
-      if (resource.identifier.trim()) head.push(resource.identifier.trim())
+      if (resource.resource.trim()) head.push(resource.resource.trim())
+      if (resource.resourceIdentifier.trim()) head.push(resource.resourceIdentifier.trim())
       const meta: string[] = []
-      if (resource.quantity.trim()) meta.push(`Qty: ${resource.quantity.trim()}`)
-      if (resource.status.trim()) meta.push(`Status: ${resource.status.trim()}`)
-      if (resource.assignment.trim()) meta.push(`Assignment: ${resource.assignment.trim()}`)
+      if (resource.dateTimeOrdered.trim()) meta.push(`Ordered: ${resource.dateTimeOrdered.trim()}`)
+      if (resource.eta.trim()) meta.push(`ETA: ${resource.eta.trim()}`)
+      if (resource.onScene) meta.push('On Scene')
+      if (resource.notes.trim()) meta.push(resource.notes.trim())
       const text =
         (head.join(' — ') || 'Resource') +
         (meta.length > 0 ? ` (${meta.join(' · ')})` : '')
       pushBullet(text)
     })
   }
-  pushHeading('Safety Analysis')
-  if (form.safetyAnalysis.length === 0) {
-    pushParagraph('No safety analysis recorded.')
-  } else {
-    form.safetyAnalysis.forEach((safety, index) => {
-      pushParagraph(`Row ${index + 1}`)
-      pushParagraph(safety.hazard && `Hazard: ${safety.hazard}`)
-      pushParagraph(safety.mitigation && `Mitigation: ${safety.mitigation}`)
-      pushParagraph(safety.ppe && `PPE: ${safety.ppe}`)
-      pushParagraph(safety.medicalPlan && `Medical Plan: ${safety.medicalPlan}`)
-    })
+  pushHeading('13. Safety Analysis')
+  const b13 = form.safetyAnalysisBox13
+  pushParagraph(b13.safetyOfficer && `A. Safety Officer: ${b13.safetyOfficer}`)
+  pushParagraph(b13.safetyNotes && `D. Safety Notes: ${b13.safetyNotes}`)
+  pushParagraph(b13.ppeNotes && `E. PPE Notes: ${b13.ppeNotes}`)
+  if (b13.involvesHazmat === true) {
+    pushHeading('15. HAZMAT Assessment')
+    pushParagraph(form.hazmatAssessmentBox15.sopAndSafeWorkPractices)
+    pushParagraph(form.hazmatAssessmentBox15.emergencyProcedures)
   }
   return blocks
 }

@@ -19,6 +19,7 @@ export type Ics201SectionEditingFlags = {
   orgChart: boolean
   resources: boolean
   safetyAnalysis: boolean
+  hazmatAssessment: boolean
 }
 
 type UseIcs201AllSectionCursorsOptions = {
@@ -96,6 +97,11 @@ export function useIcs201AllSectionCursors({
     enabled: sectionEnabled(baseEnabled, briefingActive, editingFlags.safetyAnalysis),
     sectionId: 'safety-analysis',
   })
+  const hazmatAssessment = useIcs201CursorSync({
+    ...shared,
+    enabled: sectionEnabled(baseEnabled, briefingActive, editingFlags.hazmatAssessment),
+    sectionId: 'hazmat-assessment',
+  })
 
   return useMemo(
     () => ({
@@ -108,10 +114,12 @@ export function useIcs201AllSectionCursors({
       'org-chart': orgChart,
       resources,
       'safety-analysis': safetyAnalysis,
+      'hazmat-assessment': hazmatAssessment,
     }),
     [
       actions,
       currentSituation,
+      hazmatAssessment,
       incidentBriefing,
       mapSketch,
       objectives,

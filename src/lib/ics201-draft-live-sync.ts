@@ -65,6 +65,21 @@ export function applyIcs201DraftFieldPatch(
 
   if (fieldKey.startsWith('orgChart.')) {
     const field = fieldKey.slice('orgChart.'.length)
+    if (field.startsWith('commandNames.')) {
+      const index = Number(field.slice('commandNames.'.length))
+      if (Number.isFinite(index) && index >= 0 && index < 5) {
+        const commandNames = [...next.orgChart.commandNames]
+        commandNames[index] = value
+        next.orgChart = { ...next.orgChart, commandNames }
+      }
+      return next
+    }
+    if (field === 'incidentCommander') {
+      const commandNames = [...next.orgChart.commandNames]
+      commandNames[0] = value
+      next.orgChart = { ...next.orgChart, commandNames }
+      return next
+    }
     if (field in next.orgChart) {
       next.orgChart = { ...next.orgChart, [field]: value }
     }
@@ -76,7 +91,7 @@ export function applyIcs201DraftFieldPatch(
     const dot = rest.indexOf('.')
     if (dot === -1) return next
     const id = Number(rest.slice(0, dot))
-    const field = rest.slice(dot + 1) as 'task' | 'owner' | 'startTime' | 'endTime'
+    const field = rest.slice(dot + 1) as 'time' | 'action'
     next.actions = next.actions.map((action) =>
       action.id === id ? { ...action, [field]: value } : action
     )
@@ -89,26 +104,36 @@ export function applyIcs201DraftFieldPatch(
     if (dot === -1) return next
     const id = Number(rest.slice(0, dot))
     const field = rest.slice(dot + 1) as
-      | 'category'
-      | 'identifier'
-      | 'quantity'
-      | 'status'
-      | 'assignment'
+      | 'resource'
+      | 'resourceIdentifier'
+      | 'dateTimeOrdered'
+      | 'eta'
+      | 'notes'
     next.resources = next.resources.map((resource) =>
       resource.id === id ? { ...resource, [field]: value } : resource
     )
     return next
   }
 
-  if (fieldKey.startsWith('safetyAnalysis:')) {
-    const rest = fieldKey.slice('safetyAnalysis:'.length)
-    const dot = rest.indexOf('.')
-    if (dot === -1) return next
-    const id = Number(rest.slice(0, dot))
-    const field = rest.slice(dot + 1) as 'hazard' | 'mitigation' | 'ppe' | 'medicalPlan'
-    next.safetyAnalysis = next.safetyAnalysis.map((row) =>
-      row.id === id ? { ...row, [field]: value } : row
-    )
+  if (fieldKey.startsWith('safetyBox13.')) {
+    const field = fieldKey.slice('safetyBox13.'.length)
+    if (field === 'safetyOfficer') next.safetyAnalysisBox13.safetyOfficer = value
+    else if (field === 'safetyNotes') next.safetyAnalysisBox13.safetyNotes = value
+    else if (field === 'ppeNotes') next.safetyAnalysisBox13.ppeNotes = value
+    else if (field.startsWith('weather.')) {
+      const wField = field.slice('weather.'.length) as keyof typeof next.safetyAnalysisBox13.weather
+      if (wField in next.safetyAnalysisBox13.weather) {
+        next.safetyAnalysisBox13.weather = { ...next.safetyAnalysisBox13.weather, [wField]: value }
+      }
+    }
+    return next
+  }
+
+  if (fieldKey.startsWith('hazmatBox15.')) {
+    const field = fieldKey.slice('hazmatBox15.'.length)
+    if (field === 'sopAndSafeWorkPractices') next.hazmatAssessmentBox15.sopAndSafeWorkPractices = value
+    else if (field === 'decontaminationProcedures') next.hazmatAssessmentBox15.decontaminationProcedures = value
+    else if (field === 'emergencyProcedures') next.hazmatAssessmentBox15.emergencyProcedures = value
     return next
   }
 
@@ -231,6 +256,7 @@ export function isEditingIcs201Section(
     'org-chart': 'orgChart',
     resources: 'resources',
     'safety-analysis': 'safetyAnalysis',
+    'hazmat-assessment': 'hazmatAssessment',
   }
   return Boolean(flags[map[sectionId]])
 }

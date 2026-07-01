@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label'
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
 import { Textarea } from '@/components/ui/textarea'
 import { ICS201_OBJECTIVE_KIND_OPTIONS } from '@/features/ics201/constants'
+import { ICS201_BOX_LABELS } from '@/features/ics201/field-labels'
 import type { Ics201FormState, Ics201ObjectiveKind, Ics201ObjectiveRow } from '@/features/ics201/types'
 import { cloneIcs201FormState } from '@/features/ics201/utils'
 import {
@@ -120,7 +121,9 @@ export function CreateActivationIcs201Step({
         </p>
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="space-y-1 sm:col-span-2">
-            <Label htmlFor="activation-ics201-incident-name">Incident / exercise name</Label>
+            <Label htmlFor="activation-ics201-incident-name">
+              {ICS201_BOX_LABELS.incidentName}
+            </Label>
             <Input
               id="activation-ics201-incident-name"
               value={form.incidentName}
@@ -146,7 +149,9 @@ export function CreateActivationIcs201Step({
             />
           </div>
           <div className="space-y-1 sm:col-span-2">
-            <Label htmlFor="activation-ics201-location">Location</Label>
+            <Label htmlFor="activation-ics201-location">
+              {ICS201_BOX_LABELS.incidentLocation}
+            </Label>
             <Input
               id="activation-ics201-location"
               value={form.incidentLocation}
@@ -156,7 +161,9 @@ export function CreateActivationIcs201Step({
             />
           </div>
           <div className="space-y-1">
-            <Label htmlFor="activation-ics201-date-initiated">Date initiated</Label>
+            <Label htmlFor="activation-ics201-date-initiated">
+              {ICS201_BOX_LABELS.dateTimeInitiated}
+            </Label>
             <Input
               id="activation-ics201-date-initiated"
               type="date"
@@ -185,7 +192,9 @@ export function CreateActivationIcs201Step({
       </div>
 
       <div className="space-y-1">
-        <Label htmlFor="activation-ics201-current-situation">Current situation</Label>
+        <Label htmlFor="activation-ics201-current-situation">
+          {ICS201_BOX_LABELS.currentSituation}
+        </Label>
         <Textarea
           id="activation-ics201-current-situation"
           rows={5}
@@ -198,7 +207,7 @@ export function CreateActivationIcs201Step({
 
       <div className="space-y-2">
         <div className="flex items-center justify-between gap-2">
-          <Label>Objectives</Label>
+          <Label>{ICS201_BOX_LABELS.objectives}</Label>
           <Button type="button" size="sm" variant="outline" onClick={addObjectiveRow}>
             <Plus className="mr-1 h-4 w-4" />
             Add objective
