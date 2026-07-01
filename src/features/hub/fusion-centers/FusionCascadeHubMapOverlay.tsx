@@ -1,21 +1,25 @@
 import type { RefObject } from 'react'
 import type MapView from '@arcgis/core/views/MapView'
-import { ConsequenceEngineMapSurface } from '@/features/hub/fusion-centers/ConsequenceEngineMapSurface'
+import { FusionCascadeDeckSurface } from '@/features/hub/fusion-centers/FusionCascadeDeckSurface'
+import type { HubNotificationMapSource } from '@/features/hub/map/hub-notification-map-graphics'
 
 type FusionCascadeHubMapOverlayProps = {
   mapViewRef: RefObject<MapView | null>
-  mapContainerRef: RefObject<HTMLDivElement | null>
+  notification: HubNotificationMapSource | null | undefined
+  hourIndex: number
 }
 
 export function FusionCascadeHubMapOverlay({
   mapViewRef,
-  mapContainerRef,
+  notification,
+  hourIndex,
 }: FusionCascadeHubMapOverlayProps) {
   return (
-    <ConsequenceEngineMapSurface
+    <FusionCascadeDeckSurface
       enabled
+      notification={notification}
+      hourIndex={hourIndex}
       mapViewRef={mapViewRef}
-      mapContainerRef={mapContainerRef}
       className="z-[5]"
       fitExtentOnAttach={false}
     />

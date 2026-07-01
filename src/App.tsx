@@ -927,6 +927,10 @@ import { useNoaaGnomeMapLayer } from '@/features/hub/map-layers/gnome/useNoaaGno
 import { NoaaGnomeNotificationMapEmbed } from '@/features/hub/map-layers/gnome/NoaaGnomeNotificationMapEmbed'
 import { FusionCascadingImpactsEmbed } from '@/features/hub/fusion-centers/FusionCascadingImpactsEmbed'
 import { FusionCascadeHubMapOverlay } from '@/features/hub/fusion-centers/FusionCascadeHubMapOverlay'
+import {
+  loadFusionCascadeHourIndex,
+  saveFusionCascadeHourIndex,
+} from '@/features/hub/fusion-centers/fusion-cascade-hour-storage'
 import { ProductToursMenu } from '@/components/ProductToursMenu'
 import { CreateHubNotificationDialog } from '@/components/CreateHubNotificationDialog'
 import {
@@ -6237,6 +6241,9 @@ function App() {
   const [noaaGnomeLayerEnabled, setNoaaGnomeLayerEnabled] = useState(() => loadNoaaGnomeLayerEnabled())
   const [noaaGnomeHourIndex, setNoaaGnomeHourIndex] = useState(() => loadNoaaGnomeHourIndex())
   const [fusionCascadeImpactsVisible, setFusionCascadeImpactsVisible] = useState(true)
+  const [fusionCascadeHourIndex, setFusionCascadeHourIndex] = useState(() =>
+    loadFusionCascadeHourIndex()
+  )
   const [analyticsResolutionKindFilter, setAnalyticsResolutionKindFilter] =
     useState<AnalyticsResolutionKindFilter>('incidents')
   const [analyticsSpendKindFilter, setAnalyticsSpendKindFilter] =
@@ -11863,6 +11870,16 @@ function App() {
     fusionCascadeImpactsVisible &&
     !isInWorkspaceContext &&
     isMapVisible
+  const fusionCascadeNotification = useMemo(
+    () =>
+      isFusionCentersEnabled
+        ? (userVisibleNotifications.find((item) => item.id === 0) ?? null)
+        : null,
+    [isFusionCentersEnabled, userVisibleNotifications]
+  )
+  const fusionCascadeEffectiveHourIndex = isOilSpillTrajectoryModelsEnabled
+    ? fusionCascadeHourIndex
+    : 0
   useEffect(() => {
     if (!isCisaEnabled && isHubCisaDashboardTab(activeTab)) {
       setActiveTab('incident-list')
@@ -12094,6 +12111,11 @@ function App() {
     if (visible) {
       setIsMapVisible(true)
     }
+  }, [])
+  const handleFusionCascadeHourIndexChange = useCallback((hourIndex: number) => {
+    setFusionCascadeHourIndex(hourIndex)
+    saveFusionCascadeHourIndex(hourIndex)
+    setIsMapVisible(true)
   }, [])
   const handleNoaaGnomeHourIndexChange = useCallback((hourIndex: number) => {
     setNoaaGnomeHourIndex(hourIndex)
@@ -27772,7 +27794,8 @@ function App() {
       {showFusionCascadeMapLayer ? (
         <FusionCascadeHubMapOverlay
           mapViewRef={mapViewRef}
-          mapContainerRef={mapContainerRef}
+          notification={fusionCascadeNotification}
+          hourIndex={fusionCascadeEffectiveHourIndex}
         />
       ) : null}
       {activeExerciseWorkspaceId !== null &&
@@ -29367,6 +29390,16 @@ function App() {
                                     <FusionCascadingImpactsEmbed
                                       visible={fusionCascadeImpactsVisible}
                                       onVisibleChange={handleFusionCascadeImpactsVisibleChange}
+                                      notification={item}
+                                      hourIndex={
+                                        isOilSpillTrajectoryModelsEnabled
+                                          ? fusionCascadeHourIndex
+                                          : 0
+                                      }
+                                      onHourIndexChange={handleFusionCascadeHourIndexChange}
+                                      oilSpillTrajectoryModelsEnabled={
+                                        isOilSpillTrajectoryModelsEnabled
+                                      }
                                     />
                                   ) : null}
                                   {isOilSpillTrajectoryModelsEnabled && item.id === 0 ? (
@@ -33019,6 +33052,8 @@ function App() {
                     fusionCentersEnabled={isFusionCentersEnabled}
                     fusionCascadeLayerEnabled={fusionCascadeImpactsVisible}
                     onToggleFusionCascadeLayer={toggleFusionCascadeLayer}
+                    fusionCascadeHourIndex={fusionCascadeHourIndex}
+                    onFusionCascadeHourIndexChange={handleFusionCascadeHourIndexChange}
                   />
                 )}
 

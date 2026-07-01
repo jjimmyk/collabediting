@@ -1,15 +1,22 @@
 import { useEffect, useRef } from 'react'
 import Map from '@arcgis/core/Map'
 import MapView from '@arcgis/core/views/MapView'
-import { FUSION_CASCADE_SCENARIO } from '@/features/hub/fusion-centers/fusion-cascade-scenario-data'
-import { ConsequenceEngineMapSurface } from '@/features/hub/fusion-centers/ConsequenceEngineMapSurface'
+import { FusionCascadeDeckSurface } from '@/features/hub/fusion-centers/FusionCascadeDeckSurface'
+import { getNotificationCascadeExtent } from '@/features/hub/fusion-centers/fusion-cascade-arc-data'
+import type { HubNotificationMapSource } from '@/features/hub/map/hub-notification-map-graphics'
 import { safeDestroyMapView } from '@/lib/arcgis-load-abort'
 
-type ConsequenceEngineMapEmbedProps = {
+type FusionCascadeMapEmbedProps = {
   enabled?: boolean
+  notification: HubNotificationMapSource | null | undefined
+  hourIndex: number
 }
 
-export function ConsequenceEngineMapEmbed({ enabled = true }: ConsequenceEngineMapEmbedProps) {
+export function FusionCascadeMapEmbed({
+  enabled = true,
+  notification,
+  hourIndex,
+}: FusionCascadeMapEmbedProps) {
   const mapContainerRef = useRef<HTMLDivElement | null>(null)
   const mapViewRef = useRef<MapView | null>(null)
 
@@ -27,14 +34,15 @@ export function ConsequenceEngineMapEmbed({ enabled = true }: ConsequenceEngineM
         return
       }
       if (!mapViewRef.current) {
+        const extent = getNotificationCascadeExtent(notification)
         const map = new Map({
           basemap: 'dark-gray-vector',
         })
         mapViewRef.current = new MapView({
           container,
           map,
-          center: [...FUSION_CASCADE_SCENARIO.hub.coordinates] as [number, number],
-          zoom: 8,
+          center: extent?.center ?? [-95.018, 29.628],
+          zoom: extent?.zoom ?? 9,
           ui: {
             components: ['zoom'],
           },
@@ -50,7 +58,7 @@ export function ConsequenceEngineMapEmbed({ enabled = true }: ConsequenceEngineM
       safeDestroyMapView(mapViewRef.current)
       mapViewRef.current = null
     }
-  }, [])
+  }, [notification])
 
   return (
     <div className="relative h-72 w-full overflow-hidden rounded-md border bg-muted/30">
@@ -60,10 +68,11 @@ export function ConsequenceEngineMapEmbed({ enabled = true }: ConsequenceEngineM
         aria-label="Cascading critical infrastructure impacts map"
       />
       {enabled ? (
-        <ConsequenceEngineMapSurface
+        <FusionCascadeDeckSurface
           enabled
+          notification={notification}
+          hourIndex={hourIndex}
           mapViewRef={mapViewRef}
-          mapContainerRef={mapContainerRef}
           fitExtentOnAttach
         />
       ) : null}

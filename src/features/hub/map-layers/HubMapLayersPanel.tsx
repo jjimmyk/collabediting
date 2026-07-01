@@ -3,9 +3,10 @@ import { AlertCircle, CloudRain, Droplets, Loader2, MapPin, Network, Radio } fro
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
-import { Slider } from '@/components/ui/slider'
 import { cn } from '@/lib/utils'
 import { FUSION_CASCADE_LAYER_DEFINITION } from '@/features/hub/fusion-centers/fusion-cascade-scenario-data'
+import { formatFusionCascadeHourLabel } from '@/features/hub/fusion-centers/fusion-cascade-impact-projection'
+import { TrajectoryHourControl } from '@/features/hub/map-layers/shared/TrajectoryHourControl'
 import { NOAA_GNOME_LAYER_DEFINITION } from '@/features/hub/map-layers/gnome/noaa-gnome-layer-catalog'
 import {
   formatCurrentForcing,
@@ -35,6 +36,8 @@ type HubMapLayersPanelProps = {
   fusionCentersEnabled?: boolean
   fusionCascadeLayerEnabled?: boolean
   onToggleFusionCascadeLayer?: () => void
+  fusionCascadeHourIndex?: number
+  onFusionCascadeHourIndexChange?: (hourIndex: number) => void
 }
 
 function LayerStatusHint({
@@ -95,6 +98,8 @@ export function HubMapLayersPanel({
   fusionCentersEnabled = false,
   fusionCascadeLayerEnabled = false,
   onToggleFusionCascadeLayer,
+  fusionCascadeHourIndex = 0,
+  onFusionCascadeHourIndexChange,
 }: HubMapLayersPanelProps) {
   const groupedLayers = useMemo(() => groupWeatherLayersByCategory(), [])
   const visibleLayerCount =
@@ -214,32 +219,14 @@ export function HubMapLayersPanel({
             </div>
 
             {gnomeLayerEnabled ? (
-              <div className="space-y-2 rounded-md border bg-muted/20 px-3 py-2.5">
-                <div className="flex items-center justify-between gap-2">
-                  <Label htmlFor="noaa-gnome-hour-slider" className="text-xs font-medium">
-                    Trajectory hour
-                  </Label>
-                  <span className="text-[11px] text-muted-foreground">
-                    {formatNoaaGnomeHourLabel(gnomeHourIndex)}
-                  </span>
-                </div>
-                <Slider
-                  id="noaa-gnome-hour-slider"
-                  min={0}
-                  max={NOAA_GNOME_STEP_COUNT - 1}
-                  step={1}
-                  value={[gnomeHourIndex]}
-                  onValueChange={(value) => {
-                    const next = value[0]
-                    if (typeof next === 'number') {
-                      onGnomeHourIndexChange?.(next)
-                    }
-                  }}
-                  aria-label="NOAA GNOME trajectory hour"
-                />
-                <p className="text-[11px] text-muted-foreground">
-                  Hour {gnomeHourIndex + 1} of {NOAA_GNOME_STEP_COUNT} since spill release
-                </p>
+              <TrajectoryHourControl
+                id="noaa-gnome-hour-slider"
+                hourIndex={gnomeHourIndex}
+                onHourIndexChange={(next) => onGnomeHourIndexChange?.(next)}
+                stepCount={NOAA_GNOME_STEP_COUNT}
+                formatLabel={formatNoaaGnomeHourLabel}
+                ariaLabel="NOAA GNOME trajectory hour"
+              >
                 <div className="space-y-1 border-t pt-2">
                   <p className="text-xs font-medium">Forcing conditions</p>
                   {(() => {
@@ -261,7 +248,7 @@ export function HubMapLayersPanel({
                     )
                   })()}
                 </div>
-              </div>
+              </TrajectoryHourControl>
             ) : null}
           </div>
         </section>
@@ -297,6 +284,18 @@ export function HubMapLayersPanel({
                 </p>
               </div>
             </div>
+
+            {fusionCascadeLayerEnabled && oilSpillTrajectoryModelsEnabled ? (
+              <TrajectoryHourControl
+                id="fusion-cascade-hour-slider"
+                hourIndex={fusionCascadeHourIndex}
+                onHourIndexChange={(next) => onFusionCascadeHourIndexChange?.(next)}
+                stepCount={NOAA_GNOME_STEP_COUNT}
+                formatLabel={formatFusionCascadeHourLabel}
+                ariaLabel="Fusion cascade trajectory hour"
+                label="Cascade trajectory hour"
+              />
+            ) : null}
           </div>
         </section>
       ) : null}
