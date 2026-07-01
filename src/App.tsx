@@ -851,6 +851,10 @@ import {
 } from '@/features/ics201/Ics201RemoteFieldCarets'
 import { Ics201DraftLiveContext } from '@/features/ics201/Ics201DraftLiveContext'
 import { mergeRemoteIcs201FormUpdate } from '@/features/ics201/merge-remote-form-update'
+import {
+  applyIcs201DraftFieldPatchToDrafts,
+  createIcs201DraftLiveOverlayRegistry,
+} from '@/features/ics201/draft-live-overlay'
 import { Ics201RemoteTextCursors } from '@/features/ics201/Ics201RemoteTextCursors'
 import { Ics201SaveStatusIndicator } from '@/features/ics201/Ics201SaveStatusIndicator'
 import { Ics201SectionEditorBadges } from '@/features/ics201/Ics201SectionEditorBadges'
@@ -990,7 +994,7 @@ import { fetchSitrepLiveSummaryForAor } from '@/lib/sitrep-service'
 import { useIcs201AggressiveAutosave } from '@/hooks/useIcs201AggressiveAutosave'
 import { useIcs201AllSectionCursors } from '@/hooks/useIcs201AllSectionCursors'
 import { useIcs201DraftLiveSync } from '@/hooks/useIcs201DraftLiveSync'
-import { applyIcs201DraftFieldPatch } from '@/lib/ics201-draft-live-sync'
+import { applyIcs201DraftFieldPatch, type Ics201DraftFieldPatch } from '@/lib/ics201-draft-live-sync'
 import { useIcs201ObjectivesSectionEditor } from '@/hooks/useIcs201ObjectivesSectionEditor'
 import { useIcs201Presence } from '@/hooks/useIcs201Presence'
 import { useIcs201Sync } from '@/hooks/useIcs201Sync'
@@ -12655,6 +12659,7 @@ function App() {
   const ics201LiveObjectivesConnectedRef = useRef(false)
   const ics201LiveObjectivesRef = useRef<Ics201ObjectiveRow[]>([])
   const ics201EditingFlagsRef = useRef(ics201EditingFlags)
+  const ics201DraftLiveOverlayRef = useRef(createIcs201DraftLiveOverlayRegistry())
   const handleIcs204Loaded = useCallback(
     (payload: {
       forms: Ics204FormState[]
@@ -12837,15 +12842,23 @@ function App() {
         currentSituation: ics201LiveCurrentSituationRef.current,
         objectivesConnected: ics201LiveObjectivesConnectedRef.current,
         objectives: ics201LiveObjectivesRef.current,
+        draftLiveOverlay: ics201DraftLiveOverlayRef.current.getActive(),
       })
     )
   }, [])
-  const handleIcs201DraftLivePatch = useCallback(
-    (patch: { fieldKey: string; value: string }) => {
-      setIcs201Form((previous) => applyIcs201DraftFieldPatch(previous, patch))
-    },
-    []
-  )
+  const handleIcs201DraftLivePatch = useCallback((patch: Ics201DraftFieldPatch) => {
+    ics201DraftLiveOverlayRef.current.set(patch.fieldKey, patch.value, patch.updatedAt)
+    setIcs201Form((previous) => applyIcs201DraftFieldPatch(previous, patch))
+    applyIcs201DraftFieldPatchToDrafts(patch, ics201EditingFlagsRef.current, {
+      setReportInfoDraft: setIcs201ReportInfoDraft,
+      setIncidentBriefingDraft: setIcs201IncidentBriefingDraft,
+      setMapSketchDraft: setIcs201MapSketchDraft,
+      setActionsDraft: setIcs201ActionsDraft,
+      setOrgChartDraft: setIcs201OrgChartDraft,
+      setResourcesDraft: setIcs201ResourcesDraft,
+      setSafetyAnalysisDraft: setIcs201SafetyAnalysisDraft,
+    })
+  }, [])
   const handleIcs201RemoteVersionInserted = useCallback((version: Ics201Version) => {
     setIcs201Versions((previous) => {
       if (previous.some((entry) => entry.id === version.id)) {
@@ -15343,7 +15356,6 @@ function App() {
       !isViewingHistoricalOperationalPeriod,
     documentId: ics201DocumentId,
     selfUserId: user?.id ?? null,
-    editingFlags: ics201EditingFlags,
     onRemotePatch: handleIcs201DraftLivePatch,
   })
   const ics201VersionAuthorDisplay = useCallback(

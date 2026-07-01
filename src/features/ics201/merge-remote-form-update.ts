@@ -2,6 +2,7 @@ import type {
   Ics201FormState,
   Ics201ObjectiveRow,
 } from '@/features/ics201/types'
+import { applyIcs201DraftLiveOverlay, type Ics201DraftLiveOverlay } from '@/features/ics201/draft-live-overlay'
 import { cloneIcs201FormState } from '@/features/ics201/utils'
 import type { Ics201SectionEditingFlags } from '@/hooks/useIcs201AllSectionCursors'
 
@@ -10,6 +11,7 @@ export type Ics201LiveYjsOverrides = {
   currentSituation?: string
   objectivesConnected?: boolean
   objectives?: Ics201ObjectiveRow[]
+  draftLiveOverlay?: Ics201DraftLiveOverlay
 }
 
 export function mergeRemoteIcs201FormUpdate(
@@ -71,6 +73,10 @@ export function mergeRemoteIcs201FormUpdate(
 
   if (editingFlags.safetyAnalysis) {
     next.safetyAnalysis = local.safetyAnalysis.map((row) => ({ ...row }))
+  }
+
+  if (liveYjs.draftLiveOverlay && Object.keys(liveYjs.draftLiveOverlay).length > 0) {
+    return applyIcs201DraftLiveOverlay(next, liveYjs.draftLiveOverlay)
   }
 
   return next
